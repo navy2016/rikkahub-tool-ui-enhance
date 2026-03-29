@@ -1,0 +1,75 @@
+name: Build Debug APK
+
+on:
+  push:
+    branches: [feat_epub, master, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Create dummy google-services.json
+        run: |
+          mkdir -p app
+          cat > app/google-services.json << 'JSONEOF'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "dummy-project",
+              "storage_bucket": "dummy-project.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub"
+                  }
+                },
+                "api_key": [{"current_key": "AIzaSyDummyKey000000000000000000000000"}]
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000001",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub.dev.next"
+                  }
+                },
+                "api_key": [{"current_key": "AIzaSyDummyKey000000000000000000000001"}]
+              }
+            ],
+            "configuration_version": "1"
+          }
+          JSONEOF
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
