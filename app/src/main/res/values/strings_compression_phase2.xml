@@ -1,0 +1,35 @@
+<resources>
+  <string name="chat_page_compress_context_desc_v2">维护一份服务主对话的连续摘要；原始消息不会被改写或删除。</string>
+  <string name="chat_page_generate_memory_ledger_with_compress">同时生成记忆账本</string>
+  <string name="chat_page_generate_memory_ledger_with_compress_desc">压缩完成后立刻继续生成记忆账本并重建索引。</string>
+  <string name="chat_page_skip_memory_ledger_with_compress_desc">这次只更新主摘要，记忆账本稍后再补账。</string>
+  <string name="chat_page_memory_ledger_generating_title_v2">生成记忆账本</string>
+  <string name="chat_page_memory_ledger_generating_v2">正在补写记忆账本…</string>
+  <string name="chat_page_memory_index_updating_v2">正在更新记忆索引…</string>
+  <string name="chat_page_regenerate_dialogue_summary_title_v2">重新生成主对话摘要</string>
+  <string name="chat_page_regenerate_dialogue_summary_desc_v2">将使用这轮压缩原本的边界，基于当时的旧摘要和那一段增量消息重新生成主对话摘要。</string>
+  <string name="chat_page_regenerate_dialogue_summary_action_v2">重新生成主摘要</string>
+  <string name="chat_page_regenerate_memory_ledger_title_v2">重新生成记忆账本</string>
+  <string name="chat_page_regenerate_memory_ledger_desc_v2">将基于这轮压缩对应的旧账本和增量消息重新补账，并在完成后重建记忆索引。</string>
+  <string name="chat_page_regenerate_memory_ledger_action_v2">重新生成记忆账本</string>
+  <string name="chat_page_generate_memory_ledger_action_v2">生成记忆账本</string>
+  <string name="chat_page_compression_boundary_title_v2">最新压缩摘要</string>
+  <string name="chat_page_dialogue_summary_page_v2">主摘要</string>
+  <string name="chat_page_memory_ledger_page_v2">记忆账本</string>
+  <string name="chat_page_compression_swipe_hint_v2">左右滑动切换</string>
+  <string name="chat_page_memory_ledger_pending_v2">这轮压缩的记忆账本仍在排队或等待补账，当前历史检索继续沿用上一版已完成的账本与索引。</string>
+  <string name="chat_page_memory_ledger_failed_v2">这轮压缩的记忆账本生成失败，当前历史检索继续沿用上一版已完成的账本与索引。</string>
+  <string name="chat_page_memory_ledger_empty_v2">这轮压缩还没有可展示的记忆账本快照。</string>
+  <string name="chat_page_memory_ledger_stale_v2">自动生成记忆账本已关闭，可手动重新生成以更新。</string>
+  <string name="chat_page_open_sandbox_file_manager">沙箱文件管理</string>
+  <string name="workflow_menu_title">工作流</string>
+  <string name="workflow_menu_hint">点击卡片管理对应功能</string>
+  <string name="workflow_menu_sandbox_subtitle">管理对话沙箱中的文件和目录</string>
+  <string name="workflow_menu_close">关闭</string>
+  <string name="workflow_menu_phase_plan_desc">先分析需求并整理执行计划</string>
+  <string name="workflow_menu_phase_execute_desc">执行代码改动、命令和自动化任务</string>
+  <string name="workflow_menu_phase_review_desc">复查质量、回归风险和安全问题</string>
+  <string name="setting_model_page_compress_prompt_vars_v2">可用变量：{dialogue_summary_text}、{incremental_messages}、{incremental_input_tokens}、{target_output_tokens}、{hard_cap_tokens}、{additional_context}、{locale}</string>
+  <string name="memory_index_updated_title_v2">记忆索引已更新</string>
+  <string name="memory_index_updated_v2">记忆账本和索引已完成更新。</string>
+</resources>
