@@ -1,8 +1,10 @@
 name: Release Build
 
 on:
+  push:
+    branches: [ feat_epub, master, main ]
   workflow_dispatch:
-
+  
 jobs:
   build:
     runs-on: ubuntu-latest
