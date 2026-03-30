@@ -1107,9 +1107,4 @@
     <string name="chat_message_tool_running_title">Running</string>
     <string name="chat_message_tool_running_hint">Tool is executing. You can view the command details above, or stop the generation.</string>
     <string name="chat_message_tool_stop">Stop</string>
-
-    <string name="chat_message_tool_running_title">Running</string>
-    <string name="chat_message_tool_running_hint">Tool is executing. You can view the command details above, or stop the generation.</string>
-    <string name="chat_message_tool_stop">Stop</string>
-    <string name="chat_message_tool_delete">Delete</string>
 </resources>
