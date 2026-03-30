@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">RikkaHub</string>
+    <string name="title_activity_safe_mode">Safe Mode</string>
     <string name="chat_message_tool_running_title">Running</string>
     <string name="chat_message_tool_running_hint">Tool is executing. You can view the command details above, or stop the generation.</string>
     <string name="chat_message_tool_stop">Stop</string>
