@@ -1104,4 +1104,7 @@
   <string name="skill_detail_page_file_name">File Name</string>
   <string name="skill_detail_page_file_name_invalid">Invalid file name</string>
   <string name="skill_detail_page_create">Create</string>
+    <string name="chat_message_tool_running_title">Running</string>
+    <string name="chat_message_tool_running_hint">Tool is executing. You can view the command details above, or stop the generation.</string>
+    <string name="chat_message_tool_stop">Stop</string>
 </resources>

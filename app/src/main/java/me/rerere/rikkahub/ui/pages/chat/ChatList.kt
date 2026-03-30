@@ -153,6 +153,8 @@ fun ChatList(
     onJumpToMessage: (Int) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onStopGeneration: (() -> Unit)? = null,
+    onDeleteToolCall: ((nodeId: Uuid, toolCallId: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
 ) {
     AnimatedContent(
@@ -195,6 +197,8 @@ fun ChatList(
                 animatedVisibilityScope = this@AnimatedContent,
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
+                onStopGeneration = onStopGeneration,
+                onDeleteToolCall = onDeleteToolCall,
                 onToggleFavorite = onToggleFavorite,
             )
         }
@@ -225,6 +229,8 @@ private fun ChatListNormal(
     animatedVisibilityScope: AnimatedVisibilityScope,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onStopGeneration: (() -> Unit)? = null,
+    onDeleteToolCall: ((nodeId: Uuid, toolCallId: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -489,6 +495,10 @@ private fun ChatListNormal(
                             onClearTranslation = onClearTranslation,
                             onToolApproval = onToolApproval,
                             onToolAnswer = onToolAnswer,
+                            onStopGeneration = onStopGeneration,
+                            onDeleteToolCall = if (onDeleteToolCall != null) {
+                                { toolCallId -> onDeleteToolCall(node.id, toolCallId) }
+                            } else null,
                             lastMessage = index == conversation.messageNodes.lastIndex,
                         )
                     }

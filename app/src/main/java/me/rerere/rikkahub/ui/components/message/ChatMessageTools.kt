@@ -152,6 +152,8 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     loading: Boolean = false,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onStopGeneration: (() -> Unit)? = null,
+    onDeleteToolCall: ((toolCallId: String) -> Unit)? = null,
 ) {
     val isAskUser = tool.toolName == ToolNames.ASK_USER
 
@@ -284,10 +286,24 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                     }
                 }
             }
+        } else if (tool.isExecuted && onDeleteToolCall != null) {
+            {
+                IconButton(
+                    onClick = { onDeleteToolCall(tool.toolCallId) },
+                    modifier = Modifier.size(24.dp),
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Delete01,
+                        contentDescription = stringResource(R.string.chat_message_tool_delete),
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                }
+            }
         } else {
             null
         },
-        onClick = if (content != null || isPending || images.isNotEmpty() || documents.isNotEmpty()) {
+        onClick = if (content != null || isPending || loading || images.isNotEmpty() || documents.isNotEmpty()) {
             { showResult = true }
         } else {
             null
@@ -431,6 +447,8 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             arguments = arguments,
             content = content,
             output = tool.output,
+            isRunning = loading,
+            onStopGeneration = onStopGeneration,
             onDismissRequest = { showResult = false }
         )
     }
@@ -442,6 +460,8 @@ private fun ToolCallPreviewSheet(
     arguments: JsonElement,
     content: JsonElement?,
     output: List<UIMessagePart>,
+    isRunning: Boolean = false,
+    onStopGeneration: (() -> Unit)? = null,
     onDismissRequest: () -> Unit = {}
 ) {
     val memoryRepo: MemoryRepository = koinInject()
@@ -457,6 +477,13 @@ private fun ToolCallPreviewSheet(
         onDismissRequest = onDismissRequest,
         content = {
             when {
+                content == null && isRunning -> RunningToolPreview(
+                    toolName = toolName,
+                    arguments = arguments,
+                    onStopGeneration = onStopGeneration,
+                    onDismissRequest = onDismissRequest,
+                )
+
                 content == null -> GenericToolPreview(
                     toolName = toolName,
                     arguments = arguments,
@@ -1016,4 +1043,77 @@ private fun ToolDenyReasonDialog(
             }
         }
     )
+}
+
+@Composable
+private fun RunningToolPreview(
+    toolName: String,
+    arguments: JsonElement,
+    onStopGeneration: (() -> Unit)?,
+    onDismissRequest: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxHeight(0.6f)
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // Header: running indicator + stop button
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                DotLoading(size = 12.dp)
+                Text(
+                    text = stringResource(R.string.chat_message_tool_running_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+            }
+            if (onStopGeneration != null) {
+                FilledTonalButton(
+                    onClick = {
+                        onStopGeneration()
+                        onDismissRequest()
+                    },
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Cancel01,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.chat_message_tool_stop))
+                }
+            }
+        }
+
+        // Tool name and input arguments
+        FormItem(
+            label = {
+                Text(stringResource(R.string.chat_message_tool_call_label, toolName))
+            }
+        ) {
+            HighlightCodeBlock(
+                code = JsonInstantPretty.encodeToString(arguments),
+                language = "json",
+                style = TextStyle(fontSize = 10.sp, lineHeight = 12.sp)
+            )
+        }
+
+        // Hint text
+        Text(
+            text = stringResource(R.string.chat_message_tool_running_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        )
+    }
 }

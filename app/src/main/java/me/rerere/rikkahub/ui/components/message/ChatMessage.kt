@@ -115,6 +115,8 @@ fun ChatMessage(
     onClearTranslation: (UIMessage) -> Unit = {},
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onStopGeneration: (() -> Unit)? = null,
+    onDeleteToolCall: ((toolCallId: String) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
     val settings = LocalSettings.current.displaySetting
@@ -169,6 +171,8 @@ fun ChatMessage(
                 model = model,
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
+                onStopGeneration = onStopGeneration,
+                onDeleteToolCall = onDeleteToolCall,
                 onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
             )
 
@@ -266,6 +270,8 @@ private fun MessagePartsBlock(
     loading: Boolean,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onStopGeneration: (() -> Unit)? = null,
+    onDeleteToolCall: ((toolCallId: String) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -337,6 +343,8 @@ private fun MessagePartsBlock(
                                         loading = loading && !step.tool.isExecuted,
                                         onToolApproval = onToolApproval,
                                         onToolAnswer = onToolAnswer,
+                                        onStopGeneration = onStopGeneration,
+                                        onDeleteToolCall = onDeleteToolCall,
                                     )
                                 }
                             }

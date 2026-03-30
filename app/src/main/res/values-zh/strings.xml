@@ -995,4 +995,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="skill_detail_page_file_name">文件名</string>
   <string name="skill_detail_page_file_name_invalid">无效的文件名</string>
   <string name="skill_detail_page_create">创建</string>
+    <string name="chat_message_tool_running_title">运行中</string>
+    <string name="chat_message_tool_running_hint">工具正在执行。您可以查看上方的命令详情，或终止生成。</string>
+    <string name="chat_message_tool_stop">终止</string>
 </resources>

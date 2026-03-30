@@ -358,6 +358,26 @@ class ChatVM(
     ) {        chatService.handleToolApproval(_conversationId, toolCallId, approved = true, answer = answer)
     }
 
+    fun deleteToolCall(nodeId: Uuid, toolCallId: String) {
+        val node = conversation.value.messageNodes.find { it.id == nodeId }
+        if (node != null) {
+            val updatedParts = node.currentMessage.parts.filterNot { part ->
+                part is UIMessagePart.Tool && part.toolCallId == toolCallId
+            }
+            val updatedMessage = node.currentMessage.copy(parts = updatedParts)
+            val updatedNode = node.copy(messages = node.messages.mapIndexed { index, msg ->
+                if (index == node.selectIndex) updatedMessage else msg
+            })
+            val updatedNodes = conversation.value.messageNodes.map { 
+                if (it.id == nodeId) updatedNode else it 
+            }
+            val updatedConversation = conversation.value.copy(messageNodes = updatedNodes)
+            viewModelScope.launch {
+                chatService.saveConversation(_conversationId, updatedConversation)
+            }
+        }
+    }
+
     fun saveConversationAsync() {
         viewModelScope.launch {
             chatService.saveConversation(_conversationId, conversation.value)

@@ -511,6 +511,12 @@ private fun ChatPageContent(
                 onToolAnswer = { toolCallId, answer ->
                     vm.handleToolAnswer(toolCallId, answer)
                 },
+                onStopGeneration = {
+                    vm.stopGeneration()
+                },
+                onDeleteToolCall = { nodeId, toolCallId ->
+                    vm.deleteToolCall(nodeId, toolCallId)
+                },
                 onToggleFavorite = { node ->
                     vm.toggleMessageFavorite(node)
                 },
