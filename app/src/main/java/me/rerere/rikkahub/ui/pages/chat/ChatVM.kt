@@ -358,6 +358,13 @@ class ChatVM(
     ) {        chatService.handleToolApproval(_conversationId, toolCallId, approved = true, answer = answer)
     }
 
+
+
+    fun stopGeneration() {
+        viewModelScope.launch {
+            chatService.stopGeneration(_conversationId)
+        }
+    }
     fun deleteToolCall(nodeId: Uuid, toolCallId: String) {
         val node = conversation.value.messageNodes.find { it.id == nodeId }
         if (node != null) {
