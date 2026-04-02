@@ -178,7 +178,7 @@ fun WorkflowFloatingPanel(
 
                             // 提示文字
                             Text(
-                                text = "自动继续时，助手完成回复后将等待${autoContinueDelayMs}ms后发送"继续"（最多${autoContinueMaxCount}次）",
+                                text = "自动继续时，助手完成回复后将等待${autoContinueDelayMs}ms后发送\"继续\"（最多${autoContinueMaxCount}次）",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
