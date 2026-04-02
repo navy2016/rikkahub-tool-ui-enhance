@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -40,8 +41,12 @@ fun WorkflowFloatingPanel(
     visible: Boolean,
     onDismiss: () -> Unit,
     autoContinue: Boolean,
+    autoContinueMaxCount: Int,
+    autoContinueDelayMs: Long,
     currentPhase: WorkflowPhase?,
     onAutoContinueChange: (Boolean) -> Unit,
+    onAutoContinueMaxCountChange: (Int) -> Unit,
+    onAutoContinueDelayMsChange: (Long) -> Unit,
     onPhaseChange: (WorkflowPhase?) -> Unit,
 ) {
     AnimatedVisibility(
@@ -66,7 +71,7 @@ fun WorkflowFloatingPanel(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 108.dp, end = 48.dp)
-                    .widthIn(min = 260.dp, max = 320.dp)
+                    .widthIn(min = 300.dp, max = 380.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -74,7 +79,7 @@ fun WorkflowFloatingPanel(
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -107,7 +112,7 @@ fun WorkflowFloatingPanel(
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Text(
-                                text = if (autoContinue) "打开" else "关闭",
+                                text = if (autoContinue) "开启" else "关闭",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -118,16 +123,76 @@ fun WorkflowFloatingPanel(
                         )
                     }
 
-                    // 阶段卡片
-                    if (autoContinue) {
-                        // 提示文字
-                        Text(
-                            text = "可不选择阶段；若选择，则自动继续时将按该阶段执行",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    // 自动继续设置（仅当开启时显示）
+                    AnimatedVisibility(visible = autoContinue) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // 最大次数滑块
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "最大次数",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = "${autoContinueMaxCount}次",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Slider(
+                                    value = autoContinueMaxCount.toFloat(),
+                                    onValueChange = { onAutoContinueMaxCountChange(it.toInt()) },
+                                    valueRange = 1f..50f,
+                                    steps = 49
+                                )
+                            }
+
+                            // 延迟时间滑块
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "延迟时间",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = "${autoContinueDelayMs}ms",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Slider(
+                                    value = autoContinueDelayMs.toFloat(),
+                                    onValueChange = { onAutoContinueDelayMsChange(it.toLong()) },
+                                    valueRange = 0f..10000f,
+                                    steps = 20
+                                )
+                            }
+
+                            // 提示文字
+                            Text(
+                                text = "自动继续时，助手完成回复后将等待${autoContinueDelayMs}ms后发送"继续"（最多${autoContinueMaxCount}次）",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            // 阶段选择提示
+                            Text(
+                                text = "可选阶段：不选则按助手回复自动执行",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
+                    // 阶段卡片
                     WorkflowPhase.entries.forEach { phase ->
                         WorkflowPhaseCard(
                             phase = phase,
