@@ -681,7 +681,9 @@ internal fun resolveResponseProviderCapabilities(host: String): ResponseProvider
         else -> ResponseProviderCapabilities()
     }
 
-    private fun getModelAbilities(model: me.rerere.ai.provider.Model): List<ModelAbility> {
-        return model.abilities.ifEmpty { ModelRegistry.MODEL_ABILITIES.getData(model.modelId) }
-    }
+
+}
+
+private fun getModelAbilities(model: me.rerere.ai.provider.Model): List<ModelAbility> {
+    return model.abilities.ifEmpty { ModelRegistry.MODEL_ABILITIES.getData(model.modelId) }
 }
