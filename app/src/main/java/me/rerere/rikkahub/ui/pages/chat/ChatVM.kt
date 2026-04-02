@@ -252,8 +252,13 @@ class ChatVM(
      * @param content 娑堟伅鍐呭
      * @param answer 鏄惁瑙﹀彂娑堟伅鐢熸垚锛屽鏋滀负false锛屽垯浠呮坊鍔犳秷鎭埌娑堟伅鍒楄〃涓?
      */
-    fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean = true) {
+    fun handleMessageSend(content: List<UIMessagePart>, answer: Boolean = true, fromAutoContinue: Boolean = false) {
         if (content.isEmptyInputMessage()) return
+
+        // 如果不是来自自动继续，重置自动继续计数器
+        if (!fromAutoContinue) {
+            resetWorkflowAutoContinueCount()
+        }
 
         chatService.sendMessage(_conversationId, content, answer)
     }
