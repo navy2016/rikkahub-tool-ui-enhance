@@ -22,6 +22,7 @@ import me.rerere.rikkahub.data.model.Conversation
  * 4. 当前最后一条消息是 ASSISTANT
  * 5. 当前没有 pending tool
  * 6. 当前没有正在运行的任务
+ * 7. autoContinueCount < autoContinueMaxCount（未达到最大次数）
  */
 @Composable
 fun WorkflowAutoContinue(
@@ -42,6 +43,13 @@ fun WorkflowAutoContinue(
             // 检查 autoContinue 是否开启
             val workflowState = currentConversation.workflowState
             if (workflowState?.autoContinue != true) return@collect
+
+            // 检查是否达到最大次数
+            if (workflowState.autoContinueCount >= workflowState.autoContinueMaxCount) {
+                // 达到最大次数，重置计数并停止自动继续
+                vm.resetWorkflowAutoContinueCount()
+                return@collect
+            }
 
             // 等待正在运行的任务结束
             while (currentLoadingJob?.isActive == true) {
@@ -64,8 +72,14 @@ fun WorkflowAutoContinue(
             }
             if (hasPendingTool) return@collect
 
+            // 应用设置的延迟时间
+            delay(workflowState.autoContinueDelayMs)
+
             // 满足所有条件，自动发送"继续"
             vm.handleMessageSend(listOf(UIMessagePart.Text("继续")))
+
+            // 增加计数
+            vm.incrementWorkflowAutoContinueCount()
         }
     }
 }
