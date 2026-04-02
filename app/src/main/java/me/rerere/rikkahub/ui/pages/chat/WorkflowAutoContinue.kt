@@ -44,13 +44,6 @@ fun WorkflowAutoContinue(
             val workflowState = currentConversation.workflowState
             if (workflowState?.autoContinue != true) return@collect
 
-            // 检查是否达到最大次数
-            if (workflowState.autoContinueCount >= workflowState.autoContinueMaxCount) {
-                // 达到最大次数，重置计数并停止自动继续
-                vm.resetWorkflowAutoContinueCount()
-                return@collect
-            }
-
             // 等待正在运行的任务结束
             while (currentLoadingJob?.isActive == true) {
                 delay(50)
@@ -72,14 +65,23 @@ fun WorkflowAutoContinue(
             }
             if (hasPendingTool) return@collect
 
+            // 检查是否达到最大次数（在发送前检查）
+            // 注意：这里检查的是当前计数，如果已经达到最大值，则停止
+            if (workflowState.autoContinueCount >= workflowState.autoContinueMaxCount) {
+                // 达到最大次数，重置计数并停止自动继续
+                vm.resetWorkflowAutoContinueCount()
+                return@collect
+            }
+
             // 应用设置的延迟时间
             delay(workflowState.autoContinueDelayMs)
 
-            // 满足所有条件，自动发送"继续"
-            vm.handleMessageSend(listOf(UIMessagePart.Text("继续")))
-
-            // 增加计数
+            // 先增加计数，再发送消息
+            // 这样下一次检查时会使用更新后的计数
             vm.incrementWorkflowAutoContinueCount()
+
+            // 满足所有条件，自动发送"继续"
+            vm.handleMessageSend(listOf(UIMessagePart.Text("继续")), answer = true, fromAutoContinue = true)
         }
     }
 }
