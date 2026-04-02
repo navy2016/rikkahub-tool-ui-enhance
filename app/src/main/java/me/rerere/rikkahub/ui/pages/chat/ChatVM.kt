@@ -610,14 +610,16 @@ class ChatVM(
     }
 
     fun incrementWorkflowAutoContinueCount() {
-        viewModelScope.launch {
-            val currentConversation = conversation.value
-            val currentState = currentConversation.workflowState
-            if (currentState != null) {
-                val newState = currentState.copy(
-                    autoContinueCount = currentState.autoContinueCount + 1
-                )
-                val updatedConversation = currentConversation.copy(workflowState = newState)
+        // 同步执行计数更新，确保在返回前完成
+        val currentConversation = conversation.value
+        val currentState = currentConversation.workflowState
+        if (currentState != null) {
+            val newState = currentState.copy(
+                autoContinueCount = currentState.autoContinueCount + 1
+            )
+            val updatedConversation = currentConversation.copy(workflowState = newState)
+            // 使用 runBlocking 确保同步完成
+            kotlinx.coroutines.runBlocking {
                 chatService.saveConversation(_conversationId, updatedConversation)
             }
         }
