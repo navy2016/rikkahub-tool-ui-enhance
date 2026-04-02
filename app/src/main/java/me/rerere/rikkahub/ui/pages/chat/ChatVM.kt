@@ -563,6 +563,60 @@ class ChatVM(
         }
     }
 
+
+    fun updateWorkflowAutoContinueMaxCount(maxCount: Int) {
+        viewModelScope.launch {
+            val currentConversation = conversation.value
+            val currentState = currentConversation.workflowState
+            if (currentState != null) {
+                val newState = currentState.copy(
+                    autoContinueMaxCount = maxCount.coerceIn(1, 50)
+                )
+                val updatedConversation = currentConversation.copy(workflowState = newState)
+                chatService.saveConversation(_conversationId, updatedConversation)
+            }
+        }
+    }
+
+    fun updateWorkflowAutoContinueDelay(delayMs: Long) {
+        viewModelScope.launch {
+            val currentConversation = conversation.value
+            val currentState = currentConversation.workflowState
+            if (currentState != null) {
+                val newState = currentState.copy(
+                    autoContinueDelayMs = delayMs.coerceIn(0, 60000)
+                )
+                val updatedConversation = currentConversation.copy(workflowState = newState)
+                chatService.saveConversation(_conversationId, updatedConversation)
+            }
+        }
+    }
+
+    fun resetWorkflowAutoContinueCount() {
+        viewModelScope.launch {
+            val currentConversation = conversation.value
+            val currentState = currentConversation.workflowState
+            if (currentState != null) {
+                val newState = currentState.copy(autoContinueCount = 0)
+                val updatedConversation = currentConversation.copy(workflowState = newState)
+                chatService.saveConversation(_conversationId, updatedConversation)
+            }
+        }
+    }
+
+    fun incrementWorkflowAutoContinueCount() {
+        viewModelScope.launch {
+            val currentConversation = conversation.value
+            val currentState = currentConversation.workflowState
+            if (currentState != null) {
+                val newState = currentState.copy(
+                    autoContinueCount = currentState.autoContinueCount + 1
+                )
+                val updatedConversation = currentConversation.copy(workflowState = newState)
+                chatService.saveConversation(_conversationId, updatedConversation)
+            }
+        }
+    }
     private fun getDateLabel(date: LocalDate): String {
         val today = LocalDate.now()
         val yesterday = today.minusDays(1)
