@@ -365,10 +365,14 @@ class LocalTools(
                     }.toString()))
                 }
 
-                // 安全检查通过，执行命令
-                val params = jsonObjectToMap(paramsObj)
-                val result = SandboxEngine.execute(context, sandboxId.toString(), operation, params)
-                listOf(UIMessagePart.Text(result.toString()))
+                // 安全检查通过，执行命令（使用 PRoot 执行，与 container_shell 一致）
+                val result = prootManager.executeShell(
+                    sandboxId = sandboxId.toString(),
+                    command = command
+                )
+                listOf(UIMessagePart.Text(buildJsonObject {
+                    result.forEach { (key, value) -> put(key, value) }
+                }.toString()))
             }
         )
     }
