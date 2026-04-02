@@ -541,9 +541,17 @@ private fun ChatPageContent(
                 visible = showWorkflowPanel,
                 onDismiss = { showWorkflowPanel = false },
                 autoContinue = currentWorkflowState.autoContinue,
+                autoContinueMaxCount = currentWorkflowState.autoContinueMaxCount,
+                autoContinueDelayMs = currentWorkflowState.autoContinueDelayMs,
                 currentPhase = currentWorkflowState.phase,
                 onAutoContinueChange = { enabled ->
                     vm.updateWorkflowAutoContinue(enabled)
+                },
+                onAutoContinueMaxCountChange = { maxCount ->
+                    vm.updateWorkflowAutoContinueMaxCount(maxCount)
+                },
+                onAutoContinueDelayMsChange = { delayMs ->
+                    vm.updateWorkflowAutoContinueDelay(delayMs)
                 },
                 onPhaseChange = { phase ->
                     vm.updateWorkflowPhase(phase)
