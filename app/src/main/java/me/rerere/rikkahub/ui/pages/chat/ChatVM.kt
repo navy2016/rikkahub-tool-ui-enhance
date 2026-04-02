@@ -617,6 +617,7 @@ class ChatVM(
             }
         }
     }
+
     private fun getDateLabel(date: LocalDate): String {
         val today = LocalDate.now()
         val yesterday = today.minusDays(1)
