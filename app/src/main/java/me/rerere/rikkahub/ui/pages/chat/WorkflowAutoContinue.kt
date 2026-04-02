@@ -66,8 +66,7 @@ fun WorkflowAutoContinue(
             if (hasPendingTool) return@collect
 
             // 【关键修复】重新获取最新的 conversation 状态
-            val latestConversation = vm.getConversationFlow(conversationId).value
-            val latestWorkflowState = latestConversation.workflowState
+            val latestWorkflowState = vm.conversation.value.workflowState
             
             // 【关键修复】使用最新的计数进行检查
             if (latestWorkflowState?.autoContinueCount ?: 0 >= latestWorkflowState?.autoContinueMaxCount ?: Int.MAX_VALUE) {
@@ -77,7 +76,7 @@ fun WorkflowAutoContinue(
             }
 
             // 应用设置的延迟时间
-            delay(latestWorkflowState?.autoContinueDelayMs ?: 1000L)
+            delay(vm.conversation.value.workflowState?.autoContinueDelayMs ?: 1000L)
 
             // 先增加计数（同步执行确保完成）
             vm.incrementWorkflowAutoContinueCount()
