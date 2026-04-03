@@ -5,64 +5,100 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
 /**
  * 可拖动的 Workflow 悬浮按钮
  *
- * 纯白色空心圆圈设计，无图标，支持在屏幕任意位置拖动
- * 初始位置：覆盖于搜索设置按钮上（底部第2个按钮）
+ * 纯白色空心圆圈设计，圆内显示当前X和Y坐标，支持在屏幕任意位置拖动
  */
 @Composable
 fun WorkflowSidebarHandle(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // 初始位置：覆盖搜索设置按钮（从左边数第2个按钮）
-    // 假设每个按钮约48dp宽，第2个按钮中心约在 48 + 24 = 72dp 左右
-    // 从底部约80dp处（输入栏高度约60-80dp）
-    var offsetX by rememberSaveable { mutableFloatStateOf(72f) }
-    var offsetY by rememberSaveable { mutableFloatStateOf(-100f) }
+    val handleSize = 56.dp
+    // 纯白色边框
+    val whiteColor = Color.White
 
-    Box(
-        modifier = modifier
-            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
-                    change.consume()
-                    // 自由拖动，无边界限制
-                    offsetX += dragAmount.x
-                    offsetY += dragAmount.y
-                }
-            }
-            .pointerInput(onClick) {
-                // 使用 detectTapGestures 处理点击，避免 clickable 的涟漪效果
-                detectTapGestures(onTap = { onClick() })
-            }
+    BoxWithConstraints(
+        modifier = modifier.fillMaxSize()
     ) {
-        // 纯白色空心圆圈，0.5dp边框，无图标
+        val density = LocalDensity.current
+        val maxX = with(density) { (maxWidth - handleSize).toPx().coerceAtLeast(0f) }
+        val maxY = with(density) { (maxHeight - handleSize).toPx().coerceAtLeast(0f) }
+        
+        var offsetX by rememberSaveable { mutableFloatStateOf(0f) }
+        var offsetY by rememberSaveable { mutableFloatStateOf(0f) }
+        var initialized by rememberSaveable { mutableStateOf(false) }
+
+        LaunchedEffect(maxX, maxY) {
+            if (!initialized) {
+                // 初始位置：右上角偏下一点（恢复之前的逻辑）
+                offsetX = maxX * 0.9f
+                offsetY = maxY * 0.35f
+                initialized = true
+            } else {
+                offsetX = offsetX.coerceIn(0f, maxX)
+                offsetY = offsetY.coerceIn(0f, maxY)
+            }
+        }
+
         Box(
             modifier = Modifier
-                .size(56.dp)
-                .background(Color.Transparent, CircleShape)
-                .border(0.5.dp, Color.White, CircleShape),
-            contentAlignment = Alignment.Center
+                .align(Alignment.TopStart)
+                .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+                .pointerInput(maxX, maxY) {
+                    detectDragGestures { change, dragAmount ->
+                        change.consume()
+                        offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxX)
+                        offsetY = (offsetY + dragAmount.y).coerceIn(0f, maxY)
+                    }
+                }
+                .pointerInput(onClick) {
+                    // 使用 detectTapGestures 处理点击，避免 clickable 的涟漪效果
+                    detectTapGestures(onTap = { onClick() })
+                }
         ) {
-            // 空心圆，内部无任何内容
+            // 纯白色空心圆圈，0.5dp边框
+            Box(
+                modifier = Modifier
+                    .size(handleSize)
+                    .background(Color.Transparent, shape = CircleShape)
+                    .border(width = 0.5.dp, color = whiteColor, shape = CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                // 圆内显示当前 X 和 Y 坐标（取整）
+                Text(
+                    text = "${offsetX.roundToInt()}\n${offsetY.roundToInt()}",
+                    color = whiteColor,
+                    fontSize = 8.sp,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 10.sp
+                )
+            }
         }
     }
 }
