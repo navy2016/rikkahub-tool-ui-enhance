@@ -524,11 +524,9 @@ private fun ChatPageContent(
         }
 
         if (workflowEnabled && workflowActive) {
+            // Workflow 悬浮按钮容器 - 全屏无限制，初始位置在底部搜索设置按钮处
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 96.dp, end = 8.dp, bottom = 120.dp),
-                contentAlignment = Alignment.TopEnd
+                modifier = Modifier.fillMaxSize()
             ) {
                 WorkflowSidebarHandle(
                     onClick = {
