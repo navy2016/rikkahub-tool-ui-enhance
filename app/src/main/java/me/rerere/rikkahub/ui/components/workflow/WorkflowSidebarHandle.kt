@@ -37,15 +37,16 @@ fun WorkflowSidebarHandle(
     modifier: Modifier = Modifier,
 ) {
     val handleSize = 56.dp
-    // 奶白色 - 奶油色
-    val creamWhiteColor = Color(0xFFFFFDD0)
+    // 纯白色边框
+    val whiteColor = Color.White
 
     BoxWithConstraints(
         modifier = modifier.fillMaxSize()
     ) {
         val density = LocalDensity.current
-        val maxX = with(density) { (maxWidth - handleSize).toPx().coerceAtLeast(0f) }
-        val maxY = with(density) { (maxHeight - handleSize).toPx().coerceAtLeast(0f) }
+        // 允许拖到屏幕边缘，最大坐标为屏幕宽高减去按钮尺寸
+        val maxX = with(density) { maxWidth.toPx() - handleSize.toPx() }.coerceAtLeast(0f)
+        val maxY = with(density) { maxHeight.toPx() - handleSize.toPx() }.coerceAtLeast(0f)
         
         var offsetX by rememberSaveable { mutableFloatStateOf(0f) }
         var offsetY by rememberSaveable { mutableFloatStateOf(0f) }
@@ -58,6 +59,7 @@ fun WorkflowSidebarHandle(
                 offsetY = maxY * 0.35f
                 initialized = true
             } else {
+                // 确保位置在有效范围内
                 offsetX = offsetX.coerceIn(0f, maxX)
                 offsetY = offsetY.coerceIn(0f, maxY)
             }
@@ -66,10 +68,12 @@ fun WorkflowSidebarHandle(
         Box(
             modifier = Modifier
                 .align(Alignment.TopStart)
+                // 使用 offset 将按钮定位到任意位置
                 .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-                .pointerInput(maxX, maxY) {
+                .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
                         change.consume()
+                        // 更新位置并限制在屏幕范围内
                         offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxX)
                         offsetY = (offsetY + dragAmount.y).coerceIn(0f, maxY)
                     }
@@ -78,12 +82,12 @@ fun WorkflowSidebarHandle(
                     detectTapGestures(onTap = { onClick() })
                 }
         ) {
-            // 奶白色空心圆圈，内部100%透明
+            // 纯白色空心圆圈，内部100%透明，0.5dp边框
             Box(
                 modifier = Modifier
                     .size(handleSize)
                     .background(Color.Transparent, shape = CircleShape)
-                    .border(width = 3.dp, color = creamWhiteColor, shape = CircleShape),
+                    .border(width = 0.5.dp, color = whiteColor, shape = CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 // 圆内无图标，100%透明
