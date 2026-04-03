@@ -29,7 +29,7 @@ import kotlin.math.roundToInt
 /**
  * 可拖动的 Workflow 悬浮按钮
  *
- * 纯白色空心圆圈设计，圆内显示当前X和Y坐标，支持在屏幕任意位置拖动
+ * 纯白色空心圆圈设计，圆内显示X和Y坐标，支持在屏幕任意位置拖动
  */
 @Composable
 fun WorkflowSidebarHandle(
@@ -39,7 +39,7 @@ fun WorkflowSidebarHandle(
     val handleSize = 56.dp
     val whiteColor = Color.White
     
-    // 使用屏幕尺寸作为拖动范围（不受父容器限制）
+    // 获取屏幕尺寸用于初始位置计算
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
@@ -47,13 +47,13 @@ fun WorkflowSidebarHandle(
     
     var offsetX by rememberSaveable { mutableFloatStateOf(0f) }
     var offsetY by rememberSaveable { mutableFloatStateOf(0f) }
-    var initialized by rememberSaveable { mutableFloatStateOf(0f) } // 0=false
+    var initialized by rememberSaveable { mutableStateOf(false) }
 
     // 初始化位置：右上角偏下（只在首次加载时执行）
-    if (initialized < 0.5f) {
+    if (!initialized) {
         offsetX = screenWidthPx * 0.9f
         offsetY = screenHeightPx * 0.35f
-        initialized = 1f
+        initialized = true
     }
 
     Box(
@@ -62,16 +62,13 @@ fun WorkflowSidebarHandle(
             .pointerInput(Unit) {
                 detectDragGestures { change, dragAmount ->
                     change.consume()
-                    // 【关键】自由拖动，基于屏幕尺寸进行边界限制
-                    // 这样可以拖到屏幕任意位置（包括最顶和最底边缘）
-                    val maxX = screenWidthPx - with(density) { handleSize.toPx() }
-                    val maxY = screenHeightPx - with(density) { handleSize.toPx() }
-                    offsetX = (offsetX + dragAmount.x).coerceIn(0f, maxX)
-                    offsetY = (offsetY + dragAmount.y).coerceIn(0f, maxY)
+                    // 【关键】自由拖动，无边界限制！
+                    offsetX += dragAmount.x
+                    offsetY += dragAmount.y
                 }
             }
             .pointerInput(onClick) {
-                // 使用 detectTapGestures 避免 clickable 的涟漪效果
+                // 使用 detectTapGestures 避免 clickable 的涟漪效果（无闪现）
                 detectTapGestures(onTap = { onClick() })
             },
         contentAlignment = Alignment.Center
