@@ -2,8 +2,8 @@ package me.rerere.rikkahub.ui.components.workflow
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -68,10 +68,7 @@ fun WorkflowSidebarHandle(
                     offsetY += dragAmount.y
                 }
             }
-            .pointerInput(onClick) {
-                // 使用 detectTapGestures 避免 clickable 的涟漪效果（无闪现）
-                detectTapGestures(onTap = { onClick() })
-            },
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         // 纯白色空心圆圈，0.5dp边框
