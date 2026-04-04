@@ -12,15 +12,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -37,25 +34,8 @@ fun WorkflowSidebarHandle(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val handleSize = 56.dp
-    val whiteColor = Color.White
-    
-    // 获取屏幕尺寸用于初始位置计算
-    val configuration = LocalConfiguration.current
-    val density = LocalDensity.current
-    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
-    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
-    
     var offsetX by rememberSaveable { mutableFloatStateOf(0f) }
     var offsetY by rememberSaveable { mutableFloatStateOf(0f) }
-    var initialized by rememberSaveable { mutableStateOf(false) }
-
-    // 初始化位置：右上角偏下（只在首次加载时执行）
-    if (!initialized) {
-        offsetX = screenWidthPx * 0.9f
-        offsetY = screenHeightPx * 0.35f
-        initialized = true
-    }
 
     Box(
         modifier = modifier
@@ -63,26 +43,23 @@ fun WorkflowSidebarHandle(
             .pointerInput(Unit) {
                 detectDragGestures { change, dragAmount ->
                     change.consume()
-                    // 【关键】自由拖动，无边界限制！
                     offsetX += dragAmount.x
                     offsetY += dragAmount.y
                 }
             }
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
     ) {
-        // 纯白色空心圆圈，0.5dp边框
         Box(
             modifier = Modifier
-                .size(handleSize)
-                .background(Color.Transparent, shape = CircleShape)
-                .border(width = 0.5.dp, color = whiteColor, shape = CircleShape),
+                .size(56.dp)
+                .border(0.5.dp, Color.White, CircleShape)
+                .background(Color.Transparent, CircleShape)
+                .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
             // 圆内显示当前 X 和 Y 坐标
             Text(
                 text = "${offsetX.roundToInt()}\n${offsetY.roundToInt()}",
-                color = whiteColor,
+                color = Color.White,
                 fontSize = 8.sp,
                 textAlign = TextAlign.Center,
                 lineHeight = 10.sp
