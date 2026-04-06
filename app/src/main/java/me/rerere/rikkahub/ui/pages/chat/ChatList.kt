@@ -1358,7 +1358,7 @@ private fun ChatListPreview(
                             selecting = selectedItems.isNotEmpty()
                         }
                     ) {
-                        Icon(HugeIcons.LeftToRightListBullet, null)
+                        Icon(HugeIcons.CursorPointer02, null)
                     }
                 }
                 Tooltip(
