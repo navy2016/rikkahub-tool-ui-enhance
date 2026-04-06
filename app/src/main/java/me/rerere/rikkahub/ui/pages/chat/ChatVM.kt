@@ -258,6 +258,7 @@ class ChatVM(
      * @param answer 鏄惁瑙﹀彂娑堟伅鐢熸垚锛屽鏋滀负false锛屽垯浠呮坊鍔犳秷鎭埌娑堟伅鍒楄〃涓?
      */
     fun handleMessageSend(content: List<UIMessagePart>, answer: Boolean = true, fromAutoContinue: Boolean = false) {
+        clearDeleteUndoState()
         if (content.isEmptyInputMessage()) return
 
         // 如果不是来自自动继续，重置自动继续计数器
@@ -269,6 +270,7 @@ class ChatVM(
     }
 
     fun handleMessageEdit(parts: List<UIMessagePart>, messageId: Uuid) {
+        clearDeleteUndoState()
         if (parts.isEmptyInputMessage()) return
 
         viewModelScope.launch {
@@ -347,6 +349,11 @@ class ChatVM(
         }
     }
 
+    private fun clearDeleteUndoState() {
+        lastDeletedConversationSnapshot = null
+        canUndoDelete = false
+    }
+
     fun showDeleteBlockedWhileGeneratingError() {
         chatService.addError(
             error = IllegalStateException("Please stop generation before deleting messages"),
@@ -359,6 +366,7 @@ class ChatVM(
         message: UIMessage,
         regenerateAssistantMsg: Boolean = true
     ) {
+        clearDeleteUndoState()
         chatService.regenerateAtMessage(_conversationId, message, regenerateAssistantMsg)
     }
 
