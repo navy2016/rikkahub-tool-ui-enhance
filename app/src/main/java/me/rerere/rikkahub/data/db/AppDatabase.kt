@@ -1,0 +1,115 @@
+package me.rerere.rikkahub.data.db
+
+import androidx.room.AutoMigration
+import androidx.room.Database
+import androidx.room.RoomDatabase
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
+import me.rerere.ai.core.TokenUsage
+import me.rerere.rikkahub.data.db.dao.ConversationDAO
+import me.rerere.rikkahub.data.db.dao.CompressionEventDAO
+import me.rerere.rikkahub.data.db.dao.FavoriteDAO
+import me.rerere.rikkahub.data.db.dao.GenMediaDAO
+import me.rerere.rikkahub.data.db.dao.KnowledgeBaseChunkDAO
+import me.rerere.rikkahub.data.db.dao.KnowledgeBaseDocumentDAO
+import me.rerere.rikkahub.data.db.dao.ManagedFileDAO
+import me.rerere.rikkahub.data.db.dao.MemoryDAO
+import me.rerere.rikkahub.data.db.dao.MemoryIndexChunkDAO
+import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
+import me.rerere.rikkahub.data.db.dao.PendingLedgerBatchDAO
+import me.rerere.rikkahub.data.db.dao.ScheduledTaskRunDAO
+import me.rerere.rikkahub.data.db.dao.SourcePreviewChunkDAO
+import me.rerere.rikkahub.data.db.entity.ConversationEntity
+import me.rerere.rikkahub.data.db.entity.CompressionEventEntity
+import me.rerere.rikkahub.data.db.entity.FavoriteEntity
+import me.rerere.rikkahub.data.db.entity.GenMediaEntity
+import me.rerere.rikkahub.data.db.entity.KnowledgeBaseChunkEntity
+import me.rerere.rikkahub.data.db.entity.KnowledgeBaseDocumentEntity
+import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
+import me.rerere.rikkahub.data.db.entity.MemoryEntity
+import me.rerere.rikkahub.data.db.entity.MemoryIndexChunkEntity
+import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
+import me.rerere.rikkahub.data.db.entity.PendingLedgerBatchEntity
+import me.rerere.rikkahub.data.db.entity.ScheduledTaskRunEntity
+import me.rerere.rikkahub.data.db.entity.SourcePreviewChunkEntity
+import me.rerere.rikkahub.data.db.migrations.Migration_16_17
+import me.rerere.rikkahub.data.db.migrations.Migration_19_20
+import me.rerere.rikkahub.data.db.migrations.Migration_21_22
+import me.rerere.rikkahub.data.db.migrations.Migration_22_23
+import me.rerere.rikkahub.data.db.migrations.Migration_23_24
+import me.rerere.rikkahub.data.db.migrations.Migration_24_25
+import me.rerere.rikkahub.data.db.migrations.Migration_8_9
+import me.rerere.rikkahub.utils.JsonInstant
+
+@Database(
+    entities = [
+        ConversationEntity::class,
+        MemoryEntity::class,
+        GenMediaEntity::class,
+        MessageNodeEntity::class,
+        ManagedFileEntity::class,
+        FavoriteEntity::class,
+        CompressionEventEntity::class,
+        PendingLedgerBatchEntity::class,
+        MemoryIndexChunkEntity::class,
+        SourcePreviewChunkEntity::class,
+        ScheduledTaskRunEntity::class,
+        KnowledgeBaseDocumentEntity::class,
+        KnowledgeBaseChunkEntity::class,
+    ],
+    version = 25,
+    autoMigrations = [
+        AutoMigration(from = 1, to = 2),
+        AutoMigration(from = 2, to = 3),
+        AutoMigration(from = 3, to = 4),
+        AutoMigration(from = 4, to = 5),
+        AutoMigration(from = 5, to = 6),
+        AutoMigration(from = 7, to = 8),
+        AutoMigration(from = 8, to = 9, spec = Migration_8_9::class),
+        AutoMigration(from = 9, to = 10),
+        AutoMigration(from = 10, to = 11),
+        AutoMigration(from = 12, to = 13),
+        AutoMigration(from = 16, to = 17, spec = Migration_16_17::class),
+        AutoMigration(from = 20, to = 21),
+    ]
+)
+@TypeConverters(TokenUsageConverter::class)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun conversationDao(): ConversationDAO
+
+    abstract fun memoryDao(): MemoryDAO
+
+    abstract fun genMediaDao(): GenMediaDAO
+
+    abstract fun messageNodeDao(): MessageNodeDAO
+
+    abstract fun managedFileDao(): ManagedFileDAO
+
+    abstract fun favoriteDao(): FavoriteDAO
+
+    abstract fun compressionEventDao(): CompressionEventDAO
+
+    abstract fun pendingLedgerBatchDao(): PendingLedgerBatchDAO
+
+    abstract fun memoryIndexChunkDao(): MemoryIndexChunkDAO
+
+    abstract fun sourcePreviewChunkDao(): SourcePreviewChunkDAO
+
+    abstract fun scheduledTaskRunDao(): ScheduledTaskRunDAO
+
+    abstract fun knowledgeBaseDocumentDao(): KnowledgeBaseDocumentDAO
+
+    abstract fun knowledgeBaseChunkDao(): KnowledgeBaseChunkDAO
+}
+
+object TokenUsageConverter {
+    @TypeConverter
+    fun fromTokenUsage(usage: TokenUsage?): String {
+        return JsonInstant.encodeToString(usage)
+    }
+
+    @TypeConverter
+    fun toTokenUsage(usage: String): TokenUsage? {
+        return JsonInstant.decodeFromString(usage)
+    }
+}

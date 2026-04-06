@@ -1,0 +1,80 @@
+name: Build Debug APK
+
+on:
+  push:
+    branches: [ feat_epub, master, main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+
+      - name: Setup Gradle (No Cache)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Create dummy google-services.json
+        run: |
+          cat > app/google-services.json << 'EOFGS'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "dummy-project",
+              "storage_bucket": "dummy-project.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub"
+                  }
+                },
+                "api_key": [{"current_key": "AIzaSyDummyKey000000000000000000000000"}]
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000001",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub.dev.next"
+                  }
+                },
+                "api_key": [{"current_key": "AIzaSyDummyKey000000000000000000000001"}]
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOFGS
+
+      - name: Clean Build
+        run: ./gradlew clean
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+
