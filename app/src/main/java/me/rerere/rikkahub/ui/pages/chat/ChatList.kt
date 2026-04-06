@@ -602,7 +602,7 @@ private fun ChatListNormal(
                 visible = selecting,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .offset(y = -(48).dp),
+                    .padding(bottom = innerPadding.calculateBottomPadding() + 24.dp),
                 enter = slideInVertically(
                     initialOffsetY = { it * 2 },
                 ),
@@ -1328,7 +1328,7 @@ private fun ChatListPreview(
             visible = selecting,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .offset(y = -(48).dp),
+                .padding(bottom = innerPadding.calculateBottomPadding() + 24.dp),
             enter = slideInVertically(initialOffsetY = { it * 2 }),
             exit = slideOutVertically(targetOffsetY = { it * 2 }),
         ) {
