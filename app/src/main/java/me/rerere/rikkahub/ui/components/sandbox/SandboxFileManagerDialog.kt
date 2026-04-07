@@ -126,11 +126,20 @@ fun SandboxFileManagerDialog(
     var pathHistory by remember { mutableStateOf(listOf("")) }
     var currentItems by remember { mutableStateOf<List<FileSystemItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var searchQuery by remember { mutableStateOf("") }
+    var allFilesInScope by remember { mutableStateOf(emptyList()) }
+
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.isNotEmpty()) {
+            allFilesInScope = withContext(Dispatchers.IO) { collectAllFiles(currentPath, browserMode) }
+        }
+    }
 
     fun resetNavigation(mode: BrowserMode) {
         browserMode = mode
         currentPath = ""
         pathHistory = listOf("")
+        searchQuery = ""
     }
 
     fun loadDirectory(path: String = currentPath, mode: BrowserMode = browserMode) {
@@ -151,10 +160,34 @@ fun SandboxFileManagerDialog(
                 }
             }
             isLoading = false
+            allFilesInScope = withContext(Dispatchers.IO) { collectAllFiles(currentPath, browserMode) }
+        }
+    }
+
+    suspend fun collectAllFiles(basePath: String, mode: BrowserMode): List<FileSystemItem> {
+        return withContext(Dispatchers.IO) {
+            val result = mutableListOf<FileSystemItem>()
+            val stack = ArrayDeque<String>()
+            stack.add(basePath)
+            while (stack.isNotEmpty()) {
+                val current = stack.removeFirst()
+                val items = try {
+                    when (mode) {
+                        BrowserMode.Workspace -> SandboxEngine.listDirectory(context, sandboxId, current).map { it.toWorkspaceItem(context, sandboxId) }
+                        BrowserMode.Container -> loadContainerItems(context, sandboxId, prootManager, current)
+                    }
+                } catch (e: Exception) { continue }
+                for (item in items) {
+                    if (item.isDirectory) stack.add(item.path)
+                    result.add(item.copy(subtitle = item.path.removePrefix(basePath).removePrefix("/").takeIf { it.isNotEmpty() } ?: item.path))
+                }
+            }
+            result
         }
     }
 
     fun navigateTo(path: String) {
+        searchQuery = ""
         currentPath = path
         pathHistory = pathHistory + path
     }
@@ -273,7 +306,8 @@ fun SandboxFileManagerDialog(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp),
-                    )
+                        )
+
                 }
 
                 when {
@@ -293,8 +327,9 @@ fun SandboxFileManagerDialog(
                     }
 
                     else -> {
-                        val folderCount = currentItems.count { it.isDirectory }
-                        val fileCount = currentItems.size - folderCount
+                        val filteredItems = if (searchQuery.isEmpty()) currentItems else allFilesInScope.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                        val folderCount = filteredItems.count { it.isDirectory }
+                        val fileCount = filteredItems.size - folderCount
                         Text(
                             text = buildString {
                                 append("共 ")
@@ -311,8 +346,19 @@ fun SandboxFileManagerDialog(
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
 
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            placeholder = { Text("搜索文件...") },
+                            singleLine = true,
+                            shape = MaterialTheme.shapes.medium,
+                        )
+
                         LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                            items(currentItems, key = { "${it.path}:${it.name}" }) { item ->
+                            items(filteredItems, key = { "${it.path}:${it.name}" }) { item ->
                                 FileSystemItemRow(
                                     item = item,
                                     onClick = {
