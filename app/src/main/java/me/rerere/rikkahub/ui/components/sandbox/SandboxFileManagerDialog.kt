@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -124,10 +125,10 @@ fun SandboxFileManagerDialog(
     var selectedFile by remember { mutableStateOf<FileSystemItem?>(null) }
     var currentPath by remember { mutableStateOf("") }
     var pathHistory by remember { mutableStateOf(listOf("")) }
-    var currentItems by remember { mutableStateOf<List<FileSystemItem>>(emptyList()) }
+    var currentItems by remember { mutableStateOf<List<FileSystemItem>>(emptyList<FileSystemItem>()) }
     var isLoading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
-    var allFilesInScope by remember { mutableStateOf(emptyList()) }
+    var allFilesInScope by remember { mutableStateOf(emptyList<FileSystemItem>()) }
 
     LaunchedEffect(searchQuery) {
         if (searchQuery.isNotEmpty()) {
@@ -574,7 +575,7 @@ private suspend fun loadContainerItems(
                 )
             }
             ?.sortedWith(compareBy<FileSystemItem>({ !it.isDirectory }, { it.name.lowercase() }))
-            ?: emptyList()
+            ?: emptyList<FileSystemItem>()
     }
 
     return prootManager.listContainerDirectory(sandboxId, path).map { item ->
