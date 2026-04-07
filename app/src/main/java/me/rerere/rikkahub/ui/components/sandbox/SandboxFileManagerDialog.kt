@@ -114,6 +114,27 @@ fun SandboxFileManagerDialog(
     val scope = rememberCoroutineScope()
     val prootManager: PRootManager = koinInject()
 
+    suspend fun collectAllFiles(basePath: String, mode: BrowserMode): List<FileSystemItem> {
+        return withContext(Dispatchers.IO) {
+            val result = mutableListOf<FileSystemItem>()
+            val stack = ArrayDeque<String>()
+            stack.add(basePath)
+            while (stack.isNotEmpty()) {
+                val current = stack.removeFirst()
+                val items = try {
+                    when (mode) {
+                        BrowserMode.Workspace -> SandboxEngine.listDirectory(context, sandboxId, current).map { it.toWorkspaceItem(context, sandboxId) }
+                        BrowserMode.Container -> loadContainerItems(context, sandboxId, prootManager, current)
+                    }
+                } catch (e: Exception) { continue }
+                for (item in items) {
+                    if (item.isDirectory) stack.add(item.path)
+                    result.add(item.copy(subtitle = item.path.removePrefix(basePath).removePrefix("/").takeIf { it.isNotEmpty() } ?: item.path))
+                }
+            }
+            result
+        }
+    }
     var browserMode by remember { mutableStateOf(BrowserMode.Workspace) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -165,27 +186,6 @@ fun SandboxFileManagerDialog(
         }
     }
 
-    suspend fun collectAllFiles(basePath: String, mode: BrowserMode): List<FileSystemItem> {
-        return withContext(Dispatchers.IO) {
-            val result = mutableListOf<FileSystemItem>()
-            val stack = ArrayDeque<String>()
-            stack.add(basePath)
-            while (stack.isNotEmpty()) {
-                val current = stack.removeFirst()
-                val items = try {
-                    when (mode) {
-                        BrowserMode.Workspace -> SandboxEngine.listDirectory(context, sandboxId, current).map { it.toWorkspaceItem(context, sandboxId) }
-                        BrowserMode.Container -> loadContainerItems(context, sandboxId, prootManager, current)
-                    }
-                } catch (e: Exception) { continue }
-                for (item in items) {
-                    if (item.isDirectory) stack.add(item.path)
-                    result.add(item.copy(subtitle = item.path.removePrefix(basePath).removePrefix("/").takeIf { it.isNotEmpty() } ?: item.path))
-                }
-            }
-            result
-        }
-    }
 
     fun navigateTo(path: String) {
         searchQuery = ""
