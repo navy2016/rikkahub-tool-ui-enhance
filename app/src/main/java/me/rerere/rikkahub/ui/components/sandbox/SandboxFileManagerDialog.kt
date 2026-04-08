@@ -122,9 +122,7 @@ fun SandboxFileManagerDialog(
             val stack = ArrayDeque<String>()
             
             // 对于容器模式的根目录（容器入口），遍历所有 shortcuts 对应的真实路径
-            // 而不是试图访问可能无法访问的 "/" 根目录
             if (mode == BrowserMode.Container && (basePath.isBlank() || basePath == "/")) {
-                // 添加所有 shortcuts 的真实路径（排除根目录 "/" 本身，避免重复）
                 containerRootShortcuts
                     .map { it.path }
                     .filter { it != "/" }
@@ -236,6 +234,9 @@ fun SandboxFileManagerDialog(
                 }
             }
             isLoading = false
+            // 注意：不再自动更新 allFilesInScope
+            // 搜索数据保持，直到用户修改搜索词
+            // 这样"返回搜索结果"按钮能始终正确工作
         }
     }
 
