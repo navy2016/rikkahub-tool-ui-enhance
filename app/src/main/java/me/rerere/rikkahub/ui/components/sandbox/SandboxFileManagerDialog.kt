@@ -120,7 +120,19 @@ fun SandboxFileManagerDialog(
         return withContext(Dispatchers.IO) {
             val result = mutableListOf<FileSystemItem>()
             val stack = ArrayDeque<String>()
-            stack.add(basePath.ifBlank { "/" })
+            
+            // 对于容器模式的根目录（容器入口），遍历所有 shortcuts 对应的真实路径
+            // 而不是试图访问可能无法访问的 "/" 根目录
+            if (mode == BrowserMode.Container && (basePath.isBlank() || basePath == "/")) {
+                // 添加所有 shortcuts 的真实路径（排除根目录 "/" 本身，避免重复）
+                containerRootShortcuts
+                    .map { it.path }
+                    .filter { it != "/" }
+                    .forEach { stack.add(it) }
+            } else {
+                stack.add(basePath.ifBlank { "/" })
+            }
+            
             while (stack.isNotEmpty()) {
                 val current = stack.removeFirst()
                 val items = try {
@@ -170,11 +182,8 @@ fun SandboxFileManagerDialog(
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
     // 当路径或浏览模式改变时，只隐藏搜索结果视图，保留搜索数据
-    // 这样"返回搜索结果"按钮能正确工作，且搜索输入不会意外失去焦点
     LaunchedEffect(browserMode, currentPath) {
         showSearchResults = false
-        // 注意：不清空 allFilesInScope，保留之前的搜索结果
-        // 也不重置 isSearching 状态，避免闪烁
     }
 
     LaunchedEffect(searchQuery) {
@@ -233,8 +242,6 @@ fun SandboxFileManagerDialog(
     fun navigateTo(path: String) {
         currentPath = path
         pathHistory = pathHistory + path
-        // 注意：不在这里设置 showSearchResults = false
-        // 由 LaunchedEffect 处理，且保留搜索数据
     }
 
     fun openFile(item: FileSystemItem) {
@@ -472,7 +479,7 @@ fun SandboxFileManagerDialog(
                                         }
                                     }
                                     
-                                    // 搜索加载指示器叠加在列表上方，而不是替换整个内容
+                                    // 搜索加载指示器叠加在列表上方
                                     if (isSearching) {
                                         Box(
                                             modifier = Modifier
