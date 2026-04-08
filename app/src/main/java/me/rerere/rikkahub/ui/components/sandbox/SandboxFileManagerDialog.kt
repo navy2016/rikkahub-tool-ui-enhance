@@ -62,11 +62,10 @@ import com.composables.icons.lucide.Wrench
 import com.composables.icons.lucide.X
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.collectLatest
-import androidx.compose.runtime.snapshots.snapshotFlow
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.data.container.PRootManager
@@ -168,6 +167,9 @@ fun SandboxFileManagerDialog(
     var searchQuery by remember { mutableStateOf("") }
     var allFilesInScope by remember { mutableStateOf(emptyList<FileSystemItem>()) }
     var showSearchResults by remember { mutableStateOf(false) }
+    
+    // 用于防抖的 Job
+    var searchJob by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(browserMode, currentPath) {
         // 当浏览模式或路径变化时退出搜索结果并清理索引
@@ -175,28 +177,29 @@ fun SandboxFileManagerDialog(
         allFilesInScope = emptyList()
     }
 
-    LaunchedEffect(Unit) {
-        snapshotFlow { searchQuery }
-            .debounce(250)
-            .collectLatest { query ->
-                if (query.isBlank()) {
-                    allFilesInScope = emptyList()
-                    showSearchResults = false
-                    isLoading = false
-                } else {
-                    isLoading = true
-                    val list = try {
-                        withContext(Dispatchers.IO) {
-                            collectAllFiles(currentPath, browserMode)
-                        }
-                    } catch (e: Exception) {
-                        emptyList<FileSystemItem>()
+    // 使用传统 LaunchedEffect + Job 取消实现防抖，避免依赖 snapshotFlow
+    LaunchedEffect(searchQuery) {
+        searchJob?.cancel()
+        if (searchQuery.isBlank()) {
+            allFilesInScope = emptyList()
+            showSearchResults = false
+            isLoading = false
+        } else {
+            searchJob = launch {
+                delay(250) // 防抖延迟 250ms
+                isLoading = true
+                val list = try {
+                    withContext(Dispatchers.IO) {
+                        collectAllFiles(currentPath, browserMode)
                     }
-                    allFilesInScope = list
-                    showSearchResults = true
-                    isLoading = false
+                } catch (e: Exception) {
+                    emptyList<FileSystemItem>()
                 }
+                allFilesInScope = list
+                showSearchResults = true
+                isLoading = false
             }
+        }
     }
 
     fun resetNavigation(mode: BrowserMode) {
@@ -236,7 +239,6 @@ fun SandboxFileManagerDialog(
 
     fun navigateTo(path: String) {
         // 进入目录时隐藏搜索结果（但保留 searchQuery，用户可返回）
-        searchQuery = searchQuery // keep
         currentPath = path
         pathHistory = pathHistory + path
         showSearchResults = false
@@ -352,7 +354,7 @@ fun SandboxFileManagerDialog(
 
                 if (browserMode == BrowserMode.Container && currentPath.isEmpty()) {
                     Text(
-                        text = "容器目录视图可直接浏览模型能工作的主要目录。工作区文件编辑请切到“工作区文件”。",
+                        text = "容器目录视图可直接浏览模型能工作的主要目录。工作区文件编辑请切到"工作区文件"。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp),
