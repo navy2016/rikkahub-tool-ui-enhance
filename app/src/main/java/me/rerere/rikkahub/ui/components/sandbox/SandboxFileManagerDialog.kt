@@ -169,9 +169,12 @@ fun SandboxFileManagerDialog(
     
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
+    // 当路径或浏览模式改变时，只隐藏搜索结果视图，保留搜索数据
+    // 这样"返回搜索结果"按钮能正确工作，且搜索输入不会意外失去焦点
     LaunchedEffect(browserMode, currentPath) {
         showSearchResults = false
-        allFilesInScope = emptyList()
+        // 注意：不清空 allFilesInScope，保留之前的搜索结果
+        // 也不重置 isSearching 状态，避免闪烁
     }
 
     LaunchedEffect(searchQuery) {
@@ -224,16 +227,14 @@ fun SandboxFileManagerDialog(
                 }
             }
             isLoading = false
-            if (searchQuery.isNotEmpty()) {
-                allFilesInScope = withContext(Dispatchers.IO) { collectAllFiles(currentPath, browserMode) }
-            }
         }
     }
 
     fun navigateTo(path: String) {
         currentPath = path
         pathHistory = pathHistory + path
-        showSearchResults = false
+        // 注意：不在这里设置 showSearchResults = false
+        // 由 LaunchedEffect 处理，且保留搜索数据
     }
 
     fun openFile(item: FileSystemItem) {
