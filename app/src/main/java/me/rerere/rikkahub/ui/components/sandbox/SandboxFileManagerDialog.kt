@@ -120,7 +120,6 @@ fun SandboxFileManagerDialog(
         return withContext(Dispatchers.IO) {
             val result = mutableListOf<FileSystemItem>()
             val stack = ArrayDeque<String>()
-            // 统一根语义为 "/"
             stack.add(basePath.ifBlank { "/" })
             while (stack.isNotEmpty()) {
                 val current = stack.removeFirst()
@@ -130,7 +129,6 @@ fun SandboxFileManagerDialog(
                         BrowserMode.Container -> loadContainerItems(context, sandboxId, prootManager, current)
                     }
                 } catch (e: Exception) {
-                    // 跳过出错目录，继续其他目录
                     continue
                 }
                 for (item in items) {
@@ -168,16 +166,13 @@ fun SandboxFileManagerDialog(
     var allFilesInScope by remember { mutableStateOf(emptyList<FileSystemItem>()) }
     var showSearchResults by remember { mutableStateOf(false) }
     
-    // 用于防抖的 Job
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(browserMode, currentPath) {
-        // 当浏览模式或路径变化时退出搜索结果并清理索引
         showSearchResults = false
         allFilesInScope = emptyList()
     }
 
-    // 使用传统 LaunchedEffect + Job 取消实现防抖，避免依赖 snapshotFlow
     LaunchedEffect(searchQuery) {
         searchJob?.cancel()
         if (searchQuery.isBlank()) {
@@ -186,7 +181,7 @@ fun SandboxFileManagerDialog(
             isLoading = false
         } else {
             searchJob = launch {
-                delay(250) // 防抖延迟 250ms
+                delay(250)
                 isLoading = true
                 val list = try {
                     withContext(Dispatchers.IO) {
@@ -219,7 +214,6 @@ fun SandboxFileManagerDialog(
                     BrowserMode.Workspace -> SandboxEngine.listDirectory(context, sandboxId, path).map { file ->
                         file.toWorkspaceItem(context, sandboxId)
                     }
-
                     BrowserMode.Container -> loadContainerItems(
                         context = context,
                         sandboxId = sandboxId,
@@ -229,16 +223,13 @@ fun SandboxFileManagerDialog(
                 }
             }
             isLoading = false
-            // 如果当前没有主动搜索，刷新索引为空；否则保持搜索索引不变
             if (searchQuery.isNotEmpty()) {
                 allFilesInScope = withContext(Dispatchers.IO) { collectAllFiles(currentPath, browserMode) }
             }
         }
     }
 
-
     fun navigateTo(path: String) {
-        // 进入目录时隐藏搜索结果（但保留 searchQuery，用户可返回）
         currentPath = path
         pathHistory = pathHistory + path
         showSearchResults = false
@@ -354,12 +345,11 @@ fun SandboxFileManagerDialog(
 
                 if (browserMode == BrowserMode.Container && currentPath.isEmpty()) {
                     Text(
-                        text = "容器目录视图可直接浏览模型能工作的主要目录。工作区文件编辑请切到"工作区文件"。",
+                        text = "容器目录视图可直接浏览模型能工作的主要目录。工作区文件编辑请切到\"工作区文件\"。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp),
-                        )
-
+                    )
                 }
 
                 when {
@@ -379,11 +369,15 @@ fun SandboxFileManagerDialog(
                     }
 
                     else -> {
-                        val filteredItems = if (showSearchResults && searchQuery.isNotEmpty()) allFilesInScope.filter { item ->
-                            item.name.contains(searchQuery, ignoreCase = true) ||
-                                item.path.contains(searchQuery, ignoreCase = true) ||
-                                (item.subtitle?.contains(searchQuery, ignoreCase = true) ?: false)
-                        } else currentItems
+                        val filteredItems = if (showSearchResults && searchQuery.isNotEmpty()) {
+                            allFilesInScope.filter { item ->
+                                item.name.contains(searchQuery, ignoreCase = true) ||
+                                    item.path.contains(searchQuery, ignoreCase = true) ||
+                                    (item.subtitle?.contains(searchQuery, ignoreCase = true) ?: false)
+                            }
+                        } else {
+                            currentItems
+                        }
 
                         val folderCount = filteredItems.count { it.isDirectory }
                         val fileCount = filteredItems.size - folderCount
@@ -977,7 +971,6 @@ private fun FileSystemItemRow(
                         tint = if (item.isDirectory) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    // 文件名可横向滑动以查看超长名称
                     Row(
                         modifier = Modifier
                             .weight(1f)
@@ -992,7 +985,6 @@ private fun FileSystemItemRow(
                         )
                     }
 
-                    // 操作按钮放在第一行，靠右
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -1020,7 +1012,6 @@ private fun FileSystemItemRow(
                     }
                 }
 
-                // 第二行：显示修改时间（若有）加相对路径（subtitle）
                 val timeStr = if (item.modifiedTime > 0) formatModifiedTime(item.modifiedTime) + "  " else ""
                 val relativePath = item.subtitle ?: item.path
                 Text(
@@ -1028,14 +1019,13 @@ private fun FileSystemItemRow(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
-                        .padding(start = 36.dp) // 对齐到图标后的文本区域
+                        .padding(start = 36.dp)
                         .fillMaxWidth(),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
         } else {
-            // 原始布局（非搜索模式）
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1160,9 +1150,6 @@ private fun formatFileSize(size: Long): String {
     }
 }
 
-/**
- * Format file modification time as "月日时分" (e.g., "031523" for March 15, 23:00)
- */
 private fun formatModifiedTime(timestamp: Long): String {
     if (timestamp <= 0) return ""
     val calendar = java.util.Calendar.getInstance()
