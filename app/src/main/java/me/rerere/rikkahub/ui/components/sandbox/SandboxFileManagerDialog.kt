@@ -165,6 +165,7 @@ fun SandboxFileManagerDialog(
     var searchQuery by remember { mutableStateOf("") }
     var allFilesInScope by remember { mutableStateOf(emptyList<FileSystemItem>()) }
     var showSearchResults by remember { mutableStateOf(false) }
+    var isSearching by remember { mutableStateOf(false) }
     
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
@@ -178,11 +179,11 @@ fun SandboxFileManagerDialog(
         if (searchQuery.isBlank()) {
             allFilesInScope = emptyList()
             showSearchResults = false
-            isLoading = false
+            isSearching = false
         } else {
             searchJob = launch {
                 delay(250)
-                isLoading = true
+                isSearching = true
                 val list = try {
                     withContext(Dispatchers.IO) {
                         collectAllFiles(currentPath, browserMode)
@@ -192,7 +193,7 @@ fun SandboxFileManagerDialog(
                 }
                 allFilesInScope = list
                 showSearchResults = true
-                isLoading = false
+                isSearching = false
             }
         }
     }
@@ -352,118 +353,139 @@ fun SandboxFileManagerDialog(
                     )
                 }
 
-                when {
-                    isLoading -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(220.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                        }
-                    }
-
-                    currentItems.isEmpty() -> {
-                        EmptyState(browserMode = browserMode, currentPath = currentPath)
-                    }
-
-                    else -> {
-                        val filteredItems = if (showSearchResults && searchQuery.isNotEmpty()) {
-                            allFilesInScope.filter { item ->
-                                item.name.contains(searchQuery, ignoreCase = true) ||
-                                    item.path.contains(searchQuery, ignoreCase = true) ||
-                                    (item.subtitle?.contains(searchQuery, ignoreCase = true) ?: false)
+                // 搜索框始终显示，不受加载状态影响
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    placeholder = { Text("搜索文件...") },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.medium,
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            if (showSearchResults) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Lucide.X, contentDescription = "清空搜索", modifier = Modifier.size(18.dp))
+                                }
+                            } else {
+                                IconButton(onClick = { showSearchResults = true }) {
+                                    Icon(Lucide.ChevronLeft, contentDescription = "查看搜索结果", modifier = Modifier.size(18.dp))
+                                }
                             }
-                        } else {
-                            currentItems
                         }
+                    }
+                )
 
-                        val folderCount = filteredItems.count { it.isDirectory }
-                        val fileCount = filteredItems.size - folderCount
-                        Text(
-                            text = buildString {
-                                append("共 ")
-                                if (folderCount > 0) {
-                                    append("${folderCount} 个文件夹")
-                                    if (fileCount > 0) append("，")
+                // 内容区域
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    when {
+                        isLoading -> {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(220.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                            }
+                        }
+                        currentItems.isEmpty() -> {
+                            EmptyState(browserMode = browserMode, currentPath = currentPath)
+                        }
+                        else -> {
+                            val filteredItems = if (showSearchResults && searchQuery.isNotEmpty()) {
+                                allFilesInScope.filter { item ->
+                                    item.name.contains(searchQuery, ignoreCase = true) ||
+                                        item.path.contains(searchQuery, ignoreCase = true) ||
+                                        (item.subtitle?.contains(searchQuery, ignoreCase = true) ?: false)
                                 }
-                                if (fileCount > 0) {
-                                    append("${fileCount} 个文件")
-                                }
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 8.dp),
-                        )
+                            } else {
+                                currentItems
+                            }
 
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            placeholder = { Text("搜索文件...") },
-                            singleLine = true,
-                            shape = MaterialTheme.shapes.medium,
-                            trailingIcon = {
-                                if (searchQuery.isNotEmpty()) {
-                                    if (showSearchResults) {
-                                        IconButton(onClick = { searchQuery = "" }) {
-                                            Icon(Lucide.X, contentDescription = "清空搜索", modifier = Modifier.size(18.dp))
+                            Column {
+                                val folderCount = filteredItems.count { it.isDirectory }
+                                val fileCount = filteredItems.size - folderCount
+                                Text(
+                                    text = buildString {
+                                        append("共 ")
+                                        if (folderCount > 0) {
+                                            append("${folderCount} 个文件夹")
+                                            if (fileCount > 0) append("，")
                                         }
-                                    } else {
-                                        IconButton(onClick = { showSearchResults = true }) {
-                                            Icon(Lucide.ChevronLeft, contentDescription = "查看搜索结果", modifier = Modifier.size(18.dp))
+                                        if (fileCount > 0) {
+                                            append("${fileCount} 个文件")
+                                        }
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(bottom = 8.dp),
+                                )
+
+                                Box(modifier = Modifier.fillMaxWidth()) {
+                                    LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                                        items(filteredItems, key = { "${it.path}:${it.name}" }) { item ->
+                                            FileSystemItemRow(
+                                                item = item,
+                                                isSearchMode = showSearchResults && searchQuery.isNotEmpty(),
+                                                onClick = {
+                                                    if (item.isDirectory) navigateTo(item.path) else openFile(item)
+                                                },
+                                                onShare = {
+                                                    val hostFile = item.hostFile ?: return@FileSystemItemRow
+                                                    val uri = if (browserMode == BrowserMode.Workspace) {
+                                                        SandboxEngine.getShareableUri(context, sandboxId, item.path)
+                                                    } else if (hostFile.isFile) {
+                                                        FileProvider.getUriForFile(
+                                                            context,
+                                                            "${context.packageName}.fileprovider",
+                                                            hostFile,
+                                                        )
+                                                    } else {
+                                                        null
+                                                    }
+                                                    if (uri != null) {
+                                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                                            type = if (hostFile.isDirectory) "application/zip" else getMimeType(item.name)
+                                                            putExtra(Intent.EXTRA_STREAM, uri)
+                                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                        }
+                                                        context.startActivity(Intent.createChooser(intent, "分享文件"))
+                                                    }
+                                                },
+                                                onEdit = {
+                                                    if (item.canEdit) {
+                                                        selectedFile = item
+                                                        showEditMenu = true
+                                                    }
+                                                },
+                                                onDelete = {
+                                                    if (item.canDelete) {
+                                                        selectedFile = item
+                                                        showDeleteDialog = true
+                                                    }
+                                                },
+                                            )
+                                        }
+                                    }
+                                    
+                                    // 搜索加载指示器叠加在列表上方，而不是替换整个内容
+                                    if (isSearching) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(60.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(24.dp),
+                                                strokeWidth = 2.dp
+                                            )
                                         }
                                     }
                                 }
-                            }
-                        )
-
-                        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                            items(filteredItems, key = { "${it.path}:${it.name}" }) { item ->
-                                FileSystemItemRow(
-                                    item = item,
-                                    isSearchMode = showSearchResults && searchQuery.isNotEmpty(),
-                                    onClick = {
-                                        if (item.isDirectory) navigateTo(item.path) else openFile(item)
-                                    },
-                                    onShare = {
-                                        val hostFile = item.hostFile ?: return@FileSystemItemRow
-                                        val uri = if (browserMode == BrowserMode.Workspace) {
-                                            SandboxEngine.getShareableUri(context, sandboxId, item.path)
-                                        } else if (hostFile.isFile) {
-                                            FileProvider.getUriForFile(
-                                                context,
-                                                "${context.packageName}.fileprovider",
-                                                hostFile,
-                                            )
-                                        } else {
-                                            null
-                                        }
-                                        if (uri != null) {
-                                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                                type = if (hostFile.isDirectory) "application/zip" else getMimeType(item.name)
-                                                putExtra(Intent.EXTRA_STREAM, uri)
-                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                            }
-                                            context.startActivity(Intent.createChooser(intent, "分享文件"))
-                                        }
-                                    },
-                                    onEdit = {
-                                        if (item.canEdit) {
-                                            selectedFile = item
-                                            showEditMenu = true
-                                        }
-                                    },
-                                    onDelete = {
-                                        if (item.canDelete) {
-                                            selectedFile = item
-                                            showDeleteDialog = true
-                                        }
-                                    },
-                                )
                             }
                         }
                     }
