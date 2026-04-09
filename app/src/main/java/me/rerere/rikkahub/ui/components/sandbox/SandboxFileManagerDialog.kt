@@ -106,6 +106,14 @@ private val containerRootShortcuts = listOf(
     ContainerRootShortcut("/", "完整容器根目录"),
 )
 
+private data class SearchSession(
+    val query: String,
+    val basePath: String,
+    val browserMode: BrowserMode,
+    val results: List<FileSystemItem>
+)
+
+
 @Composable
 fun SandboxFileManagerDialog(
     sandboxId: String,
@@ -175,6 +183,8 @@ fun SandboxFileManagerDialog(
     var searchQuery by remember { mutableStateOf("") }
     var allFilesInScope by remember { mutableStateOf(emptyList<FileSystemItem>()) }
     var showSearchResults by remember { mutableStateOf(false) }
+    var lastSearchSession by remember { mutableStateOf<SearchSession?>(null) }
+    var suppressSearchEffect by remember { mutableStateOf(false) }
     var isSearching by remember { mutableStateOf(false) }
     
     var searchJob by remember { mutableStateOf<Job?>(null) }
@@ -185,6 +195,7 @@ fun SandboxFileManagerDialog(
     }
 
     LaunchedEffect(searchQuery) {
+        if (suppressSearchEffect) return@LaunchedEffect
         searchJob?.cancel()
         if (searchQuery.isBlank()) {
             allFilesInScope = emptyList()
@@ -202,9 +213,9 @@ fun SandboxFileManagerDialog(
                     emptyList<FileSystemItem>()
                 }
                 allFilesInScope = list
+                lastSearchSession = SearchSession(query = searchQuery, basePath = currentPath, browserMode = browserMode, results = list)
                 showSearchResults = true
                 isSearching = false
-            }
         }
     }
 
@@ -379,10 +390,21 @@ fun SandboxFileManagerDialog(
                                     Icon(Lucide.X, contentDescription = "清空搜索", modifier = Modifier.size(18.dp))
                                 }
                             } else {
-                                IconButton(onClick = { showSearchResults = true }) {
+IconButton(onClick = {
+                                    val session = lastSearchSession
+                                    if (session != null) {
+                                        searchQuery = session.query
+                                        currentPath = session.basePath
+                                        browserMode = session.browserMode
+                                        allFilesInScope = session.results
+                                        showSearchResults = true
+                                    } else {
+                                        showSearchResults = true
+                                    }
+                                }) {
                                     Icon(Lucide.ChevronLeft, contentDescription = "查看搜索结果", modifier = Modifier.size(18.dp))
                                 }
-                            }
+
                         }
                     }
                 )
