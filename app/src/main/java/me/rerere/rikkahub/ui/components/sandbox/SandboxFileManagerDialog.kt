@@ -598,6 +598,7 @@ fun SandboxFileManagerDialog(
                         }
                     }
                 }
+            }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
