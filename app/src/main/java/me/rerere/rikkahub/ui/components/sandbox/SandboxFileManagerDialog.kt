@@ -247,9 +247,43 @@ fun SandboxFileManagerDialog(
         }
     }
 
+    fun buildPathHistory(path: String, mode: BrowserMode): List<String> {
+        if (path.isBlank()) return listOf("")
+
+        return if (mode == BrowserMode.Workspace) {
+            val segments = path.split('/').filter { it.isNotBlank() }
+            buildList {
+                add("")
+                var current = ""
+                segments.forEach { segment ->
+                    current = if (current.isBlank()) segment else "$current/$segment"
+                    add(current)
+                }
+            }
+        } else {
+            val normalized = if (path.startsWith('/')) path else "/$path"
+            val segments = normalized.split('/').filter { it.isNotBlank() }
+            buildList {
+                add("")
+                var current = ""
+                segments.forEach { segment ->
+                    current = if (current.isBlank()) "/$segment" else "$current/$segment"
+                    add(current)
+                }
+            }
+        }
+    }
+
     fun navigateTo(path: String) {
-        currentPath = path
-        pathHistory = pathHistory + path
+        val targetPath = path.trim()
+        if (currentPath == targetPath) {
+            pathHistory = buildPathHistory(targetPath, browserMode)
+            showSearchResults = false
+            return
+        }
+        currentPath = targetPath
+        pathHistory = buildPathHistory(targetPath, browserMode)
+        showSearchResults = false
     }
 
     fun openFile(item: FileSystemItem) {
