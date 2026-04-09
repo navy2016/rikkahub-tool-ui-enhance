@@ -170,7 +170,6 @@ fun SandboxFileManagerDialog(
     var previewContent by remember { mutableStateOf<String?>(null) }
     var selectedFile by remember { mutableStateOf<FileSystemItem?>(null) }
     var currentPath by remember { mutableStateOf("") }
-    var pathHistory by remember { mutableStateOf(listOf("")) }
     var currentItems by remember { mutableStateOf<List<FileSystemItem>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
@@ -218,7 +217,6 @@ fun SandboxFileManagerDialog(
     fun resetNavigation(mode: BrowserMode) {
         browserMode = mode
         currentPath = ""
-        pathHistory = listOf("")
         searchQuery = ""
         showSearchResults = false
         allFilesInScope = emptyList()
@@ -277,12 +275,10 @@ fun SandboxFileManagerDialog(
     fun navigateTo(path: String) {
         val targetPath = path.trim()
         if (currentPath == targetPath) {
-            pathHistory = buildPathHistory(targetPath, browserMode)
             showSearchResults = false
             return
         }
         currentPath = targetPath
-        pathHistory = buildPathHistory(targetPath, browserMode)
         showSearchResults = false
     }
 
@@ -327,6 +323,20 @@ fun SandboxFileManagerDialog(
         }
     }
 
+    val pathHistory = remember(browserMode, currentPath) {
+        buildPathHistory(currentPath, browserMode)
+    }
+
+    fun navigateBack() {
+        currentPath = if (pathHistory.size > 1) pathHistory[pathHistory.lastIndex - 1] else ""
+        showSearchResults = false
+    }
+
+    fun navigateByBreadcrumb(index: Int) {
+        currentPath = pathHistory.getOrElse(index) { "" }
+        showSearchResults = false
+    }
+
     LaunchedEffect(sandboxId, browserMode, currentPath) {
         loadDirectory()
     }
@@ -366,8 +376,7 @@ fun SandboxFileManagerDialog(
                     browserMode = browserMode,
                     pathHistory = pathHistory,
                     onPathClick = { index ->
-                        pathHistory = pathHistory.take(index + 1)
-                        currentPath = pathHistory.last()
+                        navigateByBreadcrumb(index)
                     },
                 )
             }
@@ -382,10 +391,7 @@ fun SandboxFileManagerDialog(
                     currentPath = currentPath,
                     browserMode = browserMode,
                     onBackClick = {
-                        if (pathHistory.size > 1) {
-                            pathHistory = pathHistory.dropLast(1)
-                            currentPath = pathHistory.last()
-                        }
+                        navigateBack()
                     },
                     canGoBack = pathHistory.size > 1,
                     onRefresh = { loadDirectory() },
