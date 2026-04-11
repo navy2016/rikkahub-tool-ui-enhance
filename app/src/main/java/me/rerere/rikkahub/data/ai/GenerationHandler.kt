@@ -74,7 +74,7 @@ class GenerationHandler(
         dialogueSummaryText: String? = null,
         legacyRollingSummaryJson: String? = null,
         tools: List<Tool> = emptyList(),
-        maxSteps: Int = 256,
+        maxSteps: Int? = null,
         workflowPhase: me.rerere.rikkahub.data.model.WorkflowPhase? = null,  // ★ 新增
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
@@ -82,7 +82,8 @@ class GenerationHandler(
 
         var messages: List<UIMessage> = messages
 
-        for (stepIndex in 0 until maxSteps) {
+        val actualMaxSteps = maxSteps ?: settings.maxGenerationSteps
+        for (stepIndex in 0 until actualMaxSteps) {
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
 
             val toolsInternal = buildList {

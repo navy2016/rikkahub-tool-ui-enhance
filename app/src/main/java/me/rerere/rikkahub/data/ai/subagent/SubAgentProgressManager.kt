@@ -194,10 +194,11 @@ object SubAgentProgressManager {
      * 等待任务完成并获取最终结果
      *
      * @param toolCallId 工具调用ID
-     * @param timeoutMs 超时时间（毫秒）
+     * @param timeoutSeconds 超时时间（秒）
      * @return 最终结果，如果超时则返回null
      */
-    suspend fun awaitResult(toolCallId: String, timeoutMs: Long? = null): SubAgentResult? {
+    suspend fun awaitResult(toolCallId: String, timeoutSeconds: Int? = null): SubAgentResult? {
+        val timeoutMs = timeoutSeconds?.times(1000L)
         val awaitBlock: suspend () -> SubAgentResult? = {
             // 等待直到状态变为completed或error
             progressUpdates
@@ -222,12 +223,12 @@ object SubAgentProgressManager {
      * 获取最终执行结果（同步阻塞，用于Tool.execute返回最终结果）
      *
      * @param toolCallId 工具调用ID
-     * @param timeoutMs 超时时间（毫秒），默认15分钟
+     * @param timeoutSeconds 超时时间（秒），null 表示不超时
      * @return 执行结果
      */
-    fun getFinalResult(toolCallId: String, timeoutMs: Long? = null): SubAgentResult? {
+    fun getFinalResult(toolCallId: String, timeoutSeconds: Int? = null): SubAgentResult? {
         return runBlocking {
-            awaitResult(toolCallId, timeoutMs)
+            awaitResult(toolCallId, timeoutSeconds)
         }
     }
 

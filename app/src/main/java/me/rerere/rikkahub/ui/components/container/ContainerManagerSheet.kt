@@ -23,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.container.ContainerStateEnum
 import me.rerere.rikkahub.data.container.PRootManager
+import me.rerere.rikkahub.ui.context.LocalSettings
 
 /**
  * 容器管理弹窗（底部展开）
@@ -43,6 +44,7 @@ fun ContainerManagerSheet(
 ) {
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
+    val settings = LocalSettings.current
 
     // 监听容器状态
     val containerState by prootManager.containerState.collectAsStateWithLifecycle()
@@ -58,7 +60,7 @@ fun ContainerManagerSheet(
     LaunchedEffect(containerState) {
         if (containerState is ContainerStateEnum.Running || containerState is ContainerStateEnum.Stopped) {
             try {
-                installedPackages = prootManager.getInstalledPackages()
+                installedPackages = prootManager.getInstalledPackages(settings.containerPipListTimeoutSeconds)
                 containerSize = prootManager.getContainerSize()
             } catch (e: Exception) {
                 // 统计信息加载失败，使用默认值

@@ -104,7 +104,7 @@ class SubAgentExecutor(
                 messages = messages,
                 assistant = assistant,
                 tools = tools,
-                maxSteps = 50,
+                maxSteps = settings.maxSubagentSteps,
             ).collect { chunk ->
                 when (chunk) {
                     is GenerationChunk.Messages -> {

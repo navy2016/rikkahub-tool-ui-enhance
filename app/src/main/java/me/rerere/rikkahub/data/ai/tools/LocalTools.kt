@@ -285,7 +285,7 @@ class LocalTools(
      * 工具 2: Shell 执行（只读模式）
      * 只允许只读命令，用于Explore和Plan代理
      */
-    fun createSandboxShellReadonlyTool(sandboxId: Uuid): Tool {
+    fun createSandboxShellReadonlyTool(sandboxId: Uuid, timeoutSeconds: Int = 300): Tool {
         return Tool(
             name = "sandbox_shell_readonly",
             description = """
@@ -368,7 +368,8 @@ class LocalTools(
                 // 安全检查通过，执行命令（使用 PRoot 执行，与 container_shell 一致）
                 val result = prootManager.executeShell(
                     sandboxId = sandboxId.toString(),
-                    command = command
+                    command = command,
+                    timeoutSeconds = timeoutSeconds
                 )
                 listOf(UIMessagePart.Text(buildJsonObject {
                     result.forEach { (key, value) -> put(key, value) }
@@ -381,7 +382,7 @@ class LocalTools(
      * 容器运行时 Shell 执行工具（PRoot）
      * 仅当容器运行时启用且就绪时暴露
      */
-    fun createContainerShellTool(sandboxId: Uuid, enabledSkills: Set<String> = emptySet()): Tool {
+    fun createContainerShellTool(sandboxId: Uuid, enabledSkills: Set<String> = emptySet(), timeoutSeconds: Int = 300): Tool {
         return Tool(
             name = "container_shell",
             description = """完整 Linux Shell（Alpine），支持 apk、git、wget、Python3、Node.js。超时 5 分钟。
@@ -443,7 +444,8 @@ class LocalTools(
                 val beforeDelivery = snapshotDeliveryFiles(sandboxId)
                 val result = prootManager.executeShell(
                     sandboxId = sandboxId.toString(),
-                    command = command
+                    command = command,
+                    timeoutSeconds = timeoutSeconds
                 )
                 val deliveryItems = collectDeliveryItems(sandboxId, beforeDelivery)
                 val response = buildJsonObject {
@@ -938,11 +940,11 @@ class LocalTools(
         ) {
             if (isReadonlyPhase) {
                 // 只读阶段：仅提供只读 shell 工具和进程查看
-                tools.add(createSandboxShellReadonlyTool(sandboxId))
+                tools.add(createSandboxShellReadonlyTool(sandboxId, settings?.containerTimeoutSeconds ?: 300))
                 tools.add(createContainerProcessTool(sandboxId))
             } else {
                 // EXECUTE 阶段或无阶段限制：提供完整工具
-                tools.add(createContainerShellTool(sandboxId, enabledSkills))
+                tools.add(createContainerShellTool(sandboxId, enabledSkills, settings?.containerTimeoutSeconds ?: 300))
                 tools.add(createContainerShellBgTool(sandboxId, enabledSkills))
                 tools.add(createContainerProcessTool(sandboxId))
             }
@@ -1710,7 +1712,7 @@ private fun LocalTools.createSpawnSubagentTool(
         SubAgentProgressManager.startSubAgent(toolCallId, args.jsonObject, progressFlow)
 
         // 等待执行完成并获取最终结果
-        val result = SubAgentProgressManager.getFinalResult(toolCallId)
+        val result = SubAgentProgressManager.getFinalResult(toolCallId, (settings?.subagentTimeoutSeconds ?: 0).takeIf { it > 0 })
             ?: SubAgentResult(
                 success = false,
                 result = "",

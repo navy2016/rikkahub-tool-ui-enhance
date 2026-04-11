@@ -776,7 +776,9 @@ fi
     suspend fun executePython(
         sandboxId: String,
         code: String,
-        packages: List<String> = emptyList()
+        packages: List<String> = emptyList(),
+        pipInstallTimeoutSeconds: Int = 120,
+        commandTimeoutSeconds: Int = 300
     ): JsonObject {
         if (_containerState.value != ContainerStateEnum.Running) {
             return buildJsonObject {
@@ -800,7 +802,7 @@ fi
                 val pipResult = execInContainer(
                     sandboxId = sandboxId,
                     command = listOf("pip", "install") + packages,
-                    timeoutMs = 120_000
+                    timeoutMs = pipInstallTimeoutSeconds * 1000L
                 )
                 
                 if (pipResult.exitCode != 0) {
@@ -821,7 +823,8 @@ fi
             val writeResult = execInContainer(
                 sandboxId = sandboxId,
                 command = listOf("sh", "-c", "echo '$encodedCode' | base64 -d > $scriptFile"),
-                env = toolEnv
+                env = toolEnv,
+                timeoutMs = commandTimeoutSeconds * 1000L
             )
 
             if (writeResult.exitCode != 0) {
@@ -838,7 +841,8 @@ fi
             val execResult = execInContainer(
                 sandboxId = sandboxId,
                 command = listOf("python3", scriptFile),
-                env = toolEnv
+                env = toolEnv,
+                timeoutMs = commandTimeoutSeconds * 1000L
             )
 
             buildJsonObject {
@@ -864,7 +868,8 @@ fi
      */
     suspend fun executeShell(
         sandboxId: String,
-        command: String
+        command: String,
+        timeoutSeconds: Int = 300
     ): JsonObject {
         Log.d(TAG, "[ExecuteShell] ========== Command: $command ==========")
         Log.d(TAG, "[ExecuteShell] Container state: ${_containerState.value}")
@@ -892,7 +897,8 @@ fi
             val execResult = execInContainer(
                 sandboxId = sandboxId,
                 command = listOf("sh", "-c", command),
-                env = toolEnv
+                env = toolEnv,
+                timeoutMs = timeoutSeconds * 1000L
             )
 
             Log.d(TAG, "[ExecuteShell] Result - exitCode=${execResult.exitCode}")
@@ -1006,7 +1012,7 @@ fi
     /**
      * 获取已安装的包列表（用于统计展示）
      */
-    suspend fun getInstalledPackages(): List<String> = withContext(Dispatchers.IO) {
+    suspend fun getInstalledPackages(timeoutSeconds: Int = 30): List<String> = withContext(Dispatchers.IO) {
         try {
             val upperDir = File(containerDir, "upper/usr/local")
             if (!upperDir.exists()) return@withContext emptyList()
@@ -1015,7 +1021,7 @@ fi
             val result = execInContainer(
                 sandboxId = "system",
                 command = listOf("pip", "list", "--format=freeze"),
-                timeoutMs = 30_000
+                timeoutMs = timeoutSeconds * 1000L
             )
             
             if (result.exitCode == 0) {
