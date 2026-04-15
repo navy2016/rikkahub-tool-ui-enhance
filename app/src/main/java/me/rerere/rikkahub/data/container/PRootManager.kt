@@ -70,6 +70,7 @@ class PRootManager(
     // 全局容器状态
     private var globalContainer: ContainerState? = null
     private var currentProcess: Process? = null
+    private val cancellableProcesses = ConcurrentHashMap<String, Process>()
     private val processMutex = Mutex()  // 保护 currentProcess 的并发访问
 
     // 后台进程管理
@@ -923,6 +924,78 @@ fi
         }
     }
 
+    
+    suspend fun executeShellCancellable(
+        sandboxId: String,
+        command: String,
+        timeoutSeconds: Int = 300,
+        executionId: String = sandboxId
+    ): JsonObject {
+        Log.d(TAG, "[ExecuteShellCancellable] ========== Command: $command ==========")
+        Log.d(TAG, "[ExecuteShellCancellable] Container state: ${_containerState.value}")
+
+        if (_containerState.value != ContainerStateEnum.Running) {
+            Log.e(TAG, "[ExecuteShellCancellable] FAILED: Container not running!")
+            return buildJsonObject {
+                put("success", false)
+                put("error", "Container not running. Current state: ${_containerState.value}")
+                put("exitCode", -1)
+                put("stdout", "")
+                put("stderr", "")
+            }
+        }
+
+        return try {
+            // 确保沙箱目录存在
+            val sandboxDir = File(context.filesDir, "sandboxes/$sandboxId")
+            sandboxDir.mkdirs()
+
+            // 获取已安装工具的环境变量
+            val toolEnv = getToolEnvironment()
+            Log.d(TAG, "[ExecuteShellCancellable] Environment: $toolEnv")
+
+            val execResult = execInContainerCancellable(
+                sandboxId = sandboxId,
+                command = listOf("sh", "-c", command),
+                env = toolEnv,
+                timeoutMs = timeoutSeconds * 1000L,
+                executionId = executionId
+            )
+
+            Log.d(TAG, "[ExecuteShellCancellable] Result - exitCode=${execResult.exitCode}")
+            Log.d(TAG, "[ExecuteShellCancellable] stdout: ${execResult.stdout.take(500)}")
+            Log.d(TAG, "[ExecuteShellCancellable] stderr: ${execResult.stderr.take(500)}")
+
+            buildJsonObject {
+                put("success", execResult.exitCode == 0)
+                put("exitCode", execResult.exitCode)
+                put("stdout", execResult.stdout)
+                put("stderr", execResult.stderr)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[ExecuteShellCancellable] Exception!", e)
+            buildJsonObject {
+                put("success", false)
+                put("error", "Shell execution error: ${e.message}")
+                put("exitCode", -1)
+                put("stdout", "")
+                put("stderr", "")
+            }
+        }
+    }
+
+    fun killExecution(executionId: String): Boolean {
+        val process = cancellableProcesses.remove(executionId) ?: return false
+        return try {
+            Log.d(TAG, "[KillExecution] Killing process for execution: $executionId")
+            process.destroyForcibly()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "[KillExecution] Failed to kill process", e)
+            false
+        }
+    }
+
     suspend fun listContainerDirectory(
         sandboxId: String,
         containerPath: String,
@@ -1144,6 +1217,173 @@ fi
             workDir = workDir.absolutePath,
             upperDir = upperDir.absolutePath
         )
+    }
+
+    private suspend fun execInContainerCancellable(
+        sandboxId: String,
+        command: List<String>,
+        timeoutMs: Long = DEFAULT_TIMEOUT_MS,
+        env: Map<String, String> = emptyMap(),
+        executionId: String
+    ): ExecutionResult = withContext(Dispatchers.IO) {
+        try {
+            val container = globalContainer
+                ?: return@withContext ExecutionResult(
+                    exitCode = -1,
+                    stdout = "",
+                    stderr = "Global container not created"
+                )
+
+            // 构建 PRoot 命令
+            val prootBinary = File(prootDir, "proot").absolutePath
+            val sandboxDir = File(context.filesDir, "sandboxes/$sandboxId")
+            val deliveryDir = SandboxEngine.getDeliveryDir(context, sandboxId)
+            val runtimeSkillsDir = SandboxEngine.getRuntimeSkillsDir(context, sandboxId)
+            val skillLibraryDir = File(context.filesDir, FileFolders.SKILLS).apply { mkdirs() }
+
+            sandboxDir.mkdirs()
+
+            val nativeLibDir = context.applicationInfo.nativeLibraryDir
+            val termuxExecLib = File(nativeLibDir, "libtermux-exec.so")
+            val hasTermuxExec = termuxExecLib.exists()
+
+            val prootCmd = buildList {
+                add(prootBinary)
+                add("-b")
+                add("/dev")
+                add("-b")
+                add("/proc")
+                add("-b")
+                add("/sys")
+                add("-b")
+                add("${sandboxDir.absolutePath}:/workspace")
+                add("-b")
+                add("${deliveryDir.absolutePath}:/delivery")
+                add("-b")
+                add("${skillLibraryDir.absolutePath}:/skills")
+                add("-b")
+                add("${runtimeSkillsDir.absolutePath}:/opt/rikkahub/skills")
+                add("-b")
+                add("${container.upperDir}/usr/local:/usr/local")
+                add("-b")
+                add("${container.upperDir}/root:/root")
+                add("-b")
+                add("${container.upperDir}/usr/lib:/usr/lib!")
+                val nodeModulesDir = File(container.upperDir, "usr/lib/node_modules")
+                if (nodeModulesDir.exists()) {
+                    add("-b")
+                    add("${nodeModulesDir.absolutePath}:/usr/local/lib/node_modules")
+                }
+                add("-R")
+                add(rootfsDir.absolutePath)
+                add("-w")
+                add("/workspace")
+                add("--link2symlink")
+                addAll(command)
+            }
+
+            val processBuilder = ProcessBuilder(prootCmd)
+            processBuilder.redirectErrorStream(false)
+
+            val processEnv = processBuilder.environment()
+            processEnv["HOME"] = "/root"
+            processEnv["TMPDIR"] = "/tmp"
+            processEnv["PROOT_TMP_DIR"] = context.cacheDir.absolutePath
+            processEnv["PREFIX"] = "/usr"
+            processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+            if (hasTermuxExec) {
+                processEnv["LD_PRELOAD"] = termuxExecLib.absolutePath
+            }
+
+            processEnv.putAll(env)
+
+            Log.d(TAG, "[ExecInContainerCancellable] Executing: $executionId")
+
+            val process = processBuilder.start()
+            cancellableProcesses[executionId] = process
+
+            val stdoutBuilder = StringBuilder()
+            val stderrBuilder = StringBuilder()
+
+            val stdoutThread = Thread {
+                try {
+                    process.inputStream.bufferedReader().use { reader ->
+                        var line: String?
+                        while (reader.readLine().also { line = it } != null) {
+                            stdoutBuilder.append(line).append("\n")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error reading stdout", e)
+                }
+            }
+
+            val stderrThread = Thread {
+                try {
+                    process.errorStream.bufferedReader().use { reader ->
+                        var line: String?
+                        while (reader.readLine().also { line = it } != null) {
+                            stderrBuilder.append(line).append("\n")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error reading stderr", e)
+                }
+            }
+
+            stdoutThread.start()
+            stderrThread.start()
+
+            // 等待完成、超时或取消
+            val startTime = System.currentTimeMillis()
+            var finished = false
+            while (System.currentTimeMillis() - startTime < timeoutMs) {
+                if (!isActive) {
+                    Log.d(TAG, "[ExecInContainerCancellable] Coroutine cancelled, killing process")
+                    process.destroyForcibly()
+                    cancellableProcesses.remove(executionId)
+                    stdoutThread.join(500)
+                    stderrThread.join(500)
+                    return@withContext ExecutionResult(
+                        exitCode = -1,
+                        stdout = stdoutBuilder.toString(),
+                        stderr = stderrBuilder.toString() + "\nExecution was cancelled"
+                    )
+                }
+                if (process.waitFor(100, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    finished = true
+                    break
+                }
+            }
+            stdoutThread.join(1000)
+            stderrThread.join(1000)
+
+            cancellableProcesses.remove(executionId)
+
+            if (!finished) {
+                process.destroyForcibly()
+                cleanupResidualProcesses()
+                return@withContext ExecutionResult(
+                    exitCode = -1,
+                    stdout = stdoutBuilder.toString(),
+                    stderr = stderrBuilder.toString() + "\nExecution timed out"
+                )
+            }
+
+            ExecutionResult(
+                exitCode = process.exitValue(),
+                stdout = stdoutBuilder.toString().trim(),
+                stderr = stderrBuilder.toString().trim()
+            )
+        } catch (e: Exception) {
+            cancellableProcesses.remove(executionId)
+            ExecutionResult(
+                exitCode = -1,
+                stdout = "",
+                stderr = "Execution error: ${e.message}"
+            )
+        }
     }
 
     private suspend fun execInContainer(

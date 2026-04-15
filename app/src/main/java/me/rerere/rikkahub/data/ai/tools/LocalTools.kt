@@ -437,42 +437,60 @@ class LocalTools(
                     }.toString()))
                 }
 
-                // 调用 PRootManager 执行（全局单例，无需创建容器）
-                runBlocking {
+                // 调用 PRootManager 执行（支持协程取消）
+                val executionId = sandboxId.toString()
+                
+                try {
                     skillManager.syncSkillsToRuntime(sandboxId.toString(), enabledSkills)
-                }
-                val beforeDelivery = snapshotDeliveryFiles(sandboxId)
-                val result = prootManager.executeShell(
-                    sandboxId = sandboxId.toString(),
-                    command = command,
-                    timeoutSeconds = timeoutSeconds
-                )
-                val deliveryItems = collectDeliveryItems(sandboxId, beforeDelivery)
-                val response = buildJsonObject {
-                    result.forEach { (key, value) -> put(key, value) }
-                    put("delivery_items", buildJsonArray {
-                        deliveryItems.forEach { item ->
-                            add(buildJsonObject {
-                                put("relative_path", item.relativePath)
-                                put("display_name", item.displayName)
-                                put("mime", item.mime)
-                                put("size", item.size)
-                                put("render_url", item.renderUrl)
-                            })
+                    val beforeDelivery = snapshotDeliveryFiles(sandboxId)
+                    
+                    // 使用可取消的执行方法
+                    val execResult = prootManager.executeShellCancellable(
+                        sandboxId = sandboxId.toString(),
+                        command = command,
+                        timeoutSeconds = timeoutSeconds,
+                        executionId = executionId
+                    )
+                    
+                    val deliveryItems = collectDeliveryItems(sandboxId, beforeDelivery)
+                    val result = buildJsonObject {
+                        execResult.forEach { (key, value) -> put(key, value) }
+                        put("delivery_items", buildJsonArray {
+                            deliveryItems.forEach { item ->
+                                add(buildJsonObject {
+                                    put("relative_path", item.relativePath)
+                                    put("display_name", item.displayName)
+                                    put("mime", item.mime)
+                                    put("size", item.size)
+                                    put("render_url", item.renderUrl)
+                                })
+                            }
+                        })
+                        if (deliveryItems.any { it.isImage }) {
+                            put(
+                                "delivery_hint",
+                                JsonPrimitive("Images written to /delivery are not shown automatically. To display an image in chat, reference its render_url with Markdown image syntax in your assistant reply.")
+                            )
                         }
-                    })
-                    if (deliveryItems.any { it.isImage }) {
-                        put(
-                            "delivery_hint",
-                            JsonPrimitive("Images written to /delivery are not shown automatically. To display an image in chat, reference its render_url with Markdown image syntax in your assistant reply.")
-                        )
                     }
-                }
-                buildList {
-                    add(UIMessagePart.Text(response.toString()))
-                    deliveryItems.filterNot { it.isImage }.forEach { item ->
-                        add(UIMessagePart.Document(url = item.renderUrl, fileName = item.displayName, mime = item.mime))
+                    
+                    buildList {
+                        add(UIMessagePart.Text(result.toString()))
+                        deliveryItems.filterNot { it.isImage }.forEach { item ->
+                            add(UIMessagePart.Document(url = item.renderUrl, fileName = item.displayName, mime = item.mime))
+                        }
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // 重新抛出取消异常，让上层正确处理
+                    throw e
+                } catch (e: Exception) {
+                    listOf(UIMessagePart.Text(buildJsonObject {
+                        put("success", JsonPrimitive(false))
+                        put("error", JsonPrimitive("Execution error: ${e.message}"))
+                        put("exitCode", -1)
+                        put("stdout", "")
+                        put("stderr", "")
+                    }.toString()))
                 }
             }
         )

@@ -285,6 +285,10 @@ class GenerationHandler(
                             val result = toolDef.execute(args)
                             executedTools += tool.copy(output = result)
                         }.onFailure { error ->
+                            // 重新抛出取消异常，让上层正确处理
+                            if (error is kotlinx.coroutines.CancellationException) {
+                                throw error
+                            }
                             Log.e(TAG, "generateText: tool ${tool.toolName} failed", error)
                             val shortMessage = error.message?.take(240)?.ifBlank { null }
                                 ?: "tool execution failed"
