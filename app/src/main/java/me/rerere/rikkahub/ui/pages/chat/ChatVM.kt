@@ -29,6 +29,10 @@ import kotlinx.coroutines.runBlocking
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.ToolApprovalState
+import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.ToolApprovalStatePart
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
@@ -400,6 +404,43 @@ class ChatVM(
 
     fun stopGeneration() {
         viewModelScope.launch {
+            // 在取消前，先将正在执行的工具标记为已取消并保存
+            val currentConversation = conversation.value
+            val updatedNodes = currentConversation.messageNodes.map { node ->
+                val updatedParts = node.currentMessage.parts.map { part ->
+                    if (part is UIMessagePart.Tool && !part.isExecuted) {
+                        // 将未执行的工具标记为已取消
+                        part.copy(
+                            output = listOf(
+                                UIMessagePart.Text(
+                                    buildJsonObject {
+                                        put("error", JsonPrimitive("Tool execution was cancelled by user"))
+                                        put("error_code", JsonPrimitive("TOOL_EXECUTION_CANCELLED"))
+                                    }.toString()
+                                )
+                            ),
+                            approvalState = ToolApprovalState.Cancelled("Cancelled by user")
+                        )
+                    } else part
+                }
+                if (updatedParts != node.currentMessage.parts) {
+                    node.copy(
+                        messages = node.messages.mapIndexed { index, msg ->
+                            if (index == node.selectIndex) {
+                                msg.copy(parts = updatedParts)
+                            } else msg
+                        }
+                    )
+                } else node
+            }
+            
+            // 保存更新后的对话状态
+            if (updatedNodes != currentConversation.messageNodes) {
+                val updatedConversation = currentConversation.copy(messageNodes = updatedNodes)
+                chatService.saveConversation(_conversationId, updatedConversation)
+            }
+            
+            // 然后取消生成
             chatService.stopGeneration(_conversationId)
         }
     }
