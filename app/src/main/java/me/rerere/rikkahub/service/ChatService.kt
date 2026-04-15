@@ -156,7 +156,8 @@ internal fun shouldPreservePendingToolNode(tools: List<UIMessagePart.Tool>): Boo
 
     return tools.any { tool ->
         tool.approvalState is ToolApprovalState.Approved ||
-            tool.approvalState is ToolApprovalState.Answered
+            tool.approvalState is ToolApprovalState.Answered ||
+            tool.approvalState is ToolApprovalState.Cancelled
     }
 }
 

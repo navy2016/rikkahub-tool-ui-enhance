@@ -395,6 +395,10 @@ sealed class ToolApprovalState {
     @Serializable
     @SerialName("answered")
     data class Answered(val answer: String) : ToolApprovalState()
+
+    @Serializable
+    @SerialName("cancelled")
+    data class Cancelled(val reason: String = "") : ToolApprovalState()
 }
 
 @Serializable

@@ -285,9 +285,22 @@ class GenerationHandler(
                             val result = toolDef.execute(args)
                             executedTools += tool.copy(output = result)
                         }.onFailure { error ->
-                            // 重新抛出取消异常，让上层正确处理
                             if (error is kotlinx.coroutines.CancellationException) {
-                                throw error
+                                // 用户取消：标记工具为已取消并保留消息
+                                executedTools += tool.copy(
+                                    output = listOf(
+                                        UIMessagePart.Text(
+                                            json.encodeToString(
+                                                buildJsonObject {
+                                                    put("error", JsonPrimitive("Tool execution was cancelled by user"))
+                                                    put("error_code", JsonPrimitive("TOOL_EXECUTION_CANCELLED"))
+                                                }
+                                            )
+                                        )
+                                    ),
+                                    approvalState = ToolApprovalState.Cancelled("Cancelled by user")
+                                )
+                                return@forEach
                             }
                             Log.e(TAG, "generateText: tool ${tool.toolName} failed", error)
                             val shortMessage = error.message?.take(240)?.ifBlank { null }

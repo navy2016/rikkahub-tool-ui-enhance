@@ -208,6 +208,7 @@
   <string name="chat_message_tool_approve">Approve</string>
   <string name="chat_message_tool_deny">Deny</string>
   <string name="chat_message_tool_denied">Denied</string>
+  <string name="chat_message_tool_cancelled">Cancelled</string>
   <string name="chat_message_tool_deny_dialog_title">Deny Tool Execution</string>
   <string name="chat_message_tool_deny_dialog_hint">Reason (optional)</string>
   <string name="chat_message_tool_get_time">Get time info</string>
