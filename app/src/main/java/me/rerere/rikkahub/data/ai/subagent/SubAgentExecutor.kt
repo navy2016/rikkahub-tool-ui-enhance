@@ -248,7 +248,7 @@ class SubAgentExecutor(
         }
 
         if (toolSet.enableSandboxShellReadonly) {
-            tools.add(localTools.createSandboxShellReadonlyTool(sandboxId))
+            tools.add(localTools.createSandboxShellReadonlyTool(sandboxId, settings.containerTimeoutSeconds, settings.containerPipListTimeoutSeconds))
         }
 
         if (!isReadonlyPhase &&
@@ -259,7 +259,7 @@ class SubAgentExecutor(
                 toolSet.enableSandboxDev) &&
             containerEnabled
         ) {
-            tools.add(localTools.createContainerShellTool(sandboxId))
+            tools.add(localTools.createContainerShellTool(sandboxId, enabledSkills = emptySet(), timeoutSeconds = settings.containerTimeoutSeconds, pipInstallTimeoutSeconds = settings.containerPipInstallTimeoutSeconds, pipListTimeoutSeconds = settings.containerPipListTimeoutSeconds))
         }
 
         if (toolSet.allowedMcpServers.isNotEmpty()) {

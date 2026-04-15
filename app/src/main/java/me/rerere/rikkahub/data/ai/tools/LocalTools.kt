@@ -285,7 +285,7 @@ class LocalTools(
      * 工具 2: Shell 执行（只读模式）
      * 只允许只读命令，用于Explore和Plan代理
      */
-    fun createSandboxShellReadonlyTool(sandboxId: Uuid, timeoutSeconds: Int = 300): Tool {
+    fun createSandboxShellReadonlyTool(sandboxId: Uuid, timeoutSeconds: Int = 300, pipListTimeoutSeconds: Int = 30): Tool {
         return Tool(
             name = "sandbox_shell_readonly",
             description = """
@@ -366,10 +366,17 @@ class LocalTools(
                 }
 
                 // 安全检查通过，执行命令（使用 PRoot 执行，与 container_shell 一致）
+                // 根据命令内容选择超时值，整体执行不拆分
+                val effectiveTimeout = selectShellTimeout(
+                    command = command,
+                    defaultTimeoutSeconds = timeoutSeconds,
+                    pipInstallTimeoutSeconds = timeoutSeconds, // 只读模式不允许 pip install
+                    pipListTimeoutSeconds = pipListTimeoutSeconds
+                )
                 val result = prootManager.executeShell(
                     sandboxId = sandboxId.toString(),
                     command = command,
-                    timeoutSeconds = timeoutSeconds
+                    timeoutSeconds = effectiveTimeout
                 )
                 listOf(UIMessagePart.Text(buildJsonObject {
                     result.forEach { (key, value) -> put(key, value) }
@@ -382,7 +389,7 @@ class LocalTools(
      * 容器运行时 Shell 执行工具（PRoot）
      * 仅当容器运行时启用且就绪时暴露
      */
-    fun createContainerShellTool(sandboxId: Uuid, enabledSkills: Set<String> = emptySet(), timeoutSeconds: Int = 300): Tool {
+    fun createContainerShellTool(sandboxId: Uuid, enabledSkills: Set<String> = emptySet(), timeoutSeconds: Int = 300, pipInstallTimeoutSeconds: Int = 120, pipListTimeoutSeconds: Int = 30): Tool {
         return Tool(
             name = "container_shell",
             description = """完整 Linux Shell（Alpine），支持 apk、git、wget、Python3、Node.js。超时 5 分钟。
@@ -441,11 +448,18 @@ class LocalTools(
                 runBlocking {
                     skillManager.syncSkillsToRuntime(sandboxId.toString(), enabledSkills)
                 }
+                // 根据命令内容选择超时值，整体执行不拆分
+                val effectiveTimeout = selectShellTimeout(
+                    command = command,
+                    defaultTimeoutSeconds = timeoutSeconds,
+                    pipInstallTimeoutSeconds = pipInstallTimeoutSeconds,
+                    pipListTimeoutSeconds = pipListTimeoutSeconds
+                )
                 val beforeDelivery = snapshotDeliveryFiles(sandboxId)
                 val result = prootManager.executeShell(
                     sandboxId = sandboxId.toString(),
                     command = command,
-                    timeoutSeconds = timeoutSeconds
+                    timeoutSeconds = effectiveTimeout
                 )
                 val deliveryItems = collectDeliveryItems(sandboxId, beforeDelivery)
                 val response = buildJsonObject {
@@ -940,11 +954,11 @@ class LocalTools(
         ) {
             if (isReadonlyPhase) {
                 // 只读阶段：仅提供只读 shell 工具和进程查看
-                tools.add(createSandboxShellReadonlyTool(sandboxId, settings?.containerTimeoutSeconds ?: 300))
+                tools.add(createSandboxShellReadonlyTool(sandboxId, settings?.containerTimeoutSeconds ?: 300, settings?.containerPipListTimeoutSeconds ?: 30))
                 tools.add(createContainerProcessTool(sandboxId))
             } else {
                 // EXECUTE 阶段或无阶段限制：提供完整工具
-                tools.add(createContainerShellTool(sandboxId, enabledSkills, settings?.containerTimeoutSeconds ?: 300))
+                tools.add(createContainerShellTool(sandboxId, enabledSkills, settings?.containerTimeoutSeconds ?: 300, settings?.containerPipInstallTimeoutSeconds ?: 120, settings?.containerPipListTimeoutSeconds ?: 30))
                 tools.add(createContainerShellBgTool(sandboxId, enabledSkills))
                 tools.add(createContainerProcessTool(sandboxId))
             }
@@ -1037,6 +1051,52 @@ class LocalTools(
             .toList()
 
     }
+
+    /**
+     * 根据命令内容选择超时值：
+     * 1. 纯 pip install 命令 → pipInstallTimeoutSeconds
+     * 2. 纯 pip list/show/freeze/config 命令 → pipListTimeoutSeconds
+     * 3. 不含 pip 的命令 → defaultTimeoutSeconds
+     * 4. 含 pip 的混合命令 → max(相关pip超时, defaultTimeoutSeconds)
+     *    整体执行，不拆分，避免拆分带来的安全风险和环境污染问题
+     */
+    private fun selectShellTimeout(
+        command: String,
+        defaultTimeoutSeconds: Int,
+        pipInstallTimeoutSeconds: Int,
+        pipListTimeoutSeconds: Int
+    ): Int {
+        val normalizedCmd = command.trim().lowercase()
+        val hasPipInstall = normalizedCmd.contains(Regex("\bpip[3]?\s+install\b")) ||
+            normalizedCmd.contains(Regex("\bpython[3]?\s+-m\s+pip\s+install\b"))
+        val hasPipList = normalizedCmd.contains(Regex("\bpip[3]?\s+(list|show|freeze|config)\b")) ||
+            normalizedCmd.contains(Regex("\bpython[3]?\s+-m\s+pip\s+(list|show|freeze|config)\b"))
+
+        // 纯 pip install（命令以 pip/python 开头）
+        if (hasPipInstall && !hasPipList) {
+            val isPurePipInstall = normalizedCmd.startsWith("pip") || normalizedCmd.startsWith("pip3") ||
+                normalizedCmd.startsWith("python") || normalizedCmd.startsWith("python3")
+            return if (isPurePipInstall) pipInstallTimeoutSeconds
+            else maxOf(pipInstallTimeoutSeconds, defaultTimeoutSeconds)
+        }
+
+        // 纯 pip list/show/freeze/config（命令以 pip/python 开头）
+        if (hasPipList && !hasPipInstall) {
+            val isPurePipList = normalizedCmd.startsWith("pip") || normalizedCmd.startsWith("pip3") ||
+                normalizedCmd.startsWith("python") || normalizedCmd.startsWith("python3")
+            return if (isPurePipList) pipListTimeoutSeconds
+            else maxOf(pipListTimeoutSeconds, defaultTimeoutSeconds)
+        }
+
+        // 同时含 pip install 和 pip list（罕见），取三者最大值
+        if (hasPipInstall && hasPipList) {
+            return maxOf(pipInstallTimeoutSeconds, pipListTimeoutSeconds, defaultTimeoutSeconds)
+        }
+
+        // 不含任何 pip 命令
+        return defaultTimeoutSeconds
+    }
+
 }
 
 /**
@@ -1808,8 +1868,12 @@ private fun checkContainerCommandSecurity(command: String): ContainerSecurityRes
     val foundPaths = pathPattern.findAll(command).map { it.value }.toList()
 
     // 检查是否包含危险命令
+    // 使用正则匹配，覆盖所有分隔符紧贴场景
+    // 匹配规则：危险命令名前面是非字母字符或字符串开头，后面是空格/结尾/非标识符字符
     val isDangerousCommand = DANGEROUS_COMMAND_PATTERNS.any { pattern ->
-        trimmedCommand.startsWith(pattern) || trimmedCommand.contains(" $pattern ")
+        val escapedPattern = pattern.replace(" ", "\s+")
+        val regex = Regex("(?:^|[^a-zA-Z])${escapedPattern}(?:\s|$|[^a-zA-Z0-9._-])")
+        trimmedCommand.contains(regex)
     }
 
     if (!isDangerousCommand) {
