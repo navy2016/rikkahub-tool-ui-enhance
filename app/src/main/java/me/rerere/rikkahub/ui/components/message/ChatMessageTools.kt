@@ -168,6 +168,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     val scope = rememberCoroutineScope()
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isDenied = tool.approvalState is ToolApprovalState.Denied
+    val isCancelled = tool.approvalState is ToolApprovalState.Cancelled
     val arguments = tool.inputAsJson()
     val memoryAction = arguments.getStringContent("action")
     val content = if (tool.isExecuted) {
@@ -419,6 +420,15 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                         val reason = (tool.approvalState as ToolApprovalState.Denied).reason
                         Text(
                             text = stringResource(R.string.chat_message_tool_denied) +
+                                if (reason.isNotBlank()) ": $reason" else "",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    if (isCancelled) {
+                        val reason = (tool.approvalState as ToolApprovalState.Cancelled).reason
+                        Text(
+                            text = stringResource(R.string.chat_message_tool_cancelled) +
                                 if (reason.isNotBlank()) ": $reason" else "",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
