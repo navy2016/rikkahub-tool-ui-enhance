@@ -365,11 +365,13 @@ class LocalTools(
                     }.toString()))
                 }
 
-                // 安全检查通过，执行命令（使用 PRoot 执行，与 container_shell 一致）
-                val result = prootManager.executeShell(
+                // 安全检查通过，执行命令（使用 PRoot 执行，与 container_shell 一致，支持取消）
+                val executionId = sandboxId.toString() + "_readonly_" + System.currentTimeMillis()
+                val result = prootManager.executeShellCancellable(
                     sandboxId = sandboxId.toString(),
                     command = command,
-                    timeoutSeconds = timeoutSeconds
+                    timeoutSeconds = timeoutSeconds,
+                    executionId = executionId
                 )
                 listOf(UIMessagePart.Text(buildJsonObject {
                     result.forEach { (key, value) -> put(key, value) }
