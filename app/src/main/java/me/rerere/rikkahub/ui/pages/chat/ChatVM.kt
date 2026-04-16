@@ -28,6 +28,9 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.runBlocking
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
@@ -434,14 +437,36 @@ class ChatVM(
                 } else node
             }
             
+            // 标记最后一条消息为已完成（设置 finishedAt）
+            val nodesWithFinished = updatedNodes.mapIndexed { index, node ->
+                if (index == updatedNodes.lastIndex) {
+                    // 最后一条消息，检查是否需要设置 finishedAt
+                    val lastMsg = node.currentMessage
+                    if (lastMsg.finishedAt == null) {
+                        node.copy(
+                            messages = node.messages.mapIndexed { msgIndex, msg ->
+                                if (msgIndex == node.selectIndex) {
+                                    msg.copy(
+                                        finishedAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+                                    )
+                                } else msg
+                            }
+                        )
+                    } else node
+                } else node
+            }
+            
             // 保存更新后的对话状态
-            if (updatedNodes != currentConversation.messageNodes) {
-                val updatedConversation = currentConversation.copy(messageNodes = updatedNodes)
+            if (nodesWithFinished != currentConversation.messageNodes) {
+                val updatedConversation = currentConversation.copy(messageNodes = nodesWithFinished)
                 chatService.saveConversation(_conversationId, updatedConversation)
             }
             
             // 然后取消生成
             chatService.stopGeneration(_conversationId)
+            
+            // 清理所有进行中的子代理任务
+            SubAgentProgressManager.cleanupAll()
         }
     }
     fun deleteToolCall(nodeId: Uuid, toolCallId: String) {
