@@ -1,0 +1,799 @@
+package me.rerere.rikkahub.ui.pages.container
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.container.BackgroundProcessInfo
+import me.rerere.rikkahub.data.container.BackgroundProcessManager
+import me.rerere.rikkahub.data.container.ControlInput
+import me.rerere.rikkahub.data.container.ProcessStatus
+import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.utils.TerminalEmulator
+import me.rerere.rikkahub.utils.TerminalEmulator.Key
+import org.koin.compose.koinInject
+import java.util.concurrent.TimeUnit
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProcessSessionPage(sandboxId: String) {
+    val bgManager = koinInject<BackgroundProcessManager>()
+    val processStates by bgManager.processStates.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+
+    val sandboxProcesses = processStates
+        .filter { it.sandboxId == sandboxId }
+        .sortedByDescending { it.createdAt }
+
+    var activeInteractiveId by remember { mutableStateOf<String?>(null) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var showLogsFor by remember { mutableStateOf<String?>(null) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(
+                            text = "会话管理",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "sandbox: ${sandboxId.takeLast(8)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                navigationIcon = { BackButton() },
+                actions = {
+                    IconButton(onClick = { showCreateDialog = true }) {
+                        Text("+", fontSize = 20.sp)
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        if (sandboxProcesses.isEmpty()) {
+            EmptyState(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                onCreate = { showCreateDialog = true }
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .verticalScroll(rememberScrollState())
+                    .imePadding(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                sandboxProcesses.forEach { process ->
+                    ProcessCard(
+                        process = process,
+                        isInteractiveActive = activeInteractiveId == process.processId,
+                        onToggleInteractive = {
+                            activeInteractiveId =
+                                if (activeInteractiveId == process.processId) null
+                                else process.processId
+                        },
+                        onKill = {
+                            scope.launch {
+                                if (process.isInteractive) {
+                                    bgManager.closeInteractiveSession(process.processId)
+                                } else {
+                                    bgManager.killProcess(process.processId)
+                                }
+                                if (activeInteractiveId == process.processId) {
+                                    activeInteractiveId = null
+                                }
+                            }
+                        },
+                        onViewLogs = { showLogsFor = process.processId },
+                        onRemove = {
+                            bgManager.removeProcessRecord(process.processId)
+                            if (activeInteractiveId == process.processId) {
+                                activeInteractiveId = null
+                            }
+                        }
+                    )
+
+                    if (process.isInteractive && activeInteractiveId == process.processId) {
+                        TerminalInteractivePanel(
+                            processId = process.processId,
+                            bgManager = bgManager
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showCreateDialog) {
+        CreateSessionDialog(
+            onDismiss = { showCreateDialog = false },
+            onCreate = { command ->
+                scope.launch {
+                    bgManager.startInteractiveSession(
+                        sandboxId = sandboxId,
+                        command = command,
+                        preferTty = true,
+                        columns = 80,
+                        rows = 24
+                    )
+                    showCreateDialog = false
+                }
+            }
+        )
+    }
+
+    showLogsFor?.let { processId ->
+        LogsDialog(
+            processId = processId,
+            bgManager = bgManager,
+            onDismiss = { showLogsFor = null }
+        )
+    }
+}
+
+@Composable
+private fun EmptyState(
+    modifier: Modifier = Modifier,
+    onCreate: () -> Unit
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("🖥️", fontSize = 56.sp)
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "暂无进程",
+            style = MaterialTheme.typography.titleMedium
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "AI 可通过 container_shell_bg 启动后台/交互进程\n用户可在此前台化交互式会话",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(onClick = onCreate) {
+            Text("新建交互会话")
+        }
+    }
+}
+
+@Composable
+private fun ProcessCard(
+    process: BackgroundProcessInfo,
+    isInteractiveActive: Boolean,
+    onToggleInteractive: () -> Unit,
+    onKill: () -> Unit,
+    onViewLogs: () -> Unit,
+    onRemove: () -> Unit
+) {
+    val statusColor = when (process.status) {
+        ProcessStatus.RUNNING -> Color(0xFF4CAF50)
+        ProcessStatus.STARTING -> Color(0xFFFFA726)
+        ProcessStatus.STOPPED -> Color(0xFF9E9E9E)
+        ProcessStatus.COMPLETED -> Color(0xFF2196F3)
+        ProcessStatus.FAILED -> Color(0xFFE53935)
+        ProcessStatus.ORPHANED -> Color(0xFF795548)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(statusColor)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = process.processId.takeLast(10),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                StatusChip(
+                    status = process.status,
+                    isInteractive = process.isInteractive,
+                    ttyEnabled = process.ttyEnabled
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = process.command,
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column {
+                    process.pid?.let {
+                        Text(
+                            text = "PID: $it",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    process.startedAt?.let { startedAt ->
+                        val end = process.exitedAt ?: System.currentTimeMillis()
+                        Text(
+                            text = formatDuration(end - startedAt),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    when {
+                        process.isInteractive && process.status == ProcessStatus.RUNNING -> {
+                            TextButton(onClick = onToggleInteractive) {
+                                Text(if (isInteractiveActive) "收起" else "终端")
+                            }
+                            TextButton(
+                                onClick = onKill,
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("终止")
+                            }
+                        }
+
+                        !process.isInteractive && process.status == ProcessStatus.RUNNING -> {
+                            TextButton(onClick = onViewLogs) {
+                                Text("日志")
+                            }
+                            TextButton(
+                                onClick = onKill,
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("终止")
+                            }
+                        }
+
+                        else -> {
+                            TextButton(onClick = onViewLogs) {
+                                Text("日志")
+                            }
+                            TextButton(
+                                onClick = onRemove,
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("删除记录")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusChip(
+    status: ProcessStatus,
+    isInteractive: Boolean,
+    ttyEnabled: Boolean
+) {
+    val text = buildString {
+        append(
+            when (status) {
+                ProcessStatus.RUNNING -> if (isInteractive) "交互中" else "运行中"
+                ProcessStatus.STARTING -> "启动中"
+                ProcessStatus.STOPPED -> "已停止"
+                ProcessStatus.COMPLETED -> "已完成"
+                ProcessStatus.FAILED -> "失败"
+                ProcessStatus.ORPHANED -> "孤立"
+            }
+        )
+        if (isInteractive && ttyEnabled) append(" · TTY")
+    }
+
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelSmall
+        )
+    }
+}
+
+@Composable
+private fun TerminalInteractivePanel(
+    processId: String,
+    bgManager: BackgroundProcessManager
+) {
+    val scope = rememberCoroutineScope()
+    val outputScroll = rememberScrollState()
+    val controlScroll = rememberScrollState()
+
+    val terminalEmulator = remember(processId) { TerminalEmulator(initialColumns = 80, initialRows = 24) }
+    var input by remember { mutableStateOf("") }
+    var terminalText by remember { mutableStateOf(terminalEmulator.render()) }
+    var terminalModeSummary by remember { mutableStateOf(terminalEmulator.modeSummary()) }
+    var autoScroll by remember { mutableStateOf(true) }
+    var terminalColumns by remember { mutableIntStateOf(80) }
+    var terminalRows by remember { mutableIntStateOf(24) }
+
+    LaunchedEffect(processId) {
+        terminalEmulator.reset()
+        bgManager.readInteractiveBuffer(processId)?.let { existing ->
+            terminalEmulator.feed(existing)
+            terminalText = terminalEmulator.render()
+            terminalModeSummary = terminalEmulator.modeSummary()
+        }
+    }
+
+    val commandHistory = remember { mutableStateListOf<String>() }
+    var historyIndex by remember { mutableIntStateOf(-1) }
+
+    fun applyHistoryUp() {
+        if (commandHistory.isEmpty()) return
+        if (historyIndex == -1) {
+            historyIndex = commandHistory.lastIndex
+        } else if (historyIndex > 0) {
+            historyIndex--
+        }
+        input = commandHistory.getOrElse(historyIndex) { input }
+    }
+
+    fun applyHistoryDown() {
+        if (commandHistory.isEmpty()) return
+        if (historyIndex in 0 until commandHistory.lastIndex) {
+            historyIndex++
+            input = commandHistory[historyIndex]
+        } else {
+            historyIndex = -1
+            input = ""
+        }
+    }
+
+    fun submitCommand() {
+        val command = input.trim()
+        if (command.isBlank()) return
+
+        if (commandHistory.lastOrNull() != command) {
+            commandHistory.add(command)
+        }
+        historyIndex = -1
+
+        scope.launch {
+            val payload = terminalEmulator.wrapPaste(command)
+            bgManager.sendInput(processId, payload, appendNewline = true)
+            input = ""
+        }
+    }
+
+    fun sendRaw(sequence: String) {
+        scope.launch {
+            bgManager.sendInput(processId, sequence, appendNewline = false)
+        }
+    }
+
+    fun sendKey(key: Key) {
+        sendRaw(terminalEmulator.sequenceFor(key))
+    }
+
+    fun clearLocalTerminal() {
+        terminalEmulator.reset()
+        terminalText = terminalEmulator.render()
+        terminalModeSummary = terminalEmulator.modeSummary()
+    }
+
+    LaunchedEffect(processId, terminalColumns, terminalRows) {
+        terminalEmulator.resize(terminalColumns, terminalRows)
+        terminalText = terminalEmulator.render()
+        terminalModeSummary = terminalEmulator.modeSummary()
+        bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)
+    }
+
+    LaunchedEffect(processId) {
+        bgManager.observeOutput(processId)?.collect { bytes ->
+            terminalEmulator.feed(bytes)
+            terminalEmulator.drainResponses().forEach { response ->
+                bgManager.sendInput(processId, response, appendNewline = false)
+            }
+            terminalText = terminalEmulator.render()
+            terminalModeSummary = terminalEmulator.modeSummary()
+            if (autoScroll) {
+                outputScroll.scrollTo(outputScroll.maxValue)
+            }
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1B1B1B)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp)
+                .imePadding()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = buildString { append("终端 · ${terminalColumns}x${terminalRows}"); if (terminalModeSummary.isNotBlank()) append(" · $terminalModeSummary") },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFFBDBDBD),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "自动滚动",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFBDBDBD)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Switch(
+                        checked = autoScroll,
+                        onCheckedChange = { autoScroll = it }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+                    .background(Color(0xFF101010), RoundedCornerShape(8.dp))
+                    .padding(10.dp)
+                    .onSizeChanged { size ->
+                        val cols = (size.width / 7).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
+                        val rows = (size.height / 14).coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
+                        if (cols != terminalColumns) terminalColumns = cols
+                        if (rows != terminalRows) terminalRows = rows
+                    }
+                    .verticalScroll(outputScroll)
+            ) {
+                Text(
+                    text = if (terminalText.text.isEmpty()) AnnotatedString("等待输出...") else terminalText,
+                    color = Color(0xFF00E676),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(controlScroll),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ControlChip("Ctrl+C") {
+                    scope.launch {
+                        bgManager.sendControlInput(processId, ControlInput.CTRL_C)
+                    }
+                }
+                ControlChip("Ctrl+D") {
+                    scope.launch {
+                        bgManager.sendControlInput(processId, ControlInput.CTRL_D)
+                    }
+                }
+                ControlChip("Tab") {
+                    scope.launch {
+                        bgManager.sendControlInput(processId, ControlInput.TAB)
+                    }
+                }
+                ControlChip("Esc") {
+                    scope.launch {
+                        bgManager.sendControlInput(processId, ControlInput.ESC)
+                    }
+                }
+                ControlChip("Shell↑") { sendKey(Key.UP) }
+                ControlChip("Shell↓") { sendKey(Key.DOWN) }
+                ControlChip("Shell←") { sendKey(Key.LEFT) }
+                ControlChip("Shell→") { sendKey(Key.RIGHT) }
+                ControlChip("Home") { sendKey(Key.HOME) }
+                ControlChip("End") { sendKey(Key.END) }
+                ControlChip("PgUp") { sendKey(Key.PAGE_UP) }
+                ControlChip("PgDn") { sendKey(Key.PAGE_DOWN) }
+                ControlChip("Ins") { sendKey(Key.INSERT) }
+                ControlChip("Del") { sendKey(Key.DELETE) }
+                ControlChip("F1") { sendKey(Key.F1) }
+                ControlChip("F2") { sendKey(Key.F2) }
+                ControlChip("F3") { sendKey(Key.F3) }
+                ControlChip("F4") { sendKey(Key.F4) }
+                ControlChip("本地清屏") { clearLocalTerminal() }
+                ControlChip("↑历史") { applyHistoryUp() }
+                ControlChip("↓历史") { applyHistoryDown() }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                prefix = {
+                    Text(
+                        text = "$",
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                },
+                label = { Text("终端输入") },
+                placeholder = { Text("例如：npm install -g @anthropic-ai/claude-code") },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(
+                    onSend = { submitCommand() }
+                )
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { applyHistoryUp() }) {
+                        Text("上一条")
+                    }
+                    TextButton(onClick = { applyHistoryDown() }) {
+                        Text("下一条")
+                    }
+                }
+
+                Button(onClick = { submitCommand() }) {
+                    Text("回车执行")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ControlChip(
+    text: String,
+    onClick: () -> Unit
+) {
+    FilterChip(
+        selected = false,
+        onClick = onClick,
+        label = {
+            Text(
+                text = text,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+    )
+}
+
+@Composable
+private fun CreateSessionDialog(
+    onDismiss: () -> Unit,
+    onCreate: (String) -> Unit
+) {
+    var command by remember { mutableStateOf("bash") }
+    val quickCommands = listOf(
+        "bash",
+        "vim",
+        "nano",
+        "claude",
+        "codex",
+        "opencode",
+        "apk add vim nano util-linux nodejs npm",
+        "npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("新建交互会话") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = command,
+                    onValueChange = { command = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("命令") },
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    quickCommands.forEach { item ->
+                        FilterChip(
+                            selected = command == item,
+                            onClick = { command = item },
+                            label = { Text(item, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "CLI/TUI 建议 TTY 模式。安装：apk add vim nano util-linux nodejs npm；npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onCreate(command) }) {
+                Text("创建")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@Composable
+private fun LogsDialog(
+    processId: String,
+    bgManager: BackgroundProcessManager,
+    onDismiss: () -> Unit
+) {
+    var text by remember { mutableStateOf("加载中...") }
+
+    LaunchedEffect(processId) {
+        val result = bgManager.readProcessLogs(
+            processId = processId,
+            stream = "stdout",
+            offset = 0,
+            limit = 400
+        )
+        text = if (result.error != null) {
+            "读取失败：${result.error}"
+        } else {
+            result.lines.joinToString("\n")
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("进程日志") },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp)
+                    .background(Color(0xFF111111), RoundedCornerShape(8.dp))
+                    .padding(10.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = text.ifBlank { "(空)" },
+                    color = Color(0xFF00E676),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("关闭")
+            }
+        }
+    )
+}
+
+private fun formatDuration(durationMs: Long): String {
+    val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(durationMs)
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+
+    return when {
+        hours > 0 -> "${hours}h ${minutes}m ${seconds}s"
+        minutes > 0 -> "${minutes}m ${seconds}s"
+        else -> "${seconds}s"
+    }
+}
