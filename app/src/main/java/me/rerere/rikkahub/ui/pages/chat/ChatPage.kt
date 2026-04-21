@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import android.net.Uri
+import me.rerere.rikkahub.Screen
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -544,6 +545,9 @@ private fun ChatPageContent(
                 WorkflowSidebarHandle(
                     onClick = {
                         showWorkflowPanel = !showWorkflowPanel
+                    },
+                    onLongClick = {
+                        navController.navigate(Screen.ProcessSessions(conversation.id.toString()))
                     }
                 )
             }
