@@ -5,55 +5,104 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.koin.core.context.GlobalContext
+import java.io.ByteArrayOutputStream
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.io.InputStream
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+
+enum class ControlInput {
+    CTRL_C,
+    CTRL_D,
+    TAB,
+    ESC,
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT,
+    HOME,
+    END,
+    PAGE_UP,
+    PAGE_DOWN,
+    INSERT,
+    DELETE,
+    ENTER,
+    BACKSPACE,
+    F1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12
+}
 
 /**
  * 后台进程管理器
  *
- * 负责管理容器中启动的后台进程的生命周期
- *
- * @property context 应用上下文
- * @property prootManager PRoot容器管理器
+ * 负责管理两类进程：
+ * 1. 后台非交互进程（原有 container_shell_bg 行为）：输出到日志文件
+ * 2. 交互式 session（container_shell_bg interactive=true）：支持 stdin / 实时输出 / 可选 tty
  */
 @Singleton
 class BackgroundProcessManager @Inject constructor(
     private val context: Context
 ) {
-    // 运行时获取PRootManager，避免循环依赖
     private val prootManager: PRootManager
-        get() = org.koin.core.context.GlobalContext.get().get()
+        get() = GlobalContext.get().get()
+
     companion object {
         private const val TAG = "BackgroundProcessManager"
+
         // 日志文件大小限制（10MB），internal 以便 PRootManager 访问
         internal const val MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
-        private const val PROCESS_CHECK_INTERVAL_MS = 5000L    // 进程检查间隔
-        private const val MAX_RUNNING_PROCESSES_PER_SANDBOX = 10 // 每个沙箱最多运行10个进程
+
+        private const val PROCESS_CHECK_INTERVAL_MS = 5000L
+        private const val MAX_RUNNING_PROCESSES_PER_SANDBOX = 10
+        private const val MAX_INTERACTIVE_SESSIONS = 5
+        private const val INTERACTIVE_BUFFER_MAX_BYTES = 256 * 1024
     }
 
-    // 后台进程映射（内存中）
+    /**
+     * 原有后台进程记录
+     */
     private val processes = ConcurrentHashMap<String, BackgroundProcessInfo>()
 
-    // 进程状态流（用于UI观察）
+    /**
+     * 新增：交互式 session 记录
+     */
+    private val interactiveSessions = ConcurrentHashMap<String, InteractiveSessionRecord>()
+
+    private val interactiveReadOffsets = ConcurrentHashMap<String, Long>()
+
+    /**
+     * 统一状态流（后台进程 + 交互 session）
+     */
     private val _processStates = MutableStateFlow<List<BackgroundProcessInfo>>(emptyList())
     val processStates: StateFlow<List<BackgroundProcessInfo>> = _processStates.asStateFlow()
 
-    // 应用作用域（用于启动监控协程）
-    private val appScope = CoroutineScope(Dispatchers.IO)
-
-    // 监控协程Job
+    private val appScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var monitoringJob: Job? = null
 
     init {
@@ -61,12 +110,95 @@ class BackgroundProcessManager @Inject constructor(
     }
 
     /**
-     * 启动后台进程
-     *
-     * @param sandboxId 沙箱ID
-     * @param command 要执行的命令
-     * @param tag 可选的用户标签
-     * @return ProcessExecutionResult
+     * 交互式会话输出缓冲
+     * 仅保留最近 maxBytes 数据，供 UI 展示和 tool read/logs 复用
+     */
+    private class SessionOutputBuffer(
+        private val maxBytes: Int = INTERACTIVE_BUFFER_MAX_BYTES
+    ) {
+        private val data = ByteArrayOutputStream()
+        private var baseOffset: Long = 0L
+        private var totalWritten: Long = 0L
+
+        @Synchronized
+        fun append(bytes: ByteArray) {
+            data.write(bytes)
+            totalWritten += bytes.size
+            val current = data.toByteArray()
+            if (current.size > maxBytes) {
+                val drop = current.size - maxBytes
+                val trimmed = current.copyOfRange(drop, current.size)
+                data.reset()
+                data.write(trimmed)
+                baseOffset += drop.toLong()
+            }
+        }
+
+        @Synchronized
+        fun snapshot(): ByteArray = data.toByteArray()
+
+        @Synchronized
+        fun snapshotAsString(): String = data.toByteArray().toString(Charsets.UTF_8)
+
+        @Synchronized
+        fun totalBytes(): Long = totalWritten
+
+        @Synchronized
+        fun readFrom(offset: Long, limitBytes: Int): BufferRead {
+            val safeLimit = limitBytes.coerceIn(1, maxBytes)
+            val effectiveOffset = offset.coerceAtLeast(baseOffset).coerceAtMost(totalWritten)
+            val localStart = (effectiveOffset - baseOffset).toInt()
+            val bytes = data.toByteArray()
+            val end = minOf(localStart + safeLimit, bytes.size)
+            val slice = if (localStart < end) bytes.copyOfRange(localStart, end) else ByteArray(0)
+            val toOffset = baseOffset + end
+            return BufferRead(
+                content = slice.toString(StandardCharsets.UTF_8),
+                fromOffset = effectiveOffset,
+                toOffset = toOffset,
+                totalBytes = totalWritten,
+                baseOffset = baseOffset,
+                hasMore = toOffset < totalWritten
+            )
+        }
+    }
+
+    data class BufferRead(
+        val content: String,
+        val fromOffset: Long,
+        val toOffset: Long,
+        val totalBytes: Long,
+        val baseOffset: Long,
+        val hasMore: Boolean
+    )
+
+    /**
+     * 交互式 session 运行态记录
+     */
+    private data class InteractiveSessionRecord(
+        val processId: String,
+        val sandboxId: String,
+        val command: String,
+        val process: Process,
+        val ttyEnabled: Boolean,
+        val outputFlow: MutableSharedFlow<ByteArray>,
+        val outputBuffer: SessionOutputBuffer,
+        var columns: Int = 80,
+        var rows: Int = 24,
+        var stdoutJob: Job? = null,
+        var stderrJob: Job? = null,
+        var waiterJob: Job? = null,
+        val createdAt: Long = System.currentTimeMillis(),
+        var startedAt: Long? = System.currentTimeMillis(),
+        var exitedAt: Long? = null,
+        var exitCode: Int? = null,
+        var finalStatus: ProcessStatus? = null,
+        var lastActivityAt: Long = System.currentTimeMillis(),
+        val tag: String? = null
+    )
+
+    /**
+     * 启动后台进程（原有逻辑）
      */
     suspend fun startBackgroundProcess(
         sandboxId: String,
@@ -74,7 +206,6 @@ class BackgroundProcessManager @Inject constructor(
         tag: String? = null
     ): ProcessExecutionResult = withContext(Dispatchers.IO) {
         try {
-            // 检查沙箱进程数限制
             val runningCount = processes.values
                 .count { it.sandboxId == sandboxId && it.status == ProcessStatus.RUNNING }
 
@@ -87,16 +218,13 @@ class BackgroundProcessManager @Inject constructor(
                 )
             }
 
-            // 生成进程ID
             val processId = generateProcessId()
             val timestamp = System.currentTimeMillis()
 
-            // 创建日志文件
             val logsDir = File(context.filesDir, "sandboxes/$sandboxId/logs").apply { mkdirs() }
             val stdoutFile = File(logsDir, "$processId.stdout.log")
             val stderrFile = File(logsDir, "$processId.stderr.log")
 
-            // 创建进程信息
             val processInfo = BackgroundProcessInfo(
                 processId = processId,
                 sandboxId = sandboxId,
@@ -112,7 +240,6 @@ class BackgroundProcessManager @Inject constructor(
                 tag = tag
             )
 
-            // 启动进程
             val result = prootManager.execInBackground(
                 sandboxId = sandboxId,
                 command = listOf("sh", "-c", command),
@@ -122,9 +249,7 @@ class BackgroundProcessManager @Inject constructor(
             )
 
             if (result.exitCode == 0) {
-                // 进程启动成功
                 val startedAt = System.currentTimeMillis()
-                // 从 stdout 中解析 PID（格式：Process started with PID: xxx）
                 val pid = extractPidFromOutput(result.stdout)
 
                 val updatedInfo = processInfo.copy(
@@ -133,11 +258,8 @@ class BackgroundProcessManager @Inject constructor(
                     startedAt = startedAt
                 )
 
-                // 注意：此时进程对象已经在PRootManager中管理，我们这里只存储信息
                 processes[processId] = updatedInfo
-
-                // 更新状态流
-                _processStates.value = processes.values.map { it }
+                refreshProcessStates()
 
                 Log.i(TAG, "Started background process: $processId, command: $command")
 
@@ -148,19 +270,22 @@ class BackgroundProcessManager @Inject constructor(
                     message = "Process started successfully",
                     stdoutFile = stdoutFile.absolutePath,
                     stderrFile = stderrFile.absolutePath,
-                    pid = pid
+                    pid = pid,
+                    isInteractive = false,
+                    stdinEnabled = false,
+                    ttyEnabled = false
                 )
             } else {
-                // 进程启动失败
                 val failedInfo = processInfo.copy(status = ProcessStatus.FAILED)
                 processes[processId] = failedInfo
-                _processStates.value = processes.values.map { it }
+                refreshProcessStates()
 
                 ProcessExecutionResult(
                     success = false,
                     processId = processId,
                     status = ProcessStatus.FAILED,
-                    message = "Failed to start process: ${result.stderr}"
+                    message = "Failed to start process: ${result.stderr}",
+                    isInteractive = false
                 )
             }
         } catch (e: Exception) {
@@ -169,37 +294,376 @@ class BackgroundProcessManager @Inject constructor(
                 success = false,
                 processId = "",
                 status = ProcessStatus.FAILED,
-                message = "Error: ${e.message}"
+                message = "Error: ${e.message}",
+                isInteractive = false
             )
         }
     }
 
     /**
-     * 获取进程信息
+     * 启动交互式 session
+     *
+     * 优先尝试使用 script 分配轻量 tty；
+     * 如果容器内不存在 script，则自动 fallback 为普通 pipe 模式。
      */
-    fun getProcess(processId: String): BackgroundProcessInfo? {
-        return processes[processId]
+    suspend fun startInteractiveSession(
+        sandboxId: String,
+        command: String,
+        tag: String? = null,
+        preferTty: Boolean = true,
+        columns: Int = 80,
+        rows: Int = 24
+    ): ProcessExecutionResult = withContext(Dispatchers.IO) {
+        try {
+            val aliveInteractiveCount = interactiveSessions.values.count { it.process.isAlive }
+            if (aliveInteractiveCount >= MAX_INTERACTIVE_SESSIONS) {
+                return@withContext ProcessExecutionResult(
+                    success = false,
+                    processId = "",
+                    status = ProcessStatus.FAILED,
+                    message = "Too many interactive sessions (max $MAX_INTERACTIVE_SESSIONS)."
+                )
+            }
+
+            val processId = generateProcessId()
+            val ttyEnabled = preferTty && hasScriptCommand(sandboxId)
+            val initialColumns = columns.coerceIn(20, 240)
+            val initialRows = rows.coerceIn(6, 80)
+
+            val envPrefix = "export TERM=xterm-256color LINES=$initialRows COLUMNS=$initialColumns; " +
+                "export FORCE_COLOR=1 COLORTERM=truecolor; " +
+                "stty rows $initialRows cols $initialColumns 2>/dev/null || true; "
+            val wrappedCommand = if (ttyEnabled) {
+                val inner = "$envPrefix exec $command"
+                val quoted = shellQuote(inner)
+                "TERM=xterm-256color LINES=$initialRows COLUMNS=$initialColumns script -q -e -c $quoted /dev/null"
+            } else {
+                "TERM=dumb NO_COLOR=1 FORCE_COLOR=0 CLICOLOR=0 LINES=$initialRows COLUMNS=$initialColumns $command"
+            }
+
+            val process = prootManager.execInteractive(
+                sandboxId = sandboxId,
+                command = listOf("sh", "-lc", wrappedCommand)
+            )
+
+            val outputFlow = MutableSharedFlow<ByteArray>(extraBufferCapacity = 128)
+            val outputBuffer = SessionOutputBuffer()
+
+            val record = InteractiveSessionRecord(
+                processId = processId,
+                sandboxId = sandboxId,
+                command = command,
+                process = process,
+                ttyEnabled = ttyEnabled,
+                outputFlow = outputFlow,
+                outputBuffer = outputBuffer,
+                tag = tag,
+                columns = initialColumns,
+                rows = initialRows
+            )
+
+            interactiveSessions[processId] = record
+
+            record.stdoutJob = launchStreamReader(
+                inputStream = process.inputStream,
+                outputFlow = outputFlow,
+                buffer = outputBuffer
+            ) {
+                record.lastActivityAt = System.currentTimeMillis()
+            }
+
+            record.stderrJob = launchStreamReader(
+                inputStream = process.errorStream,
+                outputFlow = outputFlow,
+                buffer = outputBuffer
+            ) {
+                record.lastActivityAt = System.currentTimeMillis()
+            }
+
+            record.waiterJob = appScope.launch {
+                val code = try {
+                    process.waitFor()
+                } catch (_: Exception) {
+                    -1
+                }
+
+                interactiveSessions[processId]?.let { session ->
+                    session.exitCode = code
+                    session.exitedAt = System.currentTimeMillis()
+                    if (session.finalStatus == null) {
+                        session.finalStatus = if (code == 0) {
+                            ProcessStatus.COMPLETED
+                        } else {
+                            ProcessStatus.FAILED
+                        }
+                    }
+                }
+                refreshProcessStates()
+            }
+
+            refreshProcessStates()
+
+            ProcessExecutionResult(
+                success = true,
+                processId = processId,
+                status = ProcessStatus.RUNNING,
+                message = "Interactive session started",
+                pid = tryGetPid(process),
+                isInteractive = true,
+                stdinEnabled = true,
+                ttyEnabled = ttyEnabled,
+                terminalColumns = initialColumns,
+                terminalRows = initialRows,
+                terminalBackend = if (NativePtyBridge.isAvailable) "native-pty" else if (ttyEnabled) "script-sigwinch" else "pipe"
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting interactive session", e)
+            ProcessExecutionResult(
+                success = false,
+                processId = "",
+                status = ProcessStatus.FAILED,
+                message = "Error: ${e.message}",
+                isInteractive = true
+            )
+        }
     }
 
     /**
-     * 获取沙箱的所有进程
+     * 获取进程信息（统一视图）
+     */
+    fun getProcess(processId: String): BackgroundProcessInfo? {
+        refreshProcessStates()
+        return _processStates.value.firstOrNull { it.processId == processId }
+    }
+
+    /**
+     * 获取指定 sandbox 的所有进程
      */
     fun getProcessesBySandbox(sandboxId: String): List<BackgroundProcessInfo> {
-        return processes.values
-            .filter { it.sandboxId == sandboxId }
+        refreshProcessStates()
+        return _processStates.value.filter { it.sandboxId == sandboxId }
     }
 
     /**
      * 获取所有进程
      */
     fun getAllProcesses(): List<BackgroundProcessInfo> {
-        return processes.values.toList()
+        refreshProcessStates()
+        return _processStates.value
+    }
+
+    /**
+     * 向交互式 session 发送文本输入
+     */
+    suspend fun sendInput(
+        processId: String,
+        input: String,
+        appendNewline: Boolean = true
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val record = interactiveSessions[processId]
+            ?: return@withContext Result.failure(
+                IllegalStateException("Interactive session not found: $processId")
+            )
+
+        try {
+            val bytes = if (appendNewline) {
+                (input + "\n").toByteArray(Charsets.UTF_8)
+            } else {
+                input.toByteArray(Charsets.UTF_8)
+            }
+            record.process.outputStream.write(bytes)
+            record.process.outputStream.flush()
+            record.lastActivityAt = System.currentTimeMillis()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sending input to session: $processId", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 发送控制输入
+     */
+    suspend fun sendControlInput(
+        processId: String,
+        control: ControlInput
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val record = interactiveSessions[processId]
+            ?: return@withContext Result.failure(
+                IllegalStateException("Interactive session not found: $processId")
+            )
+
+        try {
+            fun esc(suffix: String): ByteArray = ("\u001B" + suffix).toByteArray(Charsets.UTF_8)
+            val bytes = when (control) {
+                ControlInput.CTRL_C -> byteArrayOf(0x03)
+                ControlInput.CTRL_D -> byteArrayOf(0x04)
+                ControlInput.TAB -> byteArrayOf('\t'.code.toByte())
+                ControlInput.ESC -> byteArrayOf(0x1B)
+                ControlInput.UP -> esc("[A")
+                ControlInput.DOWN -> esc("[B")
+                ControlInput.LEFT -> esc("[D")
+                ControlInput.RIGHT -> esc("[C")
+                ControlInput.HOME -> esc("[H")
+                ControlInput.END -> esc("[F")
+                ControlInput.PAGE_UP -> esc("[5~")
+                ControlInput.PAGE_DOWN -> esc("[6~")
+                ControlInput.INSERT -> esc("[2~")
+                ControlInput.DELETE -> esc("[3~")
+                ControlInput.ENTER -> byteArrayOf('\n'.code.toByte())
+                ControlInput.BACKSPACE -> byteArrayOf(0x7F)
+                ControlInput.F1 -> esc("OP")
+                ControlInput.F2 -> esc("OQ")
+                ControlInput.F3 -> esc("OR")
+                ControlInput.F4 -> esc("OS")
+                ControlInput.F5 -> esc("[15~")
+                ControlInput.F6 -> esc("[17~")
+                ControlInput.F7 -> esc("[18~")
+                ControlInput.F8 -> esc("[19~")
+                ControlInput.F9 -> esc("[20~")
+                ControlInput.F10 -> esc("[21~")
+                ControlInput.F11 -> esc("[23~")
+                ControlInput.F12 -> esc("[24~")
+            }
+
+            record.process.outputStream.write(bytes)
+            record.process.outputStream.flush()
+            record.lastActivityAt = System.currentTimeMillis()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error sending control input to session: $processId", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 观察交互式输出流
+     */
+    fun observeOutput(processId: String): Flow<ByteArray>? {
+        return interactiveSessions[processId]?.outputFlow?.asSharedFlow()
+    }
+
+    /**
+     * 读取交互式输出缓冲
+     */
+    fun readInteractiveBuffer(processId: String): String? {
+        return interactiveSessions[processId]?.outputBuffer?.snapshotAsString()
+    }
+
+    fun readInteractiveOutput(
+        processId: String,
+        mode: String = "new",
+        offset: Long? = null,
+        limitBytes: Int = 64 * 1024
+    ): BufferRead? {
+        val buffer = interactiveSessions[processId]?.outputBuffer ?: return null
+        val fromOffset = when (mode) {
+            "all" -> 0L
+            "tail" -> (buffer.totalBytes() - limitBytes).coerceAtLeast(0L)
+            else -> offset ?: interactiveReadOffsets[processId] ?: 0L
+        }
+        val result = buffer.readFrom(fromOffset, limitBytes)
+        if (mode == "new") {
+            interactiveReadOffsets[processId] = result.toOffset
+        }
+        return result
+    }
+
+    /**
+     * 更新交互式 session 的终端尺寸。Java Process 本身没有 PTY resize API；
+     * 这里同步记录并向进程树发送 WINCH。script/util-linux 有机会据此刷新，
+     * 同时新启动的 session 会使用动态 rows/columns 初始化 stty。
+     */
+    suspend fun resizeInteractiveSession(
+        processId: String,
+        columns: Int,
+        rows: Int
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val record = interactiveSessions[processId]
+            ?: return@withContext Result.failure(
+                IllegalStateException("Interactive session not found: $processId")
+            )
+        val newColumns = columns.coerceIn(20, 240)
+        val newRows = rows.coerceIn(6, 80)
+        if (record.columns == newColumns && record.rows == newRows) {
+            return@withContext Result.success(Unit)
+        }
+        record.columns = newColumns
+        record.rows = newRows
+        record.lastActivityAt = System.currentTimeMillis()
+        if (record.ttyEnabled) {
+            prootManager.signalProcessTree(record.process, "WINCH")
+        }
+        Result.success(Unit)
+    }
+
+    /**
+     * 关闭交互式会话
+     */
+    suspend fun closeInteractiveSession(processId: String): ProcessExecutionResult = withContext(Dispatchers.IO) {
+        val record = interactiveSessions[processId]
+            ?: return@withContext ProcessExecutionResult(
+                success = false,
+                processId = processId,
+                status = ProcessStatus.FAILED,
+                message = "Interactive session not found: $processId"
+            )
+
+        try {
+            if (record.process.isAlive) {
+                record.finalStatus = ProcessStatus.STOPPED
+                record.exitedAt = System.currentTimeMillis()
+
+                prootManager.terminateProcessTree(record.process)
+                if (!record.process.waitFor(800, TimeUnit.MILLISECONDS)) {
+                    record.process.destroyForcibly()
+                    prootManager.terminateProcessTree(record.process, force = true)
+                }
+            }
+
+            record.exitCode = try {
+                record.process.exitValue()
+            } catch (_: Exception) {
+                -1
+            }
+
+            record.stdoutJob?.cancel()
+            record.stderrJob?.cancel()
+            record.waiterJob?.cancel()
+
+            refreshProcessStates()
+
+            ProcessExecutionResult(
+                success = true,
+                processId = processId,
+                status = ProcessStatus.STOPPED,
+                message = "Interactive session stopped",
+                pid = tryGetPid(record.process),
+                isInteractive = true,
+                stdinEnabled = true,
+                ttyEnabled = record.ttyEnabled
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing interactive session: $processId", e)
+            ProcessExecutionResult(
+                success = false,
+                processId = processId,
+                status = ProcessStatus.FAILED,
+                message = "Error: ${e.message}",
+                isInteractive = true
+            )
+        }
     }
 
     /**
      * 终止进程
+     * 对交互 session 自动转到 closeInteractiveSession
      */
     suspend fun killProcess(processId: String): ProcessExecutionResult = withContext(Dispatchers.IO) {
+        interactiveSessions[processId]?.let {
+            return@withContext closeInteractiveSession(processId)
+        }
+
         try {
             val managedProcess = processes[processId]
                 ?: return@withContext ProcessExecutionResult(
@@ -217,7 +681,7 @@ class BackgroundProcessManager @Inject constructor(
                     exitedAt = System.currentTimeMillis()
                 )
                 processes[processId] = updatedInfo
-                _processStates.value = processes.values.toList()
+                refreshProcessStates()
 
                 ProcessExecutionResult(
                     success = true,
@@ -246,6 +710,8 @@ class BackgroundProcessManager @Inject constructor(
 
     /**
      * 读取进程日志
+     * - 普通后台进程：读取日志文件
+     * - 交互 session：读取内存缓冲
      */
     suspend fun readProcessLogs(
         processId: String,
@@ -254,7 +720,24 @@ class BackgroundProcessManager @Inject constructor(
         limit: Int = 1000
     ): LogReadResult = withContext(Dispatchers.IO) {
         try {
-            val processInfo = getProcess(processId)
+            interactiveSessions[processId]?.let { session ->
+                val allLines = session.outputBuffer.snapshotAsString().lines()
+                val totalLines = allLines.size
+                val lines = if (offset < totalLines) {
+                    val end = minOf(offset + limit, totalLines)
+                    allLines.subList(offset, end)
+                } else {
+                    emptyList()
+                }
+
+                return@withContext LogReadResult(
+                    lines = lines,
+                    totalLines = totalLines,
+                    hasMore = offset + limit < totalLines
+                )
+            }
+
+            val processInfo = processes[processId]
                 ?: return@withContext LogReadResult(
                     lines = emptyList(),
                     totalLines = 0,
@@ -281,11 +764,9 @@ class BackgroundProcessManager @Inject constructor(
                 )
             }
 
-            // 读取所有行
             val allLines = logFile.readLines()
             val totalLines = allLines.size
 
-            // 应用偏移和限制
             val lines = if (offset < allLines.size) {
                 val end = minOf(offset + limit, allLines.size)
                 allLines.subList(offset, end)
@@ -310,18 +791,52 @@ class BackgroundProcessManager @Inject constructor(
     }
 
     /**
-     * 清理已结束的进程记录
+     * 删除单条进程记录（仅允许删除已结束记录）
      */
-    suspend fun cleanupOldProcesses(olderThan: Long = 24 * 60 * 60 * 1000L): Int = withContext(Dispatchers.IO) {
+    fun removeProcessRecord(processId: String): Boolean {
+        val interactive = interactiveSessions[processId]
+        if (interactive != null) {
+            if (interactive.process.isAlive) return false
+            interactive.stdoutJob?.cancel()
+            interactive.stderrJob?.cancel()
+            interactive.waiterJob?.cancel()
+            interactiveSessions.remove(processId)
+            interactiveReadOffsets.remove(processId)
+            refreshProcessStates()
+            return true
+        }
+
+        val info = processes[processId] ?: return false
+        if (info.status == ProcessStatus.RUNNING || info.status == ProcessStatus.STARTING) {
+            return false
+        }
+
+        try {
+            if (info.stdoutPath.isNotBlank()) File(info.stdoutPath).delete()
+            if (info.stderrPath.isNotBlank()) File(info.stderrPath).delete()
+        } catch (_: Exception) {
+        }
+
+        processes.remove(processId)
+        refreshProcessStates()
+        return true
+    }
+
+    /**
+     * 清理已结束的旧进程记录
+     */
+    suspend fun cleanupOldProcesses(
+        olderThan: Long = 24 * 60 * 60 * 1000L
+    ): Int = withContext(Dispatchers.IO) {
         try {
             val now = System.currentTimeMillis()
+
             val toRemove = processes.values
                 .filter { it.exitedAt != null && (now - it.exitedAt!!) > olderThan }
                 .map { it.processId }
 
             toRemove.forEach { processId ->
                 val info = processes[processId]
-                // 删除对应的日志文件
                 info?.let {
                     try {
                         File(it.stdoutPath).delete()
@@ -332,10 +847,29 @@ class BackgroundProcessManager @Inject constructor(
                 }
                 processes.remove(processId)
             }
-            _processStates.value = processes.values.toList()
 
-            Log.i(TAG, "Cleaned up ${toRemove.size} old processes and their log files")
-            toRemove.size
+            val interactiveToRemove = interactiveSessions.values
+                .filter { it.exitedAt != null && (now - it.exitedAt!!) > olderThan }
+                .map { it.processId }
+
+            interactiveToRemove.forEach { processId ->
+                interactiveSessions[processId]?.let { record ->
+                    record.stdoutJob?.cancel()
+                    record.stderrJob?.cancel()
+                    record.waiterJob?.cancel()
+                }
+                interactiveSessions.remove(processId)
+                interactiveReadOffsets.remove(processId)
+            }
+
+            refreshProcessStates()
+
+            Log.i(
+                TAG,
+                "Cleaned up ${toRemove.size} old background processes and ${interactiveToRemove.size} old interactive sessions"
+            )
+
+            toRemove.size + interactiveToRemove.size
         } catch (e: Exception) {
             Log.e(TAG, "Error cleaning up old processes", e)
             0
@@ -343,11 +877,10 @@ class BackgroundProcessManager @Inject constructor(
     }
 
     /**
-     * 清理指定沙箱的所有进程
+     * 清理指定 sandbox 的所有进程
      */
     suspend fun cleanupSandboxProcesses(sandboxId: String): Result<Int> = withContext(Dispatchers.IO) {
         try {
-            // 终止所有运行中的进程
             val sandboxProcesses = processes.values
                 .filter { it.sandboxId == sandboxId && it.status == ProcessStatus.RUNNING }
                 .map { it.processId }
@@ -356,12 +889,27 @@ class BackgroundProcessManager @Inject constructor(
                 killProcess(processId)
             }
 
-            // 删除所有进程记录
-            val toRemove = processes.filter { it.value.sandboxId == sandboxId }.keys.toList()
-            toRemove.forEach { processes.remove(it) }
-            _processStates.value = processes.values.toList()
+            val interactiveIds = interactiveSessions.values
+                .filter { it.sandboxId == sandboxId }
+                .map { it.processId }
 
-            Result.success(toRemove.size)
+            interactiveIds.forEach { processId ->
+                closeInteractiveSession(processId)
+            }
+
+            val bgToRemove = processes.filter { it.value.sandboxId == sandboxId }.keys.toList()
+            bgToRemove.forEach { processes.remove(it) }
+
+            interactiveIds.forEach { processId ->
+                interactiveSessions[processId]?.stdoutJob?.cancel()
+                interactiveSessions[processId]?.stderrJob?.cancel()
+                interactiveSessions[processId]?.waiterJob?.cancel()
+                interactiveSessions.remove(processId)
+                interactiveReadOffsets.remove(processId)
+            }
+
+            refreshProcessStates()
+            Result.success(bgToRemove.size + interactiveIds.size)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -380,6 +928,10 @@ class BackgroundProcessManager @Inject constructor(
                 killProcess(processId)
             }
 
+            interactiveSessions.keys.toList().forEach { processId ->
+                closeInteractiveSession(processId)
+            }
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -388,7 +940,6 @@ class BackgroundProcessManager @Inject constructor(
 
     /**
      * 标记所有运行中的进程为已停止（容器停止时调用）
-     * 与 stopAllProcesses 不同，此方法不尝试 kill 进程（因为容器已杀死它们）
      */
     fun markAllProcessesStopped() {
         val updatedProcesses = processes.values.map { process ->
@@ -407,7 +958,19 @@ class BackgroundProcessManager @Inject constructor(
             processes[process.processId] = process
         }
 
-        _processStates.value = processes.values.toList()
+        interactiveSessions.values.forEach { record ->
+            record.finalStatus = ProcessStatus.STOPPED
+            record.exitedAt = System.currentTimeMillis()
+            record.exitCode = -1
+            try {
+                if (record.process.isAlive) {
+                    record.process.destroyForcibly()
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        refreshProcessStates()
         Log.d(TAG, "All processes marked as stopped")
     }
 
@@ -415,7 +978,21 @@ class BackgroundProcessManager @Inject constructor(
      * 清理所有进程状态（容器销毁时调用）
      */
     fun clearAllProcesses() {
+        interactiveSessions.values.forEach { record ->
+            try {
+                if (record.process.isAlive) {
+                    record.process.destroyForcibly()
+                }
+            } catch (_: Exception) {
+            }
+            record.stdoutJob?.cancel()
+            record.stderrJob?.cancel()
+            record.waiterJob?.cancel()
+        }
+
         processes.clear()
+        interactiveSessions.clear()
+        interactiveReadOffsets.clear()
         _processStates.value = emptyList()
         Log.d(TAG, "All process states cleared")
     }
@@ -448,15 +1025,12 @@ class BackgroundProcessManager @Inject constructor(
     }
 
     /**
-     * 更新进程状态
-     * 定期检查运行中的进程是否还在存活，标记已死亡的进程
+     * 周期性更新进程状态
      */
     private suspend fun updateProcessStates() {
-        val updatedProcesses = processes.values.map { process ->
+        val updatedBackground = processes.values.map { process ->
             if (process.status == ProcessStatus.RUNNING && process.pid != null) {
-                // 检查进程是否仍然存活
                 if (!isProcessAlive(process.pid)) {
-                    // 进程已死亡，标记为失败
                     process.copy(
                         status = ProcessStatus.FAILED,
                         exitedAt = System.currentTimeMillis(),
@@ -470,29 +1044,146 @@ class BackgroundProcessManager @Inject constructor(
             }
         }
 
-        // 更新内存中的进程状态
-        updatedProcesses.forEach { process ->
+        updatedBackground.forEach { process ->
             processes[process.processId] = process
         }
 
-        _processStates.value = processes.values.toList()
+        interactiveSessions.values.forEach { session ->
+            if (!session.process.isAlive && session.finalStatus == null) {
+                val exitCode = try {
+                    session.process.exitValue()
+                } catch (_: Exception) {
+                    -1
+                }
+                session.exitCode = exitCode
+                session.exitedAt = System.currentTimeMillis()
+                session.finalStatus = if (exitCode == 0) {
+                    ProcessStatus.COMPLETED
+                } else {
+                    ProcessStatus.FAILED
+                }
+            }
+        }
+
+        refreshProcessStates()
     }
 
     /**
-     * 检查进程是否存活
-     * 通过检查 /proc/[pid] 目录是否存在来判断
+     * 统一重建状态流
      */
-    private fun isProcessAlive(pid: Int): Boolean {
-        return try {
-            File("/proc/$pid").exists()
-        } catch (e: Exception) {
+    private fun refreshProcessStates() {
+        val backgroundList = processes.values.toList()
+
+        val interactiveList = interactiveSessions.values.map { record ->
+            val status = when {
+                record.process.isAlive -> ProcessStatus.RUNNING
+                record.finalStatus != null -> record.finalStatus!!
+                record.exitCode == 0 -> ProcessStatus.COMPLETED
+                else -> ProcessStatus.FAILED
+            }
+
+            BackgroundProcessInfo(
+                processId = record.processId,
+                sandboxId = record.sandboxId,
+                command = record.command,
+                status = status,
+                pid = tryGetPid(record.process),
+                stdoutPath = "",
+                stderrPath = "",
+                createdAt = record.createdAt,
+                startedAt = record.startedAt,
+                exitedAt = record.exitedAt,
+                exitCode = record.exitCode,
+                tag = record.tag,
+                isInteractive = true,
+                stdinEnabled = true,
+                ttyEnabled = record.ttyEnabled,
+                terminalColumns = record.columns,
+                terminalRows = record.rows,
+                terminalBackend = if (NativePtyBridge.isAvailable) "native-pty" else if (record.ttyEnabled) "script-sigwinch" else "pipe",
+                processSource = "container_shell_bg"
+            )
+        }
+
+        _processStates.value = (backgroundList + interactiveList)
+            .sortedByDescending { it.createdAt }
+    }
+
+    /**
+     * 读取交互流，按 byte chunk 处理
+     */
+    private fun launchStreamReader(
+        inputStream: InputStream,
+        outputFlow: MutableSharedFlow<ByteArray>,
+        buffer: SessionOutputBuffer,
+        onChunk: () -> Unit = {}
+    ): Job = appScope.launch {
+        try {
+            val chunk = ByteArray(4096)
+            while (isActive) {
+                val read = inputStream.read(chunk)
+                if (read < 0) break
+                if (read == 0) continue
+
+                val data = chunk.copyOf(read)
+                buffer.append(data)
+                outputFlow.emit(data)
+                onChunk()
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * 容器内探测 script 命令
+     */
+    private suspend fun hasScriptCommand(sandboxId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val probe = prootManager.execInteractive(
+                sandboxId = sandboxId,
+                command = listOf(
+                    "sh",
+                    "-lc",
+                    "if command -v script >/dev/null 2>&1; then printf 1; else printf 0; fi"
+                )
+            )
+
+            val output = try {
+                probe.inputStream.bufferedReader().readText()
+            } catch (_: Exception) {
+                ""
+            }
+
+            try {
+                probe.waitFor(3, TimeUnit.SECONDS)
+            } catch (_: Exception) {
+            }
+
+            try {
+                if (probe.isAlive) probe.destroyForcibly() else probe.destroy()
+            } catch (_: Exception) {
+            }
+
+            output.trim() == "1"
+        } catch (_: Exception) {
             false
         }
     }
 
     /**
-     * 从输出中提取PID
-     * 输出格式："Process started with PID: 12345"
+     * 检查进程是否存活
+     */
+    private fun isProcessAlive(pid: Int): Boolean {
+        return try {
+            File("/proc/$pid").exists()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * 从输出中提取 PID
+     * 输出格式：Process started with PID: 12345
      */
     private fun extractPidFromOutput(output: String): Int? {
         return try {
@@ -503,5 +1194,22 @@ class BackgroundProcessManager @Inject constructor(
             Log.w(TAG, "Failed to extract PID from output: $output", e)
             null
         }
+    }
+
+    private fun tryGetPid(process: Process): Int? {
+        return try {
+            val field = process.javaClass.getDeclaredField("pid")
+            field.isAccessible = true
+            field.get(process) as? Int
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * 对 shell 参数做单引号安全转义
+     */
+    private fun shellQuote(value: String): String {
+        return "'" + value.replace("'", "'\"'\"'") + "'"
     }
 }

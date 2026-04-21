@@ -22,6 +22,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.UUID
 import javax.inject.Singleton
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.sandbox.SandboxEngine
@@ -72,6 +73,7 @@ class PRootManager(
     private var globalContainer: ContainerState? = null
     private var currentProcess: Process? = null
     private val cancellableProcesses = ConcurrentHashMap<String, Process>()
+    private val executionAliases = ConcurrentHashMap<String, String>()
     private val processMutex = Mutex()  // 保护 currentProcess 的并发访问
 
     // 后台进程管理
@@ -932,6 +934,15 @@ fi
         timeoutSeconds: Int = 300,
         executionId: String = sandboxId
     ): JsonObject {
+        val effectiveExecutionId = if (executionId == sandboxId) {
+            "${sandboxId}_shell_${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(8)}"
+        } else {
+            executionId
+        }
+        if (effectiveExecutionId != executionId) {
+            executionAliases[executionId] = effectiveExecutionId
+        }
+
         Log.d(TAG, "[ExecuteShellCancellable] ========== Command: $command ==========")
         Log.d(TAG, "[ExecuteShellCancellable] Container state: ${_containerState.value}")
 
@@ -960,7 +971,7 @@ fi
                 command = listOf("sh", "-c", command),
                 env = toolEnv,
                 timeoutMs = timeoutSeconds * 1000L,
-                executionId = executionId
+                executionId = effectiveExecutionId
             )
 
             Log.d(TAG, "[ExecuteShellCancellable] Result - exitCode=${execResult.exitCode}")
@@ -986,10 +997,11 @@ fi
     }
 
     fun killExecution(executionId: String): Boolean {
-        val process = cancellableProcesses.remove(executionId) ?: return false
+        val effectiveId = executionAliases.remove(executionId) ?: executionId
+        val process = cancellableProcesses.remove(effectiveId) ?: return false
         return try {
-            Log.d(TAG, "[KillExecution] Killing process for execution: $executionId")
-            process.destroyForcibly()
+            Log.d(TAG, "[KillExecution] Killing process for execution: $executionId ($effectiveId)")
+            terminateProcessTree(process, force = true)
             true
         } catch (e: Exception) {
             Log.e(TAG, "[KillExecution] Failed to kill process", e)
@@ -1187,6 +1199,9 @@ fi
         // Node.js 模块路径（确保 npm 可用）
         val nodePath = listOf("/usr/local/lib/node_modules", "/usr/lib/node_modules")
         env["NODE_PATH"] = nodePath.joinToString(":")
+        env["NPM_CONFIG_PREFIX"] = "/usr/local"
+        env["npm_config_prefix"] = "/usr/local"
+        env["NPM_CONFIG_CACHE"] = "/tmp/npm-cache"
 
         // 组合 PATH：工具路径 + 基础 PATH（确保基础命令可用）
         val finalPath = if (toolPaths.isNotEmpty()) {
@@ -1207,11 +1222,14 @@ fi
     private suspend fun createGlobalContainer() = withContext(Dispatchers.IO) {
         val workDir = File(containerDir, "work").apply { mkdirs() }
         val upperDir = File(containerDir, "upper").apply { mkdirs() }
-        
+
         // 创建 bind mount 所需的子目录
         File(upperDir, "usr/local").apply { mkdirs() }
+        File(upperDir, "usr/local/bin").apply { mkdirs() }
+        File(upperDir, "usr/local/lib/node_modules").apply { mkdirs() }
         File(upperDir, "usr/lib").apply { mkdirs() }
         File(upperDir, "root").apply { mkdirs() }
+        File(upperDir, "root/.npmrc").writeText("prefix=/usr/local\ncache=/tmp/npm-cache\n")
 
         globalContainer = ContainerState(
             id = "global",
@@ -1235,69 +1253,10 @@ fi
                     stderr = "Global container not created"
                 )
 
-            // 构建 PRoot 命令
-            val prootBinary = File(prootDir, "proot").absolutePath
-            val sandboxDir = File(context.filesDir, "sandboxes/$sandboxId")
-            val deliveryDir = SandboxEngine.getDeliveryDir(context, sandboxId)
-            val runtimeSkillsDir = SandboxEngine.getRuntimeSkillsDir(context, sandboxId)
-            val skillLibraryDir = File(context.filesDir, FileFolders.SKILLS).apply { mkdirs() }
-
-            sandboxDir.mkdirs()
-
-            val nativeLibDir = context.applicationInfo.nativeLibraryDir
-            val termuxExecLib = File(nativeLibDir, "libtermux-exec.so")
-            val hasTermuxExec = termuxExecLib.exists()
-
-            val prootCmd = buildList {
-                add(prootBinary)
-                add("-b")
-                add("/dev")
-                add("-b")
-                add("/proc")
-                add("-b")
-                add("/sys")
-                add("-b")
-                add("${sandboxDir.absolutePath}:/workspace")
-                add("-b")
-                add("${deliveryDir.absolutePath}:/delivery")
-                add("-b")
-                add("${skillLibraryDir.absolutePath}:/skills")
-                add("-b")
-                add("${runtimeSkillsDir.absolutePath}:/opt/rikkahub/skills")
-                add("-b")
-                add("${container.upperDir}/usr/local:/usr/local")
-                add("-b")
-                add("${container.upperDir}/root:/root")
-                add("-b")
-                add("${container.upperDir}/usr/lib:/usr/lib!")
-                val nodeModulesDir = File(container.upperDir, "usr/lib/node_modules")
-                if (nodeModulesDir.exists()) {
-                    add("-b")
-                    add("${nodeModulesDir.absolutePath}:/usr/local/lib/node_modules")
-                }
-                add("-R")
-                add(rootfsDir.absolutePath)
-                add("-w")
-                add("/workspace")
-                add("--link2symlink")
-                addAll(command)
-            }
-
+            val prootCmd = buildProotCommand(sandboxId, command, env, container)
             val processBuilder = ProcessBuilder(prootCmd)
             processBuilder.redirectErrorStream(false)
-
-            val processEnv = processBuilder.environment()
-            processEnv["HOME"] = "/root"
-            processEnv["TMPDIR"] = "/tmp"
-            processEnv["PROOT_TMP_DIR"] = context.cacheDir.absolutePath
-            processEnv["PREFIX"] = "/usr"
-            processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-
-            if (hasTermuxExec) {
-                processEnv["LD_PRELOAD"] = termuxExecLib.absolutePath
-            }
-
-            processEnv.putAll(env)
+            setupProcessEnvironment(processBuilder.environment(), env)
 
             Log.d(TAG, "[ExecInContainerCancellable] Executing: $executionId")
 
@@ -1336,14 +1295,14 @@ fi
             stdoutThread.start()
             stderrThread.start()
 
-            // 等待完成、超时或取消
             val startTime = System.currentTimeMillis()
             var finished = false
             while (System.currentTimeMillis() - startTime < timeoutMs) {
                 if (!isActive) {
                     Log.d(TAG, "[ExecInContainerCancellable] Coroutine cancelled, killing process")
-                    process.destroyForcibly()
+                    terminateProcessTree(process, force = true)
                     cancellableProcesses.remove(executionId)
+                    executionAliases.entries.removeIf { it.value == executionId }
                     stdoutThread.join(500)
                     stderrThread.join(500)
                     return@withContext ExecutionResult(
@@ -1357,14 +1316,14 @@ fi
                     break
                 }
             }
+
             stdoutThread.join(1000)
             stderrThread.join(1000)
-
             cancellableProcesses.remove(executionId)
+            executionAliases.entries.removeIf { it.value == executionId }
 
             if (!finished) {
-                process.destroyForcibly()
-                cleanupResidualProcesses()
+                terminateProcessTree(process, force = true)
                 return@withContext ExecutionResult(
                     exitCode = -1,
                     stdout = stdoutBuilder.toString(),
@@ -1379,6 +1338,7 @@ fi
             )
         } catch (e: Exception) {
             cancellableProcesses.remove(executionId)
+            executionAliases.entries.removeIf { it.value == executionId }
             ExecutionResult(
                 exitCode = -1,
                 stdout = "",
@@ -1450,13 +1410,6 @@ fi
                 add("-b")
                 add("${container.upperDir}/usr/lib:/usr/lib!")
 
-                // [修复 npm] 如果 node_modules 已安装，额外挂载到 /usr/local/lib（不带 !）
-                val nodeModulesDir = File(container.upperDir, "usr/lib/node_modules")
-                if (nodeModulesDir.exists()) {
-                    add("-b")
-                    add("${nodeModulesDir.absolutePath}:/usr/local/lib/node_modules")
-                }
-
                 // 根目录使用基础 rootfs（只读）- 必须在 -b 之后
                 add("-R")
                 add(rootfsDir.absolutePath)
@@ -1482,6 +1435,10 @@ fi
             processEnv["TMPDIR"] = "/tmp"
             processEnv["PROOT_TMP_DIR"] = context.cacheDir.absolutePath
             processEnv["PREFIX"] = "/usr"
+            processEnv["NPM_CONFIG_PREFIX"] = "/usr/local"
+            processEnv["npm_config_prefix"] = "/usr/local"
+            processEnv["NPM_CONFIG_CACHE"] = "/tmp/npm-cache"
+            processEnv["NODE_PATH"] = "/usr/local/lib/node_modules:/usr/lib/node_modules"
             processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
             // 如果 termux-exec 可用，设置 LD_PRELOAD
@@ -1547,8 +1504,7 @@ fi
             stderrThread.join(1000)
 
             if (!finished) {
-                process.destroyForcibly()
-                cleanupResidualProcesses()
+                terminateProcessTree(process, force = true)
                 // 清理 currentProcess
                 processMutex.withLock {
                     if (currentProcess == process) {
@@ -1593,15 +1549,6 @@ fi
                 stdout = "",
                 stderr = "Execution error: ${e.message}"
             )
-        }
-    }
-
-    private fun cleanupResidualProcesses() {
-        try {
-            val process = ProcessBuilder("pkill", "-f", "proot").start()
-            process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-        } catch (e: Exception) {
-            // 忽略清理错误
         }
     }
 
@@ -2269,6 +2216,65 @@ fi
         }
     }
 
+
+    /**
+     * 在容器内启动交互式进程。
+     *
+     * 与 execInBackground 不同：
+     * - 不重定向 stdout/stderr 到文件
+     * - 直接返回 Process，由上层管理 stdin/stdout/stderr
+     */
+    suspend fun execInteractive(
+        sandboxId: String,
+        command: List<String>,
+        env: Map<String, String> = emptyMap()
+    ): Process = withContext(Dispatchers.IO) {
+        val container = globalContainer ?: throw IllegalStateException("Global container not created")
+
+        val prootCmd = buildProotCommand(sandboxId, command, env, container)
+
+        Log.d(TAG, "[ExecInteractive] Command: ${command.joinToString(" ")}")
+
+        val processBuilder = ProcessBuilder(prootCmd)
+        processBuilder.redirectErrorStream(false)
+
+        val processEnv = processBuilder.environment()
+        setupProcessEnvironment(processEnv, env)
+
+        processBuilder.start()
+    }
+    fun signalProcessTree(process: Process?, signal: String) {
+        if (process == null) return
+        val pid = getProcessPid(process) ?: return
+        val safeSignal = signal.filter { it.isLetterOrDigit() }.take(16).ifBlank { return }
+        try {
+            ProcessBuilder(
+                "sh",
+                "-c",
+                "kill -$safeSignal -$pid 2>/dev/null || true; pkill -$safeSignal -P $pid 2>/dev/null || true"
+            ).start().waitFor(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: Exception) {
+        }
+    }
+
+    fun terminateProcessTree(process: Process?, force: Boolean = false) {
+        if (process == null) return
+        val pid = getProcessPid(process)
+        try {
+            if (!force) process.destroy() else process.destroyForcibly()
+        } catch (_: Exception) {
+        }
+        if (pid != null) {
+            try {
+                val signal = if (force) "-KILL" else "-TERM"
+                ProcessBuilder("sh", "-c", "pkill $signal -P $pid 2>/dev/null || true; kill $signal -$pid 2>/dev/null || true")
+                    .start()
+                    .waitFor(800, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     /**
      * 终止后台进程
      */
@@ -2283,11 +2289,12 @@ fi
 
             Log.d(TAG, "[KillBackgroundProcess] Killing process: $processId")
 
-            // 销毁进程
-            record.process?.destroyForcibly()
-
-            // 等待进程结束
-            record.process?.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+            // 优先温和终止整个进程树，再强杀残留
+            terminateProcessTree(record.process, force = false)
+            if (record.process?.waitFor(1200, java.util.concurrent.TimeUnit.MILLISECONDS) != true) {
+                terminateProcessTree(record.process, force = true)
+                record.process?.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)
+            }
 
             // 取消输出读取Job
             record.stdoutJob?.cancel()
@@ -2382,6 +2389,10 @@ fi
         processEnv["TMPDIR"] = "/tmp"
         processEnv["PROOT_TMP_DIR"] = context.cacheDir.absolutePath
         processEnv["PREFIX"] = "/usr"
+        processEnv["NPM_CONFIG_PREFIX"] = "/usr/local"
+        processEnv["npm_config_prefix"] = "/usr/local"
+        processEnv["NPM_CONFIG_CACHE"] = "/tmp/npm-cache"
+        processEnv["NODE_PATH"] = "/usr/local/lib/node_modules:/usr/lib/node_modules"
         processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
         // 检查 termux-exec 是否可用
@@ -2407,9 +2418,9 @@ fi
         container: ContainerState
     ): List<String> {
         val prootBinary = File(prootDir, "proot").absolutePath
-        val sandboxDir = File(context.filesDir, "sandboxes/$sandboxId")
-        val deliveryDir = SandboxEngine.getDeliveryDir(context, sandboxId)
-        val runtimeSkillsDir = SandboxEngine.getRuntimeSkillsDir(context, sandboxId)
+        val sandboxDir = File(context.filesDir, "sandboxes/$sandboxId").apply { mkdirs() }
+        val deliveryDir = SandboxEngine.getDeliveryDir(context, sandboxId).apply { mkdirs() }
+        val runtimeSkillsDir = SandboxEngine.getRuntimeSkillsDir(context, sandboxId).apply { mkdirs() }
         val skillLibraryDir = File(context.filesDir, FileFolders.SKILLS).apply { mkdirs() }
 
         return buildList {
@@ -2444,13 +2455,6 @@ fi
             // 额外绑定挂载 usr/lib 以确保库文件可访问
             add("-b")
             add("${container.upperDir}/usr/lib:/usr/lib!")
-
-            // [修复 npm] 如果 node_modules 已安装，额外挂载到 /usr/local/lib（不带 !）
-            val nodeModulesDir = File(container.upperDir, "usr/lib/node_modules")
-            if (nodeModulesDir.exists()) {
-                add("-b")
-                add("${nodeModulesDir.absolutePath}:/usr/local/lib/node_modules")
-            }
 
             // 根目录使用基础 rootfs（只读）- 必须在 -b 之后
             add("-R")
