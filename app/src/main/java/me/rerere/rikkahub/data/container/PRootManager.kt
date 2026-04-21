@@ -2269,6 +2269,33 @@ fi
         }
     }
 
+
+    /**
+     * 在容器内启动交互式进程。
+     *
+     * 与 execInBackground 不同：
+     * - 不重定向 stdout/stderr 到文件
+     * - 直接返回 Process，由上层管理 stdin/stdout/stderr
+     */
+    suspend fun execInteractive(
+        sandboxId: String,
+        command: List<String>,
+        env: Map<String, String> = emptyMap()
+    ): Process = withContext(Dispatchers.IO) {
+        val container = globalContainer ?: throw IllegalStateException("Global container not created")
+
+        val prootCmd = buildProotCommand(sandboxId, command, env, container)
+
+        Log.d(TAG, "[ExecInteractive] Command: ${command.joinToString(" ")}")
+
+        val processBuilder = ProcessBuilder(prootCmd)
+        processBuilder.redirectErrorStream(false)
+
+        val processEnv = processBuilder.environment()
+        setupProcessEnvironment(processEnv, env)
+
+        processBuilder.start()
+    }
     /**
      * 终止后台进程
      */

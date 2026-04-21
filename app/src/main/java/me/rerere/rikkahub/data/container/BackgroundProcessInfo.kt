@@ -17,6 +17,10 @@ import kotlinx.serialization.Serializable
  * @property exitedAt 退出时间戳
  * @property exitCode 退出码（已结束时）
  * @property tag 用户自定义标签（可选）
+ * @property isInteractive 是否为交互式 session
+ * @property stdinEnabled 是否支持 stdin 输入
+ * @property ttyEnabled 是否启用了 tty/script 包装
+ * @property processSource 进程来源，当前统一为 container_shell_bg
  */
 @Serializable
 data class BackgroundProcessInfo(
@@ -31,7 +35,11 @@ data class BackgroundProcessInfo(
     val startedAt: Long?,
     val exitedAt: Long?,
     val exitCode: Int?,
-    val tag: String? = null
+    val tag: String? = null,
+    val isInteractive: Boolean = false,
+    val stdinEnabled: Boolean = false,
+    val ttyEnabled: Boolean = false,
+    val processSource: String = "container_shell_bg"
 )
 
 /**
@@ -76,7 +84,7 @@ enum class ProcessStatus {
  * @property success 是否成功
  * @property processId 进程ID
  * @property status 进程状态
- * @message message 结果消息
+ * @property message 结果消息
  * @property stdoutFile 标准输出日志文件路径
  * @property stderrFile 标准错误日志文件路径
  * @property pid 系统进程ID（容器内）
@@ -89,7 +97,10 @@ data class ProcessExecutionResult(
     val message: String,
     val stdoutFile: String? = null,
     val stderrFile: String? = null,
-    val pid: Int? = null
+    val pid: Int? = null,
+    val isInteractive: Boolean = false,
+    val stdinEnabled: Boolean = false,
+    val ttyEnabled: Boolean = false
 )
 
 /**
