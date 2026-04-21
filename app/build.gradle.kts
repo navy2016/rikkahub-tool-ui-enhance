@@ -32,6 +32,11 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17 -Wall -Wextra"
+            }
+        }
     }
 
     signingConfigs {
@@ -106,6 +111,11 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
         }
     }
     tasks.withType<KotlinCompile>().configureEach {

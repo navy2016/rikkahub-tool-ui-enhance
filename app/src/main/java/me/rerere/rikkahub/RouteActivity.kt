@@ -79,6 +79,7 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantPromptPage
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
+import me.rerere.rikkahub.ui.pages.container.ProcessSessionPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
 import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
@@ -486,6 +487,10 @@ class RouteActivity : ComponentActivity() {
                                 StatsPage()
                             }
 
+                            entry<Screen.ProcessSessions> { key ->
+                                ProcessSessionPage(sandboxId = key.sandboxId)
+                            }
+
                             entry<Screen.ScheduledTaskRuns> {
                                 ScheduledTaskRunsPage()
                             }
@@ -676,6 +681,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class ScheduledTaskRunDetail(val id: String) : Screen
+
+    @Serializable
+    data class ProcessSessions(val sandboxId: String) : Screen
 
     @Serializable
     data object MessageSearch : Screen
