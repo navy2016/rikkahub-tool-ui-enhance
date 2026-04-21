@@ -5,12 +5,12 @@ import android.net.Uri
 import com.whl.quickjs.wrapper.QuickJSContext
 import com.whl.quickjs.wrapper.QuickJSObject
 import java.io.File
+import kotlin.uuid.Uuid
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.*
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
@@ -20,13 +20,32 @@ import me.rerere.rikkahub.data.ai.subagent.SubAgentResult
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.files.SkillManager
-import me.rerere.rikkahub.sandbox.SandboxEngine
-import me.rerere.rikkahub.data.model.TodoStatus
 import me.rerere.rikkahub.data.model.TodoItem
+import me.rerere.rikkahub.data.model.TodoStatus
+import me.rerere.rikkahub.sandbox.SandboxEngine
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
-import kotlin.uuid.Uuid
-
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.double
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 @Serializable
 sealed class LocalToolOption {
     @Serializable
@@ -415,6 +434,8 @@ class LocalTools(
             defaultParameters = {
                 buildJsonObject {
                     put("command", JsonPrimitive("ls -la /workspace"))
+                    put("interactive", JsonPrimitive(false))
+                    put("tty", JsonPrimitive(true))
                 }
             },
             execute = { args ->
@@ -440,8 +461,6 @@ class LocalTools(
                 }
 
                 // 调用 PRootManager 执行（支持协程取消）
-                val executionId = sandboxId.toString()
-                
                 try {
                     skillManager.syncSkillsToRuntime(sandboxId.toString(), enabledSkills)
                     val beforeDelivery = snapshotDeliveryFiles(sandboxId)
@@ -451,7 +470,7 @@ class LocalTools(
                         sandboxId = sandboxId.toString(),
                         command = command,
                         timeoutSeconds = timeoutSeconds,
-                        executionId = executionId
+                        executionId = "${sandboxId}_shell_${System.currentTimeMillis()}"
                     )
                     
                     val deliveryItems = collectDeliveryItems(sandboxId, beforeDelivery)
@@ -536,7 +555,15 @@ class LocalTools(
                         })
                         put("tag", buildJsonObject {
                             put("type", "string")
-                            put("description", "可选的进程标签，便于识别（如 'web-server', 'database'）")
+                            put("description", "可选的进程标签，便于识别（如 'web-server', 'database', 'claude-session'）")
+                        })
+                        put("interactive", buildJsonObject {
+                            put("type", "boolean")
+                            put("description", "是否以交互模式启动。交互模式支持 stdin 输入和实时输出，适用于 bash、claude-code、codex 等")
+                        })
+                        put("tty", buildJsonObject {
+                            put("type", "boolean")
+                            put("description", "仅 interactive=true 时有效。优先尝试通过 script 分配轻量 tty，默认 true；如只需要干净 pipe 输出可设为 false")
                         })
                     },
                     required = listOf("command")
@@ -546,6 +573,8 @@ class LocalTools(
             defaultParameters = {
                 buildJsonObject {
                     put("command", JsonPrimitive("ls -la /workspace"))
+                    put("interactive", JsonPrimitive(false))
+                    put("tty", JsonPrimitive(true))
                 }
             },
             execute = { args ->
@@ -556,16 +585,27 @@ class LocalTools(
                     }.toString()))
 
                 val tag = args.jsonObject["tag"]?.jsonPrimitive?.contentOrNull
+                val interactive = args.jsonObject["interactive"]?.jsonPrimitive?.booleanOrNull ?: false
+                val tty = args.jsonObject["tty"]?.jsonPrimitive?.booleanOrNull ?: true
 
                 // 调用 BackgroundProcessManager
                 runBlocking {
                     skillManager.syncSkillsToRuntime(sandboxId.toString(), enabledSkills)
                 }
-                val result = backgroundProcessManager.startBackgroundProcess(
-                    sandboxId = sandboxId.toString(),
-                    command = command,
-                    tag = tag
-                )
+                val result = if (interactive) {
+                    backgroundProcessManager.startInteractiveSession(
+                        sandboxId = sandboxId.toString(),
+                        command = command,
+                        tag = tag,
+                        preferTty = tty
+                    )
+                } else {
+                    backgroundProcessManager.startBackgroundProcess(
+                        sandboxId = sandboxId.toString(),
+                        command = command,
+                        tag = tag
+                    )
+                }
 
                 val response = buildJsonObject {
                     put("success", JsonPrimitive(result.success))
@@ -581,15 +621,33 @@ class LocalTools(
                     if (result.pid != null) {
                         put("pid", JsonPrimitive(result.pid))
                     }
+                    put("interactive", JsonPrimitive(result.isInteractive))
+                    put("stdinEnabled", JsonPrimitive(result.stdinEnabled))
+                    put("ttyEnabled", JsonPrimitive(result.ttyEnabled))
 
                     if (result.success) {
-                        put("hint", JsonPrimitive("""
-                            |进程已启动在后台。
-                            |使用 container_process 工具管理：
-                            |- 查看状态：action=list
-                            |- 查看日志：action=logs, processId=${result.processId}
-                            |- 终止进程：action=kill, processId=${result.processId}
-                        """.trimMargin()))
+                        put("hint", JsonPrimitive(
+                            if (result.isInteractive) {
+                                """
+                                |交互式会话已启动。
+                                |可用 container_process 工具管理：
+                                |- 查看状态：action=status, processId=${result.processId}
+                                |- 读取输出：action=read, processId=${result.processId}
+                                |- 查看输出（兼容方式）：action=logs, processId=${result.processId}
+                                |- 发送输入：action=input, processId=${result.processId}, data="..."
+                                |- 发送控制键：action=input, processId=${result.processId}, control="CTRL_C"
+                                |- 终止会话：action=kill, processId=${result.processId}
+                                """.trimMargin()
+                            } else {
+                                """
+                                |进程已启动在后台。
+                                |使用 container_process 工具管理：
+                                |- 查看状态：action=list
+                                |- 查看日志：action=logs, processId=${result.processId}
+                                |- 终止进程：action=kill, processId=${result.processId}
+                                """.trimMargin()
+                            }
+                        ))
                     }
                 }
 
@@ -612,6 +670,7 @@ class LocalTools(
 - logs: 查看进程输出日志（stdout/stderr）
 - kill: 终止指定进程
 - clean: 清理已结束的进程记录
+- diagnose: 查看容器运行环境、PATH、Node/npm 路径诊断
 
 【操作说明】
 1. list - 列出所有后台进程
@@ -642,8 +701,12 @@ class LocalTools(
                                 add("list")
                                 add("status")
                                 add("logs")
+                                add("read")
+                                add("input")
                                 add("kill")
                                 add("clean")
+                                add("remove")
+                                add("diagnose")
                             })
                             put("description", "操作类型")
                         })
@@ -667,6 +730,45 @@ class LocalTools(
                             put("type", "integer")
                             put("description", "最大日志行数（logs操作，默认1000）")
                         })
+                        put("mode", buildJsonObject {
+                            put("type", "string")
+                            put("enum", buildJsonArray {
+                                add("new")
+                                add("all")
+                                add("tail")
+                            })
+                            put("description", "read 操作的读取模式：new=新增输出(默认)，all=全量，tail=尾部")
+                        })
+                        put("offsetBytes", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "read 操作的字节偏移，可选")
+                        })
+                        put("limitBytes", buildJsonObject {
+                            put("type", "integer")
+                            put("description", "read 操作最大返回字节数，默认65536")
+                        })
+                        put("data", buildJsonObject {
+                            put("type", "string")
+                            put("description", "input 操作时发送到交互式会话 stdin 的文本")
+                        })
+                        put("appendNewline", buildJsonObject {
+                            put("type", "boolean")
+                            put("description", "input 操作时是否自动追加换行，默认 true")
+                        })
+                        put("control", buildJsonObject {
+                            put("type", "string")
+                            put("enum", buildJsonArray {
+                                add("CTRL_C")
+                                add("CTRL_D")
+                                add("TAB")
+                                add("ESC")
+                                add("UP")
+                                add("DOWN")
+                                add("ENTER")
+                                add("BACKSPACE")
+                            })
+                            put("description", "input 操作时可选的控制输入；与 data 二选一")
+                        })
                     },
                     required = listOf("action")
                 )
@@ -688,8 +790,12 @@ class LocalTools(
                     "list" -> handleListProcesses(sandboxId.toString())
                     "status" -> handleGetProcessStatus(args.jsonObject, sandboxId.toString())
                     "logs" -> runBlocking { handleReadLogs(args.jsonObject) }
+                    "read" -> handleReadInteractive(args.jsonObject)
+                    "input" -> runBlocking { handleInputInteractive(args.jsonObject) }
                     "kill" -> runBlocking { handleKillProcess(args.jsonObject) }
                     "clean" -> runBlocking { handleCleanup(sandboxId.toString()) }
+                    "remove" -> handleRemoveProcess(args.jsonObject)
+                    "diagnose" -> runBlocking { handleContainerDiagnose(sandboxId.toString()) }
                     else -> buildJsonObject {
                         put("success", JsonPrimitive(false))
                         put("error", JsonPrimitive("Unknown action: $action"))
@@ -717,6 +823,10 @@ class LocalTools(
                     put("createdAt", info.createdAt)
                     put("startedAt", JsonPrimitive(info.startedAt ?: 0))
                     put("pid", JsonPrimitive(info.pid ?: -1))
+                    put("isInteractive", JsonPrimitive(info.isInteractive))
+                    put("stdinEnabled", JsonPrimitive(info.stdinEnabled))
+                    put("ttyEnabled", JsonPrimitive(info.ttyEnabled))
+                    put("processSource", JsonPrimitive(info.processSource))
                     info.exitCode?.let { put("exitCode", it) }
                 })
             }
@@ -835,12 +945,154 @@ class LocalTools(
      * 处理 clean 操作
      */
     private suspend fun handleCleanup(sandboxId: String): JsonObject {
-        // 清理24小时前已结束的进程
         val cleanedCount = backgroundProcessManager.cleanupOldProcesses(24 * 60 * 60 * 1000L)
 
         return buildJsonObject {
             put("success", JsonPrimitive(true))
+            put("sandboxId", JsonPrimitive(sandboxId))
             put("message", JsonPrimitive("Cleaned up $cleanedCount old process records"))
+            put("count", JsonPrimitive(cleanedCount))
+        }
+    }
+
+    private fun handleReadInteractive(args: JsonObject): JsonObject {
+        val processId = args["processId"]?.jsonPrimitive?.contentOrNull
+            ?: return buildJsonObject {
+                put("success", JsonPrimitive(false))
+                put("error", JsonPrimitive("Missing required parameter: processId"))
+            }
+
+        val mode = args["mode"]?.jsonPrimitive?.contentOrNull ?: "new"
+        val offsetBytes = args["offsetBytes"]?.jsonPrimitive?.longOrNull
+        val limitBytes = args["limitBytes"]?.jsonPrimitive?.intOrNull ?: 64 * 1024
+
+        val result = backgroundProcessManager.readInteractiveOutput(
+            processId = processId,
+            mode = mode,
+            offset = offsetBytes,
+            limitBytes = limitBytes
+        ) ?: return buildJsonObject {
+            put("success", JsonPrimitive(false))
+            put("error", JsonPrimitive("Interactive session not found: $processId"))
+        }
+
+        return buildJsonObject {
+            put("success", JsonPrimitive(true))
+            put("processId", JsonPrimitive(processId))
+            put("mode", JsonPrimitive(mode))
+            put("content", JsonPrimitive(me.rerere.rikkahub.utils.AnsiSanitizer.clean(result.content)))
+            put("fromOffset", JsonPrimitive(result.fromOffset))
+            put("toOffset", JsonPrimitive(result.toOffset))
+            put("totalBytes", JsonPrimitive(result.totalBytes))
+            put("baseOffset", JsonPrimitive(result.baseOffset))
+            put("hasMore", JsonPrimitive(result.hasMore))
+            put("hint", JsonPrimitive("Default read returns only new output. Use mode=all for full retained buffer, or mode=tail for recent output."))
+        }
+    }
+
+    private suspend fun handleInputInteractive(args: JsonObject): JsonObject {
+        val processId = args["processId"]?.jsonPrimitive?.contentOrNull
+            ?: return buildJsonObject {
+                put("success", JsonPrimitive(false))
+                put("error", JsonPrimitive("Missing required parameter: processId"))
+            }
+
+        val control = args["control"]?.jsonPrimitive?.contentOrNull
+        val data = args["data"]?.jsonPrimitive?.contentOrNull
+        val appendNewline = args["appendNewline"]?.jsonPrimitive?.booleanOrNull ?: true
+
+        val result = when {
+            control != null -> {
+                val enumValue = try {
+                    me.rerere.rikkahub.data.container.ControlInput.valueOf(control)
+                } catch (_: Exception) {
+                    return buildJsonObject {
+                        put("success", JsonPrimitive(false))
+                        put("error", JsonPrimitive("Invalid control: $control"))
+                    }
+                }
+                backgroundProcessManager.sendControlInput(processId, enumValue)
+            }
+
+            data != null -> {
+                backgroundProcessManager.sendInput(processId, data, appendNewline)
+            }
+
+            else -> {
+                return buildJsonObject {
+                    put("success", JsonPrimitive(false))
+                    put("error", JsonPrimitive("Missing data or control"))
+                }
+            }
+        }
+
+        return if (result.isSuccess) {
+            buildJsonObject {
+                put("success", JsonPrimitive(true))
+                put("processId", JsonPrimitive(processId))
+                put("message", JsonPrimitive("Input sent"))
+            }
+        } else {
+            buildJsonObject {
+                put("success", JsonPrimitive(false))
+                put("processId", JsonPrimitive(processId))
+                put("error", JsonPrimitive(result.exceptionOrNull()?.message ?: "Unknown error"))
+            }
+        }
+    }
+
+    private fun handleRemoveProcess(args: JsonObject): JsonObject {
+        val processId = args["processId"]?.jsonPrimitive?.contentOrNull
+            ?: return buildJsonObject {
+                put("success", JsonPrimitive(false))
+                put("error", JsonPrimitive("Missing required parameter: processId"))
+            }
+
+        val removed = backgroundProcessManager.removeProcessRecord(processId)
+
+        return buildJsonObject {
+            put("success", JsonPrimitive(removed))
+            put("processId", JsonPrimitive(processId))
+            put(
+                "message",
+                JsonPrimitive(
+                    if (removed) {
+                        "Process record removed"
+                    } else {
+                        "Failed to remove process record (process may still be running)"
+                    }
+                )
+            )
+        }
+    }
+
+    private suspend fun handleContainerDiagnose(sandboxId: String): JsonObject {
+        val command = """
+            echo '--- PATH ---'
+            echo "${'$'}PATH"
+            echo '--- node/npm ---'
+            command -v node || true
+            command -v npm || true
+            command -v npx || true
+            node -v 2>&1 || true
+            npm -v 2>&1 || true
+            npm config get prefix 2>&1 || true
+            echo '--- node paths ---'
+            ls -l /usr/local/bin/node /usr/bin/node /usr/local/bin/npm /usr/bin/npm 2>&1 || true
+            echo '--- node_modules ---'
+            ls -ld /usr/local/lib/node_modules /usr/lib/node_modules 2>&1 || true
+            echo '--- network ---'
+            cat /etc/resolv.conf 2>&1 || true
+        """.trimIndent()
+        val result = prootManager.executeShellCancellable(
+            sandboxId = sandboxId,
+            command = command,
+            timeoutSeconds = 30,
+            executionId = "${sandboxId}_diagnose_${System.currentTimeMillis()}"
+        )
+        return buildJsonObject {
+            put("success", JsonPrimitive(result["success"]?.jsonPrimitive?.booleanOrNull ?: false))
+            put("diagnose", result)
         }
     }
 
