@@ -745,7 +745,7 @@ private fun CreateSessionDialog(
         "opencode",
         "apk add vim nano util-linux nodejs npm",
         "npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai",
-        "tty; stty size; echo $TERM"
+        "tty; stty size; echo \$TERM"
     )
 
     AlertDialog(
