@@ -74,6 +74,7 @@ class TerminalEmulator(
     private var utf8Decoder = StandardCharsets.UTF_8.newDecoder()
         .onMalformedInput(CodingErrorAction.REPLACE)
         .onUnmappableCharacter(CodingErrorAction.REPLACE)
+    private var pendingUtf8 = ByteArray(0)
 
     private val scrollback = ArrayDeque<Array<Cell>>()
     private val mainScreen = MutableList(rows) { blankLine() }
@@ -95,6 +96,7 @@ class TerminalEmulator(
         oscEscSeen = false
         pendingResponses.clear()
         resetDecoder()
+        pendingUtf8 = ByteArray(0)
         cursorVisible = true
         wraparound = true
         originMode = false
@@ -136,6 +138,7 @@ class TerminalEmulator(
         oscEscSeen = false
         pendingResponses.clear()
         resetDecoder()
+        pendingUtf8 = ByteArray(0)
         cursorVisible = true
         wraparound = true
         originMode = false
@@ -150,8 +153,9 @@ class TerminalEmulator(
 
     @Synchronized
     fun feed(bytes: ByteArray) {
-        val input = ByteBuffer.wrap(bytes)
-        val output = CharBuffer.allocate((bytes.size * 2).coerceAtLeast(16))
+        val source = if (pendingUtf8.isEmpty()) bytes else pendingUtf8 + bytes
+        val input = ByteBuffer.wrap(source)
+        val output = CharBuffer.allocate((source.size * 2).coerceAtLeast(16))
         while (true) {
             val result = utf8Decoder.decode(input, output, false)
             output.flip()
@@ -159,7 +163,17 @@ class TerminalEmulator(
                 feed(output.toString())
             }
             output.clear()
-            if (!result.isOverflow) break
+            if (result.isOverflow) continue
+            if (result.isUnderflow) {
+                pendingUtf8 = if (input.hasRemaining()) {
+                    ByteArray(input.remaining()).also { input.get(it) }
+                } else {
+                    ByteArray(0)
+                }
+                break
+            }
+            pendingUtf8 = ByteArray(0)
+            break
         }
     }
 
@@ -291,7 +305,10 @@ class TerminalEmulator(
         when (ch) {
             '\u001B' -> parserState = ParserState.ESC
             '\r' -> cursorCol = 0
-            '\n' -> lineFeed()
+            '\n' -> {
+                cursorCol = 0
+                lineFeed()
+            }
             '\u000E' -> lineDrawing = true
             '\u000F' -> lineDrawing = false
             '\b', '\u007F' -> if (cursorCol > 0) cursorCol--
@@ -676,8 +693,8 @@ class TerminalEmulator(
 
     private fun ansiColor(index: Int, bright: Boolean): Color {
         val normal = listOf(
-            Color(0xFF000000), Color(0xFFCC0000), Color(0xFF4E9A06), Color(0xFFC4A000),
-            Color(0xFF3465A4), Color(0xFF75507B), Color(0xFF06989A), Color(0xFFD3D7CF)
+            Color(0xFF7F8490), Color(0xFFCC0000), Color(0xFF4E9A06), Color(0xFFC4A000),
+            Color(0xFF729FCF), Color(0xFFAD7FA8), Color(0xFF34E2E2), Color(0xFFD3D7CF)
         )
         val brightColors = listOf(
             Color(0xFF555753), Color(0xFFEF2929), Color(0xFF8AE234), Color(0xFFFCE94F),

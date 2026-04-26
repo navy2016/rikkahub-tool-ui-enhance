@@ -119,7 +119,7 @@ fun ContainerManagerSheet(
                             icon = "🐧",
                             title = "初始化容器",
                             subtitle = "",
-                            description = "支持 Python/Go/Rust/Java，npm 不可用",
+                            description = "支持 Python/Node/npm/Go/Rust/Java；内置 apk 源修复脚本",
                             onClick = {
                                 scope.launch {
                                     prootManager.initialize()
@@ -190,7 +190,7 @@ fun ContainerManagerSheet(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 已知限制提示（所有状态都显示）
+                // 运行提示（所有状态都显示）
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -205,13 +205,13 @@ fun ContainerManagerSheet(
                             .padding(12.dp)
                     ) {
                         Text(
-                            text = "⚠️ 已知限制",
+                            text = "⚠️ 运行提示",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "• npm 在容器环境中不可用（上游 bug，截至 2026 年未修复）\n• 推荐使用：Python/pip、Go/mod、Rust/cargo、Java/Maven",
+                            text = "• 网络异常时可在终端运行 rikkahub-fix-apk 后重试安装\n• CLI/TUI 推荐使用交互终端；依赖会保留在容器 upper 层",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -232,7 +232,7 @@ fun ContainerManagerSheet(
                 Text(
                     "这将删除所有已安装的 Python 依赖包（numpy、pandas 等）\n\n" +
                     "基础系统文件会保留，下次使用需要重新准备环境。\n\n" +
-                    "注意：其他开发工具可通过 apk 安装（如 go、rust、openjdk），但 npm 不可用。"
+                    "注意：开发工具可通过 apk/npm 安装，依赖会被一并删除。"
                 )
             },
             confirmButton = {

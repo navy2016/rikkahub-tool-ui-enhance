@@ -30,6 +30,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -407,6 +408,16 @@ private fun TerminalInteractivePanel(
     val controlScroll = rememberScrollState()
 
     val terminalEmulator = remember(processId) { TerminalEmulator(initialColumns = 80, initialRows = 24) }
+    val terminalBackground = Color(0xFF101010)
+    val terminalForeground = Color(0xFF00E676)
+    val terminalMuted = Color(0xFFB0BEC5)
+    val installCliCommand = remember {
+        "rikkahub-install-cli || (printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf; " +
+            "printf 'https://dl-cdn.alpinelinux.org/alpine/v3.19/main\nhttps://dl-cdn.alpinelinux.org/alpine/v3.19/community\n' > /etc/apk/repositories; " +
+            "apk update && apk add --no-cache vim nano util-linux nodejs npm bash ca-certificates curl git openssh-client && " +
+            "npm config set prefix /usr/local && npm config set cache /tmp/npm-cache && " +
+            "npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai)"
+    }
     var input by remember { mutableStateOf("") }
     var terminalText by remember { mutableStateOf(terminalEmulator.render()) }
     var terminalModeSummary by remember { mutableStateOf(terminalEmulator.modeSummary()) }
@@ -549,7 +560,7 @@ private fun TerminalInteractivePanel(
                 Text(
                     text = buildString { append("终端 · ${terminalColumns}x${terminalRows}"); if (terminalModeSummary.isNotBlank()) append(" · $terminalModeSummary") },
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFFBDBDBD),
+                    color = terminalMuted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -558,7 +569,7 @@ private fun TerminalInteractivePanel(
                     Text(
                         text = "自动滚动",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFBDBDBD)
+                        color = terminalMuted
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Switch(
@@ -569,7 +580,7 @@ private fun TerminalInteractivePanel(
                     Text(
                         text = "逐字输入",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFFBDBDBD)
+                        color = terminalMuted
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Switch(
@@ -588,7 +599,7 @@ private fun TerminalInteractivePanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(300.dp)
-                    .background(Color(0xFF101010), RoundedCornerShape(8.dp))
+                    .background(terminalBackground, RoundedCornerShape(8.dp))
                     .padding(10.dp)
                     .onSizeChanged { size ->
                         val cols = (size.width / 7).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
@@ -600,7 +611,7 @@ private fun TerminalInteractivePanel(
             ) {
                 Text(
                     text = if (terminalText.text.isEmpty()) AnnotatedString("等待输出...") else terminalText,
-                    color = Color(0xFF00E676),
+                    color = terminalForeground,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp,
                     lineHeight = 14.sp
@@ -667,10 +678,7 @@ private fun TerminalInteractivePanel(
                     sendCommand("tty; stty size; echo ${'$'}TERM", rememberHistory = true)
                 }
                 ControlChip("安装CLI") {
-                    sendCommand(
-                        "apk add vim nano util-linux nodejs npm && npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai",
-                        rememberHistory = true
-                    )
+                    sendCommand(installCliCommand, rememberHistory = true)
                 }
                 ControlChip("↑历史") { applyHistoryUp() }
                 ControlChip("↓历史") { applyHistoryDown() }
@@ -695,6 +703,20 @@ private fun TerminalInteractivePanel(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(
                     onSend = { submitCommand() }
+                ),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = terminalForeground,
+                    unfocusedTextColor = terminalForeground,
+                    disabledTextColor = terminalMuted,
+                    cursorColor = terminalForeground,
+                    focusedContainerColor = terminalBackground,
+                    unfocusedContainerColor = terminalBackground,
+                    focusedBorderColor = terminalForeground,
+                    unfocusedBorderColor = Color(0xFF455A64),
+                    focusedLabelColor = terminalForeground,
+                    unfocusedLabelColor = terminalMuted,
+                    focusedPlaceholderColor = Color(0xFF78909C),
+                    unfocusedPlaceholderColor = Color(0xFF78909C)
                 )
             )
 
@@ -760,8 +782,8 @@ private fun CreateSessionDialog(
         "claude",
         "codex",
         "opencode",
-        "apk add vim nano util-linux nodejs npm",
-        "npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai",
+        "rikkahub-fix-apk",
+        "rikkahub-install-cli",
         "tty; stty size; echo ${'$'}TERM"
     )
 

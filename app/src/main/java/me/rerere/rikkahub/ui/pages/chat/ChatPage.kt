@@ -548,7 +548,8 @@ private fun ChatPageContent(
                     },
                     onLongClick = {
                         navController.navigate(Screen.ProcessSessions(conversation.id.toString()))
-                    }
+                    },
+                    sandboxId = conversation.id.toString()
                 )
             }
 

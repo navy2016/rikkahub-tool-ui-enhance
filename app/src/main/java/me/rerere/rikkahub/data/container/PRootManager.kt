@@ -60,7 +60,7 @@ class PRootManager(
         private const val DEFAULT_MAX_MEMORY_MB = 6144  // 6GB for compilation tasks
 
         // Rootfs 版本控制 - 每次更新 alpine rootfs 时递增此版本号
-        private const val ROOTFS_VERSION = 1
+        private const val ROOTFS_VERSION = 2
         private const val ROOTFS_VERSION_FILE = "rootfs_version.txt"
     }
 
@@ -167,6 +167,8 @@ class PRootManager(
             
             _containerState.value = ContainerStateEnum.Initializing(0.8f)
             
+            hardenAlpineBaseEnvironment()
+
             // 创建全局容器
             Log.d(TAG, "Creating global container...")
             createGlobalContainer()
@@ -1219,6 +1221,70 @@ fi
 
     // ==================== Private Methods ====================
 
+    private fun hardenAlpineBaseEnvironment() {
+        runCatching {
+            val etcDir = File(rootfsDir, "etc").apply { mkdirs() }
+            File(etcDir, "apk").mkdirs()
+            File(etcDir, "apk/repositories").writeText(
+                "https://dl-cdn.alpinelinux.org/alpine/v3.19/main\n" +
+                    "https://dl-cdn.alpinelinux.org/alpine/v3.19/community\n"
+            )
+            File(etcDir, "resolv.conf").writeText(
+                "nameserver 1.1.1.1\n" +
+                    "nameserver 8.8.8.8\n" +
+                    "options timeout:2 attempts:2\n"
+            )
+            File(etcDir, "nsswitch.conf").writeText("hosts: files dns\n")
+            File(rootfsDir, "tmp").apply {
+                mkdirs()
+                setReadable(true, false)
+                setWritable(true, false)
+                setExecutable(true, false)
+            }
+            val profileDir = File(etcDir, "profile.d").apply { mkdirs() }
+            File(profileDir, "rikkahub.sh").writeText(
+                "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n" +
+                    "export NPM_CONFIG_PREFIX=/usr/local\n" +
+                    "export npm_config_prefix=/usr/local\n" +
+                    "export NPM_CONFIG_CACHE=/tmp/npm-cache\n" +
+                    "export NPM_CONFIG_AUDIT=false\n" +
+                    "export NPM_CONFIG_FUND=false\n" +
+                    "export NO_UPDATE_NOTIFIER=1\n" +
+                    "export PIP_DISABLE_PIP_VERSION_CHECK=1\n"
+            )
+        }.onFailure {
+            Log.w(TAG, "Failed to harden Alpine base environment", it)
+        }
+    }
+
+    private fun writeContainerUtilityScripts(upperDir: File) {
+        val binDir = File(upperDir, "usr/local/bin").apply { mkdirs() }
+        File(binDir, "rikkahub-fix-apk").apply {
+            writeText("""#!/bin/sh
+set -eu
+printf 'https://dl-cdn.alpinelinux.org/alpine/v3.19/main\nhttps://dl-cdn.alpinelinux.org/alpine/v3.19/community\n' > /etc/apk/repositories
+printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions timeout:2 attempts:2\n' > /etc/resolv.conf
+mkdir -p /tmp /tmp/npm-cache /tmp/pip-cache
+chmod 1777 /tmp /tmp/npm-cache /tmp/pip-cache 2>/dev/null || true
+apk update
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-install-cli").apply {
+            writeText("""#!/bin/sh
+set -eu
+rikkahub-fix-apk
+apk add --no-cache bash ca-certificates curl git openssh-client vim nano util-linux nodejs npm
+npm config set prefix /usr/local
+npm config set cache /tmp/npm-cache
+npm config set audit false
+npm config set fund false
+npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
+""")
+            setExecutable(true, false)
+        }
+    }
+
     private suspend fun createGlobalContainer() = withContext(Dispatchers.IO) {
         val workDir = File(containerDir, "work").apply { mkdirs() }
         val upperDir = File(containerDir, "upper").apply { mkdirs() }
@@ -1229,7 +1295,8 @@ fi
         File(upperDir, "usr/local/lib/node_modules").apply { mkdirs() }
         File(upperDir, "usr/lib").apply { mkdirs() }
         File(upperDir, "root").apply { mkdirs() }
-        File(upperDir, "root/.npmrc").writeText("prefix=/usr/local\ncache=/tmp/npm-cache\n")
+        File(upperDir, "root/.npmrc").writeText("prefix=/usr/local\ncache=/tmp/npm-cache\naudit=false\nfund=false\nupdate-notifier=false\n")
+        writeContainerUtilityScripts(upperDir)
 
         globalContainer = ContainerState(
             id = "global",
@@ -2408,6 +2475,10 @@ fi
         processEnv["NPM_CONFIG_PREFIX"] = "/usr/local"
         processEnv["npm_config_prefix"] = "/usr/local"
         processEnv["NPM_CONFIG_CACHE"] = "/tmp/npm-cache"
+        processEnv["NPM_CONFIG_AUDIT"] = "false"
+        processEnv["NPM_CONFIG_FUND"] = "false"
+        processEnv["NO_UPDATE_NOTIFIER"] = "1"
+        processEnv["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
         processEnv["NODE_PATH"] = "/usr/local/lib/node_modules:/usr/lib/node_modules"
         processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 

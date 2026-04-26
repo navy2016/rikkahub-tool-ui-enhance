@@ -88,6 +88,13 @@ Java_me_rerere_rikkahub_data_container_NativePtyBridge_nativeStart(
         if (slaveFd < 0) _exit(127);
         ioctl(slaveFd, TIOCSCTTY, 0);
         ioctl(slaveFd, TIOCSWINSZ, &ws);
+        struct termios tio{};
+        if (tcgetattr(slaveFd, &tio) == 0) {
+            tio.c_iflag |= ICRNL;
+            tio.c_oflag |= OPOST | ONLCR;
+            tio.c_lflag |= ISIG | ICANON | ECHO;
+            tcsetattr(slaveFd, TCSANOW, &tio);
+        }
         dup2(slaveFd, STDIN_FILENO);
         dup2(slaveFd, STDOUT_FILENO);
         dup2(slaveFd, STDERR_FILENO);

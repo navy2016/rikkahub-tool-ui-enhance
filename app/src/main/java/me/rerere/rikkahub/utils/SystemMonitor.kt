@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.utils
 
 import android.content.Context
+import android.os.SystemClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -10,6 +11,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import me.rerere.rikkahub.sandbox.SandboxEngine
 
 /**
  * 系统监控工具类
@@ -27,21 +29,30 @@ class SystemMonitor @Inject constructor(
 
     private var lastCpuTotal: Long = 0
     private var lastCpuIdle: Long = 0
+    private var lastProcessCpuMs: Long = 0
+    private var lastProcessWallMs: Long = 0
 
     /**
-     * 获取 CPU 使用率（0f ~ 100f）。无法读取时返回 -1，UI 显示为 --。
+     * 获取 CPU 使用率（0f ~ 100f）。系统 /proc/stat 不可读时回退到当前进程 CPU 采样。
      */
     suspend fun getCpuUsagePercent(): Float = withContext(Dispatchers.IO) {
-        readCpuUsagePercent() ?: -1f
+        readCpuUsagePercent() ?: readProcessCpuUsagePercent() ?: 0f
+    }
+
+    suspend fun getSandboxUsagePercent(sandboxId: String): Float = withContext(Dispatchers.IO) {
+        runCatching {
+            SandboxEngine.getSandboxUsage(context, sandboxId).usagePercent.toFloat().coerceIn(0f, 100f)
+        }.getOrDefault(0f)
     }
 
     private suspend fun readCpuUsagePercent(): Float? {
         return try {
             val statFile = File(PROC_STAT)
-            if (!statFile.exists()) return null
+            if (!statFile.exists() || !statFile.canRead()) return null
 
-            val line = statFile.readLines().firstOrNull { it.startsWith("cpu ") }
-                ?: return null
+            val line = statFile.bufferedReader().useLines { lines ->
+                lines.firstOrNull { it.startsWith("cpu ") }
+            } ?: return null
 
             val parts = line.trim().split(Regex("\\s+"))
             if (parts.size < 5) return null
@@ -61,7 +72,7 @@ class SystemMonitor @Inject constructor(
             if (lastCpuTotal == 0L) {
                 lastCpuTotal = total
                 lastCpuIdle = idleTotal
-                delay(200)
+                delay(120)
                 return readCpuUsagePercent()
             }
 
@@ -74,6 +85,27 @@ class SystemMonitor @Inject constructor(
             if (totalDelta <= 0) return 0f
 
             (((totalDelta - idleDelta).toFloat() / totalDelta) * 100f).coerceIn(0f, 100f)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun readProcessCpuUsagePercent(): Float? {
+        return try {
+            val cpuMs = android.os.Process.getElapsedCpuTime()
+            val wallMs = SystemClock.elapsedRealtime()
+            if (lastProcessCpuMs == 0L || lastProcessWallMs == 0L) {
+                lastProcessCpuMs = cpuMs
+                lastProcessWallMs = wallMs
+                return 0f
+            }
+            val cpuDelta = cpuMs - lastProcessCpuMs
+            val wallDelta = wallMs - lastProcessWallMs
+            lastProcessCpuMs = cpuMs
+            lastProcessWallMs = wallMs
+            if (wallDelta <= 0) return 0f
+            val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+            ((cpuDelta.toFloat() / (wallDelta * cores)) * 100f).coerceIn(0f, 100f)
         } catch (_: Exception) {
             null
         }

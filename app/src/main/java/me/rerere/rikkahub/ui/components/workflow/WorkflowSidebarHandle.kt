@@ -37,6 +37,7 @@ import kotlin.math.roundToInt
 fun WorkflowSidebarHandle(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    sandboxId: String,
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
@@ -46,6 +47,7 @@ fun WorkflowSidebarHandle(
     var offsetX by rememberSaveable { mutableFloatStateOf(0f) }
     var offsetY by rememberSaveable { mutableFloatStateOf(0f) }
     var cpuUsage by rememberSaveable { mutableFloatStateOf(0f) }
+    var sandboxUsage by rememberSaveable { mutableFloatStateOf(0f) }
 
     val processStates by backgroundProcessManager.processStates.collectAsStateWithLifecycle()
 
@@ -53,9 +55,10 @@ fun WorkflowSidebarHandle(
         it.status == ProcessStatus.RUNNING && it.processSource == "container_shell_bg"
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(sandboxId) {
         while (true) {
             cpuUsage = systemMonitor.getCpuUsagePercent()
+            sandboxUsage = systemMonitor.getSandboxUsagePercent(sandboxId)
             delay(1000L)
         }
     }
@@ -85,10 +88,11 @@ fun WorkflowSidebarHandle(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            val cpuText = if (cpuUsage >= 0f) "${cpuUsage.roundToInt()}%" else "--"
+            val cpuText = "${cpuUsage.roundToInt().coerceIn(0, 100)}%"
+            val sandboxText = "${sandboxUsage.roundToInt().coerceIn(0, 100)}%"
 
             Text(
-                text = "CPU $cpuText\nBG $runningBgCount",
+                text = "$cpuText  $sandboxText\nBG $runningBgCount",
                 color = Color.White,
                 fontSize = 10.sp,
                 textAlign = TextAlign.Center,
