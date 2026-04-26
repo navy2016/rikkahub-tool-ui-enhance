@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -66,6 +67,7 @@ import me.rerere.rikkahub.data.container.ProcessStatus
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.utils.TerminalEmulator
 import me.rerere.rikkahub.utils.TerminalEmulator.Key
+import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.compose.koinInject
 import java.util.concurrent.TimeUnit
 
@@ -400,6 +402,7 @@ private fun TerminalInteractivePanel(
     bgManager: BackgroundProcessManager
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val outputScroll = rememberScrollState()
     val controlScroll = rememberScrollState()
 
@@ -445,20 +448,22 @@ private fun TerminalInteractivePanel(
         }
     }
 
-    fun submitCommand() {
-        val command = input.trim()
-        if (command.isBlank()) return
-
-        if (commandHistory.lastOrNull() != command) {
-            commandHistory.add(command)
+    fun sendCommand(command: String, rememberHistory: Boolean = true) {
+        val trimmed = command.trim()
+        if (trimmed.isBlank()) return
+        if (rememberHistory && commandHistory.lastOrNull() != trimmed) {
+            commandHistory.add(trimmed)
         }
         historyIndex = -1
-
         scope.launch {
-            val payload = terminalEmulator.wrapPaste(command)
+            val payload = terminalEmulator.wrapPaste(trimmed)
             bgManager.sendInput(processId, payload, appendNewline = true)
             input = ""
         }
+    }
+
+    fun submitCommand() {
+        sendCommand(input, rememberHistory = true)
     }
 
     fun sendRaw(sequence: String) {
@@ -655,6 +660,18 @@ private fun TerminalInteractivePanel(
                 ControlChip("F3") { sendKey(Key.F3) }
                 ControlChip("F4") { sendKey(Key.F4) }
                 ControlChip("本地清屏") { clearLocalTerminal() }
+                ControlChip("复制输出") {
+                    context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
+                }
+                ControlChip("PTY自检") {
+                    sendCommand("tty; stty size; echo ${'$'}TERM", rememberHistory = true)
+                }
+                ControlChip("安装CLI") {
+                    sendCommand(
+                        "apk add vim nano util-linux nodejs npm && npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai",
+                        rememberHistory = true
+                    )
+                }
                 ControlChip("↑历史") { applyHistoryUp() }
                 ControlChip("↓历史") { applyHistoryDown() }
             }
@@ -745,7 +762,7 @@ private fun CreateSessionDialog(
         "opencode",
         "apk add vim nano util-linux nodejs npm",
         "npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai",
-        "tty; stty size; echo \$TERM"
+        "tty; stty size; echo ${'$'}TERM"
     )
 
     AlertDialog(

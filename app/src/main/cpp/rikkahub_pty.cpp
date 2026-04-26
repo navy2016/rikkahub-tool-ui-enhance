@@ -108,14 +108,15 @@ Java_me_rerere_rikkahub_data_container_NativePtyBridge_nativeStart(
 
 extern "C" JNIEXPORT jint JNICALL
 Java_me_rerere_rikkahub_data_container_NativePtyBridge_nativeRead(
-        JNIEnv *env, jobject, jint fd, jbyteArray buffer, jint length) {
-    if (fd < 0 || !buffer || length <= 0) return -1;
+        JNIEnv *env, jobject, jint fd, jbyteArray buffer, jint offset, jint length) {
+    if (fd < 0 || !buffer || offset < 0 || length <= 0) return -1;
     jsize capacity = env->GetArrayLength(buffer);
-    if (length > capacity) length = capacity;
+    if (offset >= capacity) return -1;
+    if (length > capacity - offset) length = capacity - offset;
     jbyte *bytes = env->GetByteArrayElements(buffer, nullptr);
     ssize_t readBytes;
     do {
-        readBytes = read(fd, bytes, static_cast<size_t>(length));
+        readBytes = read(fd, bytes + offset, static_cast<size_t>(length));
     } while (readBytes < 0 && errno == EINTR);
     env->ReleaseByteArrayElements(buffer, bytes, 0);
     if (readBytes < 0) return -errno;
@@ -124,18 +125,48 @@ Java_me_rerere_rikkahub_data_container_NativePtyBridge_nativeRead(
 
 extern "C" JNIEXPORT jint JNICALL
 Java_me_rerere_rikkahub_data_container_NativePtyBridge_nativeWrite(
-        JNIEnv *env, jobject, jint fd, jbyteArray buffer, jint length) {
-    if (fd < 0 || !buffer || length <= 0) return -1;
+        JNIEnv *env, jobject, jint fd, jbyteArray buffer, jint offset, jint length) {
+    if (fd < 0 || !buffer || offset < 0 || length <= 0) return -1;
     jsize capacity = env->GetArrayLength(buffer);
-    if (length > capacity) length = capacity;
+    if (offset >= capacity) return -1;
+    if (length > capacity - offset) length = capacity - offset;
     jbyte *bytes = env->GetByteArrayElements(buffer, nullptr);
     ssize_t written;
     do {
-        written = write(fd, bytes, static_cast<size_t>(length));
+        written = write(fd, bytes + offset, static_cast<size_t>(length));
     } while (written < 0 && errno == EINTR);
     env->ReleaseByteArrayElements(buffer, bytes, JNI_ABORT);
     if (written < 0) return -errno;
     return static_cast<jint>(written);
+}
+
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_me_rerere_rikkahub_data_container_NativePtyBridge_nativeDrain(
+        JNIEnv *env, jobject, jint fd, jint maxBytes) {
+    if (fd < 0 || maxBytes <= 0) return env->NewByteArray(0);
+    int oldFlags = fcntl(fd, F_GETFL, 0);
+    if (oldFlags >= 0) fcntl(fd, F_SETFL, oldFlags | O_NONBLOCK);
+
+    std::vector<jbyte> out;
+    out.reserve(static_cast<size_t>(maxBytes > 4096 ? 4096 : maxBytes));
+    char chunk[512];
+    while (static_cast<jint>(out.size()) < maxBytes) {
+        size_t want = sizeof(chunk);
+        jint remaining = maxBytes - static_cast<jint>(out.size());
+        if (remaining < static_cast<jint>(want)) want = static_cast<size_t>(remaining);
+        ssize_t n = read(fd, chunk, want);
+        if (n > 0) {
+            out.insert(out.end(), reinterpret_cast<jbyte *>(chunk), reinterpret_cast<jbyte *>(chunk + n));
+            continue;
+        }
+        if (n < 0 && errno == EINTR) continue;
+        break;
+    }
+
+    if (oldFlags >= 0) fcntl(fd, F_SETFL, oldFlags);
+    jbyteArray result = env->NewByteArray(static_cast<jsize>(out.size()));
+    if (!out.empty()) env->SetByteArrayRegion(result, 0, static_cast<jsize>(out.size()), out.data());
+    return result;
 }
 
 extern "C" JNIEXPORT jint JNICALL

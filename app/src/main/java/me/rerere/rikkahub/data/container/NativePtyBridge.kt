@@ -33,8 +33,12 @@ object NativePtyBridge {
         return NativePtyProcess(result[0].toInt(), result[1].toInt())
     }
 
-    fun read(fd: Int, buffer: ByteArray): Int = nativeRead(fd, buffer, buffer.size)
-    fun write(fd: Int, buffer: ByteArray): Int = nativeWrite(fd, buffer, buffer.size)
+    fun read(fd: Int, buffer: ByteArray, offset: Int = 0, length: Int = buffer.size - offset): Int =
+        nativeRead(fd, buffer, offset, length)
+    fun write(fd: Int, buffer: ByteArray, offset: Int = 0, length: Int = buffer.size - offset): Int =
+        nativeWrite(fd, buffer, offset, length)
+    fun drain(fd: Int, maxBytes: Int = 8192): ByteArray = nativeDrain(fd, maxBytes) ?: ByteArray(0)
+    fun describeResult(result: Int): String = if (result < 0) "errno=${-result}" else "result=$result"
     fun resize(fd: Int, columns: Int, rows: Int): Int = nativeResize(fd, columns, rows)
     fun waitFor(pid: Int): Int = nativeWait(pid)
     fun waitNoHang(pid: Int): Int? {
@@ -50,8 +54,9 @@ object NativePtyBridge {
     fun isProcessAlive(pid: Int): Boolean = nativeKill(pid, 0) == 0
 
     private external fun nativeStart(argv: Array<String>, env: Array<String>, columns: Int, rows: Int): LongArray?
-    private external fun nativeRead(fd: Int, buffer: ByteArray, length: Int): Int
-    private external fun nativeWrite(fd: Int, buffer: ByteArray, length: Int): Int
+    private external fun nativeRead(fd: Int, buffer: ByteArray, offset: Int, length: Int): Int
+    private external fun nativeWrite(fd: Int, buffer: ByteArray, offset: Int, length: Int): Int
+    private external fun nativeDrain(fd: Int, maxBytes: Int): ByteArray?
     private external fun nativeResize(fd: Int, columns: Int, rows: Int): Int
     private const val STILL_RUNNING = -100000
     private const val ALREADY_REAPED = -100001

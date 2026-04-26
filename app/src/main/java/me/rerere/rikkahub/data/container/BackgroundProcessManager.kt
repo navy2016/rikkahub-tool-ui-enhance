@@ -421,6 +421,7 @@ class BackgroundProcessManager @Inject constructor(
                 }
 
                 interactiveSessions[processId]?.let { session ->
+                    drainNativePtyTail(session)
                     session.exitCode = code
                     session.exitedAt = System.currentTimeMillis()
                     if (session.finalStatus == null) {
@@ -632,6 +633,16 @@ class BackgroundProcessManager @Inject constructor(
         Result.success(Unit)
     }
 
+    private suspend fun drainNativePtyTail(record: InteractiveSessionRecord, maxBytes: Int = 16 * 1024) {
+        val nativeProcess = record.process as? NativePtyProcess ?: return
+        val tail = nativeProcess.drainAvailable(maxBytes)
+        if (tail.isNotEmpty()) {
+            record.outputBuffer.append(tail)
+            record.outputFlow.emit(tail)
+            record.lastActivityAt = System.currentTimeMillis()
+        }
+    }
+
     /**
      * 关闭交互式会话
      */
@@ -661,6 +672,8 @@ class BackgroundProcessManager @Inject constructor(
             } catch (_: Exception) {
                 -1
             }
+
+            drainNativePtyTail(record)
 
             record.stdoutJob?.cancel()
             record.stderrJob?.cancel()

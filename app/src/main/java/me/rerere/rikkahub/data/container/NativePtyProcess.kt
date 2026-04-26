@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.container
 
 import java.io.InputStream
+import android.util.Log
 import java.io.OutputStream
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -9,7 +10,13 @@ class NativePtyProcess internal constructor(
     private val childPid: Int,
     private val masterFd: Int
 ) : Process() {
+    companion object {
+        private const val TAG = "NativePtyProcess"
+    }
+
     private val closed = AtomicBoolean(false)
+    private val readErrorLogged = AtomicBoolean(false)
+    private val writeErrorLogged = AtomicBoolean(false)
     @Volatile private var cachedExitCode: Int? = null
     private val waitStarted = AtomicBoolean(false)
 
@@ -23,9 +30,12 @@ class NativePtyProcess internal constructor(
             if (off < 0 || len < 0 || off + len > b.size) throw IndexOutOfBoundsException()
             var writtenTotal = 0
             while (writtenTotal < len && !closed.get()) {
-                val chunk = b.copyOfRange(off + writtenTotal, off + len)
-                val written = NativePtyBridge.write(masterFd, chunk)
-                if (written <= 0) break
+                val written = NativePtyBridge.write(masterFd, b, off + writtenTotal, len - writtenTotal)
+                if (written < 0) {
+                    logWriteError(written)
+                    break
+                }
+                if (written == 0) break
                 writtenTotal += written
             }
         }
@@ -46,11 +56,12 @@ class NativePtyProcess internal constructor(
             if (off < 0 || len < 0 || off + len > b.size) throw IndexOutOfBoundsException()
             if (closed.get()) return -1
             if (len <= 0) return 0
-            val temp = if (off == 0 && len == b.size) b else ByteArray(len)
-            val read = NativePtyBridge.read(masterFd, temp)
+            val read = NativePtyBridge.read(masterFd, b, off, len)
             if (read == 0) return -1
-            if (read < 0) return -1
-            if (temp !== b) temp.copyInto(b, off, 0, read)
+            if (read < 0) {
+                logReadError(read)
+                return -1
+            }
             return read
         }
 
@@ -130,6 +141,23 @@ class NativePtyProcess internal constructor(
     }
 
     fun pidOrNull(): Int = childPid
+
+    fun drainAvailable(maxBytes: Int = 8192): ByteArray {
+        if (closed.get()) return ByteArray(0)
+        return NativePtyBridge.drain(masterFd, maxBytes)
+    }
+
+    private fun logReadError(result: Int) {
+        if (readErrorLogged.compareAndSet(false, true)) {
+            Log.w(TAG, "PTY read failed: ${NativePtyBridge.describeResult(result)}")
+        }
+    }
+
+    private fun logWriteError(result: Int) {
+        if (writeErrorLogged.compareAndSet(false, true)) {
+            Log.w(TAG, "PTY write failed: ${NativePtyBridge.describeResult(result)}")
+        }
+    }
 
     private fun closePty() {
         if (closed.compareAndSet(false, true)) {
