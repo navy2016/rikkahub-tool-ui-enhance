@@ -5,6 +5,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -397,6 +398,7 @@ private fun StatusChip(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun TerminalInteractivePanel(
     processId: String,
@@ -405,7 +407,6 @@ private fun TerminalInteractivePanel(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val outputScroll = rememberScrollState()
-    val controlScroll = rememberScrollState()
 
     val terminalEmulator = remember(processId) { TerminalEmulator(initialColumns = 80, initialRows = 24) }
     val terminalBackground = Color(0xFF101010)
@@ -421,6 +422,7 @@ private fun TerminalInteractivePanel(
     var input by remember { mutableStateOf("") }
     var terminalText by remember { mutableStateOf(terminalEmulator.render()) }
     var terminalModeSummary by remember { mutableStateOf(terminalEmulator.modeSummary()) }
+    var terminalStatus by remember { mutableStateOf("就绪") }
     var autoScroll by remember { mutableStateOf(true) }
     var rawInputMode by remember { mutableStateOf(false) }
     var terminalColumns by remember { mutableIntStateOf(80) }
@@ -468,7 +470,8 @@ private fun TerminalInteractivePanel(
         historyIndex = -1
         scope.launch {
             val payload = terminalEmulator.wrapPaste(trimmed)
-            bgManager.sendInput(processId, payload, appendNewline = true)
+            val result = bgManager.sendInput(processId, payload, appendNewline = true)
+            terminalStatus = result.exceptionOrNull()?.message ?: "已发送"
             input = ""
         }
     }
@@ -479,7 +482,8 @@ private fun TerminalInteractivePanel(
 
     fun sendRaw(sequence: String) {
         scope.launch {
-            bgManager.sendInput(processId, sequence, appendNewline = false)
+            val result = bgManager.sendInput(processId, sequence, appendNewline = false)
+            result.exceptionOrNull()?.let { terminalStatus = it.message ?: "发送失败" }
         }
     }
 
@@ -558,7 +562,11 @@ private fun TerminalInteractivePanel(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = buildString { append("终端 · ${terminalColumns}x${terminalRows}"); if (terminalModeSummary.isNotBlank()) append(" · $terminalModeSummary") },
+                    text = buildString {
+                        append("终端 · ${terminalColumns}x${terminalRows}")
+                        if (terminalModeSummary.isNotBlank()) append(" · $terminalModeSummary")
+                        if (terminalStatus.isNotBlank()) append(" · $terminalStatus")
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = terminalMuted,
                     maxLines = 1,
@@ -620,11 +628,10 @@ private fun TerminalInteractivePanel(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(controlScroll),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 ControlChip("Ctrl+C") {
                     scope.launch {
@@ -683,6 +690,15 @@ private fun TerminalInteractivePanel(
                 ControlChip("↑历史") { applyHistoryUp() }
                 ControlChip("↓历史") { applyHistoryDown() }
             }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "提示：安装失败先点/运行 rikkahub-fix-apk；TUI 使用逐字输入 + 方向键/ESC 控制。",
+                style = MaterialTheme.typography.labelSmall,
+                color = terminalMuted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 

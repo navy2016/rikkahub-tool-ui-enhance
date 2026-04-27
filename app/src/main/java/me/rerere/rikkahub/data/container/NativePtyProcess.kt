@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.container
 
 import java.io.InputStream
 import android.util.Log
+import java.io.IOException
 import java.io.OutputStream
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -33,9 +34,9 @@ class NativePtyProcess internal constructor(
                 val written = NativePtyBridge.write(masterFd, b, off + writtenTotal, len - writtenTotal)
                 if (written < 0) {
                     logWriteError(written)
-                    break
+                    throw IOException("PTY write failed: ${NativePtyBridge.describeResult(written)}")
                 }
-                if (written == 0) break
+                if (written == 0) throw IOException("PTY write returned 0 bytes")
                 writtenTotal += written
             }
         }
@@ -115,12 +116,33 @@ class NativePtyProcess internal constructor(
 
     override fun destroy() {
         NativePtyBridge.kill(childPid, 15)
-        closePty()
+        Thread {
+            try {
+                if (!waitFor(800, TimeUnit.MILLISECONDS)) closePty()
+            } catch (_: Exception) {
+                closePty()
+            }
+        }.apply {
+            name = "NativePtyProcess-destroy-$childPid"
+            isDaemon = true
+            start()
+        }
     }
 
     override fun destroyForcibly(): Process {
         NativePtyBridge.kill(childPid, 9)
-        closePty()
+        Thread {
+            try {
+                waitFor(300, TimeUnit.MILLISECONDS)
+            } catch (_: Exception) {
+            } finally {
+                closePty()
+            }
+        }.apply {
+            name = "NativePtyProcess-kill-$childPid"
+            isDaemon = true
+            start()
+        }
         return this
     }
 

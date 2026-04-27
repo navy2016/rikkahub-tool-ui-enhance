@@ -15,6 +15,7 @@ extern "C" char *ptsname(int);
 #include <unistd.h>
 #include <vector>
 #include <string>
+#include <algorithm>
 
 #define LOG_TAG "RikkahubPty"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -71,8 +72,8 @@ Java_me_rerere_rikkahub_data_container_NativePtyBridge_nativeStart(
     }
 
     struct winsize ws{};
-    ws.ws_col = static_cast<unsigned short>(columns > 0 ? columns : 80);
-    ws.ws_row = static_cast<unsigned short>(rows > 0 ? rows : 24);
+    ws.ws_col = static_cast<unsigned short>(std::max(1, std::min(300, static_cast<int>(columns))));
+    ws.ws_row = static_cast<unsigned short>(std::max(1, std::min(120, static_cast<int>(rows))));
     ioctl(masterFd, TIOCSWINSZ, &ws);
 
     pid_t pid = fork();
@@ -90,9 +91,18 @@ Java_me_rerere_rikkahub_data_container_NativePtyBridge_nativeStart(
         ioctl(slaveFd, TIOCSWINSZ, &ws);
         struct termios tio{};
         if (tcgetattr(slaveFd, &tio) == 0) {
-            tio.c_iflag |= ICRNL;
+            tio.c_iflag |= ICRNL | IXON;
+#ifdef IXANY
+            tio.c_iflag |= IXANY;
+#endif
             tio.c_oflag |= OPOST | ONLCR;
             tio.c_lflag |= ISIG | ICANON | ECHO;
+#ifdef ECHOE
+            tio.c_lflag |= ECHOE;
+#endif
+#ifdef ECHOK
+            tio.c_lflag |= ECHOK;
+#endif
             tcsetattr(slaveFd, TCSANOW, &tio);
         }
         dup2(slaveFd, STDIN_FILENO);
@@ -181,8 +191,8 @@ Java_me_rerere_rikkahub_data_container_NativePtyBridge_nativeResize(
         JNIEnv *, jobject, jint fd, jint columns, jint rows) {
     if (fd < 0) return -1;
     struct winsize ws{};
-    ws.ws_col = static_cast<unsigned short>(columns > 0 ? columns : 80);
-    ws.ws_row = static_cast<unsigned short>(rows > 0 ? rows : 24);
+    ws.ws_col = static_cast<unsigned short>(std::max(1, std::min(300, static_cast<int>(columns))));
+    ws.ws_row = static_cast<unsigned short>(std::max(1, std::min(120, static_cast<int>(rows))));
     return ioctl(fd, TIOCSWINSZ, &ws) == 0 ? 0 : -errno;
 }
 

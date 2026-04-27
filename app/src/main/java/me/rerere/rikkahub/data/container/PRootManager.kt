@@ -687,11 +687,8 @@ fi
                     if (globalContainer == null) {
                         createGlobalContainer()
                     } else {
-                        // 确保子目录存在（以防万一目录被删除）
-                        val upperDir = File(containerDir, "upper")
-                        File(upperDir, "usr/local").apply { mkdirs() }
-                        File(upperDir, "usr/lib").apply { mkdirs() }
-                        File(upperDir, "root").apply { mkdirs() }
+                        // 确保子目录/运行时脚本存在（兼容升级前已初始化的容器）
+                        ensureContainerRuntimeFiles(File(containerDir, "upper"))
                     }
                     _containerState.value = ContainerStateEnum.Running
                     return@withContext Result.success(Unit)
@@ -1257,28 +1254,54 @@ fi
         }
     }
 
+    private fun ensureContainerRuntimeFiles(upperDir: File = File(containerDir, "upper")) {
+        File(upperDir, "usr/local").mkdirs()
+        File(upperDir, "usr/local/bin").mkdirs()
+        File(upperDir, "usr/local/lib/node_modules").mkdirs()
+        File(upperDir, "usr/lib").mkdirs()
+        File(upperDir, "root").mkdirs()
+        val etcDir = File(upperDir, "etc").apply { mkdirs() }
+        File(etcDir, "apk").mkdirs()
+        File(etcDir, "apk/repositories").writeText(
+            "https://dl-cdn.alpinelinux.org/alpine/v3.19/main\n" +
+                "https://dl-cdn.alpinelinux.org/alpine/v3.19/community\n"
+        )
+        File(etcDir, "resolv.conf").writeText(
+            "nameserver 1.1.1.1\n" +
+                "nameserver 8.8.8.8\n" +
+                "options timeout:2 attempts:2\n"
+        )
+        File(upperDir, "root/.npmrc").writeText(
+            "prefix=/usr/local\ncache=/tmp/npm-cache\naudit=false\nfund=false\nupdate-notifier=false\n"
+        )
+        writeContainerUtilityScripts(upperDir)
+    }
+
     private fun writeContainerUtilityScripts(upperDir: File) {
         val binDir = File(upperDir, "usr/local/bin").apply { mkdirs() }
         File(binDir, "rikkahub-fix-apk").apply {
             writeText("""#!/bin/sh
-set -eu
-printf 'https://dl-cdn.alpinelinux.org/alpine/v3.19/main\nhttps://dl-cdn.alpinelinux.org/alpine/v3.19/community\n' > /etc/apk/repositories
-printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions timeout:2 attempts:2\n' > /etc/resolv.conf
-mkdir -p /tmp /tmp/npm-cache /tmp/pip-cache
+set -u
+printf 'https://dl-cdn.alpinelinux.org/alpine/v3.19/main\nhttps://dl-cdn.alpinelinux.org/alpine/v3.19/community\n' > /etc/apk/repositories || exit 11
+printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions timeout:2 attempts:2\n' > /etc/resolv.conf || exit 12
+mkdir -p /tmp /tmp/npm-cache /tmp/pip-cache /var/cache/apk
 chmod 1777 /tmp /tmp/npm-cache /tmp/pip-cache 2>/dev/null || true
-apk update
+command -v apk >/dev/null 2>&1 || { echo 'apk not found in PATH' >&2; exit 13; }
+apk update || apk update --no-cache
 """)
             setExecutable(true, false)
         }
         File(binDir, "rikkahub-install-cli").apply {
             writeText("""#!/bin/sh
-set -eu
-rikkahub-fix-apk
-apk add --no-cache bash ca-certificates curl git openssh-client vim nano util-linux nodejs npm
+set -u
+rikkahub-fix-apk || exit $?
+apk add --no-cache bash ca-certificates curl git openssh-client vim nano util-linux nodejs npm || exit $?
+command -v update-ca-certificates >/dev/null 2>&1 && update-ca-certificates || true
 npm config set prefix /usr/local
 npm config set cache /tmp/npm-cache
 npm config set audit false
 npm config set fund false
+npm config set update-notifier false
 npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 """)
             setExecutable(true, false)
@@ -1289,14 +1312,8 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
         val workDir = File(containerDir, "work").apply { mkdirs() }
         val upperDir = File(containerDir, "upper").apply { mkdirs() }
 
-        // 创建 bind mount 所需的子目录
-        File(upperDir, "usr/local").apply { mkdirs() }
-        File(upperDir, "usr/local/bin").apply { mkdirs() }
-        File(upperDir, "usr/local/lib/node_modules").apply { mkdirs() }
-        File(upperDir, "usr/lib").apply { mkdirs() }
-        File(upperDir, "root").apply { mkdirs() }
-        File(upperDir, "root/.npmrc").writeText("prefix=/usr/local\ncache=/tmp/npm-cache\naudit=false\nfund=false\nupdate-notifier=false\n")
-        writeContainerUtilityScripts(upperDir)
+        // 创建/刷新 bind mount 所需的子目录、配置和工具脚本
+        ensureContainerRuntimeFiles(upperDir)
 
         globalContainer = ContainerState(
             id = "global",
@@ -2509,6 +2526,7 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
         val deliveryDir = SandboxEngine.getDeliveryDir(context, sandboxId).apply { mkdirs() }
         val runtimeSkillsDir = SandboxEngine.getRuntimeSkillsDir(context, sandboxId).apply { mkdirs() }
         val skillLibraryDir = File(context.filesDir, FileFolders.SKILLS).apply { mkdirs() }
+        ensureContainerRuntimeFiles(File(container.upperDir))
 
         return buildList {
             add(prootBinary)
@@ -2542,6 +2560,11 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
             // 额外绑定挂载 usr/lib 以确保库文件可访问
             add("-b")
             add("${container.upperDir}/usr/lib:/usr/lib!")
+            // 绑定可写 apk/DNS 配置，避免 -R rootfs 下修复脚本无法写 /etc
+            add("-b")
+            add("${container.upperDir}/etc/apk/repositories:/etc/apk/repositories")
+            add("-b")
+            add("${container.upperDir}/etc/resolv.conf:/etc/resolv.conf")
 
             // 根目录使用基础 rootfs（只读）- 必须在 -b 之后
             add("-R")
