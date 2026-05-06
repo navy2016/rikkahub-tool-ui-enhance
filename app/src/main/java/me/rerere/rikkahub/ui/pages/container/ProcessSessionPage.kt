@@ -85,8 +85,13 @@ fun ProcessSessionPage(sandboxId: String) {
         .sortedByDescending { it.createdAt }
 
     var activeInteractiveId by remember { mutableStateOf<String?>(null) }
+    var terminalFullscreen by remember { mutableStateOf(true) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var showLogsFor by remember { mutableStateOf<String?>(null) }
+
+    val activeInteractiveProcess = sandboxProcesses.firstOrNull {
+        it.processId == activeInteractiveId && it.isInteractive
+    }
 
     Scaffold(
         topBar = {
@@ -113,7 +118,17 @@ fun ProcessSessionPage(sandboxId: String) {
             )
         }
     ) { padding ->
-        if (sandboxProcesses.isEmpty()) {
+        if (terminalFullscreen && activeInteractiveProcess != null) {
+            TerminalInteractivePanel(
+                processId = activeInteractiveProcess.processId,
+                bgManager = bgManager,
+                fullscreen = true,
+                onFullscreenChange = { terminalFullscreen = it },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            )
+        } else if (sandboxProcesses.isEmpty()) {
             EmptyState(
                 modifier = Modifier
                     .fillMaxSize()
@@ -135,9 +150,11 @@ fun ProcessSessionPage(sandboxId: String) {
                         process = process,
                         isInteractiveActive = activeInteractiveId == process.processId,
                         onToggleInteractive = {
-                            activeInteractiveId =
-                                if (activeInteractiveId == process.processId) null
-                                else process.processId
+                            val isClosing = activeInteractiveId == process.processId
+                            activeInteractiveId = if (isClosing) null else process.processId
+                            if (!isClosing && process.isInteractive) {
+                                terminalFullscreen = true
+                            }
                         },
                         onKill = {
                             scope.launch {
@@ -160,10 +177,13 @@ fun ProcessSessionPage(sandboxId: String) {
                         }
                     )
 
-                    if (process.isInteractive && activeInteractiveId == process.processId) {
+                    if (!terminalFullscreen && process.isInteractive && activeInteractiveId == process.processId) {
                         TerminalInteractivePanel(
                             processId = process.processId,
-                            bgManager = bgManager
+                            bgManager = bgManager,
+                            fullscreen = false,
+                            onFullscreenChange = { terminalFullscreen = it },
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -176,13 +196,17 @@ fun ProcessSessionPage(sandboxId: String) {
             onDismiss = { showCreateDialog = false },
             onCreate = { command ->
                 scope.launch {
-                    bgManager.startInteractiveSession(
+                    val result = bgManager.startInteractiveSession(
                         sandboxId = sandboxId,
                         command = command,
                         preferTty = true,
-                        columns = 80,
-                        rows = 24
+                        columns = 120,
+                        rows = 40
                     )
+                    if (result.success) {
+                        activeInteractiveId = result.processId
+                        terminalFullscreen = true
+                    }
                     showCreateDialog = false
                 }
             }
@@ -402,7 +426,10 @@ private fun StatusChip(
 @Composable
 private fun TerminalInteractivePanel(
     processId: String,
-    bgManager: BackgroundProcessManager
+    bgManager: BackgroundProcessManager,
+    fullscreen: Boolean,
+    onFullscreenChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -544,16 +571,16 @@ private fun TerminalInteractivePanel(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        modifier = modifier,
+        shape = if (fullscreen) RoundedCornerShape(0.dp) else RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF1B1B1B)
         )
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp)
+                .fillMaxSize()
+                .padding(if (fullscreen) 6.dp else 10.dp)
                 .imePadding()
         ) {
             Row(
@@ -570,45 +597,52 @@ private fun TerminalInteractivePanel(
                     style = MaterialTheme.typography.labelMedium,
                     color = terminalMuted,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "自动滚动",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = terminalMuted
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Switch(
-                        checked = autoScroll,
-                        onCheckedChange = { autoScroll = it }
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "逐字输入",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = terminalMuted
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Switch(
-                        checked = rawInputMode,
-                        onCheckedChange = {
-                            rawInputMode = it
-                            input = ""
-                        }
-                    )
+                    TextButton(onClick = { onFullscreenChange(!fullscreen) }) {
+                        Text(if (fullscreen) "退出全屏" else "全屏")
+                    }
+                    if (!fullscreen) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "自动滚动",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = terminalMuted
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Switch(
+                            checked = autoScroll,
+                            onCheckedChange = { autoScroll = it }
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "逐字输入",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = terminalMuted
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Switch(
+                            checked = rawInputMode,
+                            onCheckedChange = {
+                                rawInputMode = it
+                                input = ""
+                            }
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(if (fullscreen) 4.dp else 8.dp))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(300.dp)
-                    .background(terminalBackground, RoundedCornerShape(8.dp))
-                    .padding(10.dp)
+                    .then(if (fullscreen) Modifier.weight(1f) else Modifier.height(300.dp))
+                    .background(terminalBackground, if (fullscreen) RoundedCornerShape(0.dp) else RoundedCornerShape(8.dp))
+                    .padding(if (fullscreen) 6.dp else 10.dp)
                     .onSizeChanged { size ->
                         val cols = (size.width / 7).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
                         val rows = (size.height / 14).coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
@@ -626,79 +660,57 @@ private fun TerminalInteractivePanel(
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            if (!fullscreen) {
+                Spacer(modifier = Modifier.height(8.dp))
 
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                ControlChip("Ctrl+C") {
-                    scope.launch {
-                        bgManager.sendControlInput(processId, ControlInput.CTRL_C)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ControlChip("Ctrl+C") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_C) } }
+                    ControlChip("Ctrl+D") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_D) } }
+                    ControlChip("Tab") { scope.launch { bgManager.sendControlInput(processId, ControlInput.TAB) } }
+                    ControlChip("Esc") { scope.launch { bgManager.sendControlInput(processId, ControlInput.ESC) } }
+                    ControlChip("Enter") { scope.launch { bgManager.sendControlInput(processId, ControlInput.ENTER) } }
+                    ControlChip("Backspace") { scope.launch { bgManager.sendControlInput(processId, ControlInput.BACKSPACE) } }
+                    ControlChip("Shell↑") { sendKey(Key.UP) }
+                    ControlChip("Shell↓") { sendKey(Key.DOWN) }
+                    ControlChip("Shell←") { sendKey(Key.LEFT) }
+                    ControlChip("Shell→") { sendKey(Key.RIGHT) }
+                    ControlChip("Home") { sendKey(Key.HOME) }
+                    ControlChip("End") { sendKey(Key.END) }
+                    ControlChip("PgUp") { sendKey(Key.PAGE_UP) }
+                    ControlChip("PgDn") { sendKey(Key.PAGE_DOWN) }
+                    ControlChip("Ins") { sendKey(Key.INSERT) }
+                    ControlChip("Del") { sendKey(Key.DELETE) }
+                    ControlChip("F1") { sendKey(Key.F1) }
+                    ControlChip("F2") { sendKey(Key.F2) }
+                    ControlChip("F3") { sendKey(Key.F3) }
+                    ControlChip("F4") { sendKey(Key.F4) }
+                    ControlChip("本地清屏") { clearLocalTerminal() }
+                    ControlChip("复制输出") {
+                        context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
                     }
-                }
-                ControlChip("Ctrl+D") {
-                    scope.launch {
-                        bgManager.sendControlInput(processId, ControlInput.CTRL_D)
+                    ControlChip("PTY自检") {
+                        sendCommand("tty; stty size; echo ${'$'}TERM", rememberHistory = true)
                     }
-                }
-                ControlChip("Tab") {
-                    scope.launch {
-                        bgManager.sendControlInput(processId, ControlInput.TAB)
+                    ControlChip("安装CLI") {
+                        sendCommand(installCliCommand, rememberHistory = true)
                     }
+                    ControlChip("↑历史") { applyHistoryUp() }
+                    ControlChip("↓历史") { applyHistoryDown() }
                 }
-                ControlChip("Esc") {
-                    scope.launch {
-                        bgManager.sendControlInput(processId, ControlInput.ESC)
-                    }
-                }
-                ControlChip("Enter") {
-                    scope.launch {
-                        bgManager.sendControlInput(processId, ControlInput.ENTER)
-                    }
-                }
-                ControlChip("Backspace") {
-                    scope.launch {
-                        bgManager.sendControlInput(processId, ControlInput.BACKSPACE)
-                    }
-                }
-                ControlChip("Shell↑") { sendKey(Key.UP) }
-                ControlChip("Shell↓") { sendKey(Key.DOWN) }
-                ControlChip("Shell←") { sendKey(Key.LEFT) }
-                ControlChip("Shell→") { sendKey(Key.RIGHT) }
-                ControlChip("Home") { sendKey(Key.HOME) }
-                ControlChip("End") { sendKey(Key.END) }
-                ControlChip("PgUp") { sendKey(Key.PAGE_UP) }
-                ControlChip("PgDn") { sendKey(Key.PAGE_DOWN) }
-                ControlChip("Ins") { sendKey(Key.INSERT) }
-                ControlChip("Del") { sendKey(Key.DELETE) }
-                ControlChip("F1") { sendKey(Key.F1) }
-                ControlChip("F2") { sendKey(Key.F2) }
-                ControlChip("F3") { sendKey(Key.F3) }
-                ControlChip("F4") { sendKey(Key.F4) }
-                ControlChip("本地清屏") { clearLocalTerminal() }
-                ControlChip("复制输出") {
-                    context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
-                }
-                ControlChip("PTY自检") {
-                    sendCommand("tty; stty size; echo ${'$'}TERM", rememberHistory = true)
-                }
-                ControlChip("安装CLI") {
-                    sendCommand(installCliCommand, rememberHistory = true)
-                }
-                ControlChip("↑历史") { applyHistoryUp() }
-                ControlChip("↓历史") { applyHistoryDown() }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "提示：默认进入 tmux；安装失败先点/运行 rikkahub-fix-apk；TUI 使用逐字输入 + 方向键/ESC 控制。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = terminalMuted,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = "提示：默认进入 tmux；安装失败先点/运行 rikkahub-fix-apk；TUI 使用逐字输入 + 方向键/ESC 控制。",
-                style = MaterialTheme.typography.labelSmall,
-                color = terminalMuted,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
