@@ -437,7 +437,7 @@ class TerminalEmulator(
             finishOsc()
             return
         }
-        if (oscEscSeen && ch == '\') {
+        if (oscEscSeen && ch == '\\') {
             finishOsc()
             return
         }
@@ -468,7 +468,7 @@ class TerminalEmulator(
     }
 
     private fun handleStringTerminatedBySt(ch: Char) {
-        if (ch == '\u009C' || (oscEscSeen && ch == '\')) {
+        if (ch == '\u009C' || (oscEscSeen && ch == '\\')) {
             parserState = ParserState.NORMAL
             oscEscSeen = false
             return
