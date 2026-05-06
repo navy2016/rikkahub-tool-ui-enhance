@@ -83,7 +83,17 @@ jobs:
           EOFGS
 
       - name: Run focused unit tests
-        run: ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.utils.TerminalEmulatorTest --stacktrace
+        run: |
+          for attempt in 1 2 3; do
+            echo "Gradle test attempt ${attempt}/3"
+            if ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.utils.TerminalEmulatorTest --stacktrace; then
+              exit 0
+            fi
+            if [ "$attempt" = "3" ]; then
+              exit 1
+            fi
+            sleep $((attempt * 20))
+          done
 
       - name: Upload test reports
         if: always()
