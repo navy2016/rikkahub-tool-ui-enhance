@@ -31,15 +31,20 @@ class TerminalEmulator(
         const val MAX_COLUMNS = 240
         const val MIN_ROWS = 6
         const val MAX_ROWS = 80
+        private const val MAX_CSI_LENGTH = 256
+        private const val MAX_STRING_SEQUENCE = 4096
     }
 
     private data class Style(
         val fg: Color = Color(0xFF00E676),
         val bg: Color? = null,
         val bold: Boolean = false,
+        val faint: Boolean = false,
         val italic: Boolean = false,
         val underline: Boolean = false,
-        val inverse: Boolean = false
+        val inverse: Boolean = false,
+        val concealed: Boolean = false,
+        val strike: Boolean = false
     )
 
     private data class Cell(var ch: Char = ' ', var style: Style = Style())
@@ -50,17 +55,38 @@ class TerminalEmulator(
 
     private enum class ParserState { NORMAL, ESC, CSI, OSC, STRING_IGNORE, ESC_CHARSET_G0, ESC_CHARSET_G1 }
 
+    private data class CsiSequence(
+        val privateMarker: Char?,
+        val params: List<String>,
+        val intermediates: String,
+        val final: Char
+    )
+
+    private data class SavedCursor(
+        val row: Int,
+        val col: Int,
+        val style: Style,
+        val originMode: Boolean,
+        val lineDrawing: Boolean,
+        val pendingWrap: Boolean
+    )
+
     private val defaultStyle = Style()
     private var currentStyle = defaultStyle
     private var cursorRow = 0
     private var cursorCol = 0
     private var savedRow = 0
     private var savedCol = 0
+    private var savedCursor = SavedCursor(0, 0, defaultStyle, false, false, false)
     private var parserState = ParserState.NORMAL
     private var csiBuffer = StringBuilder()
+    private var oscBuffer = StringBuilder()
     private var oscEscSeen = false
+    var title: String = ""
+        private set
     private var cursorVisible = true
     private var wraparound = true
+    private var pendingWrap = false
     private var originMode = false
     private var applicationCursorKeys = false
     private var bracketedPaste = false
@@ -83,6 +109,7 @@ class TerminalEmulator(
 
     @Synchronized
     fun reset() {
+        currentStyle = defaultStyle
         scrollback.clear()
         mainScreen.resetScreen()
         altScreen.resetScreen()
@@ -90,15 +117,18 @@ class TerminalEmulator(
         cursorCol = 0
         savedRow = 0
         savedCol = 0
-        currentStyle = defaultStyle
+        savedCursor = SavedCursor(0, 0, defaultStyle, false, false, false)
         parserState = ParserState.NORMAL
         csiBuffer.clear()
+        oscBuffer.clear()
         oscEscSeen = false
         pendingResponses.clear()
         resetDecoder()
         pendingUtf8 = ByteArray(0)
         cursorVisible = true
         wraparound = true
+        pendingWrap = false
+        title = ""
         originMode = false
         applicationCursorKeys = false
         bracketedPaste = false
@@ -116,18 +146,25 @@ class TerminalEmulator(
         val newRows = rows.coerceIn(MIN_ROWS, MAX_ROWS)
         if (newColumns == this.columns && newRows == this.rows) return
 
-        val retainedText = plainText(includeScrollback = false)
         this.columns = newColumns
         this.rows = newRows
+        mainScreen.resizeScreen(newRows, newColumns)
+        altScreen.resizeScreen(newRows, newColumns)
+        val resizedScrollback = scrollback.map { resizedLine(it, newColumns, defaultStyle) }
+        scrollback.clear()
+        resizedScrollback.takeLast(maxScrollbackLines).forEach { scrollback.addLast(it) }
         scrollTop = 0
         scrollBottom = newRows - 1
-        cursorRow = 0
-        cursorCol = 0
-        mainScreen.resetScreen()
-        altScreen.resetScreen()
-        feed(retainedText)
-        cursorRow = cursorRow.coerceIn(0, this.rows - 1)
-        cursorCol = cursorCol.coerceIn(0, this.columns - 1)
+        cursorRow = cursorRow.coerceIn(0, newRows - 1)
+        cursorCol = cursorCol.coerceIn(0, newColumns - 1)
+        savedRow = savedRow.coerceIn(0, newRows - 1)
+        savedCol = savedCol.coerceIn(0, newColumns - 1)
+        savedCursor = savedCursor.copy(
+            row = savedCursor.row.coerceIn(0, newRows - 1),
+            col = savedCursor.col.coerceIn(0, newColumns - 1),
+            pendingWrap = false
+        )
+        pendingWrap = false
     }
 
     @Synchronized
@@ -135,12 +172,14 @@ class TerminalEmulator(
         currentStyle = defaultStyle
         parserState = ParserState.NORMAL
         csiBuffer.clear()
+        oscBuffer.clear()
         oscEscSeen = false
         pendingResponses.clear()
         resetDecoder()
         pendingUtf8 = ByteArray(0)
         cursorVisible = true
         wraparound = true
+        pendingWrap = false
         originMode = false
         applicationCursorKeys = false
         bracketedPaste = false
@@ -259,6 +298,20 @@ class TerminalEmulator(
             .onUnmappableCharacter(CodingErrorAction.REPLACE)
     }
 
+    private fun resizedLine(old: Array<Cell>, newColumns: Int, fillStyle: Style = currentStyle): Array<Cell> {
+        return Array(newColumns) { index ->
+            if (index < old.size) old[index].copy() else Cell(style = fillStyle)
+        }
+    }
+
+    private fun MutableList<Array<Cell>>.resizeScreen(newRows: Int, newColumns: Int) {
+        val old = toList()
+        clear()
+        val copyRows = min(old.size, newRows)
+        repeat(copyRows) { row -> add(resizedLine(old[row], newColumns, defaultStyle)) }
+        repeat(newRows - copyRows) { add(Array(newColumns) { Cell(style = defaultStyle) }) }
+    }
+
     private fun MutableList<Array<Cell>>.resetScreen() {
         clear()
         repeat(rows) { add(blankLine()) }
@@ -291,7 +344,7 @@ class TerminalEmulator(
             ParserState.NORMAL -> handleNormal(ch)
             ParserState.ESC -> handleEsc(ch)
             ParserState.CSI -> handleCsi(ch)
-            ParserState.OSC -> handleStringTerminatedByBelOrSt(ch)
+            ParserState.OSC -> handleOsc(ch)
             ParserState.STRING_IGNORE -> handleStringTerminatedBySt(ch)
             ParserState.ESC_CHARSET_G0 -> {
                 lineDrawing = ch == '0'
@@ -304,14 +357,34 @@ class TerminalEmulator(
     private fun handleNormal(ch: Char) {
         when (ch) {
             '\u001B' -> parserState = ParserState.ESC
-            '\r' -> cursorCol = 0
+            '\u009B' -> {
+                csiBuffer.clear()
+                parserState = ParserState.CSI
+            }
+            '\u009D' -> {
+                oscBuffer.clear()
+                oscEscSeen = false
+                parserState = ParserState.OSC
+            }
+            '\u0090', '\u0098', '\u009E', '\u009F' -> {
+                oscEscSeen = false
+                parserState = ParserState.STRING_IGNORE
+            }
+            '\r' -> {
+                pendingWrap = false
+                cursorCol = 0
+            }
             '\n' -> {
+                pendingWrap = false
                 cursorCol = 0
                 lineFeed()
             }
             '\u000E' -> lineDrawing = true
             '\u000F' -> lineDrawing = false
-            '\b', '\u007F' -> if (cursorCol > 0) cursorCol--
+            '\b', '\u007F' -> {
+                pendingWrap = false
+                if (cursorCol > 0) cursorCol--
+            }
             '\t' -> repeat(8 - (cursorCol % 8)) { putChar(' ') }
             in '\u0000'..'\u001F' -> Unit
             else -> putChar(if (lineDrawing) mapLineDrawing(ch) else ch)
@@ -325,10 +398,11 @@ class TerminalEmulator(
                 parserState = ParserState.CSI
             }
             ']' -> {
+                oscBuffer.clear()
                 oscEscSeen = false
                 parserState = ParserState.OSC
             }
-            'P', '^', '_' -> {
+            'P', '^', '_', 'X' -> {
                 oscEscSeen = false
                 parserState = ParserState.STRING_IGNORE
             }
@@ -339,28 +413,62 @@ class TerminalEmulator(
             '7' -> saveCursor()
             '8' -> restoreCursor()
             'c' -> reset()
-            'D' -> lineFeed()
+            'D' -> {
+                pendingWrap = false
+                lineFeed()
+            }
             'E' -> {
+                pendingWrap = false
                 cursorCol = 0
                 lineFeed()
             }
-            'M' -> reverseIndex()
+            'M' -> {
+                pendingWrap = false
+                reverseIndex()
+            }
             '(' -> parserState = ParserState.ESC_CHARSET_G0
             ')' -> parserState = ParserState.ESC_CHARSET_G1
             else -> parserState = ParserState.NORMAL
         }
     }
 
-    private fun handleStringTerminatedByBelOrSt(ch: Char) {
-        if (ch == '\u0007') {
-            parserState = ParserState.NORMAL
+    private fun handleOsc(ch: Char) {
+        if (ch == '' || ch == '\u009C') {
+            finishOsc()
             return
         }
-        handleStringTerminatedBySt(ch)
+        if (oscEscSeen && ch == '\') {
+            finishOsc()
+            return
+        }
+        if (oscEscSeen) {
+            if (oscBuffer.length < MAX_STRING_SEQUENCE) oscBuffer.append('\u001B')
+            oscEscSeen = false
+        }
+        if (ch == '\u001B') {
+            oscEscSeen = true
+        } else if (oscBuffer.length < MAX_STRING_SEQUENCE) {
+            oscBuffer.append(ch)
+        }
+    }
+
+    private fun finishOsc() {
+        val text = oscBuffer.toString()
+        val sep = text.indexOf(';')
+        if (sep > 0) {
+            val code = text.substring(0, sep).toIntOrNull()
+            val value = text.substring(sep + 1)
+            if (code == 0 || code == 1 || code == 2) {
+                title = value.take(MAX_STRING_SEQUENCE)
+            }
+        }
+        oscBuffer.clear()
+        oscEscSeen = false
+        parserState = ParserState.NORMAL
     }
 
     private fun handleStringTerminatedBySt(ch: Char) {
-        if (oscEscSeen && ch == '\\') {
+        if (ch == '\u009C' || (oscEscSeen && ch == '\')) {
             parserState = ParserState.NORMAL
             oscEscSeen = false
             return
@@ -374,86 +482,119 @@ class TerminalEmulator(
             parserState = ParserState.NORMAL
             csiBuffer.clear()
         } else {
-            csiBuffer.append(ch)
+            if (csiBuffer.length < MAX_CSI_LENGTH) {
+                csiBuffer.append(ch)
+            } else {
+                csiBuffer.clear()
+                parserState = ParserState.NORMAL
+            }
         }
     }
 
+    private fun parseCsi(raw: String, final: Char): CsiSequence {
+        var index = 0
+        var privateMarker: Char? = null
+        if (raw.isNotEmpty() && raw[0] in charArrayOf('?', '>', '<', '=')) {
+            privateMarker = raw[0]
+            index = 1
+        }
+        val params = StringBuilder()
+        val intermediates = StringBuilder()
+        while (index < raw.length) {
+            val c = raw[index]
+            when (c) {
+                in '0'..'?' -> params.append(c)
+                in ' '..'/' -> intermediates.append(c)
+            }
+            index++
+        }
+        val paramList = if (params.isEmpty()) emptyList() else params.toString().split(';')
+        return CsiSequence(privateMarker, paramList, intermediates.toString(), final)
+    }
+
+    private fun CsiSequence.paramInt(index: Int, default: Int): Int {
+        return params.getOrNull(index)
+            ?.substringBefore(':')
+            ?.toIntOrNull()
+            ?.takeIf { it != 0 }
+            ?: default
+    }
+
+    private fun CsiSequence.paramZero(index: Int): Int {
+        return params.getOrNull(index)?.substringBefore(':')?.toIntOrNull() ?: 0
+    }
+
+    private fun CsiSequence.intParams(): List<Int> = params.mapNotNull { it.substringBefore(':').toIntOrNull() }
+
+    private fun moveCursor(row: Int = cursorRow, col: Int = cursorCol) {
+        pendingWrap = false
+        cursorRow = row.coerceIn(0, rows - 1)
+        cursorCol = col.coerceIn(0, columns - 1)
+    }
+
     private fun executeCsi(raw: String, command: Char) {
-        if (raw.startsWith("<") && (command == 'M' || command == 'm')) return // xterm mouse report
-        val isPrivate = raw.startsWith("?")
-        val clean = raw.trimStart('?', '>', '!', '<')
-        val params = clean.split(';').filter { it.isNotEmpty() }.map { it.toIntOrNull() ?: 0 }
-        fun p(index: Int, default: Int): Int = params.getOrNull(index)?.takeIf { it != 0 } ?: default
+        val seq = parseCsi(raw, command)
+        if (seq.privateMarker == '<' && (command == 'M' || command == 'm')) return // xterm mouse report
 
         when (command) {
-            'A' -> cursorRow = (cursorRow - p(0, 1)).coerceAtLeast(scrollTop)
-            'B' -> cursorRow = (cursorRow + p(0, 1)).coerceAtMost(scrollBottom)
-            'C' -> cursorCol = (cursorCol + p(0, 1)).coerceAtMost(columns - 1)
-            'D' -> cursorCol = (cursorCol - p(0, 1)).coerceAtLeast(0)
-            'E' -> {
-                cursorRow = (cursorRow + p(0, 1)).coerceAtMost(scrollBottom)
-                cursorCol = 0
-            }
-            'F' -> {
-                cursorRow = (cursorRow - p(0, 1)).coerceAtLeast(scrollTop)
-                cursorCol = 0
-            }
-            'G', '`' -> cursorCol = (p(0, 1) - 1).coerceIn(0, columns - 1)
-            'I' -> cursorCol = (cursorCol + p(0, 1) * 8).coerceAtMost(columns - 1)
-            'a' -> cursorCol = (cursorCol + p(0, 1)).coerceAtMost(columns - 1)
-            'e' -> cursorRow = (cursorRow + p(0, 1)).coerceAtMost(scrollBottom)
+            'A' -> moveCursor(row = (cursorRow - seq.paramInt(0, 1)).coerceAtLeast(scrollTop))
+            'B' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1)).coerceAtMost(scrollBottom))
+            'C' -> moveCursor(col = (cursorCol + seq.paramInt(0, 1)).coerceAtMost(columns - 1))
+            'D' -> moveCursor(col = (cursorCol - seq.paramInt(0, 1)).coerceAtLeast(0))
+            'E' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1)).coerceAtMost(scrollBottom), col = 0)
+            'F' -> moveCursor(row = (cursorRow - seq.paramInt(0, 1)).coerceAtLeast(scrollTop), col = 0)
+            'G', '`' -> moveCursor(col = seq.paramInt(0, 1) - 1)
+            'I' -> moveCursor(col = (cursorCol + seq.paramInt(0, 1) * 8).coerceAtMost(columns - 1))
+            'a' -> moveCursor(col = (cursorCol + seq.paramInt(0, 1)).coerceAtMost(columns - 1))
+            'e' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1)).coerceAtMost(scrollBottom))
             'H', 'f' -> {
-                val targetRow = p(0, 1) - 1
-                cursorRow = if (originMode) {
-                    (scrollTop + targetRow).coerceIn(scrollTop, scrollBottom)
-                } else {
-                    targetRow.coerceIn(0, rows - 1)
-                }
-                cursorCol = (p(1, 1) - 1).coerceIn(0, columns - 1)
+                val targetRow = seq.paramInt(0, 1) - 1
+                val row = if (originMode) (scrollTop + targetRow).coerceIn(scrollTop, scrollBottom) else targetRow.coerceIn(0, rows - 1)
+                moveCursor(row = row, col = seq.paramInt(1, 1) - 1)
             }
-            'J' -> eraseDisplay(params.getOrNull(0) ?: 0)
-            'K' -> eraseLine(params.getOrNull(0) ?: 0)
-            'm' -> applySgr(if (params.isEmpty()) listOf(0) else params)
+            'J' -> eraseDisplay(seq.paramZero(0))
+            'K' -> eraseLine(seq.paramZero(0))
+            'm' -> applySgr(seq.params.ifEmpty { listOf("0") })
             's' -> saveCursor()
             'u' -> restoreCursor()
-            'L' -> repeat(p(0, 1)) { insertLine() }
-            'M' -> repeat(p(0, 1)) { deleteLine() }
-            'P' -> deleteChars(p(0, 1))
-            '@' -> insertChars(p(0, 1))
-            'X' -> eraseChars(p(0, 1))
-            'S' -> repeat(p(0, 1)) { scrollUp() }
-            'T' -> repeat(p(0, 1)) { scrollDown() }
-            'Z' -> cursorCol = (cursorCol - p(0, 1) * 8).coerceAtLeast(0)
-            'b' -> repeat(p(0, 1)) { if (cursorCol > 0) putChar(screen[cursorRow][cursorCol - 1].ch) }
-            'c' -> if (isPrivate || params.isEmpty() || params.firstOrNull() == 0) pendingResponses.add("\u001B[?1;2c")
+            'L' -> repeat(seq.paramInt(0, 1)) { insertLine() }
+            'M' -> repeat(seq.paramInt(0, 1)) { deleteLine() }
+            'P' -> deleteChars(seq.paramInt(0, 1))
+            '@' -> insertChars(seq.paramInt(0, 1))
+            'X' -> eraseChars(seq.paramInt(0, 1))
+            'S' -> repeat(seq.paramInt(0, 1)) { scrollUp() }
+            'T' -> repeat(seq.paramInt(0, 1)) { scrollDown() }
+            'Z' -> moveCursor(col = (cursorCol - seq.paramInt(0, 1) * 8).coerceAtLeast(0))
+            'b' -> repeat(seq.paramInt(0, 1)) { if (cursorCol > 0) putChar(screen[cursorRow][cursorCol - 1].ch) }
+            'c' -> if (seq.privateMarker != '>' && (seq.params.isEmpty() || seq.paramZero(0) == 0)) pendingResponses.add("[?1;2c")
             'd' -> {
-                val targetRow = p(0, 1) - 1
-                cursorRow = if (originMode) (scrollTop + targetRow).coerceIn(scrollTop, scrollBottom)
-                else targetRow.coerceIn(0, rows - 1)
+                val targetRow = seq.paramInt(0, 1) - 1
+                val row = if (originMode) (scrollTop + targetRow).coerceIn(scrollTop, scrollBottom) else targetRow.coerceIn(0, rows - 1)
+                moveCursor(row = row)
             }
-            'n' -> handleDeviceStatusReport(params.getOrNull(0) ?: 0)
-            'g', 'q' -> Unit
-            'r' -> setScrollRegion(p(0, 1), p(1, rows))
-            'h' -> if (isPrivate) setPrivateModes(params, true)
-            'l' -> if (isPrivate) setPrivateModes(params, false)
+            'n' -> handleDeviceStatusReport(seq.paramZero(0))
+            'g' -> Unit
+            'q' -> Unit
+            'p' -> if (seq.intermediates == "!") softReset()
+            'r' -> setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
+            'h' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), true)
+            'l' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), false)
         }
     }
 
     private fun putChar(ch: Char) {
-        if (cursorCol >= columns) {
-            if (!wraparound) {
-                cursorCol = columns - 1
-            } else {
-                cursorCol = 0
-                lineFeed()
-            }
+        if (pendingWrap) {
+            cursorCol = 0
+            lineFeed()
+            pendingWrap = false
         }
         screen[cursorRow][cursorCol].ch = ch
         screen[cursorRow][cursorCol].style = currentStyle
-        cursorCol++
-        if (cursorCol >= columns && wraparound) {
-            cursorCol = 0
-            lineFeed()
+        if (cursorCol == columns - 1) {
+            pendingWrap = wraparound
+        } else {
+            cursorCol++
+            pendingWrap = false
         }
     }
 
@@ -494,6 +635,7 @@ class TerminalEmulator(
     }
 
     private fun eraseDisplay(mode: Int) {
+        pendingWrap = false
         when (mode) {
             0 -> {
                 eraseLine(0)
@@ -513,6 +655,7 @@ class TerminalEmulator(
     }
 
     private fun eraseLine(mode: Int) {
+        pendingWrap = false
         when (mode) {
             0 -> for (c in cursorCol until columns) screen[cursorRow][c] = Cell(style = currentStyle)
             1 -> for (c in 0..cursorCol) screen[cursorRow][c] = Cell(style = currentStyle)
@@ -521,6 +664,7 @@ class TerminalEmulator(
     }
 
     private fun insertLine() {
+        pendingWrap = false
         if (cursorRow !in scrollTop..scrollBottom) return
         for (r in scrollBottom downTo cursorRow + 1) {
             screen[r] = screen[r - 1]
@@ -529,6 +673,7 @@ class TerminalEmulator(
     }
 
     private fun deleteLine() {
+        pendingWrap = false
         if (cursorRow !in scrollTop..scrollBottom) return
         for (r in cursorRow until scrollBottom) {
             screen[r] = screen[r + 1]
@@ -537,6 +682,7 @@ class TerminalEmulator(
     }
 
     private fun insertChars(count: Int) {
+        pendingWrap = false
         val available = columns - cursorCol
         if (available <= 0) return
         val n = count.coerceIn(1, available)
@@ -546,6 +692,7 @@ class TerminalEmulator(
     }
 
     private fun deleteChars(count: Int) {
+        pendingWrap = false
         val available = columns - cursorCol
         if (available <= 0) return
         val n = count.coerceIn(1, available)
@@ -555,6 +702,7 @@ class TerminalEmulator(
     }
 
     private fun eraseChars(count: Int) {
+        pendingWrap = false
         val available = columns - cursorCol
         if (available <= 0) return
         val n = count.coerceIn(1, available)
@@ -568,6 +716,7 @@ class TerminalEmulator(
         scrollBottom = bottom
         cursorRow = scrollTop
         cursorCol = 0
+        pendingWrap = false
     }
 
     private fun handleDeviceStatusReport(code: Int) {
@@ -585,11 +734,16 @@ class TerminalEmulator(
                     originMode = enabled
                     cursorRow = if (enabled) scrollTop else 0
                     cursorCol = 0
+                    pendingWrap = false
                 }
-                7 -> wraparound = enabled
+                7 -> {
+                    wraparound = enabled
+                    if (!enabled) pendingWrap = false
+                }
+                12 -> Unit
                 25 -> cursorVisible = enabled
                 47, 1047, 1049 -> setAlternateScreen(enabled, clear = code == 1049)
-                1000, 1002, 1003, 1006 -> mouseTracking = enabled
+                1000, 1002, 1003, 1005, 1006, 1015 -> mouseTracking = enabled
                 1004 -> focusReporting = enabled
                 1048 -> if (enabled) saveCursor() else restoreCursor()
                 2004 -> bracketedPaste = enabled
@@ -605,6 +759,7 @@ class TerminalEmulator(
             if (clear) altScreen.resetScreen()
             cursorRow = 0
             cursorCol = 0
+            pendingWrap = false
         } else {
             alternateScreen = false
             restoreCursor()
@@ -615,28 +770,47 @@ class TerminalEmulator(
     private fun saveCursor() {
         savedRow = cursorRow
         savedCol = cursorCol
+        savedCursor = SavedCursor(cursorRow, cursorCol, currentStyle, originMode, lineDrawing, pendingWrap)
         parserState = ParserState.NORMAL
     }
 
     private fun restoreCursor() {
-        cursorRow = savedRow.coerceIn(0, rows - 1)
-        cursorCol = savedCol.coerceIn(0, columns - 1)
+        cursorRow = savedCursor.row.coerceIn(0, rows - 1)
+        cursorCol = savedCursor.col.coerceIn(0, columns - 1)
+        currentStyle = savedCursor.style
+        originMode = savedCursor.originMode
+        lineDrawing = savedCursor.lineDrawing
+        pendingWrap = savedCursor.pendingWrap
         parserState = ParserState.NORMAL
     }
 
-    private fun applySgr(params: List<Int>) {
+    private fun applySgr(rawParams: List<String>) {
+        val params = if (rawParams.isEmpty()) listOf("0") else rawParams
         var i = 0
         while (i < params.size) {
-            when (val code = params[i]) {
+            val token = params[i]
+            if (token.contains(':')) {
+                applyColonSgr(token)
+                i++
+                continue
+            }
+            when (val code = token.toIntOrNull() ?: 0) {
                 0 -> currentStyle = defaultStyle
-                1 -> currentStyle = currentStyle.copy(bold = true)
+                1 -> currentStyle = currentStyle.copy(bold = true, faint = false)
+                2 -> currentStyle = currentStyle.copy(faint = true, bold = false)
                 3 -> currentStyle = currentStyle.copy(italic = true)
-                4 -> currentStyle = currentStyle.copy(underline = true)
-                22 -> currentStyle = currentStyle.copy(bold = false)
+                4, 21 -> currentStyle = currentStyle.copy(underline = true)
+                5, 6 -> Unit
+                7 -> currentStyle = currentStyle.copy(inverse = true)
+                8 -> currentStyle = currentStyle.copy(concealed = true)
+                9 -> currentStyle = currentStyle.copy(strike = true)
+                22 -> currentStyle = currentStyle.copy(bold = false, faint = false)
                 23 -> currentStyle = currentStyle.copy(italic = false)
                 24 -> currentStyle = currentStyle.copy(underline = false)
-                7 -> currentStyle = currentStyle.copy(inverse = true)
+                25 -> Unit
                 27 -> currentStyle = currentStyle.copy(inverse = false)
+                28 -> currentStyle = currentStyle.copy(concealed = false)
+                29 -> currentStyle = currentStyle.copy(strike = false)
                 39 -> currentStyle = currentStyle.copy(fg = defaultStyle.fg)
                 49 -> currentStyle = currentStyle.copy(bg = null)
                 in 30..37 -> currentStyle = currentStyle.copy(fg = ansiColor(code - 30, currentStyle.bold))
@@ -645,34 +819,62 @@ class TerminalEmulator(
                 in 100..107 -> currentStyle = currentStyle.copy(bg = ansiColor(code - 100, true))
                 38, 48 -> {
                     val isFg = code == 38
-                    val mode = params.getOrNull(i + 1)
-                    if (mode == 5) {
-                        val color = xterm256(params.getOrNull(i + 2) ?: 7)
-                        currentStyle = if (isFg) currentStyle.copy(fg = color) else currentStyle.copy(bg = color)
-                        i += 2
-                    } else if (mode == 2) {
-                        val r = params.getOrNull(i + 2) ?: 0
-                        val g = params.getOrNull(i + 3) ?: 0
-                        val b = params.getOrNull(i + 4) ?: 0
-                        val color = rgbColor(r, g, b)
-                        currentStyle = if (isFg) currentStyle.copy(fg = color) else currentStyle.copy(bg = color)
-                        i += 4
+                    when (params.getOrNull(i + 1)?.toIntOrNull()) {
+                        5 -> {
+                            val color = xterm256(params.getOrNull(i + 2)?.toIntOrNull() ?: 7)
+                            currentStyle = if (isFg) currentStyle.copy(fg = color) else currentStyle.copy(bg = color)
+                            i += 2
+                        }
+                        2 -> {
+                            val r = params.getOrNull(i + 2)?.toIntOrNull() ?: 0
+                            val g = params.getOrNull(i + 3)?.toIntOrNull() ?: 0
+                            val b = params.getOrNull(i + 4)?.toIntOrNull() ?: 0
+                            val color = rgbColor(r, g, b)
+                            currentStyle = if (isFg) currentStyle.copy(fg = color) else currentStyle.copy(bg = color)
+                            i += 4
+                        }
                     }
                 }
+                58, 59 -> Unit
             }
             i++
         }
     }
 
+    private fun applyColonSgr(token: String) {
+        val parts = token.split(':')
+        val code = parts.firstOrNull()?.toIntOrNull() ?: return
+        val isFg = code == 38
+        val isBg = code == 48
+        if (!isFg && !isBg) return
+        val mode = parts.getOrNull(1)?.toIntOrNull() ?: return
+        val color = when (mode) {
+            5 -> xterm256(parts.getOrNull(2)?.toIntOrNull() ?: 7)
+            2 -> {
+                val rgb = parts.drop(2).mapNotNull { it.toIntOrNull() }.takeLast(3)
+                if (rgb.size == 3) rgbColor(rgb[0], rgb[1], rgb[2]) else null
+            }
+            else -> null
+        } ?: return
+        currentStyle = if (isFg) currentStyle.copy(fg = color) else currentStyle.copy(bg = color)
+    }
+
     private fun Style.toSpanStyle(): SpanStyle {
-        val fgColor = if (inverse) bg ?: Color(0xFF101010) else fg
+        val rawFgColor = if (inverse) bg ?: Color(0xFF101010) else fg
+        val fgColor = if (concealed) bg ?: Color.Transparent else rawFgColor
         val bgColor = if (inverse) fg else bg
+        val textDecoration = when {
+            underline && strike -> TextDecoration.Underline + TextDecoration.LineThrough
+            underline -> TextDecoration.Underline
+            strike -> TextDecoration.LineThrough
+            else -> TextDecoration.None
+        }
         return SpanStyle(
-            color = fgColor,
+            color = if (faint) fgColor.copy(alpha = 0.72f) else fgColor,
             background = bgColor ?: Color.Transparent,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
             fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
-            textDecoration = if (underline) TextDecoration.Underline else TextDecoration.None
+            textDecoration = textDecoration
         )
     }
 
