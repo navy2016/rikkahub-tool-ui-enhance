@@ -415,7 +415,7 @@ private fun TerminalInteractivePanel(
     val installCliCommand = remember {
         "rikkahub-install-cli || (printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf; " +
             "printf 'https://dl-cdn.alpinelinux.org/alpine/v3.19/main\nhttps://dl-cdn.alpinelinux.org/alpine/v3.19/community\n' > /etc/apk/repositories; " +
-            "apk update && apk add --no-cache vim nano util-linux nodejs npm bash ca-certificates curl git openssh-client && " +
+            "apk update && apk add --no-cache vim nano util-linux nodejs npm bash ca-certificates curl git openssh-client tmux && " +
             "npm config set prefix /usr/local && npm config set cache /tmp/npm-cache && " +
             "npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai)"
     }
@@ -693,7 +693,7 @@ private fun TerminalInteractivePanel(
 
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "提示：安装失败先点/运行 rikkahub-fix-apk；TUI 使用逐字输入 + 方向键/ESC 控制。",
+                text = "提示：默认进入 tmux；安装失败先点/运行 rikkahub-fix-apk；TUI 使用逐字输入 + 方向键/ESC 控制。",
                 style = MaterialTheme.typography.labelSmall,
                 color = terminalMuted,
                 maxLines = 2,
@@ -715,7 +715,7 @@ private fun TerminalInteractivePanel(
                     )
                 },
                 label = { Text(if (rawInputMode) "逐字输入（适合 vim/nano/TUI）" else "终端输入") },
-                placeholder = { Text(if (rawInputMode) "输入会立即发送；用 Esc/Ctrl+C/方向键按钮控制" else "例如：npm install -g @anthropic-ai/claude-code") },
+                placeholder = { Text(if (rawInputMode) "输入会立即发送；用 Esc/Ctrl+C/方向键按钮控制" else "例如：rikkahub-tmux 或 npm install -g @anthropic-ai/claude-code") },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(
                     onSend = { submitCommand() }
@@ -790,8 +790,10 @@ private fun CreateSessionDialog(
     onDismiss: () -> Unit,
     onCreate: (String) -> Unit
 ) {
-    var command by remember { mutableStateOf("bash") }
+    var command by remember { mutableStateOf("rikkahub-tmux") }
     val quickCommands = listOf(
+        "rikkahub-tmux",
+        "tmux",
         "bash",
         "vim",
         "nano",

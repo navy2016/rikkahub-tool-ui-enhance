@@ -1291,11 +1291,32 @@ apk update || apk update --no-cache
 """)
             setExecutable(true, false)
         }
+        File(binDir, "rikkahub-tmux").apply {
+            writeText("""#!/bin/sh
+set -u
+SESSION="${'$'}{1:-main}"
+if command -v tmux >/dev/null 2>&1; then
+    exec tmux new-session -A -s "${'$'}SESSION"
+fi
+printf '%s\n' "tmux is not installed; attempting to install it..."
+if command -v rikkahub-fix-apk >/dev/null 2>&1; then
+    rikkahub-fix-apk >/dev/null 2>&1 || true
+fi
+if command -v apk >/dev/null 2>&1; then
+    if apk add --no-cache tmux; then
+        exec tmux new-session -A -s "${'$'}SESSION"
+    fi
+fi
+printf '%s\n' "Unable to start tmux. Falling back to sh -l. Run 'rikkahub-install-cli' or 'apk add --no-cache tmux' to enable tmux."
+exec sh -l
+""")
+            setExecutable(true, false)
+        }
         File(binDir, "rikkahub-install-cli").apply {
             writeText("""#!/bin/sh
 set -u
-rikkahub-fix-apk || exit $?
-apk add --no-cache bash ca-certificates curl git openssh-client vim nano util-linux nodejs npm || exit $?
+rikkahub-fix-apk || exit ${'$'}?
+apk add --no-cache bash ca-certificates curl git openssh-client vim nano util-linux nodejs npm tmux || exit ${'$'}?
 command -v update-ca-certificates >/dev/null 2>&1 && update-ca-certificates || true
 npm config set prefix /usr/local
 npm config set cache /tmp/npm-cache
