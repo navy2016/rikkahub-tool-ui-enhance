@@ -764,6 +764,13 @@ class TerminalEmulatorTest {
         assertEquals("a", terminal.sequenceForCodePoint('a'.code))
         assertEquals("\u0001", terminal.sequenceForCodePoint('a'.code, ctrl = true))
         assertEquals("\u001Ba", terminal.sequenceForCodePoint('a'.code, alt = true))
+        assertEquals("\u0000", terminal.sequenceForCodePoint(' '.code, ctrl = true))
+        assertEquals("\u001B", terminal.sequenceForCodePoint('['.code, ctrl = true))
+        assertEquals("\u001C", terminal.sequenceForCodePoint('\\'.code, ctrl = true))
+        assertEquals("\u001D", terminal.sequenceForCodePoint(']'.code, ctrl = true))
+        assertEquals("\u001E", terminal.sequenceForCodePoint('^'.code, ctrl = true))
+        assertEquals("\u001F", terminal.sequenceForCodePoint('_'.code, ctrl = true))
+        assertEquals("\u007F", terminal.sequenceForCodePoint('?'.code, ctrl = true))
 
         terminal.feed("\u001B[?1039h")
         assertEquals("\u001B[27;5;97~", terminal.sequenceForCodePoint('a'.code, ctrl = true))
