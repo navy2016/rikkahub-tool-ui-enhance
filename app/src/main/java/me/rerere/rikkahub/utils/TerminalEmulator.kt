@@ -80,6 +80,7 @@ class TerminalEmulator(
     private enum class BaselineShift { NORMAL, SUPERSCRIPT, SUBSCRIPT }
     enum class Key {
         UP, DOWN, LEFT, RIGHT, HOME, END, PAGE_UP, PAGE_DOWN, INSERT, DELETE,
+        TAB, BACK_TAB, ENTER, ESCAPE, BACKSPACE,
         F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
         KP_0, KP_1, KP_2, KP_3, KP_4, KP_5, KP_6, KP_7, KP_8, KP_9,
         KP_DECIMAL, KP_ADD, KP_SUBTRACT, KP_MULTIPLY, KP_DIVIDE, KP_ENTER
@@ -349,45 +350,58 @@ class TerminalEmulator(
     fun cursorShape(): CursorShape = cursorShape
 
     @Synchronized
-    fun sequenceFor(key: Key): String = when (key) {
-        Key.UP -> if (applicationCursorKeys) "\u001BOA" else "\u001B[A"
-        Key.DOWN -> if (applicationCursorKeys) "\u001BOB" else "\u001B[B"
-        Key.RIGHT -> if (applicationCursorKeys) "\u001BOC" else "\u001B[C"
-        Key.LEFT -> if (applicationCursorKeys) "\u001BOD" else "\u001B[D"
-        Key.HOME -> "\u001B[H"
-        Key.END -> "\u001B[F"
-        Key.PAGE_UP -> "\u001B[5~"
-        Key.PAGE_DOWN -> "\u001B[6~"
-        Key.INSERT -> "\u001B[2~"
-        Key.DELETE -> "\u001B[3~"
-        Key.F1 -> "\u001BOP"
-        Key.F2 -> "\u001BOQ"
-        Key.F3 -> "\u001BOR"
-        Key.F4 -> "\u001BOS"
-        Key.F5 -> "\u001B[15~"
-        Key.F6 -> "\u001B[17~"
-        Key.F7 -> "\u001B[18~"
-        Key.F8 -> "\u001B[19~"
-        Key.F9 -> "\u001B[20~"
-        Key.F10 -> "\u001B[21~"
-        Key.F11 -> "\u001B[23~"
-        Key.F12 -> "\u001B[24~"
-        Key.KP_0 -> if (applicationKeypad) "\u001BOp" else "0"
-        Key.KP_1 -> if (applicationKeypad) "\u001BOq" else "1"
-        Key.KP_2 -> if (applicationKeypad) "\u001BOr" else "2"
-        Key.KP_3 -> if (applicationKeypad) "\u001BOs" else "3"
-        Key.KP_4 -> if (applicationKeypad) "\u001BOt" else "4"
-        Key.KP_5 -> if (applicationKeypad) "\u001BOu" else "5"
-        Key.KP_6 -> if (applicationKeypad) "\u001BOv" else "6"
-        Key.KP_7 -> if (applicationKeypad) "\u001BOw" else "7"
-        Key.KP_8 -> if (applicationKeypad) "\u001BOx" else "8"
-        Key.KP_9 -> if (applicationKeypad) "\u001BOy" else "9"
-        Key.KP_DECIMAL -> if (applicationKeypad) "\u001BOn" else "."
-        Key.KP_ADD -> if (applicationKeypad) "\u001BOk" else "+"
-        Key.KP_SUBTRACT -> if (applicationKeypad) "\u001BOm" else "-"
-        Key.KP_MULTIPLY -> if (applicationKeypad) "\u001BOj" else "*"
-        Key.KP_DIVIDE -> if (applicationKeypad) "\u001BOo" else "/"
-        Key.KP_ENTER -> if (applicationKeypad) "\u001BOM" else "\r"
+    fun sequenceFor(key: Key, shift: Boolean = false, alt: Boolean = false, ctrl: Boolean = false): String {
+        fun modifier(): Int = 1 + (if (shift) 1 else 0) + (if (alt) 2 else 0) + (if (ctrl) 4 else 0)
+        fun maybeAlt(sequence: String): String = if (alt && !shift && !ctrl) "\u001B$sequence" else sequence
+        fun csiModified(final: Char, normal: String): String = if (shift || alt || ctrl) "\u001B[1;${modifier()}$final" else normal
+        fun tildeModified(code: Int, normal: String): String = if (shift || alt || ctrl) "\u001B[${code};${modifier()}~" else normal
+        fun ss3Modified(final: Char, normal: String): String = if (shift || alt || ctrl) "\u001B[1;${modifier()}$final" else normal
+
+        return when (key) {
+            Key.UP -> csiModified('A', if (applicationCursorKeys) "\u001BOA" else "\u001B[A")
+            Key.DOWN -> csiModified('B', if (applicationCursorKeys) "\u001BOB" else "\u001B[B")
+            Key.RIGHT -> csiModified('C', if (applicationCursorKeys) "\u001BOC" else "\u001B[C")
+            Key.LEFT -> csiModified('D', if (applicationCursorKeys) "\u001BOD" else "\u001B[D")
+            Key.HOME -> csiModified('H', "\u001B[H")
+            Key.END -> csiModified('F', "\u001B[F")
+            Key.PAGE_UP -> tildeModified(5, "\u001B[5~")
+            Key.PAGE_DOWN -> tildeModified(6, "\u001B[6~")
+            Key.INSERT -> tildeModified(2, "\u001B[2~")
+            Key.DELETE -> tildeModified(3, "\u001B[3~")
+            Key.TAB -> if (shift) "\u001B[Z" else maybeAlt("\t")
+            Key.BACK_TAB -> "\u001B[Z"
+            Key.ENTER -> maybeAlt("\r")
+            Key.ESCAPE -> "\u001B"
+            Key.BACKSPACE -> if (ctrl) "\u0017" else maybeAlt("\u007F")
+            Key.F1 -> ss3Modified('P', "\u001BOP")
+            Key.F2 -> ss3Modified('Q', "\u001BOQ")
+            Key.F3 -> ss3Modified('R', "\u001BOR")
+            Key.F4 -> ss3Modified('S', "\u001BOS")
+            Key.F5 -> tildeModified(15, "\u001B[15~")
+            Key.F6 -> tildeModified(17, "\u001B[17~")
+            Key.F7 -> tildeModified(18, "\u001B[18~")
+            Key.F8 -> tildeModified(19, "\u001B[19~")
+            Key.F9 -> tildeModified(20, "\u001B[20~")
+            Key.F10 -> tildeModified(21, "\u001B[21~")
+            Key.F11 -> tildeModified(23, "\u001B[23~")
+            Key.F12 -> tildeModified(24, "\u001B[24~")
+            Key.KP_0 -> maybeAlt(if (applicationKeypad) "\u001BOp" else "0")
+            Key.KP_1 -> maybeAlt(if (applicationKeypad) "\u001BOq" else "1")
+            Key.KP_2 -> maybeAlt(if (applicationKeypad) "\u001BOr" else "2")
+            Key.KP_3 -> maybeAlt(if (applicationKeypad) "\u001BOs" else "3")
+            Key.KP_4 -> maybeAlt(if (applicationKeypad) "\u001BOt" else "4")
+            Key.KP_5 -> maybeAlt(if (applicationKeypad) "\u001BOu" else "5")
+            Key.KP_6 -> maybeAlt(if (applicationKeypad) "\u001BOv" else "6")
+            Key.KP_7 -> maybeAlt(if (applicationKeypad) "\u001BOw" else "7")
+            Key.KP_8 -> maybeAlt(if (applicationKeypad) "\u001BOx" else "8")
+            Key.KP_9 -> maybeAlt(if (applicationKeypad) "\u001BOy" else "9")
+            Key.KP_DECIMAL -> maybeAlt(if (applicationKeypad) "\u001BOn" else ".")
+            Key.KP_ADD -> maybeAlt(if (applicationKeypad) "\u001BOk" else "+")
+            Key.KP_SUBTRACT -> maybeAlt(if (applicationKeypad) "\u001BOm" else "-")
+            Key.KP_MULTIPLY -> maybeAlt(if (applicationKeypad) "\u001BOj" else "*")
+            Key.KP_DIVIDE -> maybeAlt(if (applicationKeypad) "\u001BOo" else "/")
+            Key.KP_ENTER -> maybeAlt(if (applicationKeypad) "\u001BOM" else "\r")
+        }
     }
 
     @Synchronized

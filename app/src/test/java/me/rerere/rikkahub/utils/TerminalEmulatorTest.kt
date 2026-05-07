@@ -432,4 +432,32 @@ class TerminalEmulatorTest {
         assertEquals("first", terminal.title)
     }
 
+
+    @Test
+    fun keySequencesSupportXtermModifiersAndEditingKeys() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        assertEquals("\u001B[1;5A", terminal.sequenceFor(TerminalEmulator.Key.UP, ctrl = true))
+        assertEquals("\u001B[1;4D", terminal.sequenceFor(TerminalEmulator.Key.LEFT, shift = true, alt = true))
+        assertEquals("\u001B[3;2~", terminal.sequenceFor(TerminalEmulator.Key.DELETE, shift = true))
+        assertEquals("\u001B[15;8~", terminal.sequenceFor(TerminalEmulator.Key.F5, shift = true, alt = true, ctrl = true))
+        assertEquals("\u001B[Z", terminal.sequenceFor(TerminalEmulator.Key.BACK_TAB))
+        assertEquals("\u0017", terminal.sequenceFor(TerminalEmulator.Key.BACKSPACE, ctrl = true))
+    }
+
+    @Test
+    fun c1ControlsHandleIndexNextLineReverseIndexAndTabSet() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("A\u0085B")
+        assertEquals("A", terminal.plainText(includeScrollback = false).lines()[0])
+        assertEquals("B", terminal.plainText(includeScrollback = false).lines()[1])
+
+        val tabbed = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        tabbed.feed("\u001B[3g\u001B[5G\u0088\rX\tY")
+        assertEquals("X   Y", tabbed.plainText(includeScrollback = false).lines()[0])
+
+        val reverse = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        reverse.feed("\u001B[2;1Hdown\u008Dtop")
+        assertTrue(reverse.plainText(includeScrollback = false).lines()[0].startsWith("top"))
+    }
+
 }
