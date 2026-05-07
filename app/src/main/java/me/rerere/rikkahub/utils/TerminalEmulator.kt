@@ -374,7 +374,7 @@ class TerminalEmulator(
 
     @Synchronized
     fun sequenceFor(key: Key, shift: Boolean = false, alt: Boolean = false, ctrl: Boolean = false): String {
-        fun modifier(): Int = 1 + (if (shift) 1 else 0) + (if (alt) 2 else 0) + (if (ctrl) 4 else 0)
+        fun modifier(): Int = keyModifier(shift, alt, ctrl)
         fun maybeAlt(sequence: String): String = if (alt && !shift && !ctrl) "\u001B$sequence" else sequence
         fun csiModified(final: Char, normal: String): String = if (shift || alt || ctrl) "\u001B[1;${modifier()}$final" else normal
         fun tildeModified(code: Int, normal: String): String = if (shift || alt || ctrl) "\u001B[${code};${modifier()}~" else normal
@@ -425,6 +425,32 @@ class TerminalEmulator(
             Key.KP_DIVIDE -> maybeAlt(if (applicationKeypad) "\u001BOo" else "/")
             Key.KP_ENTER -> maybeAlt(if (applicationKeypad) "\u001BOM" else "\r")
         }
+    }
+
+
+    @Synchronized
+    fun sequenceForCodePoint(codePoint: Int, shift: Boolean = false, alt: Boolean = false, ctrl: Boolean = false): String {
+        if (!Character.isValidCodePoint(codePoint)) return ""
+        val text = String(Character.toChars(codePoint))
+        val modified = shift || alt || ctrl
+        if (modifyOtherKeys > 0 && modified) {
+            val modifier = keyModifier(shift, alt, ctrl)
+            return if (formatOtherKeys == 2) {
+                "\u001B[${codePoint};${modifier}u"
+            } else {
+                "\u001B[27;${modifier};${codePoint}~"
+            }
+        }
+        return when {
+            ctrl && codePoint in 'a'.code..'z'.code -> ((codePoint - 'a'.code + 1).toChar()).toString()
+            ctrl && codePoint in 'A'.code..'Z'.code -> ((codePoint - 'A'.code + 1).toChar()).toString()
+            alt -> "\u001B$text"
+            else -> text
+        }
+    }
+
+    private fun keyModifier(shift: Boolean, alt: Boolean, ctrl: Boolean): Int {
+        return 1 + (if (shift) 1 else 0) + (if (alt) 2 else 0) + (if (ctrl) 4 else 0)
     }
 
     @Synchronized

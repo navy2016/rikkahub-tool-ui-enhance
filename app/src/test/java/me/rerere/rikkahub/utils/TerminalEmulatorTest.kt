@@ -757,4 +757,23 @@ class TerminalEmulatorTest {
         assertEquals("[<65;1;1M", terminal.sequenceForMouse(wheelDown))
     }
 
+
+    @Test
+    fun modifyOtherKeysFormatsPrintableCharacterInputs() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        assertEquals("a", terminal.sequenceForCodePoint('a'.code))
+        assertEquals("\u0001", terminal.sequenceForCodePoint('a'.code, ctrl = true))
+        assertEquals("\u001Ba", terminal.sequenceForCodePoint('a'.code, alt = true))
+
+        terminal.feed("\u001B[?1039h")
+        assertEquals("\u001B[27;5;97~", terminal.sequenceForCodePoint('a'.code, ctrl = true))
+        assertEquals("\u001B[27;7;65~", terminal.sequenceForCodePoint('A'.code, shift = true, alt = true))
+
+        terminal.feed("\u001B[?1061h")
+        assertEquals("\u001B[97;5u", terminal.sequenceForCodePoint('a'.code, ctrl = true))
+
+        terminal.feed("\u001B[?1039l")
+        assertEquals("\u0001", terminal.sequenceForCodePoint('a'.code, ctrl = true))
+    }
+
 }
