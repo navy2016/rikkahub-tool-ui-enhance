@@ -677,7 +677,7 @@ class TerminalEmulatorTest {
         terminal.feed("\u001B[2J\u001B[1;1HABCD\u001B[2;1HEFGH\u001B[90;2;3;9;30\$x")
         lines = terminal.plainText(includeScrollback = false).lines()
         assertEquals("ABCD", lines[0])
-        assertEquals("EFZZ", lines[1])
+        assertEquals("EF" + "Z".repeat(18), lines[1])
     }
 
 }
