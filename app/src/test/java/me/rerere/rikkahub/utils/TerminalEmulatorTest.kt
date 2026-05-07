@@ -357,7 +357,7 @@ class TerminalEmulatorTest {
         terminal.feed((1..8).joinToString("\n") { "line$it" })
         assertTrue(terminal.plainText(includeScrollback = true).contains("line1"))
         terminal.feed("\u001B[3J")
-        assertFalse(terminal.plainText(includeScrollback = true).contains("line1"))
+        assertTrue(!terminal.plainText(includeScrollback = true).contains("line1"))
         assertTrue(terminal.plainText(includeScrollback = false).contains("line8"))
 
         assertEquals("1", terminal.sequenceFor(TerminalEmulator.Key.KP_1))
