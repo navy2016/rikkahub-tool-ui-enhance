@@ -60,6 +60,54 @@ enum class ControlInput {
     CTRL_RIGHT_BRACKET,
     CTRL_CARET,
     CTRL_UNDERSCORE,
+    ALT_SPACE,
+    ALT_A,
+    ALT_B,
+    ALT_C,
+    ALT_D,
+    ALT_E,
+    ALT_F,
+    ALT_G,
+    ALT_H,
+    ALT_I,
+    ALT_J,
+    ALT_K,
+    ALT_L,
+    ALT_M,
+    ALT_N,
+    ALT_O,
+    ALT_P,
+    ALT_Q,
+    ALT_R,
+    ALT_S,
+    ALT_T,
+    ALT_U,
+    ALT_V,
+    ALT_W,
+    ALT_X,
+    ALT_Y,
+    ALT_Z,
+    ALT_0,
+    ALT_1,
+    ALT_2,
+    ALT_3,
+    ALT_4,
+    ALT_5,
+    ALT_6,
+    ALT_7,
+    ALT_8,
+    ALT_9,
+    ALT_MINUS,
+    ALT_EQUALS,
+    ALT_LEFT_BRACKET,
+    ALT_RIGHT_BRACKET,
+    ALT_BACKSLASH,
+    ALT_SEMICOLON,
+    ALT_APOSTROPHE,
+    ALT_COMMA,
+    ALT_PERIOD,
+    ALT_SLASH,
+    ALT_GRAVE,
     TAB,
     BACK_TAB,
     ALT_TAB,
@@ -243,6 +291,54 @@ internal fun controlInputBytes(control: ControlInput): ByteArray {
         ControlInput.CTRL_RIGHT_BRACKET -> byteArrayOf(0x1D)
         ControlInput.CTRL_CARET -> byteArrayOf(0x1E)
         ControlInput.CTRL_UNDERSCORE -> byteArrayOf(0x1F)
+        ControlInput.ALT_SPACE -> alt(byteArrayOf(' '.code.toByte()))
+        ControlInput.ALT_A -> alt(byteArrayOf('a'.code.toByte()))
+        ControlInput.ALT_B -> alt(byteArrayOf('b'.code.toByte()))
+        ControlInput.ALT_C -> alt(byteArrayOf('c'.code.toByte()))
+        ControlInput.ALT_D -> alt(byteArrayOf('d'.code.toByte()))
+        ControlInput.ALT_E -> alt(byteArrayOf('e'.code.toByte()))
+        ControlInput.ALT_F -> alt(byteArrayOf('f'.code.toByte()))
+        ControlInput.ALT_G -> alt(byteArrayOf('g'.code.toByte()))
+        ControlInput.ALT_H -> alt(byteArrayOf('h'.code.toByte()))
+        ControlInput.ALT_I -> alt(byteArrayOf('i'.code.toByte()))
+        ControlInput.ALT_J -> alt(byteArrayOf('j'.code.toByte()))
+        ControlInput.ALT_K -> alt(byteArrayOf('k'.code.toByte()))
+        ControlInput.ALT_L -> alt(byteArrayOf('l'.code.toByte()))
+        ControlInput.ALT_M -> alt(byteArrayOf('m'.code.toByte()))
+        ControlInput.ALT_N -> alt(byteArrayOf('n'.code.toByte()))
+        ControlInput.ALT_O -> alt(byteArrayOf('o'.code.toByte()))
+        ControlInput.ALT_P -> alt(byteArrayOf('p'.code.toByte()))
+        ControlInput.ALT_Q -> alt(byteArrayOf('q'.code.toByte()))
+        ControlInput.ALT_R -> alt(byteArrayOf('r'.code.toByte()))
+        ControlInput.ALT_S -> alt(byteArrayOf('s'.code.toByte()))
+        ControlInput.ALT_T -> alt(byteArrayOf('t'.code.toByte()))
+        ControlInput.ALT_U -> alt(byteArrayOf('u'.code.toByte()))
+        ControlInput.ALT_V -> alt(byteArrayOf('v'.code.toByte()))
+        ControlInput.ALT_W -> alt(byteArrayOf('w'.code.toByte()))
+        ControlInput.ALT_X -> alt(byteArrayOf('x'.code.toByte()))
+        ControlInput.ALT_Y -> alt(byteArrayOf('y'.code.toByte()))
+        ControlInput.ALT_Z -> alt(byteArrayOf('z'.code.toByte()))
+        ControlInput.ALT_0 -> alt(byteArrayOf('0'.code.toByte()))
+        ControlInput.ALT_1 -> alt(byteArrayOf('1'.code.toByte()))
+        ControlInput.ALT_2 -> alt(byteArrayOf('2'.code.toByte()))
+        ControlInput.ALT_3 -> alt(byteArrayOf('3'.code.toByte()))
+        ControlInput.ALT_4 -> alt(byteArrayOf('4'.code.toByte()))
+        ControlInput.ALT_5 -> alt(byteArrayOf('5'.code.toByte()))
+        ControlInput.ALT_6 -> alt(byteArrayOf('6'.code.toByte()))
+        ControlInput.ALT_7 -> alt(byteArrayOf('7'.code.toByte()))
+        ControlInput.ALT_8 -> alt(byteArrayOf('8'.code.toByte()))
+        ControlInput.ALT_9 -> alt(byteArrayOf('9'.code.toByte()))
+        ControlInput.ALT_MINUS -> alt(byteArrayOf('-'.code.toByte()))
+        ControlInput.ALT_EQUALS -> alt(byteArrayOf('='.code.toByte()))
+        ControlInput.ALT_LEFT_BRACKET -> alt(byteArrayOf('['.code.toByte()))
+        ControlInput.ALT_RIGHT_BRACKET -> alt(byteArrayOf(']'.code.toByte()))
+        ControlInput.ALT_BACKSLASH -> alt(byteArrayOf('\\'.code.toByte()))
+        ControlInput.ALT_SEMICOLON -> alt(byteArrayOf(';'.code.toByte()))
+        ControlInput.ALT_APOSTROPHE -> alt(byteArrayOf("'".single().code.toByte()))
+        ControlInput.ALT_COMMA -> alt(byteArrayOf(','.code.toByte()))
+        ControlInput.ALT_PERIOD -> alt(byteArrayOf('.'.code.toByte()))
+        ControlInput.ALT_SLASH -> alt(byteArrayOf('/'.code.toByte()))
+        ControlInput.ALT_GRAVE -> alt(byteArrayOf('`'.code.toByte()))
         ControlInput.TAB -> byteArrayOf('\t'.code.toByte())
         ControlInput.BACK_TAB -> esc("[Z")
         ControlInput.ALT_TAB -> alt(byteArrayOf('\t'.code.toByte()))

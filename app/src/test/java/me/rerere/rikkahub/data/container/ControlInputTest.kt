@@ -70,4 +70,19 @@ class ControlInputTest {
         assertArrayEquals(byteArrayOf(0x17), controlInputBytes(ControlInput.CTRL_BACKSPACE))
         assertArrayEquals(byteArrayOf(0x1B, 0x7F), controlInputBytes(ControlInput.ALT_BACKSPACE))
     }
+
+    @Test
+    fun controlInputBytesSupportAltPrintableMetaKeys() {
+        assertArrayEquals(byteArrayOf(0x1B, ' '.code.toByte()), controlInputBytes(ControlInput.ALT_SPACE))
+        assertArrayEquals(byteArrayOf(0x1B, 'b'.code.toByte()), controlInputBytes(ControlInput.ALT_B))
+        assertArrayEquals(byteArrayOf(0x1B, 'f'.code.toByte()), controlInputBytes(ControlInput.ALT_F))
+        assertArrayEquals(byteArrayOf(0x1B, 'd'.code.toByte()), controlInputBytes(ControlInput.ALT_D))
+        assertArrayEquals(byteArrayOf(0x1B, '0'.code.toByte()), controlInputBytes(ControlInput.ALT_0))
+        assertArrayEquals(byteArrayOf(0x1B, '9'.code.toByte()), controlInputBytes(ControlInput.ALT_9))
+        assertArrayEquals(byteArrayOf(0x1B, '.'.code.toByte()), controlInputBytes(ControlInput.ALT_PERIOD))
+        assertArrayEquals(byteArrayOf(0x1B, '/'.code.toByte()), controlInputBytes(ControlInput.ALT_SLASH))
+        assertArrayEquals(byteArrayOf(0x1B, '\'.code.toByte()), controlInputBytes(ControlInput.ALT_BACKSLASH))
+        assertArrayEquals(byteArrayOf(0x1B, "'".single().code.toByte()), controlInputBytes(ControlInput.ALT_APOSTROPHE))
+        assertArrayEquals(byteArrayOf(0x1B, '`'.code.toByte()), controlInputBytes(ControlInput.ALT_GRAVE))
+    }
 }
