@@ -580,7 +580,23 @@ private fun TerminalInteractivePanel(
             AndroidKeyEvent.KEYCODE_INSERT -> Key.INSERT
             AndroidKeyEvent.KEYCODE_FORWARD_DEL -> Key.DELETE
             AndroidKeyEvent.KEYCODE_DEL -> Key.BACKSPACE
-            AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> Key.ENTER
+            AndroidKeyEvent.KEYCODE_ENTER -> Key.ENTER
+            AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> Key.KP_ENTER
+            AndroidKeyEvent.KEYCODE_NUMPAD_0 -> Key.KP_0
+            AndroidKeyEvent.KEYCODE_NUMPAD_1 -> Key.KP_1
+            AndroidKeyEvent.KEYCODE_NUMPAD_2 -> Key.KP_2
+            AndroidKeyEvent.KEYCODE_NUMPAD_3 -> Key.KP_3
+            AndroidKeyEvent.KEYCODE_NUMPAD_4 -> Key.KP_4
+            AndroidKeyEvent.KEYCODE_NUMPAD_5 -> Key.KP_5
+            AndroidKeyEvent.KEYCODE_NUMPAD_6 -> Key.KP_6
+            AndroidKeyEvent.KEYCODE_NUMPAD_7 -> Key.KP_7
+            AndroidKeyEvent.KEYCODE_NUMPAD_8 -> Key.KP_8
+            AndroidKeyEvent.KEYCODE_NUMPAD_9 -> Key.KP_9
+            AndroidKeyEvent.KEYCODE_NUMPAD_DOT -> Key.KP_DECIMAL
+            AndroidKeyEvent.KEYCODE_NUMPAD_ADD -> Key.KP_ADD
+            AndroidKeyEvent.KEYCODE_NUMPAD_SUBTRACT -> Key.KP_SUBTRACT
+            AndroidKeyEvent.KEYCODE_NUMPAD_MULTIPLY -> Key.KP_MULTIPLY
+            AndroidKeyEvent.KEYCODE_NUMPAD_DIVIDE -> Key.KP_DIVIDE
             AndroidKeyEvent.KEYCODE_TAB -> Key.TAB
             AndroidKeyEvent.KEYCODE_ESCAPE -> Key.ESCAPE
             AndroidKeyEvent.KEYCODE_F1 -> Key.F1
