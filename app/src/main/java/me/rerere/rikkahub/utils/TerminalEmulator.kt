@@ -34,6 +34,7 @@ class TerminalEmulator(
         const val MAX_ROWS = 80
         private const val MAX_CSI_LENGTH = 256
         private const val MAX_STRING_SEQUENCE = 4096
+        private const val ZERO_WIDTH_JOINER = 0x200D
     }
 
     private data class Hyperlink(val uri: String, val id: String? = null)
@@ -121,6 +122,7 @@ class TerminalEmulator(
     private var mouseProtocol = MouseProtocol.DEFAULT
     private var focusReporting = false
     private var cursorShape = CursorShape.DEFAULT
+    private var graphemeJoinPending = false
     private val clipboardRequests = mutableListOf<String>()
     private var currentHyperlink: Hyperlink? = null
     private var alternateScreen = false
@@ -169,6 +171,7 @@ class TerminalEmulator(
         mouseProtocol = MouseProtocol.DEFAULT
         focusReporting = false
         cursorShape = CursorShape.DEFAULT
+        graphemeJoinPending = false
         currentHyperlink = null
         alternateScreen = false
         lineDrawing = false
@@ -224,6 +227,7 @@ class TerminalEmulator(
         mouseProtocol = MouseProtocol.DEFAULT
         focusReporting = false
         cursorShape = CursorShape.DEFAULT
+        graphemeJoinPending = false
         currentHyperlink = null
         currentStyle = currentStyle.copy(hyperlink = null)
         lineDrawing = false
@@ -372,10 +376,16 @@ class TerminalEmulator(
     fun isFocusReportingEnabled(): Boolean = focusReporting
 
     @Synchronized
+    fun sequenceForFocus(focused: Boolean): String? {
+        return if (focusReporting) if (focused) "\u001B[I" else "\u001B[O" else null
+    }
+
+    @Synchronized
     fun modeSummary(): String = buildList {
         if (alternateScreen) add("ALT")
         if (applicationCursorKeys) add("APP-CURSOR")
         if (bracketedPaste) add("BRACKETED-PASTE")
+        if (focusReporting) add("FOCUS")
         if (mouseTracking) add(mouseModeSummary())
         if (cursorShape != CursorShape.DEFAULT) add(cursorShape.name.replace('_', '-'))
         if (originMode) add("ORIGIN")
@@ -429,7 +439,7 @@ class TerminalEmulator(
             val cell = copy[cursorRow][cursorCol]
             cell.style = cell.style.copy(inverse = !cell.style.inverse)
             if (cell.text == " " || cell.continuation) {
-                cell.text = "█"
+                cell.text = cursorGlyph()
                 cell.width = 1
                 cell.continuation = false
             }
@@ -727,10 +737,12 @@ class TerminalEmulator(
     }
 
     private fun putCodePoint(text: String, codePoint: Int) {
-        if (isCombiningCodePoint(codePoint) && cursorCol > 0) {
+        if (shouldAppendToPreviousCell(codePoint)) {
             appendToPreviousCell(text)
+            graphemeJoinPending = codePoint == ZERO_WIDTH_JOINER
             return
         }
+        graphemeJoinPending = false
         if (pendingWrap) {
             cursorCol = 0
             lineFeed()
@@ -773,6 +785,27 @@ class TerminalEmulator(
             screen[row][col + 1] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
         }
     }
+
+    private fun shouldAppendToPreviousCell(codePoint: Int): Boolean {
+        if (cursorCol <= 0) return false
+        if (codePoint == ZERO_WIDTH_JOINER) return true
+        if (graphemeJoinPending) return true
+        if (isCombiningCodePoint(codePoint)) return true
+        if (isRegionalIndicator(codePoint)) {
+            val previous = previousBaseCellText() ?: return false
+            val trailingRegionalIndicators = previous.codePoints().toArray().takeLastWhile { isRegionalIndicator(it) }.size
+            return trailingRegionalIndicators % 2 == 1
+        }
+        return false
+    }
+
+    private fun previousBaseCellText(): String? {
+        var col = cursorCol - 1
+        if (col in 0 until columns && screen[cursorRow][col].continuation) col--
+        return if (col in 0 until columns) screen[cursorRow][col].text else null
+    }
+
+    private fun isRegionalIndicator(codePoint: Int): Boolean = codePoint in 0x1F1E6..0x1F1FF
 
     private fun isCombiningCodePoint(codePoint: Int): Boolean {
         val type = Character.getType(codePoint)
@@ -1102,6 +1135,12 @@ class TerminalEmulator(
     }
 
     private fun blankLine(): Array<Cell> = Array(columns) { Cell(style = currentStyle.copy(hyperlink = currentHyperlink)) }
+
+    private fun cursorGlyph(): String = when (cursorShape) {
+        CursorShape.UNDERLINE, CursorShape.STEADY_UNDERLINE -> "▁"
+        CursorShape.BAR, CursorShape.STEADY_BAR -> "▏"
+        else -> "█"
+    }
 
     private fun mapLineDrawing(ch: Char): Char = when (ch) {
         'j' -> '┘'; 'k' -> '┐'; 'l' -> '┌'; 'm' -> '└'; 'n' -> '┼'; 'q' -> '─'; 't' -> '├'; 'u' -> '┤'; 'v' -> '┴'; 'w' -> '┬'; 'x' -> '│'

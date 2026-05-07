@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.container
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -662,6 +664,10 @@ private fun TerminalInteractivePanel(
                         if (cols != terminalColumns) terminalColumns = cols
                         if (rows != terminalRows) terminalRows = rows
                     }
+                    .onFocusChanged { focusState ->
+                        terminalEmulator.sequenceForFocus(focusState.isFocused)?.let { sequence -> sendRaw(sequence) }
+                    }
+                    .focusable()
                     .pointerInteropFilter { event ->
                         if (!terminalEmulator.isMouseTrackingEnabled()) return@pointerInteropFilter false
                         val col = (event.x.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
@@ -670,9 +676,12 @@ private fun TerminalInteractivePanel(
                             MotionEvent.ACTION_DOWN -> MouseEventType.PRESS
                             MotionEvent.ACTION_UP -> MouseEventType.RELEASE
                             MotionEvent.ACTION_MOVE -> if (event.buttonState != 0) MouseEventType.DRAG else MouseEventType.MOVE
+                            MotionEvent.ACTION_SCROLL -> MouseEventType.WHEEL
                             else -> return@pointerInteropFilter true
                         }
                         val button = when {
+                            eventType == MouseEventType.WHEEL && event.getAxisValue(MotionEvent.AXIS_VSCROLL) < 0f -> MouseButton.WHEEL_DOWN
+                            eventType == MouseEventType.WHEEL -> MouseButton.WHEEL_UP
                             eventType == MouseEventType.RELEASE -> MouseButton.RELEASE
                             event.buttonState and MotionEvent.BUTTON_SECONDARY != 0 -> MouseButton.RIGHT
                             event.buttonState and MotionEvent.BUTTON_TERTIARY != 0 -> MouseButton.MIDDLE

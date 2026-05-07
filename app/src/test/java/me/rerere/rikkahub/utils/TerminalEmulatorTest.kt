@@ -87,4 +87,53 @@ class TerminalEmulatorTest {
         assertEquals("[<0;3;2M", sequence)
     }
 
+
+    @Test
+    fun zwjFlagsSkinToneAndKeycapStayInSingleGraphemeCells() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("👨‍👩‍👧a")
+        assertTrue(terminal.plainText(includeScrollback = false).lines().first().startsWith("👨‍👩‍👧a"))
+
+        val flag = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        flag.feed("🇺🇸a")
+        assertTrue(flag.plainText(includeScrollback = false).lines().first().startsWith("🇺🇸a"))
+
+        val skinTone = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        skinTone.feed("👍🏽a")
+        assertTrue(skinTone.plainText(includeScrollback = false).lines().first().startsWith("👍🏽a"))
+
+        val keycap = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        keycap.feed("1️⃣a")
+        assertTrue(keycap.plainText(includeScrollback = false).lines().first().startsWith("1️⃣a"))
+    }
+
+    @Test
+    fun focusAndWheelReportsFollowXtermModes() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        assertEquals(null, terminal.sequenceForFocus(true))
+        terminal.feed("[?1004h")
+        assertEquals("[I", terminal.sequenceForFocus(true))
+        assertEquals("[O", terminal.sequenceForFocus(false))
+
+        terminal.feed("[?1000h[?1006h")
+        val wheel = terminal.sequenceForMouse(
+            TerminalEmulator.MouseEvent(
+                row = 0,
+                column = 0,
+                button = TerminalEmulator.MouseButton.WHEEL_DOWN,
+                type = TerminalEmulator.MouseEventType.WHEEL
+            )
+        )
+        assertEquals("[<65;1;1M", wheel)
+    }
+
+    @Test
+    fun cursorShapeUsesVisibleGlyphForBlankCells() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("[5 q")
+        assertTrue(terminal.render(includeScrollback = false).text.startsWith("▏"))
+        terminal.feed("[3 q")
+        assertTrue(terminal.render(includeScrollback = false).text.startsWith("▁"))
+    }
+
 }
