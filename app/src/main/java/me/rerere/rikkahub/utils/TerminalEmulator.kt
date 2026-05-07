@@ -1292,7 +1292,7 @@ class TerminalEmulator(
         pendingWrap = false
         val codePoint = seq.paramInt(0, 32).coerceIn(32, 0x10FFFF)
         val fillText = codePointToString(codePoint) ?: " "
-        val width = charWidth(codePoint)
+        val width = cellWidth(codePoint)
         val top = (seq.paramInt(1, 1) - 1).coerceIn(0, rows - 1)
         val left = (seq.paramInt(2, 1) - 1).coerceIn(0, columns - 1)
         val bottom = (seq.paramInt(3, rows) - 1).coerceIn(top, rows - 1)
