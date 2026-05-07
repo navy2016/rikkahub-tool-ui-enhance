@@ -771,7 +771,7 @@ class LocalTools(
                         })
                         put("renderTerminal", buildJsonObject {
                             put("type", "boolean")
-                            put("description", "read 操作是否将保留的 ANSI/TTY 输出渲染为当前终端纯文本屏幕 terminalScreen，并返回 screen lines/visible content lines/non-empty/internal-blank row counts/content edge lines/content bounds/cursor visible-line/cursor line/title/mode/cwd、query responses、OSC52 clipboard request 元数据；适合读取 vim、codex、claude、opencode 等 TUI 当前界面，默认 false")
+                            put("description", "read 操作是否将保留的 ANSI/TTY 输出渲染为当前终端纯文本屏幕 terminalScreen，并返回 screen lines/visible content lines/non-empty/internal/edge blank row counts/content edge lines/content bounds/cursor visible-line/cursor line/title/mode/cwd、query responses、OSC52 clipboard request 元数据；适合读取 vim、codex、claude、opencode 等 TUI 当前界面，默认 false")
                         })
                         put("data", buildJsonObject {
                             put("type", "string")
@@ -1041,6 +1041,8 @@ class LocalTools(
             }
             result.terminalNonEmptyRowCount?.let { put("terminalNonEmptyRowCount", JsonPrimitive(it)) }
             result.terminalInternalBlankRowCount?.let { put("terminalInternalBlankRowCount", JsonPrimitive(it)) }
+            result.terminalLeadingBlankRowCount?.let { put("terminalLeadingBlankRowCount", JsonPrimitive(it)) }
+            result.terminalTrailingBlankRowCount?.let { put("terminalTrailingBlankRowCount", JsonPrimitive(it)) }
             result.terminalFirstNonEmptyRow?.let { put("terminalFirstNonEmptyRow", JsonPrimitive(it)) }
             result.terminalLastNonEmptyRow?.let { put("terminalLastNonEmptyRow", JsonPrimitive(it)) }
             result.terminalFirstNonEmptyLine?.let { put("terminalFirstNonEmptyLine", JsonPrimitive(it)) }
@@ -1068,7 +1070,7 @@ class LocalTools(
             result.terminalClipboardRequests?.let { requests ->
                 put("terminalClipboardRequests", JsonArray(requests.map { JsonPrimitive(it) }))
             }
-            put("hint", JsonPrimitive("Default read returns only new output. Use mode=all for full retained buffer, mode=tail for recent output, or renderTerminal=true for a plain-text TUI screen snapshot with screen-line/visible-content-lines/non-empty/internal-blank-row-counts/content-edge-lines/content-bounds/cursor-visible-line/cursor-line/title/mode/cwd/query-response metadata."))
+            put("hint", JsonPrimitive("Default read returns only new output. Use mode=all for full retained buffer, mode=tail for recent output, or renderTerminal=true for a plain-text TUI screen snapshot with screen-line/visible-content-lines/non-empty/internal/edge-blank-row-counts/content-edge-lines/content-bounds/cursor-visible-line/cursor-line/title/mode/cwd/query-response metadata."))
         }
     }
 

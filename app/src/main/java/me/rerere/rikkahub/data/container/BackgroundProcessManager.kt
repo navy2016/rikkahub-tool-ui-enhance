@@ -37,6 +37,8 @@ internal data class InteractiveTerminalSnapshot(
     val nonEmptyRows: List<Int>,
     val nonEmptyRowCount: Int,
     val internalBlankRowCount: Int,
+    val leadingBlankRowCount: Int,
+    val trailingBlankRowCount: Int,
     val firstNonEmptyRow: Int?,
     val lastNonEmptyRow: Int?,
     val firstNonEmptyLine: String?,
@@ -89,6 +91,8 @@ internal fun renderInteractiveTerminalSnapshot(
         emptyList()
     }
     val internalBlankRowCount = contentHeight - nonEmptyRows.size
+    val leadingBlankRowCount = firstNonEmptyRow?.let { it - 1 } ?: safeRows
+    val trailingBlankRowCount = lastNonEmptyRow?.let { safeRows - it } ?: 0
     val visibleContent = visibleContentLines.joinToString("\n")
     val firstNonEmptyLine = firstNonEmptyRow?.let { row -> screenLines.getOrNull(row - 1) }
     val lastNonEmptyLine = lastNonEmptyRow?.let { row -> screenLines.getOrNull(row - 1) }
@@ -113,6 +117,8 @@ internal fun renderInteractiveTerminalSnapshot(
         nonEmptyRows = nonEmptyRows,
         nonEmptyRowCount = nonEmptyRows.size,
         internalBlankRowCount = internalBlankRowCount,
+        leadingBlankRowCount = leadingBlankRowCount,
+        trailingBlankRowCount = trailingBlankRowCount,
         firstNonEmptyRow = firstNonEmptyRow,
         lastNonEmptyRow = lastNonEmptyRow,
         firstNonEmptyLine = firstNonEmptyLine,
@@ -887,6 +893,8 @@ class BackgroundProcessManager @Inject constructor(
         val terminalNonEmptyRows: List<Int>? = null,
         val terminalNonEmptyRowCount: Int? = null,
         val terminalInternalBlankRowCount: Int? = null,
+        val terminalLeadingBlankRowCount: Int? = null,
+        val terminalTrailingBlankRowCount: Int? = null,
         val terminalFirstNonEmptyRow: Int? = null,
         val terminalLastNonEmptyRow: Int? = null,
         val terminalFirstNonEmptyLine: String? = null,
@@ -1328,6 +1336,8 @@ class BackgroundProcessManager @Inject constructor(
             terminalNonEmptyRows = snapshot.nonEmptyRows,
             terminalNonEmptyRowCount = snapshot.nonEmptyRowCount,
             terminalInternalBlankRowCount = snapshot.internalBlankRowCount,
+            terminalLeadingBlankRowCount = snapshot.leadingBlankRowCount,
+            terminalTrailingBlankRowCount = snapshot.trailingBlankRowCount,
             terminalFirstNonEmptyRow = snapshot.firstNonEmptyRow,
             terminalLastNonEmptyRow = snapshot.lastNonEmptyRow,
             terminalFirstNonEmptyLine = snapshot.firstNonEmptyLine,
