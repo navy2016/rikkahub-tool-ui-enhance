@@ -62,6 +62,7 @@ enum class ControlInput {
     CTRL_UNDERSCORE,
     TAB,
     BACK_TAB,
+    ALT_TAB,
     ESC,
     UP,
     DOWN,
@@ -114,7 +115,10 @@ enum class ControlInput {
     ALT_INSERT,
     ALT_DELETE,
     ENTER,
+    ALT_ENTER,
     BACKSPACE,
+    CTRL_BACKSPACE,
+    ALT_BACKSPACE,
     F1,
     F2,
     F3,
@@ -126,13 +130,86 @@ enum class ControlInput {
     F9,
     F10,
     F11,
-    F12
+    F12,
+    SHIFT_F1,
+    SHIFT_F2,
+    SHIFT_F3,
+    SHIFT_F4,
+    SHIFT_F5,
+    SHIFT_F6,
+    SHIFT_F7,
+    SHIFT_F8,
+    SHIFT_F9,
+    SHIFT_F10,
+    SHIFT_F11,
+    SHIFT_F12,
+    ALT_F1,
+    ALT_F2,
+    ALT_F3,
+    ALT_F4,
+    ALT_F5,
+    ALT_F6,
+    ALT_F7,
+    ALT_F8,
+    ALT_F9,
+    ALT_F10,
+    ALT_F11,
+    ALT_F12,
+    CTRL_F1,
+    CTRL_F2,
+    CTRL_F3,
+    CTRL_F4,
+    CTRL_F5,
+    CTRL_F6,
+    CTRL_F7,
+    CTRL_F8,
+    CTRL_F9,
+    CTRL_F10,
+    CTRL_F11,
+    CTRL_F12,
+    SHIFT_CTRL_F1,
+    SHIFT_CTRL_F2,
+    SHIFT_CTRL_F3,
+    SHIFT_CTRL_F4,
+    SHIFT_CTRL_F5,
+    SHIFT_CTRL_F6,
+    SHIFT_CTRL_F7,
+    SHIFT_CTRL_F8,
+    SHIFT_CTRL_F9,
+    SHIFT_CTRL_F10,
+    SHIFT_CTRL_F11,
+    SHIFT_CTRL_F12,
+    ALT_CTRL_F1,
+    ALT_CTRL_F2,
+    ALT_CTRL_F3,
+    ALT_CTRL_F4,
+    ALT_CTRL_F5,
+    ALT_CTRL_F6,
+    ALT_CTRL_F7,
+    ALT_CTRL_F8,
+    ALT_CTRL_F9,
+    ALT_CTRL_F10,
+    ALT_CTRL_F11,
+    ALT_CTRL_F12,
+    SHIFT_ALT_CTRL_F1,
+    SHIFT_ALT_CTRL_F2,
+    SHIFT_ALT_CTRL_F3,
+    SHIFT_ALT_CTRL_F4,
+    SHIFT_ALT_CTRL_F5,
+    SHIFT_ALT_CTRL_F6,
+    SHIFT_ALT_CTRL_F7,
+    SHIFT_ALT_CTRL_F8,
+    SHIFT_ALT_CTRL_F9,
+    SHIFT_ALT_CTRL_F10,
+    SHIFT_ALT_CTRL_F11,
+    SHIFT_ALT_CTRL_F12
 }
 
 internal fun controlInputBytes(control: ControlInput): ByteArray {
     fun esc(suffix: String): ByteArray = ("\u001B" + suffix).toByteArray(Charsets.UTF_8)
     fun csiModified(final: Char, modifier: Int): ByteArray = esc("[1;${modifier}$final")
     fun tildeModified(code: Int, modifier: Int): ByteArray = esc("[${code};${modifier}~")
+    fun alt(bytes: ByteArray): ByteArray = byteArrayOf(0x1B) + bytes
     return when (control) {
         ControlInput.CTRL_SPACE -> byteArrayOf(0x00)
         ControlInput.CTRL_A -> byteArrayOf(0x01)
@@ -168,6 +245,7 @@ internal fun controlInputBytes(control: ControlInput): ByteArray {
         ControlInput.CTRL_UNDERSCORE -> byteArrayOf(0x1F)
         ControlInput.TAB -> byteArrayOf('\t'.code.toByte())
         ControlInput.BACK_TAB -> esc("[Z")
+        ControlInput.ALT_TAB -> alt(byteArrayOf('\t'.code.toByte()))
         ControlInput.ESC -> byteArrayOf(0x1B)
         ControlInput.UP -> esc("[A")
         ControlInput.DOWN -> esc("[B")
@@ -220,7 +298,10 @@ internal fun controlInputBytes(control: ControlInput): ByteArray {
         ControlInput.ALT_INSERT -> tildeModified(2, 3)
         ControlInput.ALT_DELETE -> tildeModified(3, 3)
         ControlInput.ENTER -> byteArrayOf('\n'.code.toByte())
+        ControlInput.ALT_ENTER -> alt(byteArrayOf('\r'.code.toByte()))
         ControlInput.BACKSPACE -> byteArrayOf(0x7F)
+        ControlInput.CTRL_BACKSPACE -> byteArrayOf(0x17)
+        ControlInput.ALT_BACKSPACE -> alt(byteArrayOf(0x7F))
         ControlInput.F1 -> esc("OP")
         ControlInput.F2 -> esc("OQ")
         ControlInput.F3 -> esc("OR")
@@ -233,6 +314,78 @@ internal fun controlInputBytes(control: ControlInput): ByteArray {
         ControlInput.F10 -> esc("[21~")
         ControlInput.F11 -> esc("[23~")
         ControlInput.F12 -> esc("[24~")
+        ControlInput.SHIFT_F1 -> csiModified('P', 2)
+        ControlInput.SHIFT_F2 -> csiModified('Q', 2)
+        ControlInput.SHIFT_F3 -> csiModified('R', 2)
+        ControlInput.SHIFT_F4 -> csiModified('S', 2)
+        ControlInput.SHIFT_F5 -> tildeModified(15, 2)
+        ControlInput.SHIFT_F6 -> tildeModified(17, 2)
+        ControlInput.SHIFT_F7 -> tildeModified(18, 2)
+        ControlInput.SHIFT_F8 -> tildeModified(19, 2)
+        ControlInput.SHIFT_F9 -> tildeModified(20, 2)
+        ControlInput.SHIFT_F10 -> tildeModified(21, 2)
+        ControlInput.SHIFT_F11 -> tildeModified(23, 2)
+        ControlInput.SHIFT_F12 -> tildeModified(24, 2)
+        ControlInput.ALT_F1 -> csiModified('P', 3)
+        ControlInput.ALT_F2 -> csiModified('Q', 3)
+        ControlInput.ALT_F3 -> csiModified('R', 3)
+        ControlInput.ALT_F4 -> csiModified('S', 3)
+        ControlInput.ALT_F5 -> tildeModified(15, 3)
+        ControlInput.ALT_F6 -> tildeModified(17, 3)
+        ControlInput.ALT_F7 -> tildeModified(18, 3)
+        ControlInput.ALT_F8 -> tildeModified(19, 3)
+        ControlInput.ALT_F9 -> tildeModified(20, 3)
+        ControlInput.ALT_F10 -> tildeModified(21, 3)
+        ControlInput.ALT_F11 -> tildeModified(23, 3)
+        ControlInput.ALT_F12 -> tildeModified(24, 3)
+        ControlInput.CTRL_F1 -> csiModified('P', 5)
+        ControlInput.CTRL_F2 -> csiModified('Q', 5)
+        ControlInput.CTRL_F3 -> csiModified('R', 5)
+        ControlInput.CTRL_F4 -> csiModified('S', 5)
+        ControlInput.CTRL_F5 -> tildeModified(15, 5)
+        ControlInput.CTRL_F6 -> tildeModified(17, 5)
+        ControlInput.CTRL_F7 -> tildeModified(18, 5)
+        ControlInput.CTRL_F8 -> tildeModified(19, 5)
+        ControlInput.CTRL_F9 -> tildeModified(20, 5)
+        ControlInput.CTRL_F10 -> tildeModified(21, 5)
+        ControlInput.CTRL_F11 -> tildeModified(23, 5)
+        ControlInput.CTRL_F12 -> tildeModified(24, 5)
+        ControlInput.SHIFT_CTRL_F1 -> csiModified('P', 6)
+        ControlInput.SHIFT_CTRL_F2 -> csiModified('Q', 6)
+        ControlInput.SHIFT_CTRL_F3 -> csiModified('R', 6)
+        ControlInput.SHIFT_CTRL_F4 -> csiModified('S', 6)
+        ControlInput.SHIFT_CTRL_F5 -> tildeModified(15, 6)
+        ControlInput.SHIFT_CTRL_F6 -> tildeModified(17, 6)
+        ControlInput.SHIFT_CTRL_F7 -> tildeModified(18, 6)
+        ControlInput.SHIFT_CTRL_F8 -> tildeModified(19, 6)
+        ControlInput.SHIFT_CTRL_F9 -> tildeModified(20, 6)
+        ControlInput.SHIFT_CTRL_F10 -> tildeModified(21, 6)
+        ControlInput.SHIFT_CTRL_F11 -> tildeModified(23, 6)
+        ControlInput.SHIFT_CTRL_F12 -> tildeModified(24, 6)
+        ControlInput.ALT_CTRL_F1 -> csiModified('P', 7)
+        ControlInput.ALT_CTRL_F2 -> csiModified('Q', 7)
+        ControlInput.ALT_CTRL_F3 -> csiModified('R', 7)
+        ControlInput.ALT_CTRL_F4 -> csiModified('S', 7)
+        ControlInput.ALT_CTRL_F5 -> tildeModified(15, 7)
+        ControlInput.ALT_CTRL_F6 -> tildeModified(17, 7)
+        ControlInput.ALT_CTRL_F7 -> tildeModified(18, 7)
+        ControlInput.ALT_CTRL_F8 -> tildeModified(19, 7)
+        ControlInput.ALT_CTRL_F9 -> tildeModified(20, 7)
+        ControlInput.ALT_CTRL_F10 -> tildeModified(21, 7)
+        ControlInput.ALT_CTRL_F11 -> tildeModified(23, 7)
+        ControlInput.ALT_CTRL_F12 -> tildeModified(24, 7)
+        ControlInput.SHIFT_ALT_CTRL_F1 -> csiModified('P', 8)
+        ControlInput.SHIFT_ALT_CTRL_F2 -> csiModified('Q', 8)
+        ControlInput.SHIFT_ALT_CTRL_F3 -> csiModified('R', 8)
+        ControlInput.SHIFT_ALT_CTRL_F4 -> csiModified('S', 8)
+        ControlInput.SHIFT_ALT_CTRL_F5 -> tildeModified(15, 8)
+        ControlInput.SHIFT_ALT_CTRL_F6 -> tildeModified(17, 8)
+        ControlInput.SHIFT_ALT_CTRL_F7 -> tildeModified(18, 8)
+        ControlInput.SHIFT_ALT_CTRL_F8 -> tildeModified(19, 8)
+        ControlInput.SHIFT_ALT_CTRL_F9 -> tildeModified(20, 8)
+        ControlInput.SHIFT_ALT_CTRL_F10 -> tildeModified(21, 8)
+        ControlInput.SHIFT_ALT_CTRL_F11 -> tildeModified(23, 8)
+        ControlInput.SHIFT_ALT_CTRL_F12 -> tildeModified(24, 8)
     }
 }
 

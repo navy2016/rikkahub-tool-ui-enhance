@@ -56,4 +56,18 @@ class ControlInputTest {
         assertArrayEquals("\u001B[3;5~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.CTRL_DELETE))
         assertArrayEquals("\u001B[3;3~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_DELETE))
     }
+
+    @Test
+    fun controlInputBytesSupportModifiedFunctionAndEditingKeys() {
+        assertArrayEquals("\u001B[1;2P".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_F1))
+        assertArrayEquals("\u001B[1;3S".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_F4))
+        assertArrayEquals("\u001B[15;5~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.CTRL_F5))
+        assertArrayEquals("\u001B[21;6~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_CTRL_F10))
+        assertArrayEquals("\u001B[23;7~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_CTRL_F11))
+        assertArrayEquals("\u001B[24;8~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_ALT_CTRL_F12))
+        assertArrayEquals(byteArrayOf(0x1B, '\t'.code.toByte()), controlInputBytes(ControlInput.ALT_TAB))
+        assertArrayEquals(byteArrayOf(0x1B, '\r'.code.toByte()), controlInputBytes(ControlInput.ALT_ENTER))
+        assertArrayEquals(byteArrayOf(0x17), controlInputBytes(ControlInput.CTRL_BACKSPACE))
+        assertArrayEquals(byteArrayOf(0x1B, 0x7F), controlInputBytes(ControlInput.ALT_BACKSPACE))
+    }
 }
