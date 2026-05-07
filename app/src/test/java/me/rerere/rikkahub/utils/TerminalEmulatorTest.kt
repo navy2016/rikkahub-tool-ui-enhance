@@ -336,14 +336,14 @@ class TerminalEmulatorTest {
     fun cursorTabulationUsesConfiguredTabStopsInBothDirections() {
         val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
         terminal.feed("\u001B[3g\u001B[5G\u001BH\u001B[10G\u001BH")
-        terminal.feed("\r\u001B[IX\u001B[IZ\u001B[ZQ")
+        terminal.feed("\r\u001B[IX\u001B[IZ\u001B[2ZQ")
         assertEquals("    Q    Z", terminal.plainText(includeScrollback = false).lines()[0])
     }
 
     @Test
     fun private1048SaveRestoreCursorReportsStateIndependently() {
         val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
-        terminal.feed("A\u001B[1;5H\u001B[?1048h\u001B[?1048\$pB\u001B[?1048lC\u001B[?1048\$p")
+        terminal.feed("A\u001B[1;5H\u001B[?1048h\u001B[?1048\$p\u001B[1;6HB\u001B[?1048lC\u001B[?1048\$p")
         val line = terminal.plainText(includeScrollback = false).lines()[0]
         assertEquals('C', line[4])
         assertEquals('B', line[5])
