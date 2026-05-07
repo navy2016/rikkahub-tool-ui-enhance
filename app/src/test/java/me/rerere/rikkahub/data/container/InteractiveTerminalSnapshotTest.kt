@@ -9,9 +9,9 @@ class InteractiveTerminalSnapshotTest {
     fun renderInteractiveTerminalSnapshotConvertsAnsiOutputToPlainScreen() {
         val bytes = "hello\u001B[2J\u001B[Htop\u001B[2;5Hmenu".toByteArray(Charsets.UTF_8)
 
-        val snapshot = renderInteractiveTerminalSnapshot(bytes, columns = 12, rows = 6)
+        val snapshot = renderInteractiveTerminalSnapshot(bytes, columns = 20, rows = 6)
 
-        assertEquals(12, snapshot.columns)
+        assertEquals(20, snapshot.columns)
         assertEquals(6, snapshot.rows)
         assertEquals("", snapshot.modes)
         val lines = snapshot.screen.lines()
