@@ -36,6 +36,7 @@ internal data class InteractiveTerminalSnapshot(
     val visibleContentLines: List<String>,
     val nonEmptyRows: List<Int>,
     val nonEmptyRowCount: Int,
+    val internalBlankRowCount: Int,
     val firstNonEmptyRow: Int?,
     val lastNonEmptyRow: Int?,
     val firstNonEmptyLine: String?,
@@ -87,6 +88,7 @@ internal fun renderInteractiveTerminalSnapshot(
     } else {
         emptyList()
     }
+    val internalBlankRowCount = contentHeight - nonEmptyRows.size
     val visibleContent = visibleContentLines.joinToString("\n")
     val firstNonEmptyLine = firstNonEmptyRow?.let { row -> screenLines.getOrNull(row - 1) }
     val lastNonEmptyLine = lastNonEmptyRow?.let { row -> screenLines.getOrNull(row - 1) }
@@ -110,6 +112,7 @@ internal fun renderInteractiveTerminalSnapshot(
         visibleContentLines = visibleContentLines,
         nonEmptyRows = nonEmptyRows,
         nonEmptyRowCount = nonEmptyRows.size,
+        internalBlankRowCount = internalBlankRowCount,
         firstNonEmptyRow = firstNonEmptyRow,
         lastNonEmptyRow = lastNonEmptyRow,
         firstNonEmptyLine = firstNonEmptyLine,
@@ -883,6 +886,7 @@ class BackgroundProcessManager @Inject constructor(
         val terminalVisibleContentLines: List<String>? = null,
         val terminalNonEmptyRows: List<Int>? = null,
         val terminalNonEmptyRowCount: Int? = null,
+        val terminalInternalBlankRowCount: Int? = null,
         val terminalFirstNonEmptyRow: Int? = null,
         val terminalLastNonEmptyRow: Int? = null,
         val terminalFirstNonEmptyLine: String? = null,
@@ -1323,6 +1327,7 @@ class BackgroundProcessManager @Inject constructor(
             terminalVisibleContentLines = snapshot.visibleContentLines,
             terminalNonEmptyRows = snapshot.nonEmptyRows,
             terminalNonEmptyRowCount = snapshot.nonEmptyRowCount,
+            terminalInternalBlankRowCount = snapshot.internalBlankRowCount,
             terminalFirstNonEmptyRow = snapshot.firstNonEmptyRow,
             terminalLastNonEmptyRow = snapshot.lastNonEmptyRow,
             terminalFirstNonEmptyLine = snapshot.firstNonEmptyLine,
