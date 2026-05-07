@@ -239,14 +239,14 @@ class TerminalEmulatorTest {
 
         val custom = TerminalEmulator(initialColumns = 20, initialRows = 6)
         custom.feed("\u001B[3g") // clear all default tab stops
-        custom.feed("abc\u001BH") // HTS at column 3
+        custom.feed("\u001B[4G\u001BH") // HTS at zero-based column 3
         custom.feed("\rX\tY")
         assertEquals("X  Y", custom.plainText(includeScrollback = false).lines()[0])
 
         val ctc = TerminalEmulator(initialColumns = 20, initialRows = 6)
-        ctc.feed("\u001B[3gabc\u001B[W\rZ\tQ")
+        ctc.feed("\u001B[3g\u001B[4G\u001B[W\rZ\tQ")
         assertEquals("Z  Q", ctc.plainText(includeScrollback = false).lines()[0])
-        ctc.feed("\u001B[2W\rR\tS")
+        ctc.feed("\u001B[4G\u001B[2W\r\u001B[KR\tS")
         assertEquals("R                  S", ctc.plainText(includeScrollback = false).lines()[0])
     }
 
@@ -256,7 +256,7 @@ class TerminalEmulatorTest {
         terminal.feed("]10;rgb:ffff/0000/0000]10;?")
         assertEquals(listOf("]10;rgb:ffff/0000/0000"), terminal.drainResponses())
         terminal.feed("]110;]10;?")
-        assertEquals(listOf("]10;rgb:0000/e575/75da"), terminal.drainResponses())
+        assertEquals(listOf("]10;rgb:0000/e6e6/7676"), terminal.drainResponses())
 
         terminal.feed("]4;2;rgb:0000/ffff/0000]4;2;?")
         assertEquals(listOf("]4;2;rgb:0000/ffff/0000"), terminal.drainResponses())
