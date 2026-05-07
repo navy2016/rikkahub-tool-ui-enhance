@@ -128,6 +128,7 @@ class TerminalEmulator(
     private var applicationCursorKeys = false
     private var applicationKeypad = false
     private var insertMode = false
+    private var newlineMode = false
     private var bracketedPaste = false
     private var mouseTracking = false
     private var mouseTrackingMode = MouseTrackingMode.OFF
@@ -138,6 +139,10 @@ class TerminalEmulator(
     private var synchronizedOutput = false
     private var alternateScroll = false
     private var metaSendsEscape = false
+    private var modifyCursorKeys = 0
+    private var modifyFunctionKeys = 0
+    private var modifyOtherKeys = 0
+    private var formatOtherKeys = 0
     private var graphemeJoinPending = false
     private var lastGraphicText: String = ""
     private var lastGraphicCodePoint: Int = 0
@@ -202,6 +207,7 @@ class TerminalEmulator(
         applicationCursorKeys = false
         applicationKeypad = false
         insertMode = false
+        newlineMode = false
         bracketedPaste = false
         mouseTracking = false
         mouseTrackingMode = MouseTrackingMode.OFF
@@ -212,6 +218,10 @@ class TerminalEmulator(
         synchronizedOutput = false
         alternateScroll = false
         metaSendsEscape = false
+        modifyCursorKeys = 0
+        modifyFunctionKeys = 0
+        modifyOtherKeys = 0
+        formatOtherKeys = 0
         graphemeJoinPending = false
         lastGraphicText = ""
         lastGraphicCodePoint = 0
@@ -269,6 +279,7 @@ class TerminalEmulator(
         applicationCursorKeys = false
         applicationKeypad = false
         insertMode = false
+        newlineMode = false
         bracketedPaste = false
         mouseTracking = false
         mouseTrackingMode = MouseTrackingMode.OFF
@@ -279,6 +290,10 @@ class TerminalEmulator(
         synchronizedOutput = false
         alternateScroll = false
         metaSendsEscape = false
+        modifyCursorKeys = 0
+        modifyFunctionKeys = 0
+        modifyOtherKeys = 0
+        formatOtherKeys = 0
         graphemeJoinPending = false
         lastGraphicText = ""
         lastGraphicCodePoint = 0
@@ -611,7 +626,7 @@ class TerminalEmulator(
             }
             '\n' -> {
                 pendingWrap = false
-                cursorCol = 0
+                if (newlineMode) cursorCol = 0
                 lineFeed()
             }
             '\u000E' -> lineDrawing = true
@@ -1218,7 +1233,7 @@ class TerminalEmulator(
 
     private fun ansiModeReportValue(code: Int): Int = when (code) {
         4 -> if (insertMode) 1 else 2
-        20 -> 2 // automatic newline mode is not currently enabled
+        20 -> if (newlineMode) 1 else 2
         else -> 0
     }
 
@@ -1238,8 +1253,12 @@ class TerminalEmulator(
         1015 -> if (mouseProtocol == MouseProtocol.URXVT) 1 else 2
         1007 -> if (alternateScroll) 1 else 2
         1034 -> if (metaSendsEscape) 1 else 2
+        1036 -> if (modifyCursorKeys > 0) 1 else 2
+        1039 -> if (modifyOtherKeys > 0) 1 else 2
         1047, 1049 -> if (alternateScreen) 1 else 2
         1048 -> if (cursorSaveMode) 1 else 2
+        1050, 1051, 1052, 1053 -> if (modifyFunctionKeys == code - 1049) 1 else 2
+        1060, 1061 -> if (formatOtherKeys == code - 1059) 1 else 2
         2004 -> if (bracketedPaste) 1 else 2
         2026 -> if (synchronizedOutput) 1 else 2
         else -> 0
@@ -1275,6 +1294,7 @@ class TerminalEmulator(
         params.forEach { code ->
             when (code) {
                 4 -> insertMode = enabled
+                20 -> newlineMode = enabled
             }
         }
         pendingWrap = false
@@ -1308,6 +1328,8 @@ class TerminalEmulator(
                 1004 -> focusReporting = enabled
                 1007 -> alternateScroll = enabled
                 1034 -> metaSendsEscape = enabled
+                1036 -> modifyCursorKeys = if (enabled) 1 else 0
+                1039 -> modifyOtherKeys = if (enabled) 1 else 0
                 1048 -> {
                     if (enabled) {
                         saveCursor()
@@ -1317,6 +1339,8 @@ class TerminalEmulator(
                         cursorSaveMode = false
                     }
                 }
+                1050, 1051, 1052, 1053 -> modifyFunctionKeys = if (enabled) code - 1049 else 0
+                1060, 1061 -> formatOtherKeys = if (enabled) code - 1059 else 0
                 2004 -> bracketedPaste = enabled
                 2026 -> synchronizedOutput = enabled
             }

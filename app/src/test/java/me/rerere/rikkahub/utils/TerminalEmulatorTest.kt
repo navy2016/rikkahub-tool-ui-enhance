@@ -460,4 +460,28 @@ class TerminalEmulatorTest {
         assertTrue(reverse.plainText(includeScrollback = false).lines()[0].contains("top"))
     }
 
+
+    @Test
+    fun ansiNewlineModeControlsLineFeedCarriageReturnAndReportsState() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("AB\u001B[1D\nC")
+        assertEquals("AB", terminal.plainText(includeScrollback = false).lines()[0])
+        assertEquals(" C", terminal.plainText(includeScrollback = false).lines()[1])
+        terminal.feed("\u001B[20h\u001B[20\$p\u001B[20l\u001B[20\$p")
+        assertEquals(listOf("\u001B[20;1\$y", "\u001B[20;2\$y"), terminal.drainResponses())
+    }
+
+    @Test
+    fun xtermKeyboardOptionModesAreTrackedAndReported() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[?1036h\u001B[?1036\$p\u001B[?1036l\u001B[?1036\$p")
+        assertEquals(listOf("\u001B[?1036;1\$y", "\u001B[?1036;2\$y"), terminal.drainResponses())
+
+        terminal.feed("\u001B[?1052h\u001B[?1052\$p\u001B[?1053\$p")
+        assertEquals(listOf("\u001B[?1052;1\$y", "\u001B[?1053;2\$y"), terminal.drainResponses())
+
+        terminal.feed("\u001B[?1061h\u001B[?1061\$p\u001B[?1060\$p")
+        assertEquals(listOf("\u001B[?1061;1\$y", "\u001B[?1060;2\$y"), terminal.drainResponses())
+    }
+
 }
