@@ -51,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -69,8 +70,12 @@ import me.rerere.rikkahub.data.container.ProcessStatus
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.utils.TerminalEmulator
 import me.rerere.rikkahub.utils.TerminalEmulator.Key
+import me.rerere.rikkahub.utils.TerminalEmulator.MouseButton
+import me.rerere.rikkahub.utils.TerminalEmulator.MouseEvent
+import me.rerere.rikkahub.utils.TerminalEmulator.MouseEventType
 import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.compose.koinInject
+import android.view.MotionEvent
 import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -454,6 +459,8 @@ private fun TerminalInteractivePanel(
     var rawInputMode by remember { mutableStateOf(false) }
     var terminalColumns by remember { mutableIntStateOf(80) }
     var terminalRows by remember { mutableIntStateOf(24) }
+    var terminalCellWidthPx by remember { mutableIntStateOf(7) }
+    var terminalCellHeightPx by remember { mutableIntStateOf(14) }
 
     LaunchedEffect(processId) {
         terminalEmulator.reset()
@@ -562,6 +569,10 @@ private fun TerminalInteractivePanel(
             terminalEmulator.drainResponses().forEach { response ->
                 bgManager.sendInput(processId, response, appendNewline = false)
             }
+            terminalEmulator.drainClipboardRequests().forEach { clipboardText ->
+                context.writeClipboardText(clipboardText)
+                terminalStatus = "OSC52 已复制到剪贴板"
+            }
             terminalText = terminalEmulator.render()
             terminalModeSummary = terminalEmulator.modeSummary()
             if (autoScroll) {
@@ -644,10 +655,33 @@ private fun TerminalInteractivePanel(
                     .background(terminalBackground, if (fullscreen) RoundedCornerShape(0.dp) else RoundedCornerShape(8.dp))
                     .padding(if (fullscreen) 6.dp else 10.dp)
                     .onSizeChanged { size ->
-                        val cols = (size.width / 7).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
-                        val rows = (size.height / 14).coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
+                        terminalCellWidthPx = 7
+                        terminalCellHeightPx = 14
+                        val cols = (size.width / terminalCellWidthPx).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
+                        val rows = (size.height / terminalCellHeightPx).coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
                         if (cols != terminalColumns) terminalColumns = cols
                         if (rows != terminalRows) terminalRows = rows
+                    }
+                    .pointerInteropFilter { event ->
+                        if (!terminalEmulator.isMouseTrackingEnabled()) return@pointerInteropFilter false
+                        val col = (event.x.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
+                        val row = (event.y.toInt() / terminalCellHeightPx).coerceIn(0, terminalRows - 1)
+                        val eventType = when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN -> MouseEventType.PRESS
+                            MotionEvent.ACTION_UP -> MouseEventType.RELEASE
+                            MotionEvent.ACTION_MOVE -> if (event.buttonState != 0) MouseEventType.DRAG else MouseEventType.MOVE
+                            else -> return@pointerInteropFilter true
+                        }
+                        val button = when {
+                            eventType == MouseEventType.RELEASE -> MouseButton.RELEASE
+                            event.buttonState and MotionEvent.BUTTON_SECONDARY != 0 -> MouseButton.RIGHT
+                            event.buttonState and MotionEvent.BUTTON_TERTIARY != 0 -> MouseButton.MIDDLE
+                            else -> MouseButton.LEFT
+                        }
+                        terminalEmulator.sequenceForMouse(MouseEvent(row = row, column = col, button = button, type = eventType))?.let { sequence ->
+                            sendRaw(sequence)
+                        }
+                        true
                     }
                     .verticalScroll(outputScroll)
             ) {

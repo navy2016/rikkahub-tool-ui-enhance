@@ -12,6 +12,7 @@ import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.util.Base64
 import kotlin.math.max
 import kotlin.math.min
 
@@ -35,6 +36,8 @@ class TerminalEmulator(
         private const val MAX_STRING_SEQUENCE = 4096
     }
 
+    private data class Hyperlink(val uri: String, val id: String? = null)
+
     private data class Style(
         val fg: Color = Color(0xFF00E676),
         val bg: Color? = null,
@@ -44,10 +47,33 @@ class TerminalEmulator(
         val underline: Boolean = false,
         val inverse: Boolean = false,
         val concealed: Boolean = false,
-        val strike: Boolean = false
+        val strike: Boolean = false,
+        val hyperlink: Hyperlink? = null
     )
 
-    private data class Cell(var ch: Char = ' ', var style: Style = Style())
+    private data class Cell(
+        var text: String = " ",
+        var style: Style = Style(),
+        var width: Int = 1,
+        var continuation: Boolean = false
+    )
+
+    enum class CursorShape { DEFAULT, BLOCK, STEADY_BLOCK, UNDERLINE, STEADY_UNDERLINE, BAR, STEADY_BAR }
+
+    enum class MouseButton { LEFT, MIDDLE, RIGHT, RELEASE, WHEEL_UP, WHEEL_DOWN, WHEEL_LEFT, WHEEL_RIGHT }
+    enum class MouseEventType { PRESS, RELEASE, DRAG, MOVE, WHEEL }
+    data class MouseEvent(
+        val row: Int,
+        val column: Int,
+        val button: MouseButton = MouseButton.LEFT,
+        val type: MouseEventType = MouseEventType.PRESS,
+        val shift: Boolean = false,
+        val alt: Boolean = false,
+        val ctrl: Boolean = false
+    )
+
+    private enum class MouseProtocol { DEFAULT, UTF8, SGR, URXVT }
+    private enum class MouseTrackingMode { OFF, X10, NORMAL, BUTTON_EVENT, ANY_EVENT }
     enum class Key {
         UP, DOWN, LEFT, RIGHT, HOME, END, PAGE_UP, PAGE_DOWN, INSERT, DELETE,
         F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12
@@ -91,7 +117,12 @@ class TerminalEmulator(
     private var applicationCursorKeys = false
     private var bracketedPaste = false
     private var mouseTracking = false
+    private var mouseTrackingMode = MouseTrackingMode.OFF
+    private var mouseProtocol = MouseProtocol.DEFAULT
     private var focusReporting = false
+    private var cursorShape = CursorShape.DEFAULT
+    private val clipboardRequests = mutableListOf<String>()
+    private var currentHyperlink: Hyperlink? = null
     private var alternateScreen = false
     private var lineDrawing = false
     private var scrollTop = 0
@@ -123,6 +154,7 @@ class TerminalEmulator(
         oscBuffer.clear()
         oscEscSeen = false
         pendingResponses.clear()
+        clipboardRequests.clear()
         resetDecoder()
         pendingUtf8 = ByteArray(0)
         cursorVisible = true
@@ -133,7 +165,11 @@ class TerminalEmulator(
         applicationCursorKeys = false
         bracketedPaste = false
         mouseTracking = false
+        mouseTrackingMode = MouseTrackingMode.OFF
+        mouseProtocol = MouseProtocol.DEFAULT
         focusReporting = false
+        cursorShape = CursorShape.DEFAULT
+        currentHyperlink = null
         alternateScreen = false
         lineDrawing = false
         scrollTop = 0
@@ -184,7 +220,12 @@ class TerminalEmulator(
         applicationCursorKeys = false
         bracketedPaste = false
         mouseTracking = false
+        mouseTrackingMode = MouseTrackingMode.OFF
+        mouseProtocol = MouseProtocol.DEFAULT
         focusReporting = false
+        cursorShape = CursorShape.DEFAULT
+        currentHyperlink = null
+        currentStyle = currentStyle.copy(hyperlink = null)
         lineDrawing = false
         scrollTop = 0
         scrollBottom = rows - 1
@@ -218,7 +259,17 @@ class TerminalEmulator(
 
     @Synchronized
     fun feed(text: String) {
-        text.forEach { feedChar(it) }
+        var index = 0
+        while (index < text.length) {
+            val codePoint = Character.codePointAt(text, index)
+            val chars = String(Character.toChars(codePoint))
+            if (parserState == ParserState.NORMAL && Character.charCount(codePoint) > 1) {
+                putCodePoint(chars, codePoint)
+            } else {
+                chars.forEach { feedChar(it) }
+            }
+            index += Character.charCount(codePoint)
+        }
     }
 
     @Synchronized
@@ -228,6 +279,17 @@ class TerminalEmulator(
         pendingResponses.clear()
         return result
     }
+
+    @Synchronized
+    fun drainClipboardRequests(): List<String> {
+        if (clipboardRequests.isEmpty()) return emptyList()
+        val result = clipboardRequests.toList()
+        clipboardRequests.clear()
+        return result
+    }
+
+    @Synchronized
+    fun cursorShape(): CursorShape = cursorShape
 
     @Synchronized
     fun sequenceFor(key: Key): String = when (key) {
@@ -264,6 +326,49 @@ class TerminalEmulator(
     fun isMouseTrackingEnabled(): Boolean = mouseTracking
 
     @Synchronized
+    fun mouseModeSummary(): String = when (mouseTrackingMode) {
+        MouseTrackingMode.OFF -> ""
+        MouseTrackingMode.X10 -> "MOUSE-X10"
+        MouseTrackingMode.NORMAL -> "MOUSE"
+        MouseTrackingMode.BUTTON_EVENT -> "MOUSE-BUTTON"
+        MouseTrackingMode.ANY_EVENT -> "MOUSE-ANY"
+    } + if (mouseProtocol == MouseProtocol.SGR && mouseTrackingMode != MouseTrackingMode.OFF) "/SGR" else ""
+
+    @Synchronized
+    fun sequenceForMouse(event: MouseEvent): String? {
+        if (mouseTrackingMode == MouseTrackingMode.OFF) return null
+        if (event.type == MouseEventType.MOVE && mouseTrackingMode != MouseTrackingMode.ANY_EVENT) return null
+        if (event.type == MouseEventType.DRAG && mouseTrackingMode !in setOf(MouseTrackingMode.BUTTON_EVENT, MouseTrackingMode.ANY_EVENT)) return null
+        if (event.type == MouseEventType.RELEASE && mouseTrackingMode == MouseTrackingMode.X10) return null
+        val col = (event.column + 1).coerceIn(1, columns)
+        val row = (event.row + 1).coerceIn(1, rows)
+        var code = when (event.button) {
+            MouseButton.LEFT -> 0
+            MouseButton.MIDDLE -> 1
+            MouseButton.RIGHT -> 2
+            MouseButton.RELEASE -> 3
+            MouseButton.WHEEL_UP -> 64
+            MouseButton.WHEEL_DOWN -> 65
+            MouseButton.WHEEL_LEFT -> 66
+            MouseButton.WHEEL_RIGHT -> 67
+        }
+        if (event.type == MouseEventType.RELEASE) code = 3
+        if (event.type == MouseEventType.DRAG) code += 32
+        if (event.shift) code += 4
+        if (event.alt) code += 8
+        if (event.ctrl) code += 16
+        return when (mouseProtocol) {
+            MouseProtocol.SGR -> "\u001B[<${code};${col};${row}${if (event.type == MouseEventType.RELEASE) 'm' else 'M'}"
+            else -> buildString {
+                append("\u001B[M")
+                append((32 + code).coerceIn(32, 255).toChar())
+                append((32 + col).coerceIn(32, 255).toChar())
+                append((32 + row).coerceIn(32, 255).toChar())
+            }
+        }
+    }
+
+    @Synchronized
     fun isFocusReportingEnabled(): Boolean = focusReporting
 
     @Synchronized
@@ -271,7 +376,8 @@ class TerminalEmulator(
         if (alternateScreen) add("ALT")
         if (applicationCursorKeys) add("APP-CURSOR")
         if (bracketedPaste) add("BRACKETED-PASTE")
-        if (mouseTracking) add("MOUSE")
+        if (mouseTracking) add(mouseModeSummary())
+        if (cursorShape != CursorShape.DEFAULT) add(cursorShape.name.replace('_', '-'))
         if (originMode) add("ORIGIN")
     }.joinToString(" · ")
 
@@ -289,7 +395,7 @@ class TerminalEmulator(
     fun plainText(includeScrollback: Boolean = true): String {
         val active = screenWithCursor(drawCursor = false)
         val lines = if (includeScrollback && !alternateScreen) scrollback.toList() + active else active
-        return lines.joinToString("\n") { line -> line.joinToString("") { it.ch.toString() }.trimEnd() }
+        return lines.joinToString("\n") { line -> line.joinToString("") { if (it.continuation) "" else it.text }.trimEnd() }
     }
 
     private fun resetDecoder() {
@@ -322,19 +428,27 @@ class TerminalEmulator(
         if (drawCursor && cursorVisible && cursorRow in 0 until rows && cursorCol in 0 until columns) {
             val cell = copy[cursorRow][cursorCol]
             cell.style = cell.style.copy(inverse = !cell.style.inverse)
-            if (cell.ch == ' ') cell.ch = '█'
+            if (cell.text == " " || cell.continuation) {
+                cell.text = "█"
+                cell.width = 1
+                cell.continuation = false
+            }
         }
         return copy
     }
 
     private fun AnnotatedString.Builder.appendStyledLine(line: Array<Cell>) {
-        val last = line.indexOfLast { it.ch != ' ' }.coerceAtLeast(0)
+        val last = line.indexOfLast { !it.continuation && it.text != " " }.coerceAtLeast(0)
         var i = 0
         while (i <= last) {
             val style = line[i].style
             var j = i + 1
             while (j <= last && line[j].style == style) j++
-            withStyle(style.toSpanStyle()) { for (k in i until j) append(line[k].ch) }
+            val start = length
+            withStyle(style.toSpanStyle()) { for (k in i until j) if (!line[k].continuation) append(line[k].text) }
+            style.hyperlink?.let { link ->
+                addStringAnnotation(tag = "URL", annotation = link.uri, start = start, end = length)
+            }
             i = j
         }
     }
@@ -458,13 +572,39 @@ class TerminalEmulator(
         if (sep > 0) {
             val code = text.substring(0, sep).toIntOrNull()
             val value = text.substring(sep + 1)
-            if (code == 0 || code == 1 || code == 2) {
-                title = value.take(MAX_STRING_SEQUENCE)
+            when (code) {
+                0, 1, 2 -> title = value.take(MAX_STRING_SEQUENCE)
+                8 -> applyHyperlinkOsc(value)
+                52 -> applyClipboardOsc(value)
             }
         }
         oscBuffer.clear()
         oscEscSeen = false
         parserState = ParserState.NORMAL
+    }
+
+    private fun applyClipboardOsc(value: String) {
+        val payload = value.substringAfter(';', missingDelimiterValue = "")
+        if (payload.isBlank() || payload == "?") return
+        runCatching {
+            String(Base64.getDecoder().decode(payload), Charsets.UTF_8)
+        }.getOrNull()?.take(MAX_STRING_SEQUENCE)?.let { clipboardRequests.add(it) }
+    }
+
+    private fun applyHyperlinkOsc(value: String) {
+        val secondSep = value.indexOf(';')
+        if (secondSep < 0) return
+        val params = value.substring(0, secondSep)
+        val uri = value.substring(secondSep + 1)
+        currentHyperlink = if (uri.isEmpty()) {
+            null
+        } else {
+            val id = params.split(':', ';').firstNotNullOfOrNull { part ->
+                part.substringAfter("id=", missingDelimiterValue = "").takeIf { it.isNotEmpty() }
+            }
+            Hyperlink(uri.take(MAX_STRING_SEQUENCE), id)
+        }
+        currentStyle = currentStyle.copy(hyperlink = currentHyperlink)
     }
 
     private fun handleStringTerminatedBySt(ch: Char) {
@@ -565,7 +705,7 @@ class TerminalEmulator(
             'S' -> repeat(seq.paramInt(0, 1)) { scrollUp() }
             'T' -> repeat(seq.paramInt(0, 1)) { scrollDown() }
             'Z' -> moveCursor(col = (cursorCol - seq.paramInt(0, 1) * 8).coerceAtLeast(0))
-            'b' -> repeat(seq.paramInt(0, 1)) { if (cursorCol > 0) putChar(screen[cursorRow][cursorCol - 1].ch) }
+            'b' -> repeat(seq.paramInt(0, 1)) { if (cursorCol > 0) screen[cursorRow][cursorCol - 1].text.firstOrNull()?.let { putChar(it) } }
             'c' -> if (seq.privateMarker != '>' && (seq.params.isEmpty() || seq.paramZero(0) == 0)) pendingResponses.add("[?1;2c")
             'd' -> {
                 val targetRow = seq.paramInt(0, 1) - 1
@@ -574,7 +714,7 @@ class TerminalEmulator(
             }
             'n' -> handleDeviceStatusReport(seq.paramZero(0))
             'g' -> Unit
-            'q' -> Unit
+            'q' -> if (seq.intermediates == " ") setCursorShape(seq.paramZero(0))
             'p' -> if (seq.intermediates == "!") softReset()
             'r' -> setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
             'h' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), true)
@@ -583,19 +723,77 @@ class TerminalEmulator(
     }
 
     private fun putChar(ch: Char) {
+        putCodePoint(ch.toString(), ch.code)
+    }
+
+    private fun putCodePoint(text: String, codePoint: Int) {
+        if (isCombiningCodePoint(codePoint) && cursorCol > 0) {
+            appendToPreviousCell(text)
+            return
+        }
         if (pendingWrap) {
             cursorCol = 0
             lineFeed()
             pendingWrap = false
         }
-        screen[cursorRow][cursorCol].ch = ch
-        screen[cursorRow][cursorCol].style = currentStyle
-        if (cursorCol == columns - 1) {
+        val width = codePointCellWidth(codePoint)
+        if (width == 0) return
+        if (width == 2 && cursorCol == columns - 1) {
+            screen[cursorRow][cursorCol] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+            cursorCol = 0
+            lineFeed()
+        }
+        clearCellForWrite(cursorRow, cursorCol)
+        screen[cursorRow][cursorCol] = Cell(text, currentStyle.copy(hyperlink = currentHyperlink), width, continuation = false)
+        if (width == 2 && cursorCol + 1 < columns) {
+            screen[cursorRow][cursorCol + 1] = Cell("", currentStyle.copy(hyperlink = currentHyperlink), 0, continuation = true)
+        }
+        if (cursorCol + width >= columns) {
+            cursorCol = columns - 1
             pendingWrap = wraparound
         } else {
-            cursorCol++
+            cursorCol += width
             pendingWrap = false
         }
+    }
+
+    private fun appendToPreviousCell(text: String) {
+        var col = cursorCol - 1
+        if (col in 0 until columns && screen[cursorRow][col].continuation) col--
+        if (col in 0 until columns) {
+            screen[cursorRow][col].text += text
+        }
+    }
+
+    private fun clearCellForWrite(row: Int, col: Int) {
+        if (screen[row][col].continuation && col > 0) {
+            screen[row][col - 1] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+        }
+        if (col + 1 < columns && screen[row][col + 1].continuation) {
+            screen[row][col + 1] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+        }
+    }
+
+    private fun isCombiningCodePoint(codePoint: Int): Boolean {
+        val type = Character.getType(codePoint)
+        return type == Character.NON_SPACING_MARK.toInt() ||
+            type == Character.COMBINING_SPACING_MARK.toInt() ||
+            type == Character.ENCLOSING_MARK.toInt() ||
+            codePoint in 0xFE00..0xFE0F ||
+            codePoint in 0xE0100..0xE01EF ||
+            codePoint in 0x1F3FB..0x1F3FF
+    }
+
+    private fun codePointCellWidth(codePoint: Int): Int {
+        if (codePoint == 0) return 0
+        if (codePoint < 32 || codePoint in 0x7F..0x9F) return 0
+        if (isCombiningCodePoint(codePoint)) return 0
+        return if (
+            codePoint in 0x1100..0x115F || codePoint in 0x2329..0x232A || codePoint in 0x2E80..0xA4CF ||
+            codePoint in 0xAC00..0xD7A3 || codePoint in 0xF900..0xFAFF || codePoint in 0xFE10..0xFE19 ||
+            codePoint in 0xFE30..0xFE6F || codePoint in 0xFF00..0xFF60 || codePoint in 0xFFE0..0xFFE6 ||
+            codePoint in 0x1F000..0x1FAFF || codePoint in 0x20000..0x3FFFD
+        ) 2 else 1
     }
 
     private fun lineFeed() {
@@ -657,8 +855,8 @@ class TerminalEmulator(
     private fun eraseLine(mode: Int) {
         pendingWrap = false
         when (mode) {
-            0 -> for (c in cursorCol until columns) screen[cursorRow][c] = Cell(style = currentStyle)
-            1 -> for (c in 0..cursorCol) screen[cursorRow][c] = Cell(style = currentStyle)
+            0 -> for (c in cursorCol until columns) screen[cursorRow][c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+            1 -> for (c in 0..cursorCol) screen[cursorRow][c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
             2 -> screen[cursorRow] = blankLine()
         }
     }
@@ -688,7 +886,7 @@ class TerminalEmulator(
         val n = count.coerceIn(1, available)
         val line = screen[cursorRow]
         for (c in columns - 1 downTo cursorCol + n) line[c] = line[c - n].copy()
-        for (c in cursorCol until min(columns, cursorCol + n)) line[c] = Cell(style = currentStyle)
+        for (c in cursorCol until min(columns, cursorCol + n)) line[c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
     }
 
     private fun deleteChars(count: Int) {
@@ -698,7 +896,7 @@ class TerminalEmulator(
         val n = count.coerceIn(1, available)
         val line = screen[cursorRow]
         for (c in cursorCol until columns - n) line[c] = line[c + n].copy()
-        for (c in max(cursorCol, columns - n) until columns) line[c] = Cell(style = currentStyle)
+        for (c in max(cursorCol, columns - n) until columns) line[c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
     }
 
     private fun eraseChars(count: Int) {
@@ -706,7 +904,7 @@ class TerminalEmulator(
         val available = columns - cursorCol
         if (available <= 0) return
         val n = count.coerceIn(1, available)
-        for (c in cursorCol until cursorCol + n) screen[cursorRow][c] = Cell(style = currentStyle)
+        for (c in cursorCol until cursorCol + n) screen[cursorRow][c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
     }
 
     private fun setScrollRegion(topOneBased: Int, bottomOneBased: Int) {
@@ -743,11 +941,35 @@ class TerminalEmulator(
                 12 -> Unit
                 25 -> cursorVisible = enabled
                 47, 1047, 1049 -> setAlternateScreen(enabled, clear = code == 1049)
-                1000, 1002, 1003, 1005, 1006, 1015 -> mouseTracking = enabled
+                1000 -> setMouseMode(if (enabled) MouseTrackingMode.NORMAL else MouseTrackingMode.OFF)
+                1002 -> setMouseMode(if (enabled) MouseTrackingMode.BUTTON_EVENT else MouseTrackingMode.OFF)
+                1003 -> setMouseMode(if (enabled) MouseTrackingMode.ANY_EVENT else MouseTrackingMode.OFF)
+                1005 -> if (enabled) mouseProtocol = MouseProtocol.UTF8 else mouseProtocol = MouseProtocol.DEFAULT
+                1006 -> if (enabled) mouseProtocol = MouseProtocol.SGR else mouseProtocol = MouseProtocol.DEFAULT
+                1015 -> if (enabled) mouseProtocol = MouseProtocol.URXVT else mouseProtocol = MouseProtocol.DEFAULT
                 1004 -> focusReporting = enabled
                 1048 -> if (enabled) saveCursor() else restoreCursor()
                 2004 -> bracketedPaste = enabled
             }
+        }
+    }
+
+    private fun setMouseMode(mode: MouseTrackingMode) {
+        mouseTrackingMode = mode
+        mouseTracking = mode != MouseTrackingMode.OFF
+        if (!mouseTracking) mouseProtocol = MouseProtocol.DEFAULT
+    }
+
+    private fun setCursorShape(code: Int) {
+        cursorShape = when (code) {
+            0 -> CursorShape.DEFAULT
+            1 -> CursorShape.BLOCK
+            2 -> CursorShape.STEADY_BLOCK
+            3 -> CursorShape.UNDERLINE
+            4 -> CursorShape.STEADY_UNDERLINE
+            5 -> CursorShape.BAR
+            6 -> CursorShape.STEADY_BAR
+            else -> cursorShape
         }
     }
 
@@ -863,14 +1085,15 @@ class TerminalEmulator(
         val rawFgColor = if (inverse) bg ?: Color(0xFF101010) else fg
         val fgColor = if (concealed) bg ?: Color.Transparent else rawFgColor
         val bgColor = if (inverse) fg else bg
+        val linkUnderline = hyperlink != null
         val textDecoration = when {
-            underline && strike -> TextDecoration.Underline + TextDecoration.LineThrough
-            underline -> TextDecoration.Underline
+            (underline || linkUnderline) && strike -> TextDecoration.Underline + TextDecoration.LineThrough
+            underline || linkUnderline -> TextDecoration.Underline
             strike -> TextDecoration.LineThrough
             else -> TextDecoration.None
         }
         return SpanStyle(
-            color = if (faint) fgColor.copy(alpha = 0.72f) else fgColor,
+            color = if (hyperlink != null) Color(0xFF64B5F6) else if (faint) fgColor.copy(alpha = 0.72f) else fgColor,
             background = bgColor ?: Color.Transparent,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
             fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
@@ -878,7 +1101,7 @@ class TerminalEmulator(
         )
     }
 
-    private fun blankLine(): Array<Cell> = Array(columns) { Cell(style = currentStyle) }
+    private fun blankLine(): Array<Cell> = Array(columns) { Cell(style = currentStyle.copy(hyperlink = currentHyperlink)) }
 
     private fun mapLineDrawing(ch: Char): Char = when (ch) {
         'j' -> '┘'; 'k' -> '┐'; 'l' -> '┌'; 'm' -> '└'; 'n' -> '┼'; 'q' -> '─'; 't' -> '├'; 'u' -> '┤'; 'v' -> '┴'; 'w' -> '┬'; 'x' -> '│'
