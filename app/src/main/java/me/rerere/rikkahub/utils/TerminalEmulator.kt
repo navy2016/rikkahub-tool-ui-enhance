@@ -118,7 +118,9 @@ class TerminalEmulator(
         private set
     var workingDirectoryUri: String = ""
         private set
+    private var savedTitle: String = ""
     private var cursorVisible = true
+    private var reverseVideo = false
     private var wraparound = true
     private var pendingWrap = false
     private var originMode = false
@@ -188,10 +190,12 @@ class TerminalEmulator(
         resetDecoder()
         pendingUtf8 = ByteArray(0)
         cursorVisible = true
+        reverseVideo = false
         resetTabStops()
         wraparound = true
         pendingWrap = false
         title = ""
+        savedTitle = ""
         workingDirectoryUri = ""
         originMode = false
         applicationCursorKeys = false
@@ -257,6 +261,7 @@ class TerminalEmulator(
         resetDecoder()
         pendingUtf8 = ByteArray(0)
         cursorVisible = true
+        reverseVideo = false
         wraparound = true
         pendingWrap = false
         originMode = false
@@ -458,6 +463,7 @@ class TerminalEmulator(
     @Synchronized
     fun modeSummary(): String = buildList {
         if (alternateScreen) add("ALT")
+        if (reverseVideo) add("REVERSE-VIDEO")
         if (applicationCursorKeys) add("APP-CURSOR")
         if (applicationKeypad) add("APP-KEYPAD")
         if (bracketedPaste) add("BRACKETED-PASTE")
@@ -1190,6 +1196,7 @@ class TerminalEmulator(
 
     private fun privateModeReportValue(code: Int): Int = when (code) {
         1 -> if (applicationCursorKeys) 1 else 2
+        5 -> if (reverseVideo) 1 else 2
         6 -> if (originMode) 1 else 2
         7 -> if (wraparound) 1 else 2
         25 -> if (cursorVisible) 1 else 2
@@ -1223,9 +1230,16 @@ class TerminalEmulator(
 
     private fun handleWindowOperation(seq: CsiSequence) {
         when (seq.paramZero(0)) {
+            11 -> pendingResponses.add("\u001B[1t")
+            13 -> pendingResponses.add("\u001B[3;0;0t")
             14 -> pendingResponses.add("\u001B[4;${rows * 14};${columns * 7}t")
             16 -> pendingResponses.add("\u001B[6;14;7t")
             18 -> pendingResponses.add("\u001B[8;${rows};${columns}t")
+            19 -> pendingResponses.add("\u001B[9;${rows};${columns}t")
+            20 -> pendingResponses.add("\u001B]L;${title}\u001B\\")
+            21 -> pendingResponses.add("\u001B]l;${title}\u001B\\")
+            22 -> savedTitle = title
+            23 -> title = savedTitle
         }
     }
 
@@ -1242,6 +1256,7 @@ class TerminalEmulator(
         params.forEach { code ->
             when (code) {
                 1 -> applicationCursorKeys = enabled
+                5 -> reverseVideo = enabled
                 6 -> {
                     originMode = enabled
                     cursorRow = if (enabled) scrollTop else 0
@@ -1419,9 +1434,10 @@ class TerminalEmulator(
     }
 
     private fun Style.toSpanStyle(): SpanStyle {
-        val rawFgColor = if (inverse) bg ?: Color(0xFF101010) else fg
+        val effectiveInverse = inverse.xor(reverseVideo)
+        val rawFgColor = if (effectiveInverse) bg ?: Color(0xFF101010) else fg
         val fgColor = if (concealed) bg ?: Color.Transparent else rawFgColor
-        val bgColor = if (inverse) fg else bg
+        val bgColor = if (effectiveInverse) fg else bg
         val linkUnderline = hyperlink != null
         val textDecoration = when {
             (underline || linkUnderline) && strike -> TextDecoration.Underline + TextDecoration.LineThrough

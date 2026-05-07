@@ -395,4 +395,41 @@ class TerminalEmulatorTest {
         assertTrue(terminal.plainText(includeScrollback = false).contains("curlyplain"))
     }
 
+
+    @Test
+    fun reverseVideoPrivateModeIsTrackedReportedAndSummarized() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[?5h\u001B[?5\$p")
+        assertTrue(terminal.modeSummary().contains("REVERSE-VIDEO"))
+        assertEquals(listOf("\u001B[?5;1\$y"), terminal.drainResponses())
+        terminal.feed("\u001B[?5l\u001B[?5\$p")
+        assertEquals(listOf("\u001B[?5;2\$y"), terminal.drainResponses())
+    }
+
+    @Test
+    fun xtwinopsWindowAndTitleReportsAreSupported() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B]0;main-title\u0007")
+        terminal.feed("\u001B[11t\u001B[13t\u001B[19t\u001B[20t\u001B[21t")
+        assertEquals(
+            listOf(
+                "\u001B[1t",
+                "\u001B[3;0;0t",
+                "\u001B[9;6;20t",
+                "\u001B]L;main-title\u001B\\",
+                "\u001B]l;main-title\u001B\\"
+            ),
+            terminal.drainResponses()
+        )
+    }
+
+    @Test
+    fun xtwinopsTitleSaveAndRestoreAreSupported() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B]0;first\u0007\u001B[22t\u001B]0;second\u0007")
+        assertEquals("second", terminal.title)
+        terminal.feed("\u001B[23t")
+        assertEquals("first", terminal.title)
+    }
+
 }
