@@ -84,4 +84,17 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(emptyList<Int>(), snapshot.nonEmptyRows)
         assertEquals(true, snapshot.isEmpty)
     }
+
+    @Test
+    fun renderInteractiveTerminalSnapshotIncludesCursorLineContext() {
+        val bytes = "prompt> hello world\u001B[1;15H".toByteArray(Charsets.UTF_8)
+
+        val snapshot = renderInteractiveTerminalSnapshot(bytes, columns = 20, rows = 6)
+
+        assertEquals(1, snapshot.cursorRow)
+        assertEquals(15, snapshot.cursorColumn)
+        assertEquals("prompt> hello world", snapshot.cursorLine)
+        assertEquals("prompt> hello ", snapshot.cursorLineTextBeforeCursor)
+        assertEquals("world", snapshot.cursorLineTextAfterCursor)
+    }
 }
