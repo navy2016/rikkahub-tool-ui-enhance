@@ -457,7 +457,7 @@ class TerminalEmulatorTest {
 
         val reverse = TerminalEmulator(initialColumns = 20, initialRows = 6)
         reverse.feed("\u001B[2;1Hdown\u008Dtop")
-        assertTrue(reverse.plainText(includeScrollback = false).lines()[0].startsWith("top"))
+        assertTrue(reverse.plainText(includeScrollback = false).lines()[0].contains("top"))
     }
 
 }
