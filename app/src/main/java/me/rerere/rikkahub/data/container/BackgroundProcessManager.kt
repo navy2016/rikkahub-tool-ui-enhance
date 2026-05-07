@@ -33,6 +33,9 @@ internal data class InteractiveTerminalSnapshot(
     val screen: String,
     val screenLines: List<String>,
     val nonEmptyRows: List<Int>,
+    val firstNonEmptyRow: Int?,
+    val lastNonEmptyRow: Int?,
+    val contentHeight: Int,
     val isEmpty: Boolean,
     val modes: String,
     val title: String,
@@ -64,6 +67,13 @@ internal fun renderInteractiveTerminalSnapshot(
     val nonEmptyRows = screenLines.mapIndexedNotNull { index, line ->
         if (line.isNotBlank()) index + 1 else null
     }
+    val firstNonEmptyRow = nonEmptyRows.firstOrNull()
+    val lastNonEmptyRow = nonEmptyRows.lastOrNull()
+    val contentHeight = if (firstNonEmptyRow != null && lastNonEmptyRow != null) {
+        lastNonEmptyRow - firstNonEmptyRow + 1
+    } else {
+        0
+    }
     val cursorRow = terminal.cursorRow()
     val cursorColumn = terminal.cursorColumn()
     val cursorLine = screenLines.getOrElse(cursorRow - 1) { "" }
@@ -72,6 +82,9 @@ internal fun renderInteractiveTerminalSnapshot(
         screen = screen,
         screenLines = screenLines,
         nonEmptyRows = nonEmptyRows,
+        firstNonEmptyRow = firstNonEmptyRow,
+        lastNonEmptyRow = lastNonEmptyRow,
+        contentHeight = contentHeight,
         isEmpty = nonEmptyRows.isEmpty(),
         modes = terminal.modeSummary(),
         title = terminal.title,
@@ -834,6 +847,9 @@ class BackgroundProcessManager @Inject constructor(
         val terminalScreen: String? = null,
         val terminalScreenLines: List<String>? = null,
         val terminalNonEmptyRows: List<Int>? = null,
+        val terminalFirstNonEmptyRow: Int? = null,
+        val terminalLastNonEmptyRow: Int? = null,
+        val terminalContentHeight: Int? = null,
         val terminalIsEmpty: Boolean? = null,
         val terminalModes: String? = null,
         val terminalTitle: String? = null,
@@ -1263,6 +1279,9 @@ class BackgroundProcessManager @Inject constructor(
             terminalScreen = snapshot.screen,
             terminalScreenLines = snapshot.screenLines,
             terminalNonEmptyRows = snapshot.nonEmptyRows,
+            terminalFirstNonEmptyRow = snapshot.firstNonEmptyRow,
+            terminalLastNonEmptyRow = snapshot.lastNonEmptyRow,
+            terminalContentHeight = snapshot.contentHeight,
             terminalIsEmpty = snapshot.isEmpty,
             terminalModes = snapshot.modes,
             terminalTitle = snapshot.title,

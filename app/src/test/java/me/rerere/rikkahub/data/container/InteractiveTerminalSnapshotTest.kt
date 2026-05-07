@@ -20,6 +20,9 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(6, lines.size)
         assertEquals(lines, snapshot.screenLines)
         assertEquals(listOf(1, 2), snapshot.nonEmptyRows)
+        assertEquals(1, snapshot.firstNonEmptyRow)
+        assertEquals(2, snapshot.lastNonEmptyRow)
+        assertEquals(2, snapshot.contentHeight)
         assertEquals(false, snapshot.isEmpty)
     }
 
@@ -82,6 +85,9 @@ class InteractiveTerminalSnapshotTest {
 
         assertEquals(List(6) { "" }, snapshot.screenLines)
         assertEquals(emptyList<Int>(), snapshot.nonEmptyRows)
+        assertEquals(null, snapshot.firstNonEmptyRow)
+        assertEquals(null, snapshot.lastNonEmptyRow)
+        assertEquals(0, snapshot.contentHeight)
         assertEquals(true, snapshot.isEmpty)
     }
 
@@ -96,5 +102,17 @@ class InteractiveTerminalSnapshotTest {
         assertEquals("prompt> hello world", snapshot.cursorLine)
         assertEquals("prompt> hello ", snapshot.cursorLineTextBeforeCursor)
         assertEquals("world", snapshot.cursorLineTextAfterCursor)
+    }
+
+    @Test
+    fun renderInteractiveTerminalSnapshotReportsSparseContentBounds() {
+        val bytes = "\u001B[3;4Hmiddle\u001B[6;1Hbottom".toByteArray(Charsets.UTF_8)
+
+        val snapshot = renderInteractiveTerminalSnapshot(bytes, columns = 20, rows = 6)
+
+        assertEquals(listOf(3, 6), snapshot.nonEmptyRows)
+        assertEquals(3, snapshot.firstNonEmptyRow)
+        assertEquals(6, snapshot.lastNonEmptyRow)
+        assertEquals(4, snapshot.contentHeight)
     }
 }
