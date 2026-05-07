@@ -56,4 +56,20 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(false, snapshot.cursorVisible)
         assertEquals("file://sandbox/workspace/project", snapshot.workingDirectoryUri)
     }
+
+    @Test
+    fun renderInteractiveTerminalSnapshotIncludesResponsesAndClipboardRequests() {
+        val bytes = (
+            "before" +
+                "\u001B[6n" +
+                "\u001B]52;c;aGVsbG8=\u0007" +
+                "after"
+        ).toByteArray(Charsets.UTF_8)
+
+        val snapshot = renderInteractiveTerminalSnapshot(bytes, columns = 20, rows = 6)
+
+        assertEquals(listOf("\u001B[1;6R"), snapshot.responses)
+        assertEquals(listOf("hello"), snapshot.clipboardRequests)
+        assertTrue(snapshot.screen.lines().first().contains("beforeafter"))
+    }
 }

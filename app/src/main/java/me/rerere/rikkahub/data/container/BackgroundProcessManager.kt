@@ -39,7 +39,9 @@ internal data class InteractiveTerminalSnapshot(
     val cursorColumn: Int,
     val cursorShape: String,
     val cursorVisible: Boolean,
-    val workingDirectoryUri: String
+    val workingDirectoryUri: String,
+    val responses: List<String>,
+    val clipboardRequests: List<String>
 )
 
 internal fun renderInteractiveTerminalSnapshot(
@@ -61,7 +63,9 @@ internal fun renderInteractiveTerminalSnapshot(
         cursorColumn = terminal.cursorColumn(),
         cursorShape = terminal.cursorShape().name,
         cursorVisible = terminal.isCursorVisible(),
-        workingDirectoryUri = terminal.workingDirectoryUri
+        workingDirectoryUri = terminal.workingDirectoryUri,
+        responses = terminal.drainResponses(),
+        clipboardRequests = terminal.drainClipboardRequests()
     )
 }
 
@@ -815,7 +819,9 @@ class BackgroundProcessManager @Inject constructor(
         val terminalCursorColumn: Int? = null,
         val terminalCursorShape: String? = null,
         val terminalCursorVisible: Boolean? = null,
-        val terminalWorkingDirectoryUri: String? = null
+        val terminalWorkingDirectoryUri: String? = null,
+        val terminalResponses: List<String>? = null,
+        val terminalClipboardRequests: List<String>? = null
     )
 
     /**
@@ -1236,7 +1242,9 @@ class BackgroundProcessManager @Inject constructor(
             terminalCursorColumn = snapshot.cursorColumn,
             terminalCursorShape = snapshot.cursorShape,
             terminalCursorVisible = snapshot.cursorVisible,
-            terminalWorkingDirectoryUri = snapshot.workingDirectoryUri
+            terminalWorkingDirectoryUri = snapshot.workingDirectoryUri,
+            terminalResponses = snapshot.responses,
+            terminalClipboardRequests = snapshot.clipboardRequests
         )
     }
 
