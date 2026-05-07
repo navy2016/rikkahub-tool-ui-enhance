@@ -53,6 +53,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -533,6 +541,21 @@ private fun TerminalInteractivePanel(
         sendRaw(terminalEmulator.sequenceFor(key))
     }
 
+    fun handleHardwareCharacterKey(event: KeyEvent): Boolean {
+        if (!rawInputMode || event.type != KeyEventType.KeyDown) return false
+        val codePoint = event.utf16CodePoint
+        if (codePoint == 0) return false
+        val sequence = terminalEmulator.sequenceForCodePoint(
+            codePoint = codePoint,
+            shift = event.isShiftPressed,
+            alt = event.isAltPressed,
+            ctrl = event.isCtrlPressed
+        )
+        if (sequence.isEmpty()) return false
+        sendRaw(sequence)
+        return true
+    }
+
     fun handleInputChange(value: String) {
         if (!rawInputMode) {
             input = value
@@ -780,7 +803,9 @@ private fun TerminalInteractivePanel(
             OutlinedTextField(
                 value = input,
                 onValueChange = { handleInputChange(it) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onPreviewKeyEvent { event -> handleHardwareCharacterKey(event) },
                 singleLine = true,
                 prefix = {
                     Text(
