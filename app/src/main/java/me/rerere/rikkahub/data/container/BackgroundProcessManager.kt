@@ -28,9 +28,17 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 enum class ControlInput {
+    CTRL_A,
     CTRL_C,
     CTRL_D,
+    CTRL_E,
+    CTRL_L,
+    CTRL_R,
+    CTRL_U,
+    CTRL_W,
+    CTRL_Z,
     TAB,
+    BACK_TAB,
     ESC,
     UP,
     DOWN,
@@ -530,9 +538,17 @@ class BackgroundProcessManager @Inject constructor(
         try {
             fun esc(suffix: String): ByteArray = ("\u001B" + suffix).toByteArray(Charsets.UTF_8)
             val bytes = when (control) {
+                ControlInput.CTRL_A -> byteArrayOf(0x01)
                 ControlInput.CTRL_C -> byteArrayOf(0x03)
                 ControlInput.CTRL_D -> byteArrayOf(0x04)
+                ControlInput.CTRL_E -> byteArrayOf(0x05)
+                ControlInput.CTRL_L -> byteArrayOf(0x0C)
+                ControlInput.CTRL_R -> byteArrayOf(0x12)
+                ControlInput.CTRL_U -> byteArrayOf(0x15)
+                ControlInput.CTRL_W -> byteArrayOf(0x17)
+                ControlInput.CTRL_Z -> byteArrayOf(0x1A)
                 ControlInput.TAB -> byteArrayOf('\t'.code.toByte())
+                ControlInput.BACK_TAB -> esc("[Z")
                 ControlInput.ESC -> byteArrayOf(0x1B)
                 ControlInput.UP -> esc("[A")
                 ControlInput.DOWN -> esc("[B")
@@ -559,7 +575,6 @@ class BackgroundProcessManager @Inject constructor(
                 ControlInput.F11 -> esc("[23~")
                 ControlInput.F12 -> esc("[24~")
             }
-
             record.process.outputStream.write(bytes)
             record.process.outputStream.flush()
             record.lastActivityAt = System.currentTimeMillis()

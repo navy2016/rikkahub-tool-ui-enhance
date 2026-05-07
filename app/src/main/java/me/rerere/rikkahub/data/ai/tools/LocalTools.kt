@@ -795,9 +795,17 @@ class LocalTools(
                         put("control", buildJsonObject {
                             put("type", "string")
                             put("enum", buildJsonArray {
+                                add("CTRL_A")
                                 add("CTRL_C")
                                 add("CTRL_D")
+                                add("CTRL_E")
+                                add("CTRL_L")
+                                add("CTRL_R")
+                                add("CTRL_U")
+                                add("CTRL_W")
+                                add("CTRL_Z")
                                 add("TAB")
+                                add("BACK_TAB")
                                 add("ESC")
                                 add("UP")
                                 add("DOWN")
@@ -824,7 +832,7 @@ class LocalTools(
                                 add("F11")
                                 add("F12")
                             })
-                            put("description", "input 操作时可选的控制输入；与 data 二选一")
+                            put("description", "input 操作时可选的控制输入；与 data 二选一。支持 Ctrl+A/C/D/E/L/R/U/W/Z、Tab/BackTab、方向键、Home/End、PgUp/PgDn、Ins/Del、Enter/Backspace、F1-F12")
                         })
                     },
                     required = listOf("action")

@@ -722,7 +722,12 @@ private fun TerminalInteractivePanel(
                 ) {
                     ControlChip("Ctrl+C") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_C) } }
                     ControlChip("Ctrl+D") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_D) } }
+                    ControlChip("Ctrl+Z") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_Z) } }
+                    ControlChip("Ctrl+L") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_L) } }
+                    ControlChip("Ctrl+U") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_U) } }
+                    ControlChip("Ctrl+W") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_W) } }
                     ControlChip("Tab") { scope.launch { bgManager.sendControlInput(processId, ControlInput.TAB) } }
+                    ControlChip("Shift+Tab") { scope.launch { bgManager.sendControlInput(processId, ControlInput.BACK_TAB) } }
                     ControlChip("Esc") { scope.launch { bgManager.sendControlInput(processId, ControlInput.ESC) } }
                     ControlChip("Enter") { scope.launch { bgManager.sendControlInput(processId, ControlInput.ENTER) } }
                     ControlChip("Backspace") { scope.launch { bgManager.sendControlInput(processId, ControlInput.BACKSPACE) } }
@@ -732,6 +737,9 @@ private fun TerminalInteractivePanel(
                     ControlChip("Shell→") { sendKey(Key.RIGHT) }
                     ControlChip("Home") { sendKey(Key.HOME) }
                     ControlChip("End") { sendKey(Key.END) }
+                    ControlChip("Ctrl+A") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_A) } }
+                    ControlChip("Ctrl+E") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_E) } }
+                    ControlChip("Ctrl+R") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_R) } }
                     ControlChip("PgUp") { sendKey(Key.PAGE_UP) }
                     ControlChip("PgDn") { sendKey(Key.PAGE_DOWN) }
                     ControlChip("Ins") { sendKey(Key.INSERT) }
