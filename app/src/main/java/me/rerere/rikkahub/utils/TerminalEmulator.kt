@@ -855,21 +855,23 @@ class TerminalEmulator(
     }
 
     private fun handleDcs(ch: Char) {
-        if (ch == '' || ch == '\u009C' || ch == '') {
-            if (ch == '') {
-                oscEscSeen = true
-            } else {
+        when {
+            ch == '\u0007' || ch == '\u009C' -> {
                 finishDcs()
+                return
             }
-            return
-        }
-        if (oscEscSeen && ch == '\') {
-            finishDcs()
-            return
-        }
-        if (oscEscSeen) {
-            if (dcsBuffer.length < MAX_STRING_SEQUENCE) dcsBuffer.append('')
-            oscEscSeen = false
+            ch == '\u001B' -> {
+                oscEscSeen = true
+                return
+            }
+            oscEscSeen && ch == '\\' -> {
+                finishDcs()
+                return
+            }
+            oscEscSeen -> {
+                if (dcsBuffer.length < MAX_STRING_SEQUENCE) dcsBuffer.append('\u001B')
+                oscEscSeen = false
+            }
         }
         if (dcsBuffer.length < MAX_STRING_SEQUENCE) dcsBuffer.append(ch)
     }
