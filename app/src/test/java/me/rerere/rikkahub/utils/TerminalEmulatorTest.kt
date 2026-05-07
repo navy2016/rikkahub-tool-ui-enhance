@@ -552,4 +552,26 @@ class TerminalEmulatorTest {
         assertEquals(emptyList<String>(), terminal.drainClipboardRequests())
     }
 
+
+    @Test
+    fun sgrPixelMouseModeReportsPixelCoordinatesAndModeState() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[?1000h\u001B[?1016h\u001B[?1016\$p")
+        assertEquals(listOf("\u001B[?1016;1\$y"), terminal.drainResponses())
+        assertEquals(
+            "\u001B[<0;15;29M",
+            terminal.sequenceForMouse(TerminalEmulator.MouseEvent(row = 2, column = 2))
+        )
+        assertTrue(terminal.mouseModeSummary().contains("SGR-PIXELS"))
+        terminal.feed("\u001B[?1016l\u001B[?1016\$p")
+        assertEquals(listOf("\u001B[?1016;2\$y"), terminal.drainResponses())
+    }
+
+    @Test
+    fun locatorStatusDeviceReportReturnsAvailable() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[?53n")
+        assertEquals(listOf("\u001B[?50n"), terminal.drainResponses())
+    }
+
 }

@@ -75,7 +75,7 @@ class TerminalEmulator(
         val ctrl: Boolean = false
     )
 
-    private enum class MouseProtocol { DEFAULT, UTF8, SGR, URXVT }
+    private enum class MouseProtocol { DEFAULT, UTF8, SGR, SGR_PIXELS, URXVT }
     private enum class MouseTrackingMode { OFF, X10, NORMAL, BUTTON_EVENT, ANY_EVENT }
     private enum class BaselineShift { NORMAL, SUPERSCRIPT, SUBSCRIPT }
     enum class Key {
@@ -448,6 +448,7 @@ class TerminalEmulator(
             MouseProtocol.DEFAULT -> ""
             MouseProtocol.UTF8 -> "/UTF8"
             MouseProtocol.SGR -> "/SGR"
+            MouseProtocol.SGR_PIXELS -> "/SGR-PIXELS"
             MouseProtocol.URXVT -> "/URXVT"
         }
         return mode + protocol
@@ -461,6 +462,8 @@ class TerminalEmulator(
         if (event.type == MouseEventType.RELEASE && mouseTrackingMode == MouseTrackingMode.X10) return null
         val col = (event.column + 1).coerceIn(1, columns)
         val row = (event.row + 1).coerceIn(1, rows)
+        val pixelCol = (event.column * 7 + 1).coerceAtLeast(1)
+        val pixelRow = (event.row * 14 + 1).coerceAtLeast(1)
         var code = when (event.button) {
             MouseButton.LEFT -> 0
             MouseButton.MIDDLE -> 1
@@ -478,6 +481,7 @@ class TerminalEmulator(
         if (event.ctrl) code += 16
         return when (mouseProtocol) {
             MouseProtocol.SGR -> "\u001B[<${code};${col};${row}${if (event.type == MouseEventType.RELEASE) 'm' else 'M'}"
+            MouseProtocol.SGR_PIXELS -> "\u001B[<${code};${pixelCol};${pixelRow}${if (event.type == MouseEventType.RELEASE) 'm' else 'M'}"
             MouseProtocol.URXVT -> "\u001B[${code + 32};${col};${row}M"
             else -> buildString {
                 append("\u001B[M")
@@ -1346,6 +1350,7 @@ class TerminalEmulator(
         1005 -> if (mouseProtocol == MouseProtocol.UTF8) 1 else 2
         1006 -> if (mouseProtocol == MouseProtocol.SGR) 1 else 2
         1015 -> if (mouseProtocol == MouseProtocol.URXVT) 1 else 2
+        1016 -> if (mouseProtocol == MouseProtocol.SGR_PIXELS) 1 else 2
         1007 -> if (alternateScroll) 1 else 2
         1034 -> if (metaSendsEscape) 1 else 2
         1036 -> if (modifyCursorKeys > 0) 1 else 2
@@ -1365,6 +1370,7 @@ class TerminalEmulator(
             seq.privateMarker == '?' && code == 6 -> pendingResponses.add("\u001B[?${cursorRow + 1};${cursorCol + 1}R")
             seq.privateMarker == '?' && code == 15 -> pendingResponses.add("\u001B[?13n")
             seq.privateMarker == '?' && code == 25 -> pendingResponses.add("\u001B[?20n")
+            seq.privateMarker == '?' && code == 53 -> pendingResponses.add("\u001B[?50n")
             code == 5 -> pendingResponses.add("\u001B[0n")
             code == 6 -> pendingResponses.add("\u001B[${cursorRow + 1};${cursorCol + 1}R")
         }
@@ -1443,6 +1449,7 @@ class TerminalEmulator(
                 1005 -> if (enabled) mouseProtocol = MouseProtocol.UTF8 else mouseProtocol = MouseProtocol.DEFAULT
                 1006 -> if (enabled) mouseProtocol = MouseProtocol.SGR else mouseProtocol = MouseProtocol.DEFAULT
                 1015 -> if (enabled) mouseProtocol = MouseProtocol.URXVT else mouseProtocol = MouseProtocol.DEFAULT
+                1016 -> if (enabled) mouseProtocol = MouseProtocol.SGR_PIXELS else mouseProtocol = MouseProtocol.DEFAULT
                 1004 -> focusReporting = enabled
                 1007 -> alternateScroll = enabled
                 1034 -> metaSendsEscape = enabled
