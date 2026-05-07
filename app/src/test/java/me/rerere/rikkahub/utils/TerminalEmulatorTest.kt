@@ -735,4 +735,26 @@ class TerminalEmulatorTest {
         assertEquals("plain", terminal.wrapPaste("plain"))
     }
 
+
+    @Test
+    fun alternateScrollWheelSendsCursorKeysWithoutMouseTracking() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        val wheelDown = TerminalEmulator.MouseEvent(
+            row = 0,
+            column = 0,
+            button = TerminalEmulator.MouseButton.WHEEL_DOWN,
+            type = TerminalEmulator.MouseEventType.WHEEL
+        )
+        assertEquals(null, terminal.sequenceForMouse(wheelDown))
+
+        terminal.feed("[?1049h[?1007h")
+        assertEquals("[B", terminal.sequenceForMouse(wheelDown))
+
+        terminal.feed("[?1h")
+        assertEquals("OB", terminal.sequenceForMouse(wheelDown))
+
+        terminal.feed("[?1000h[?1006h")
+        assertEquals("[<65;1;1M", terminal.sequenceForMouse(wheelDown))
+    }
+
 }

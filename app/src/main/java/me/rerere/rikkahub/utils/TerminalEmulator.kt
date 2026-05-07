@@ -459,7 +459,7 @@ class TerminalEmulator(
 
     @Synchronized
     fun sequenceForMouse(event: MouseEvent): String? {
-        if (mouseTrackingMode == MouseTrackingMode.OFF) return null
+        if (mouseTrackingMode == MouseTrackingMode.OFF) return alternateScrollSequence(event)
         if (event.type == MouseEventType.MOVE && mouseTrackingMode != MouseTrackingMode.ANY_EVENT) return null
         if (event.type == MouseEventType.DRAG && mouseTrackingMode !in setOf(MouseTrackingMode.BUTTON_EVENT, MouseTrackingMode.ANY_EVENT)) return null
         if (event.type == MouseEventType.RELEASE && mouseTrackingMode == MouseTrackingMode.X10) return null
@@ -492,6 +492,17 @@ class TerminalEmulator(
                 append((32 + col).coerceIn(32, 255).toChar())
                 append((32 + row).coerceIn(32, 255).toChar())
             }
+        }
+    }
+
+    private fun alternateScrollSequence(event: MouseEvent): String? {
+        if (!alternateScreen || !alternateScroll || event.type != MouseEventType.WHEEL) return null
+        return when (event.button) {
+            MouseButton.WHEEL_UP -> sequenceFor(Key.UP)
+            MouseButton.WHEEL_DOWN -> sequenceFor(Key.DOWN)
+            MouseButton.WHEEL_LEFT -> sequenceFor(Key.LEFT)
+            MouseButton.WHEEL_RIGHT -> sequenceFor(Key.RIGHT)
+            else -> null
         }
     }
 

@@ -679,7 +679,6 @@ private fun TerminalInteractivePanel(
                     }
                     .focusable()
                     .pointerInteropFilter { event ->
-                        if (!terminalEmulator.isMouseTrackingEnabled()) return@pointerInteropFilter false
                         val col = (event.x.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
                         val row = (event.y.toInt() / terminalCellHeightPx).coerceIn(0, terminalRows - 1)
                         val eventType = when (event.actionMasked) {
@@ -697,9 +696,9 @@ private fun TerminalInteractivePanel(
                             event.buttonState and MotionEvent.BUTTON_TERTIARY != 0 -> MouseButton.MIDDLE
                             else -> MouseButton.LEFT
                         }
-                        terminalEmulator.sequenceForMouse(MouseEvent(row = row, column = col, button = button, type = eventType))?.let { sequence ->
-                            sendRaw(sequence)
-                        }
+                        val sequence = terminalEmulator.sequenceForMouse(MouseEvent(row = row, column = col, button = button, type = eventType))
+                            ?: return@pointerInteropFilter false
+                        sendRaw(sequence)
                         true
                     }
                     .verticalScroll(outputScroll)
