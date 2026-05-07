@@ -86,7 +86,7 @@ class TerminalEmulator(
         KP_DECIMAL, KP_ADD, KP_SUBTRACT, KP_MULTIPLY, KP_DIVIDE, KP_ENTER
     }
 
-    private enum class ParserState { NORMAL, ESC, CSI, OSC, STRING_IGNORE, ESC_CHARSET_G0, ESC_CHARSET_G1 }
+    private enum class ParserState { NORMAL, ESC, CSI, OSC, DCS, STRING_IGNORE, ESC_CHARSET_G0, ESC_CHARSET_G1 }
 
     private data class CsiSequence(
         val privateMarker: Char?,
@@ -114,6 +114,7 @@ class TerminalEmulator(
     private var parserState = ParserState.NORMAL
     private var csiBuffer = StringBuilder()
     private var oscBuffer = StringBuilder()
+    private var dcsBuffer = StringBuilder()
     private var oscEscSeen = false
     var title: String = ""
         private set
@@ -188,6 +189,7 @@ class TerminalEmulator(
         parserState = ParserState.NORMAL
         csiBuffer.clear()
         oscBuffer.clear()
+        dcsBuffer.clear()
         oscEscSeen = false
         pendingResponses.clear()
         clipboardRequests.clear()
@@ -271,6 +273,7 @@ class TerminalEmulator(
         parserState = ParserState.NORMAL
         csiBuffer.clear()
         oscBuffer.clear()
+        dcsBuffer.clear()
         oscEscSeen = false
         pendingResponses.clear()
         resetDecoder()
@@ -585,6 +588,7 @@ class TerminalEmulator(
             ParserState.ESC -> handleEsc(ch)
             ParserState.CSI -> handleCsi(ch)
             ParserState.OSC -> handleOsc(ch)
+            ParserState.DCS -> handleDcs(ch)
             ParserState.STRING_IGNORE -> handleStringTerminatedBySt(ch)
             ParserState.ESC_CHARSET_G0 -> {
                 lineDrawing = ch == '0'
@@ -606,7 +610,12 @@ class TerminalEmulator(
                 oscEscSeen = false
                 parserState = ParserState.OSC
             }
-            '\u0090', '\u0098', '\u009E', '\u009F' -> {
+            '\u0090' -> {
+                dcsBuffer.clear()
+                oscEscSeen = false
+                parserState = ParserState.DCS
+            }
+            '\u0098', '\u009E', '\u009F' -> {
                 oscEscSeen = false
                 parserState = ParserState.STRING_IGNORE
             }
@@ -656,7 +665,12 @@ class TerminalEmulator(
                 oscEscSeen = false
                 parserState = ParserState.OSC
             }
-            'P', '^', '_', 'X' -> {
+            'P' -> {
+                dcsBuffer.clear()
+                oscEscSeen = false
+                parserState = ParserState.DCS
+            }
+            '^', '_', 'X' -> {
                 oscEscSeen = false
                 parserState = ParserState.STRING_IGNORE
             }
@@ -812,8 +826,13 @@ class TerminalEmulator(
     }
 
     private fun applyClipboardOsc(value: String) {
+        val selector = value.substringBefore(';', missingDelimiterValue = "c")
         val payload = value.substringAfter(';', missingDelimiterValue = "")
-        if (payload.isBlank() || payload == "?") return
+        if (payload == "?") {
+            pendingResponses.add("\u001B]52;${selector};\u0007")
+            return
+        }
+        if (payload.isBlank()) return
         runCatching {
             String(Base64.getDecoder().decode(payload), Charsets.UTF_8)
         }.getOrNull()?.take(MAX_STRING_SEQUENCE)?.let { clipboardRequests.add(it) }
@@ -833,6 +852,70 @@ class TerminalEmulator(
             Hyperlink(uri.take(MAX_STRING_SEQUENCE), id)
         }
         currentStyle = currentStyle.copy(hyperlink = currentHyperlink)
+    }
+
+    private fun handleDcs(ch: Char) {
+        if (ch == '' || ch == '\u009C' || ch == '') {
+            if (ch == '') {
+                oscEscSeen = true
+            } else {
+                finishDcs()
+            }
+            return
+        }
+        if (oscEscSeen && ch == '\') {
+            finishDcs()
+            return
+        }
+        if (oscEscSeen) {
+            if (dcsBuffer.length < MAX_STRING_SEQUENCE) dcsBuffer.append('')
+            oscEscSeen = false
+        }
+        if (dcsBuffer.length < MAX_STRING_SEQUENCE) dcsBuffer.append(ch)
+    }
+
+    private fun finishDcs() {
+        val text = dcsBuffer.toString()
+        if (text.startsWith("+q")) handleXtGetTcap(text.drop(2))
+        dcsBuffer.clear()
+        oscEscSeen = false
+        parserState = ParserState.NORMAL
+    }
+
+    private fun handleXtGetTcap(payload: String) {
+        payload.split(';')
+            .mapNotNull { encoded ->
+                val name = hexDecodeAscii(encoded)
+                if (name.isEmpty()) null else encoded to name
+            }
+            .forEach { (encoded, name) ->
+                val value = xtGetTcapValue(name)
+                if (value == null) {
+                    pendingResponses.add("\u001BP0+r${encoded}\u001B\\")
+                } else {
+                    pendingResponses.add("\u001BP1+r${encoded}=${asciiToHex(value)}\u001B\\")
+                }
+            }
+    }
+
+    private fun xtGetTcapValue(name: String): String? = when (name) {
+        "TN" -> "xterm-256color"
+        "Co", "colors" -> "256"
+        "RGB", "Tc" -> "1"
+        "Ms" -> "\u001B]52;%p1%s;%p2%s\u0007"
+        "Se" -> "\u001B[2 q"
+        "Ss" -> "\u001B[%p1%d q"
+        else -> null
+    }
+
+    private fun hexDecodeAscii(hex: String): String {
+        if (hex.length % 2 != 0) return ""
+        if (hex.any { it !in '0'..'9' && it !in 'a'..'f' && it !in 'A'..'F' }) return ""
+        return hex.chunked(2).map { it.toInt(16).toChar() }.joinToString("")
+    }
+
+    private fun asciiToHex(value: String): String = value.toByteArray(Charsets.UTF_8).joinToString("") { byte ->
+        (byte.toInt() and 0xFF).toString(16).padStart(2, '0')
     }
 
     private fun handleStringTerminatedBySt(ch: Char) {

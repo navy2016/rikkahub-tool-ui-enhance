@@ -528,4 +528,28 @@ class TerminalEmulatorTest {
         )
     }
 
+
+    @Test
+    fun xtGetTcapReportsCommonCapabilitiesAndUnknowns() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001BP+q544e;436f;524742;626164\u001B\\")
+        assertEquals(
+            listOf(
+                "\u001BP1+r544e=787465726d2d323536636f6c6f72\u001B\\",
+                "\u001BP1+r436f=323536\u001B\\",
+                "\u001BP1+r524742=31\u001B\\",
+                "\u001BP0+r626164\u001B\\"
+            ),
+            terminal.drainResponses()
+        )
+    }
+
+    @Test
+    fun osc52ClipboardQueryReturnsSafeEmptyResponse() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B]52;c;?\u0007")
+        assertEquals(listOf("\u001B]52;c;\u0007"), terminal.drainResponses())
+        assertEquals(emptyList<String>(), terminal.drainClipboardRequests())
+    }
+
 }
