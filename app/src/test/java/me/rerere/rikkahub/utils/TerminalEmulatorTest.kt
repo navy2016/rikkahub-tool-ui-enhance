@@ -280,4 +280,47 @@ class TerminalEmulatorTest {
         )
     }
 
+
+    @Test
+    fun repeatPrecedingGraphicCharacterRepeatsFullGrapheme() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("A[3b")
+        assertEquals("AAAA", terminal.plainText(includeScrollback = false).lines()[0])
+
+        val wide = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        wide.feed("中[2b")
+        assertEquals("中中中", wide.plainText(includeScrollback = false).lines()[0])
+    }
+
+    @Test
+    fun oscPaletteResetSupportsMultipleEntriesAndAliases() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("]4;1;rgb:ffff/0000/0000;2;rgb:0000/ffff/0000")
+        terminal.feed("]4;1;?]4;2;?")
+        assertEquals(
+            listOf("]4;1;rgb:ffff/0000/0000", "]4;2;rgb:0000/ffff/0000"),
+            terminal.drainResponses()
+        )
+        terminal.feed("]104;1;2]4;1;?]4;2;?")
+        assertEquals(
+            listOf("]4;1;rgb:cccc/0000/0000", "]4;2;rgb:4e4e/9a9a/0606"),
+            terminal.drainResponses()
+        )
+
+        terminal.feed("]4;3;rgb:ffff/ffff/0000]105;3]4;3;?")
+        assertEquals(listOf("]4;3;rgb:c4c4/a0a0/0000"), terminal.drainResponses())
+    }
+
+    @Test
+    fun requestModeReportsAnsiModesAndSgrBaselineControlsParse() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("[4\$p[20\$p[999\$p")
+        assertEquals(
+            listOf("[4;2\$y", "[20;2\$y", "[999;0\$y"),
+            terminal.drainResponses()
+        )
+        terminal.feed("[73msuper[74msub[75mnormal")
+        assertTrue(terminal.plainText(includeScrollback = false).contains("supersubnormal"))
+    }
+
 }

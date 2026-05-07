@@ -50,6 +50,7 @@ class TerminalEmulator(
         val concealed: Boolean = false,
         val strike: Boolean = false,
         val overline: Boolean = false,
+        val baselineShift: BaselineShift = BaselineShift.NORMAL,
         val hyperlink: Hyperlink? = null
     )
 
@@ -76,6 +77,7 @@ class TerminalEmulator(
 
     private enum class MouseProtocol { DEFAULT, UTF8, SGR, URXVT }
     private enum class MouseTrackingMode { OFF, X10, NORMAL, BUTTON_EVENT, ANY_EVENT }
+    private enum class BaselineShift { NORMAL, SUPERSCRIPT, SUBSCRIPT }
     enum class Key {
         UP, DOWN, LEFT, RIGHT, HOME, END, PAGE_UP, PAGE_DOWN, INSERT, DELETE,
         F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12
@@ -126,6 +128,8 @@ class TerminalEmulator(
     private var focusReporting = false
     private var cursorShape = CursorShape.DEFAULT
     private var graphemeJoinPending = false
+    private var lastGraphicText: String = ""
+    private var lastGraphicCodePoint: Int = 0
     private val tabStops = sortedSetOf<Int>()
     private val clipboardRequests = mutableListOf<String>()
     private var currentHyperlink: Hyperlink? = null
@@ -190,6 +194,8 @@ class TerminalEmulator(
         focusReporting = false
         cursorShape = CursorShape.DEFAULT
         graphemeJoinPending = false
+        lastGraphicText = ""
+        lastGraphicCodePoint = 0
         currentHyperlink = null
         alternateScreen = false
         lineDrawing = false
@@ -248,6 +254,8 @@ class TerminalEmulator(
         focusReporting = false
         cursorShape = CursorShape.DEFAULT
         graphemeJoinPending = false
+        lastGraphicText = ""
+        lastGraphicCodePoint = 0
         currentHyperlink = null
         currentStyle = currentStyle.copy(hyperlink = null)
         lineDrawing = false
@@ -627,6 +635,7 @@ class TerminalEmulator(
                 12 -> applyDynamicColorOsc(12, value)
                 52 -> applyClipboardOsc(value)
                 104 -> resetPaletteOsc(value)
+                105, 106, 107 -> resetPaletteOsc(value)
                 110 -> defaultForeground = defaultStyle.fg
                 111 -> defaultBackground = Color(0xFF101010)
                 112 -> cursorColor = defaultStyle.fg
@@ -819,7 +828,7 @@ class TerminalEmulator(
             'S' -> repeat(seq.paramInt(0, 1)) { scrollUp() }
             'T' -> repeat(seq.paramInt(0, 1)) { scrollDown() }
             'Z' -> moveCursor(col = (cursorCol - seq.paramInt(0, 1) * 8).coerceAtLeast(0))
-            'b' -> repeat(seq.paramInt(0, 1)) { if (cursorCol > 0) screen[cursorRow][cursorCol - 1].text.firstOrNull()?.let { putChar(it) } }
+            'b' -> repeatLastGraphic(seq.paramInt(0, 1))
             'c' -> handleDeviceAttributes(seq)
             'd' -> {
                 val targetRow = seq.paramInt(0, 1) - 1
@@ -856,6 +865,8 @@ class TerminalEmulator(
         }
         val width = codePointCellWidth(codePoint)
         if (width == 0) return
+        lastGraphicText = text
+        lastGraphicCodePoint = codePoint
         if (width == 2 && cursorCol == columns - 1) {
             screen[cursorRow][cursorCol] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
             cursorCol = 0
@@ -872,6 +883,13 @@ class TerminalEmulator(
         } else {
             cursorCol += width
             pendingWrap = false
+        }
+    }
+
+    private fun repeatLastGraphic(count: Int) {
+        if (lastGraphicText.isEmpty() || lastGraphicCodePoint == 0) return
+        repeat(count.coerceIn(1, columns * rows)) {
+            putCodePoint(lastGraphicText, lastGraphicCodePoint)
         }
     }
 
@@ -1095,11 +1113,17 @@ class TerminalEmulator(
     private fun handleRequestMode(seq: CsiSequence) {
         val code = seq.paramZero(0)
         val value = when (seq.privateMarker) {
-            "?".first() -> privateModeReportValue(code)
-            else -> 0
+            '?' -> privateModeReportValue(code)
+            else -> ansiModeReportValue(code)
         }
         val prefix = seq.privateMarker?.toString() ?: ""
         pendingResponses.add("\u001B[${prefix}${code};${value}\$y")
+    }
+
+    private fun ansiModeReportValue(code: Int): Int = when (code) {
+        4 -> 2 // insert mode is not currently enabled
+        20 -> 2 // automatic newline mode is not currently enabled
+        else -> 0
     }
 
     private fun privateModeReportValue(code: Int): Int = when (code) {
@@ -1271,6 +1295,9 @@ class TerminalEmulator(
                 }
                 53 -> currentStyle = currentStyle.copy(overline = true)
                 55 -> currentStyle = currentStyle.copy(overline = false)
+                73 -> currentStyle = currentStyle.copy(baselineShift = BaselineShift.SUPERSCRIPT)
+                74 -> currentStyle = currentStyle.copy(baselineShift = BaselineShift.SUBSCRIPT)
+                75 -> currentStyle = currentStyle.copy(baselineShift = BaselineShift.NORMAL)
                 58, 59 -> Unit
             }
             i++
