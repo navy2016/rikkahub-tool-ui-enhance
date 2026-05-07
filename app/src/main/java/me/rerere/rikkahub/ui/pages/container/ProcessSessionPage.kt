@@ -58,6 +58,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.nativeKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
@@ -86,6 +87,7 @@ import me.rerere.rikkahub.utils.TerminalEmulator.MouseEventType
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.compose.koinInject
+import android.view.KeyEvent as AndroidKeyEvent
 import android.view.MotionEvent
 import java.util.concurrent.TimeUnit
 
@@ -541,19 +543,61 @@ private fun TerminalInteractivePanel(
         sendRaw(terminalEmulator.sequenceFor(key))
     }
 
-    fun handleHardwareCharacterKey(event: KeyEvent): Boolean {
+    fun handleHardwareKey(event: KeyEvent): Boolean {
         if (!rawInputMode || event.type != KeyEventType.KeyDown) return false
+        val shift = event.isShiftPressed
+        val alt = event.isAltPressed
+        val ctrl = event.isCtrlPressed
+        val specialSequence = sequenceForHardwareSpecialKey(event, shift, alt, ctrl)
+        if (specialSequence != null) {
+            sendRaw(specialSequence)
+            return true
+        }
+
         val codePoint = event.utf16CodePoint
         if (codePoint == 0) return false
         val sequence = terminalEmulator.sequenceForCodePoint(
             codePoint = codePoint,
-            shift = event.isShiftPressed,
-            alt = event.isAltPressed,
-            ctrl = event.isCtrlPressed
+            shift = shift,
+            alt = alt,
+            ctrl = ctrl
         )
         if (sequence.isEmpty()) return false
         sendRaw(sequence)
         return true
+    }
+
+    fun sequenceForHardwareSpecialKey(event: KeyEvent, shift: Boolean, alt: Boolean, ctrl: Boolean): String? {
+        val key = when (event.nativeKeyEvent.keyCode) {
+            AndroidKeyEvent.KEYCODE_DPAD_UP -> Key.UP
+            AndroidKeyEvent.KEYCODE_DPAD_DOWN -> Key.DOWN
+            AndroidKeyEvent.KEYCODE_DPAD_LEFT -> Key.LEFT
+            AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> Key.RIGHT
+            AndroidKeyEvent.KEYCODE_MOVE_HOME -> Key.HOME
+            AndroidKeyEvent.KEYCODE_MOVE_END -> Key.END
+            AndroidKeyEvent.KEYCODE_PAGE_UP -> Key.PAGE_UP
+            AndroidKeyEvent.KEYCODE_PAGE_DOWN -> Key.PAGE_DOWN
+            AndroidKeyEvent.KEYCODE_INSERT -> Key.INSERT
+            AndroidKeyEvent.KEYCODE_FORWARD_DEL -> Key.DELETE
+            AndroidKeyEvent.KEYCODE_DEL -> Key.BACKSPACE
+            AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> Key.ENTER
+            AndroidKeyEvent.KEYCODE_TAB -> Key.TAB
+            AndroidKeyEvent.KEYCODE_ESCAPE -> Key.ESCAPE
+            AndroidKeyEvent.KEYCODE_F1 -> Key.F1
+            AndroidKeyEvent.KEYCODE_F2 -> Key.F2
+            AndroidKeyEvent.KEYCODE_F3 -> Key.F3
+            AndroidKeyEvent.KEYCODE_F4 -> Key.F4
+            AndroidKeyEvent.KEYCODE_F5 -> Key.F5
+            AndroidKeyEvent.KEYCODE_F6 -> Key.F6
+            AndroidKeyEvent.KEYCODE_F7 -> Key.F7
+            AndroidKeyEvent.KEYCODE_F8 -> Key.F8
+            AndroidKeyEvent.KEYCODE_F9 -> Key.F9
+            AndroidKeyEvent.KEYCODE_F10 -> Key.F10
+            AndroidKeyEvent.KEYCODE_F11 -> Key.F11
+            AndroidKeyEvent.KEYCODE_F12 -> Key.F12
+            else -> return null
+        }
+        return terminalEmulator.sequenceFor(key, shift = shift, alt = alt, ctrl = ctrl)
     }
 
     fun handleInputChange(value: String) {
@@ -805,7 +849,7 @@ private fun TerminalInteractivePanel(
                 onValueChange = { handleInputChange(it) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .onPreviewKeyEvent { event -> handleHardwareCharacterKey(event) },
+                    .onPreviewKeyEvent { event -> handleHardwareKey(event) },
                 singleLine = true,
                 prefix = {
                     Text(
