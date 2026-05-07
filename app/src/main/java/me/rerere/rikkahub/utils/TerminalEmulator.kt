@@ -445,12 +445,19 @@ class TerminalEmulator(
             ctrl && codePoint in 'a'.code..'z'.code -> ((codePoint - 'a'.code + 1).toChar()).toString()
             ctrl && codePoint in 'A'.code..'Z'.code -> ((codePoint - 'A'.code + 1).toChar()).toString()
             ctrl && codePoint == ' '.code -> "\u0000"
+            ctrl && codePoint == '2'.code -> "\u0000"
             ctrl && codePoint == '['.code -> "\u001B"
+            ctrl && codePoint == '3'.code -> "\u001B"
             ctrl && codePoint == '\\'.code -> "\u001C"
+            ctrl && codePoint == '4'.code -> "\u001C"
             ctrl && codePoint == ']'.code -> "\u001D"
+            ctrl && codePoint == '5'.code -> "\u001D"
             ctrl && codePoint == '^'.code -> "\u001E"
+            ctrl && codePoint == '6'.code -> "\u001E"
             ctrl && codePoint == '_'.code -> "\u001F"
+            ctrl && codePoint == '7'.code -> "\u001F"
             ctrl && codePoint == '?'.code -> "\u007F"
+            ctrl && codePoint == '8'.code -> "\u007F"
             alt -> "\u001B$text"
             else -> text
         }
