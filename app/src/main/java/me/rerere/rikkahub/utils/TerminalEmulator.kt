@@ -111,6 +111,8 @@ class TerminalEmulator(
     private var oscEscSeen = false
     var title: String = ""
         private set
+    var workingDirectoryUri: String = ""
+        private set
     private var cursorVisible = true
     private var wraparound = true
     private var pendingWrap = false
@@ -163,6 +165,7 @@ class TerminalEmulator(
         wraparound = true
         pendingWrap = false
         title = ""
+        workingDirectoryUri = ""
         originMode = false
         applicationCursorKeys = false
         bracketedPaste = false
@@ -330,13 +333,23 @@ class TerminalEmulator(
     fun isMouseTrackingEnabled(): Boolean = mouseTracking
 
     @Synchronized
-    fun mouseModeSummary(): String = when (mouseTrackingMode) {
-        MouseTrackingMode.OFF -> ""
-        MouseTrackingMode.X10 -> "MOUSE-X10"
-        MouseTrackingMode.NORMAL -> "MOUSE"
-        MouseTrackingMode.BUTTON_EVENT -> "MOUSE-BUTTON"
-        MouseTrackingMode.ANY_EVENT -> "MOUSE-ANY"
-    } + if (mouseProtocol == MouseProtocol.SGR && mouseTrackingMode != MouseTrackingMode.OFF) "/SGR" else ""
+    fun mouseModeSummary(): String {
+        if (mouseTrackingMode == MouseTrackingMode.OFF) return ""
+        val mode = when (mouseTrackingMode) {
+            MouseTrackingMode.OFF -> ""
+            MouseTrackingMode.X10 -> "MOUSE-X10"
+            MouseTrackingMode.NORMAL -> "MOUSE"
+            MouseTrackingMode.BUTTON_EVENT -> "MOUSE-BUTTON"
+            MouseTrackingMode.ANY_EVENT -> "MOUSE-ANY"
+        }
+        val protocol = when (mouseProtocol) {
+            MouseProtocol.DEFAULT -> ""
+            MouseProtocol.UTF8 -> "/UTF8"
+            MouseProtocol.SGR -> "/SGR"
+            MouseProtocol.URXVT -> "/URXVT"
+        }
+        return mode + protocol
+    }
 
     @Synchronized
     fun sequenceForMouse(event: MouseEvent): String? {
@@ -363,6 +376,7 @@ class TerminalEmulator(
         if (event.ctrl) code += 16
         return when (mouseProtocol) {
             MouseProtocol.SGR -> "\u001B[<${code};${col};${row}${if (event.type == MouseEventType.RELEASE) 'm' else 'M'}"
+            MouseProtocol.URXVT -> "\u001B[${code + 32};${col};${row}M"
             else -> buildString {
                 append("\u001B[M")
                 append((32 + code).coerceIn(32, 255).toChar())
@@ -584,6 +598,7 @@ class TerminalEmulator(
             val value = text.substring(sep + 1)
             when (code) {
                 0, 1, 2 -> title = value.take(MAX_STRING_SEQUENCE)
+                7 -> workingDirectoryUri = value.take(MAX_STRING_SEQUENCE)
                 8 -> applyHyperlinkOsc(value)
                 52 -> applyClipboardOsc(value)
             }
@@ -727,6 +742,7 @@ class TerminalEmulator(
             'q' -> if (seq.intermediates == " ") setCursorShape(seq.paramZero(0))
             'p' -> if (seq.intermediates == "!") softReset()
             'r' -> setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
+            't' -> handleWindowOperation(seq)
             'h' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), true)
             'l' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), false)
         }
@@ -957,6 +973,14 @@ class TerminalEmulator(
         }
     }
 
+    private fun handleWindowOperation(seq: CsiSequence) {
+        when (seq.paramZero(0)) {
+            14 -> pendingResponses.add("\u001B[4;${rows * 14};${columns * 7}t")
+            16 -> pendingResponses.add("\u001B[6;14;7t")
+            18 -> pendingResponses.add("\u001B[8;${rows};${columns}t")
+        }
+    }
+
     private fun setPrivateModes(params: List<Int>, enabled: Boolean) {
         params.forEach { code ->
             when (code) {
@@ -974,6 +998,7 @@ class TerminalEmulator(
                 12 -> Unit
                 25 -> cursorVisible = enabled
                 47, 1047, 1049 -> setAlternateScreen(enabled, clear = code == 1049)
+                9 -> setMouseMode(if (enabled) MouseTrackingMode.X10 else MouseTrackingMode.OFF)
                 1000 -> setMouseMode(if (enabled) MouseTrackingMode.NORMAL else MouseTrackingMode.OFF)
                 1002 -> setMouseMode(if (enabled) MouseTrackingMode.BUTTON_EVENT else MouseTrackingMode.OFF)
                 1003 -> setMouseMode(if (enabled) MouseTrackingMode.ANY_EVENT else MouseTrackingMode.OFF)

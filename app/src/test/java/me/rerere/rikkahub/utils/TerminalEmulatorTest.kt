@@ -136,4 +136,66 @@ class TerminalEmulatorTest {
         assertTrue(terminal.render(includeScrollback = false).text.startsWith("▁"))
     }
 
+
+    @Test
+    fun x10AndUrxvtMouseModesAreReportedCorrectly() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("[?9h")
+        assertEquals("MOUSE-X10", terminal.mouseModeSummary())
+        assertEquals(
+            "[M#!!",
+            terminal.sequenceForMouse(
+                TerminalEmulator.MouseEvent(
+                    row = 0,
+                    column = 0,
+                    button = TerminalEmulator.MouseButton.RIGHT,
+                    type = TerminalEmulator.MouseEventType.PRESS
+                )
+            )
+        )
+        assertEquals(
+            null,
+            terminal.sequenceForMouse(
+                TerminalEmulator.MouseEvent(
+                    row = 0,
+                    column = 0,
+                    button = TerminalEmulator.MouseButton.RELEASE,
+                    type = TerminalEmulator.MouseEventType.RELEASE
+                )
+            )
+        )
+
+        terminal.feed("[?1000h[?1015h")
+        assertEquals("MOUSE/URXVT", terminal.mouseModeSummary())
+        assertEquals(
+            "[32;3;2M",
+            terminal.sequenceForMouse(
+                TerminalEmulator.MouseEvent(
+                    row = 1,
+                    column = 2,
+                    button = TerminalEmulator.MouseButton.LEFT,
+                    type = TerminalEmulator.MouseEventType.PRESS
+                )
+            )
+        )
+    }
+
+    @Test
+    fun xtwinopsReportsTerminalAndCellSizes() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("[18t[14t[16t")
+        assertEquals(
+            listOf("[8;6;20t", "[4;84;140t", "[6;14;7t"),
+            terminal.drainResponses()
+        )
+    }
+
+    @Test
+    fun osc7WorkingDirectoryUriIsCapturedWithoutRendering() {
+        val terminal = TerminalEmulator(initialColumns = 30, initialRows = 6)
+        terminal.feed("before]7;file://host/workspaceafter")
+        assertEquals("file://host/workspace", terminal.workingDirectoryUri)
+        assertTrue(terminal.plainText(includeScrollback = false).contains("beforeafter"))
+    }
+
 }
