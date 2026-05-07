@@ -85,4 +85,21 @@ class ControlInputTest {
         assertArrayEquals(byteArrayOf(0x1B, "'".single().code.toByte()), controlInputBytes(ControlInput.ALT_APOSTROPHE))
         assertArrayEquals(byteArrayOf(0x1B, '`'.code.toByte()), controlInputBytes(ControlInput.ALT_GRAVE))
     }
+
+    @Test
+    fun controlInputBytesSupportModifiedPrintableKeys() {
+        assertArrayEquals("\u001B[27;4;65~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_ALT_A))
+        assertArrayEquals("\u001B[27;4;90~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_ALT_Z))
+        assertArrayEquals("\u001B[27;7;97~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_CTRL_A))
+        assertArrayEquals("\u001B[27;7;122~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_CTRL_Z))
+        assertArrayEquals("\u001B[27;8;65~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_ALT_CTRL_A))
+        assertArrayEquals("\u001B[27;8;90~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_ALT_CTRL_Z))
+        assertArrayEquals("\u001B[27;7;32~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_CTRL_SPACE))
+        assertArrayEquals("\u001B[27;7;91~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_CTRL_LEFT_BRACKET))
+        assertArrayEquals("\u001B[27;7;92~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_CTRL_BACKSLASH))
+        assertArrayEquals("\u001B[27;7;93~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_CTRL_RIGHT_BRACKET))
+        assertArrayEquals("\u001B[27;7;94~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_CTRL_CARET))
+        assertArrayEquals("\u001B[27;7;95~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_CTRL_UNDERSCORE))
+        assertArrayEquals("\u001B[27;7;63~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_CTRL_QUESTION_MARK))
+    }
 }

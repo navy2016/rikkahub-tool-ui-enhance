@@ -108,6 +108,91 @@ enum class ControlInput {
     ALT_PERIOD,
     ALT_SLASH,
     ALT_GRAVE,
+    SHIFT_ALT_A,
+    SHIFT_ALT_B,
+    SHIFT_ALT_C,
+    SHIFT_ALT_D,
+    SHIFT_ALT_E,
+    SHIFT_ALT_F,
+    SHIFT_ALT_G,
+    SHIFT_ALT_H,
+    SHIFT_ALT_I,
+    SHIFT_ALT_J,
+    SHIFT_ALT_K,
+    SHIFT_ALT_L,
+    SHIFT_ALT_M,
+    SHIFT_ALT_N,
+    SHIFT_ALT_O,
+    SHIFT_ALT_P,
+    SHIFT_ALT_Q,
+    SHIFT_ALT_R,
+    SHIFT_ALT_S,
+    SHIFT_ALT_T,
+    SHIFT_ALT_U,
+    SHIFT_ALT_V,
+    SHIFT_ALT_W,
+    SHIFT_ALT_X,
+    SHIFT_ALT_Y,
+    SHIFT_ALT_Z,
+    ALT_CTRL_A,
+    ALT_CTRL_B,
+    ALT_CTRL_C,
+    ALT_CTRL_D,
+    ALT_CTRL_E,
+    ALT_CTRL_F,
+    ALT_CTRL_G,
+    ALT_CTRL_H,
+    ALT_CTRL_I,
+    ALT_CTRL_J,
+    ALT_CTRL_K,
+    ALT_CTRL_L,
+    ALT_CTRL_M,
+    ALT_CTRL_N,
+    ALT_CTRL_O,
+    ALT_CTRL_P,
+    ALT_CTRL_Q,
+    ALT_CTRL_R,
+    ALT_CTRL_S,
+    ALT_CTRL_T,
+    ALT_CTRL_U,
+    ALT_CTRL_V,
+    ALT_CTRL_W,
+    ALT_CTRL_X,
+    ALT_CTRL_Y,
+    ALT_CTRL_Z,
+    SHIFT_ALT_CTRL_A,
+    SHIFT_ALT_CTRL_B,
+    SHIFT_ALT_CTRL_C,
+    SHIFT_ALT_CTRL_D,
+    SHIFT_ALT_CTRL_E,
+    SHIFT_ALT_CTRL_F,
+    SHIFT_ALT_CTRL_G,
+    SHIFT_ALT_CTRL_H,
+    SHIFT_ALT_CTRL_I,
+    SHIFT_ALT_CTRL_J,
+    SHIFT_ALT_CTRL_K,
+    SHIFT_ALT_CTRL_L,
+    SHIFT_ALT_CTRL_M,
+    SHIFT_ALT_CTRL_N,
+    SHIFT_ALT_CTRL_O,
+    SHIFT_ALT_CTRL_P,
+    SHIFT_ALT_CTRL_Q,
+    SHIFT_ALT_CTRL_R,
+    SHIFT_ALT_CTRL_S,
+    SHIFT_ALT_CTRL_T,
+    SHIFT_ALT_CTRL_U,
+    SHIFT_ALT_CTRL_V,
+    SHIFT_ALT_CTRL_W,
+    SHIFT_ALT_CTRL_X,
+    SHIFT_ALT_CTRL_Y,
+    SHIFT_ALT_CTRL_Z,
+    ALT_CTRL_SPACE,
+    ALT_CTRL_LEFT_BRACKET,
+    ALT_CTRL_BACKSLASH,
+    ALT_CTRL_RIGHT_BRACKET,
+    ALT_CTRL_CARET,
+    ALT_CTRL_UNDERSCORE,
+    ALT_CTRL_QUESTION_MARK,
     TAB,
     BACK_TAB,
     ALT_TAB,
@@ -257,6 +342,7 @@ internal fun controlInputBytes(control: ControlInput): ByteArray {
     fun esc(suffix: String): ByteArray = ("\u001B" + suffix).toByteArray(Charsets.UTF_8)
     fun csiModified(final: Char, modifier: Int): ByteArray = esc("[1;${modifier}$final")
     fun tildeModified(code: Int, modifier: Int): ByteArray = esc("[${code};${modifier}~")
+    fun modifyOtherKey(codePoint: Int, modifier: Int): ByteArray = esc("[27;${modifier};${codePoint}~")
     fun alt(bytes: ByteArray): ByteArray = byteArrayOf(0x1B) + bytes
     return when (control) {
         ControlInput.CTRL_SPACE -> byteArrayOf(0x00)
@@ -339,6 +425,91 @@ internal fun controlInputBytes(control: ControlInput): ByteArray {
         ControlInput.ALT_PERIOD -> alt(byteArrayOf('.'.code.toByte()))
         ControlInput.ALT_SLASH -> alt(byteArrayOf('/'.code.toByte()))
         ControlInput.ALT_GRAVE -> alt(byteArrayOf('`'.code.toByte()))
+        ControlInput.SHIFT_ALT_A -> modifyOtherKey('A'.code, 4)
+        ControlInput.SHIFT_ALT_B -> modifyOtherKey('B'.code, 4)
+        ControlInput.SHIFT_ALT_C -> modifyOtherKey('C'.code, 4)
+        ControlInput.SHIFT_ALT_D -> modifyOtherKey('D'.code, 4)
+        ControlInput.SHIFT_ALT_E -> modifyOtherKey('E'.code, 4)
+        ControlInput.SHIFT_ALT_F -> modifyOtherKey('F'.code, 4)
+        ControlInput.SHIFT_ALT_G -> modifyOtherKey('G'.code, 4)
+        ControlInput.SHIFT_ALT_H -> modifyOtherKey('H'.code, 4)
+        ControlInput.SHIFT_ALT_I -> modifyOtherKey('I'.code, 4)
+        ControlInput.SHIFT_ALT_J -> modifyOtherKey('J'.code, 4)
+        ControlInput.SHIFT_ALT_K -> modifyOtherKey('K'.code, 4)
+        ControlInput.SHIFT_ALT_L -> modifyOtherKey('L'.code, 4)
+        ControlInput.SHIFT_ALT_M -> modifyOtherKey('M'.code, 4)
+        ControlInput.SHIFT_ALT_N -> modifyOtherKey('N'.code, 4)
+        ControlInput.SHIFT_ALT_O -> modifyOtherKey('O'.code, 4)
+        ControlInput.SHIFT_ALT_P -> modifyOtherKey('P'.code, 4)
+        ControlInput.SHIFT_ALT_Q -> modifyOtherKey('Q'.code, 4)
+        ControlInput.SHIFT_ALT_R -> modifyOtherKey('R'.code, 4)
+        ControlInput.SHIFT_ALT_S -> modifyOtherKey('S'.code, 4)
+        ControlInput.SHIFT_ALT_T -> modifyOtherKey('T'.code, 4)
+        ControlInput.SHIFT_ALT_U -> modifyOtherKey('U'.code, 4)
+        ControlInput.SHIFT_ALT_V -> modifyOtherKey('V'.code, 4)
+        ControlInput.SHIFT_ALT_W -> modifyOtherKey('W'.code, 4)
+        ControlInput.SHIFT_ALT_X -> modifyOtherKey('X'.code, 4)
+        ControlInput.SHIFT_ALT_Y -> modifyOtherKey('Y'.code, 4)
+        ControlInput.SHIFT_ALT_Z -> modifyOtherKey('Z'.code, 4)
+        ControlInput.ALT_CTRL_A -> modifyOtherKey('a'.code, 7)
+        ControlInput.ALT_CTRL_B -> modifyOtherKey('b'.code, 7)
+        ControlInput.ALT_CTRL_C -> modifyOtherKey('c'.code, 7)
+        ControlInput.ALT_CTRL_D -> modifyOtherKey('d'.code, 7)
+        ControlInput.ALT_CTRL_E -> modifyOtherKey('e'.code, 7)
+        ControlInput.ALT_CTRL_F -> modifyOtherKey('f'.code, 7)
+        ControlInput.ALT_CTRL_G -> modifyOtherKey('g'.code, 7)
+        ControlInput.ALT_CTRL_H -> modifyOtherKey('h'.code, 7)
+        ControlInput.ALT_CTRL_I -> modifyOtherKey('i'.code, 7)
+        ControlInput.ALT_CTRL_J -> modifyOtherKey('j'.code, 7)
+        ControlInput.ALT_CTRL_K -> modifyOtherKey('k'.code, 7)
+        ControlInput.ALT_CTRL_L -> modifyOtherKey('l'.code, 7)
+        ControlInput.ALT_CTRL_M -> modifyOtherKey('m'.code, 7)
+        ControlInput.ALT_CTRL_N -> modifyOtherKey('n'.code, 7)
+        ControlInput.ALT_CTRL_O -> modifyOtherKey('o'.code, 7)
+        ControlInput.ALT_CTRL_P -> modifyOtherKey('p'.code, 7)
+        ControlInput.ALT_CTRL_Q -> modifyOtherKey('q'.code, 7)
+        ControlInput.ALT_CTRL_R -> modifyOtherKey('r'.code, 7)
+        ControlInput.ALT_CTRL_S -> modifyOtherKey('s'.code, 7)
+        ControlInput.ALT_CTRL_T -> modifyOtherKey('t'.code, 7)
+        ControlInput.ALT_CTRL_U -> modifyOtherKey('u'.code, 7)
+        ControlInput.ALT_CTRL_V -> modifyOtherKey('v'.code, 7)
+        ControlInput.ALT_CTRL_W -> modifyOtherKey('w'.code, 7)
+        ControlInput.ALT_CTRL_X -> modifyOtherKey('x'.code, 7)
+        ControlInput.ALT_CTRL_Y -> modifyOtherKey('y'.code, 7)
+        ControlInput.ALT_CTRL_Z -> modifyOtherKey('z'.code, 7)
+        ControlInput.SHIFT_ALT_CTRL_A -> modifyOtherKey('A'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_B -> modifyOtherKey('B'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_C -> modifyOtherKey('C'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_D -> modifyOtherKey('D'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_E -> modifyOtherKey('E'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_F -> modifyOtherKey('F'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_G -> modifyOtherKey('G'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_H -> modifyOtherKey('H'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_I -> modifyOtherKey('I'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_J -> modifyOtherKey('J'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_K -> modifyOtherKey('K'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_L -> modifyOtherKey('L'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_M -> modifyOtherKey('M'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_N -> modifyOtherKey('N'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_O -> modifyOtherKey('O'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_P -> modifyOtherKey('P'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_Q -> modifyOtherKey('Q'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_R -> modifyOtherKey('R'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_S -> modifyOtherKey('S'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_T -> modifyOtherKey('T'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_U -> modifyOtherKey('U'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_V -> modifyOtherKey('V'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_W -> modifyOtherKey('W'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_X -> modifyOtherKey('X'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_Y -> modifyOtherKey('Y'.code, 8)
+        ControlInput.SHIFT_ALT_CTRL_Z -> modifyOtherKey('Z'.code, 8)
+        ControlInput.ALT_CTRL_SPACE -> modifyOtherKey(' '.code, 7)
+        ControlInput.ALT_CTRL_LEFT_BRACKET -> modifyOtherKey('['.code, 7)
+        ControlInput.ALT_CTRL_BACKSLASH -> modifyOtherKey('\\'.code, 7)
+        ControlInput.ALT_CTRL_RIGHT_BRACKET -> modifyOtherKey(']'.code, 7)
+        ControlInput.ALT_CTRL_CARET -> modifyOtherKey('^'.code, 7)
+        ControlInput.ALT_CTRL_UNDERSCORE -> modifyOtherKey('_'.code, 7)
+        ControlInput.ALT_CTRL_QUESTION_MARK -> modifyOtherKey('?'.code, 7)
         ControlInput.TAB -> byteArrayOf('\t'.code.toByte())
         ControlInput.BACK_TAB -> esc("[Z")
         ControlInput.ALT_TAB -> alt(byteArrayOf('\t'.code.toByte()))
