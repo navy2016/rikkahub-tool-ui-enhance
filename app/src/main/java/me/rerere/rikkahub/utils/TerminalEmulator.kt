@@ -1044,7 +1044,7 @@ class TerminalEmulator(
         if (seq.privateMarker == '<' && (command == 'M' || command == 'm')) return // xterm mouse report
 
         when (command) {
-            'A' -> moveCursor(row = (cursorRow - seq.paramInt(0, 1)).coerceAtLeast(scrollTop))
+            'A' -> if (seq.intermediates == " ") scrollRight(seq.paramInt(0, 1)) else moveCursor(row = (cursorRow - seq.paramInt(0, 1)).coerceAtLeast(scrollTop))
             'B' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1)).coerceAtMost(scrollBottom))
             'C' -> moveCursor(col = (cursorCol + seq.paramInt(0, 1)).coerceAtMost(columns - 1))
             'D' -> moveCursor(col = (cursorCol - seq.paramInt(0, 1)).coerceAtLeast(0))
@@ -1067,7 +1067,7 @@ class TerminalEmulator(
             'L' -> repeat(seq.paramInt(0, 1)) { insertLine() }
             'M' -> repeat(seq.paramInt(0, 1)) { deleteLine() }
             'P' -> deleteChars(seq.paramInt(0, 1))
-            '@' -> insertChars(seq.paramInt(0, 1))
+            '@' -> if (seq.intermediates == " ") scrollLeft(seq.paramInt(0, 1)) else insertChars(seq.paramInt(0, 1))
             'X' -> eraseChars(seq.paramInt(0, 1))
             'S' -> repeat(seq.paramInt(0, 1)) { scrollUp() }
             'T' -> repeat(seq.paramInt(0, 1)) { scrollDown() }
@@ -1449,6 +1449,26 @@ class TerminalEmulator(
             screen[r] = screen[r + 1]
         }
         screen[scrollBottom] = blankLine()
+    }
+
+    private fun scrollLeft(count: Int) {
+        pendingWrap = false
+        val n = count.coerceIn(1, columns)
+        for (row in scrollTop..scrollBottom) {
+            val line = screen[row]
+            for (col in 0 until columns - n) line[col] = line[col + n].copy()
+            for (col in columns - n until columns) line[col] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+        }
+    }
+
+    private fun scrollRight(count: Int) {
+        pendingWrap = false
+        val n = count.coerceIn(1, columns)
+        for (row in scrollTop..scrollBottom) {
+            val line = screen[row]
+            for (col in columns - 1 downTo n) line[col] = line[col - n].copy()
+            for (col in 0 until n) line[col] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+        }
     }
 
     private fun insertChars(count: Int) {

@@ -705,4 +705,21 @@ class TerminalEmulatorTest {
         assertEquals(listOf("\u001BP78!~0142\u001B\\"), terminal.drainResponses())
     }
 
+
+    @Test
+    fun horizontalScrollShiftsRowsInsideScrollRegion() {
+        val terminal = TerminalEmulator(initialColumns = 10, initialRows = 4)
+        terminal.feed("abcdef\u001B[2;1Hghijkl\u001B[3;1Hmnopqr")
+        terminal.feed("\u001B[2;3r\u001B[2 \u0040")
+        var lines = terminal.plainText(includeScrollback = false).lines()
+        assertEquals("abcdef", lines[0])
+        assertEquals("ijkl", lines[1].trimEnd())
+        assertEquals("opqr", lines[2].trimEnd())
+
+        terminal.feed("\u001B[1 A")
+        lines = terminal.plainText(includeScrollback = false).lines()
+        assertEquals(" ijkl", lines[1].take(5))
+        assertEquals(" opqr", lines[2].take(5))
+    }
+
 }
