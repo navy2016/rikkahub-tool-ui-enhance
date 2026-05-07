@@ -52,7 +52,7 @@ class InteractiveTerminalSnapshotTest {
 
         assertEquals(4, snapshot.cursorRow)
         assertEquals(13, snapshot.cursorColumn)
-        assertEquals("BLINK_UNDERLINE", snapshot.cursorShape)
+        assertEquals("UNDERLINE", snapshot.cursorShape)
         assertEquals(false, snapshot.cursorVisible)
         assertEquals("file://sandbox/workspace/project", snapshot.workingDirectoryUri)
     }
