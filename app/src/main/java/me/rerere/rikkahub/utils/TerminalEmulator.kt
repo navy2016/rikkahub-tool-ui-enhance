@@ -51,6 +51,7 @@ class TerminalEmulator(
         val strike: Boolean = false,
         val overline: Boolean = false,
         val baselineShift: BaselineShift = BaselineShift.NORMAL,
+        val protected: Boolean = false,
         val hyperlink: Hyperlink? = null
     )
 
@@ -894,6 +895,7 @@ class TerminalEmulator(
     private fun handleRequestStatusString(payload: String) {
         val response = when (payload) {
             " q" -> "${cursorShapeCode()} q"
+            "\"q" -> "${characterProtectionCode()}\"q"
             "m" -> sgrStatusString()
             "r" -> "${scrollTop + 1};${scrollBottom + 1}r"
             else -> null
@@ -923,6 +925,8 @@ class TerminalEmulator(
         if (codes.isEmpty()) codes.add(0)
         return codes.joinToString(";") + "m"
     }
+
+    private fun characterProtectionCode(): Int = if (currentStyle.protected) 1 else 0
 
     private fun cursorShapeCode(): Int = when (cursorShape) {
         CursorShape.DEFAULT -> 0
@@ -1080,6 +1084,7 @@ class TerminalEmulator(
             'W' -> handleCursorTabControl(seq)
             'q' -> when {
                 seq.intermediates == " " -> setCursorShape(seq.paramZero(0))
+                seq.intermediates == "\"" -> setCharacterProtection(seq.paramZero(0))
                 seq.privateMarker == '>' -> pendingResponses.add("\u001BP>|RikkaHubTerminal 1.0\u001B\\")
             }
             'p' -> if (seq.intermediates == "!") softReset() else if (seq.intermediates == "$") handleRequestMode(seq)
@@ -1522,6 +1527,10 @@ class TerminalEmulator(
         mouseTrackingMode = mode
         mouseTracking = mode != MouseTrackingMode.OFF
         if (!mouseTracking) mouseProtocol = MouseProtocol.DEFAULT
+    }
+
+    private fun setCharacterProtection(code: Int) {
+        currentStyle = currentStyle.copy(protected = code == 1)
     }
 
     private fun setCursorShape(code: Int) {

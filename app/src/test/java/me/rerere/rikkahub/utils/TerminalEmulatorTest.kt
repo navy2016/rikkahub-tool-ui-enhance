@@ -608,4 +608,15 @@ class TerminalEmulatorTest {
         assertEquals(listOf("\u001BP1\$r0m\u001B\\"), terminal.drainResponses())
     }
 
+
+    @Test
+    fun decSelectiveCharacterProtectionIsTrackedAndReported() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[1\"q\u001BP\$q\"q\u001B\\")
+        assertEquals(listOf("\u001BP1\$r1\"q\u001B\\"), terminal.drainResponses())
+
+        terminal.feed("\u001B[0\"q\u001BP\$q\"q\u001B\\")
+        assertEquals(listOf("\u001BP1\$r0\"q\u001B\\"), terminal.drainResponses())
+    }
+
 }
