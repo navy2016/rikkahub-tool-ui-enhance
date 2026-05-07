@@ -632,4 +632,16 @@ class TerminalEmulatorTest {
         assertEquals("", lines[1].trimEnd())
     }
 
+
+    @Test
+    fun rectangularEraseHonorsSelectiveProtection() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[1\"qA\u001B[0\"qB\u001B[2;1HCD\u001B[1;1H\u001B[1;1;2;2\${")
+        assertEquals("A", terminal.plainText(includeScrollback = false).lines()[0].trimEnd())
+        assertEquals("", terminal.plainText(includeScrollback = false).lines()[1].trimEnd())
+
+        terminal.feed("\u001B[2J\u001B[1;1H\u001B[1\"qE\u001B[0\"qF\u001B[1;1H\u001B[1;1;1;2\$z")
+        assertEquals("", terminal.plainText(includeScrollback = false).lines()[0].trimEnd())
+    }
+
 }

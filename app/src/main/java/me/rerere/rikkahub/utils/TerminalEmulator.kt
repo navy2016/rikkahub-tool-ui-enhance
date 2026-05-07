@@ -1089,6 +1089,8 @@ class TerminalEmulator(
             }
             'p' -> if (seq.intermediates == "!") softReset() else if (seq.intermediates == "$") handleRequestMode(seq)
             'r' -> setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
+            'z' -> if (seq.intermediates == "$") eraseRectangle(seq, selective = false)
+            '{' -> if (seq.intermediates == "$") eraseRectangle(seq, selective = true)
             't' -> handleWindowOperation(seq)
             'h' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), true) else setModes(seq.intParams(), true)
             'l' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), false) else setModes(seq.intParams(), false)
@@ -1274,6 +1276,15 @@ class TerminalEmulator(
                 screen[row][c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
             }
         }
+    }
+
+    private fun eraseRectangle(seq: CsiSequence, selective: Boolean) {
+        pendingWrap = false
+        val top = (seq.paramInt(0, 1) - 1).coerceIn(0, rows - 1)
+        val left = (seq.paramInt(1, 1) - 1).coerceIn(0, columns - 1)
+        val bottom = (seq.paramInt(2, rows) - 1).coerceIn(top, rows - 1)
+        val right = (seq.paramInt(3, columns) - 1).coerceIn(left, columns - 1)
+        for (row in top..bottom) eraseLineRange(row, left, right, selective)
     }
 
     private fun insertLine() {
