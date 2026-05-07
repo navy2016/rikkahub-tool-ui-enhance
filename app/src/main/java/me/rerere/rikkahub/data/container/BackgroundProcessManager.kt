@@ -67,12 +67,52 @@ enum class ControlInput {
     DOWN,
     LEFT,
     RIGHT,
+    SHIFT_UP,
+    SHIFT_DOWN,
+    SHIFT_LEFT,
+    SHIFT_RIGHT,
+    ALT_UP,
+    ALT_DOWN,
+    ALT_LEFT,
+    ALT_RIGHT,
+    CTRL_UP,
+    CTRL_DOWN,
+    CTRL_LEFT,
+    CTRL_RIGHT,
+    SHIFT_CTRL_UP,
+    SHIFT_CTRL_DOWN,
+    SHIFT_CTRL_LEFT,
+    SHIFT_CTRL_RIGHT,
+    ALT_CTRL_UP,
+    ALT_CTRL_DOWN,
+    ALT_CTRL_LEFT,
+    ALT_CTRL_RIGHT,
+    SHIFT_ALT_CTRL_UP,
+    SHIFT_ALT_CTRL_DOWN,
+    SHIFT_ALT_CTRL_LEFT,
+    SHIFT_ALT_CTRL_RIGHT,
     HOME,
     END,
+    SHIFT_HOME,
+    SHIFT_END,
+    ALT_HOME,
+    ALT_END,
+    CTRL_HOME,
+    CTRL_END,
     PAGE_UP,
     PAGE_DOWN,
+    SHIFT_PAGE_UP,
+    SHIFT_PAGE_DOWN,
+    CTRL_PAGE_UP,
+    CTRL_PAGE_DOWN,
     INSERT,
     DELETE,
+    SHIFT_INSERT,
+    SHIFT_DELETE,
+    CTRL_INSERT,
+    CTRL_DELETE,
+    ALT_INSERT,
+    ALT_DELETE,
     ENTER,
     BACKSPACE,
     F1,
@@ -91,6 +131,8 @@ enum class ControlInput {
 
 internal fun controlInputBytes(control: ControlInput): ByteArray {
     fun esc(suffix: String): ByteArray = ("\u001B" + suffix).toByteArray(Charsets.UTF_8)
+    fun csiModified(final: Char, modifier: Int): ByteArray = esc("[1;${modifier}$final")
+    fun tildeModified(code: Int, modifier: Int): ByteArray = esc("[${code};${modifier}~")
     return when (control) {
         ControlInput.CTRL_SPACE -> byteArrayOf(0x00)
         ControlInput.CTRL_A -> byteArrayOf(0x01)
@@ -131,12 +173,52 @@ internal fun controlInputBytes(control: ControlInput): ByteArray {
         ControlInput.DOWN -> esc("[B")
         ControlInput.LEFT -> esc("[D")
         ControlInput.RIGHT -> esc("[C")
+        ControlInput.SHIFT_UP -> csiModified('A', 2)
+        ControlInput.SHIFT_DOWN -> csiModified('B', 2)
+        ControlInput.SHIFT_RIGHT -> csiModified('C', 2)
+        ControlInput.SHIFT_LEFT -> csiModified('D', 2)
+        ControlInput.ALT_UP -> csiModified('A', 3)
+        ControlInput.ALT_DOWN -> csiModified('B', 3)
+        ControlInput.ALT_RIGHT -> csiModified('C', 3)
+        ControlInput.ALT_LEFT -> csiModified('D', 3)
+        ControlInput.CTRL_UP -> csiModified('A', 5)
+        ControlInput.CTRL_DOWN -> csiModified('B', 5)
+        ControlInput.CTRL_RIGHT -> csiModified('C', 5)
+        ControlInput.CTRL_LEFT -> csiModified('D', 5)
+        ControlInput.SHIFT_CTRL_UP -> csiModified('A', 6)
+        ControlInput.SHIFT_CTRL_DOWN -> csiModified('B', 6)
+        ControlInput.SHIFT_CTRL_RIGHT -> csiModified('C', 6)
+        ControlInput.SHIFT_CTRL_LEFT -> csiModified('D', 6)
+        ControlInput.ALT_CTRL_UP -> csiModified('A', 7)
+        ControlInput.ALT_CTRL_DOWN -> csiModified('B', 7)
+        ControlInput.ALT_CTRL_RIGHT -> csiModified('C', 7)
+        ControlInput.ALT_CTRL_LEFT -> csiModified('D', 7)
+        ControlInput.SHIFT_ALT_CTRL_UP -> csiModified('A', 8)
+        ControlInput.SHIFT_ALT_CTRL_DOWN -> csiModified('B', 8)
+        ControlInput.SHIFT_ALT_CTRL_RIGHT -> csiModified('C', 8)
+        ControlInput.SHIFT_ALT_CTRL_LEFT -> csiModified('D', 8)
         ControlInput.HOME -> esc("[H")
         ControlInput.END -> esc("[F")
+        ControlInput.SHIFT_HOME -> csiModified('H', 2)
+        ControlInput.SHIFT_END -> csiModified('F', 2)
+        ControlInput.ALT_HOME -> csiModified('H', 3)
+        ControlInput.ALT_END -> csiModified('F', 3)
+        ControlInput.CTRL_HOME -> csiModified('H', 5)
+        ControlInput.CTRL_END -> csiModified('F', 5)
         ControlInput.PAGE_UP -> esc("[5~")
         ControlInput.PAGE_DOWN -> esc("[6~")
+        ControlInput.SHIFT_PAGE_UP -> tildeModified(5, 2)
+        ControlInput.SHIFT_PAGE_DOWN -> tildeModified(6, 2)
+        ControlInput.CTRL_PAGE_UP -> tildeModified(5, 5)
+        ControlInput.CTRL_PAGE_DOWN -> tildeModified(6, 5)
         ControlInput.INSERT -> esc("[2~")
         ControlInput.DELETE -> esc("[3~")
+        ControlInput.SHIFT_INSERT -> tildeModified(2, 2)
+        ControlInput.SHIFT_DELETE -> tildeModified(3, 2)
+        ControlInput.CTRL_INSERT -> tildeModified(2, 5)
+        ControlInput.CTRL_DELETE -> tildeModified(3, 5)
+        ControlInput.ALT_INSERT -> tildeModified(2, 3)
+        ControlInput.ALT_DELETE -> tildeModified(3, 3)
         ControlInput.ENTER -> byteArrayOf('\n'.code.toByte())
         ControlInput.BACKSPACE -> byteArrayOf(0x7F)
         ControlInput.F1 -> esc("OP")

@@ -39,4 +39,21 @@ class ControlInputTest {
         assertArrayEquals("\u001BOP".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.F1))
         assertArrayEquals("\u001B[24~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.F12))
     }
+
+    @Test
+    fun controlInputBytesSupportModifiedNavigationKeys() {
+        assertArrayEquals("\u001B[1;2A".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_UP))
+        assertArrayEquals("\u001B[1;3B".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_DOWN))
+        assertArrayEquals("\u001B[1;5D".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.CTRL_LEFT))
+        assertArrayEquals("\u001B[1;6C".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_CTRL_RIGHT))
+        assertArrayEquals("\u001B[1;7A".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_CTRL_UP))
+        assertArrayEquals("\u001B[1;8D".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_ALT_CTRL_LEFT))
+        assertArrayEquals("\u001B[1;5H".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.CTRL_HOME))
+        assertArrayEquals("\u001B[1;3F".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_END))
+        assertArrayEquals("\u001B[5;2~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_PAGE_UP))
+        assertArrayEquals("\u001B[6;5~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.CTRL_PAGE_DOWN))
+        assertArrayEquals("\u001B[2;2~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.SHIFT_INSERT))
+        assertArrayEquals("\u001B[3;5~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.CTRL_DELETE))
+        assertArrayEquals("\u001B[3;3~".toByteArray(Charsets.UTF_8), controlInputBytes(ControlInput.ALT_DELETE))
+    }
 }
