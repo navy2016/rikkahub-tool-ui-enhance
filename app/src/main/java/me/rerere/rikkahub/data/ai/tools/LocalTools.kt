@@ -776,6 +776,10 @@ class LocalTools(
                             put("type", "boolean")
                             put("description", "input 操作时是否自动追加换行，默认 true")
                         })
+                        put("bracketedPaste", buildJsonObject {
+                            put("type", "boolean")
+                            put("description", "input 操作发送 data 时是否用 ESC[200~/ESC[201~ 包裹为 bracketed paste，适合向 vim、claude、codex、opencode 粘贴多行文本，默认 false")
+                        })
                         put("columns", buildJsonObject {
                             put("type", "integer")
                             put("description", "resize 操作的终端列数")
@@ -1076,6 +1080,7 @@ class LocalTools(
         val control = args["control"]?.jsonPrimitive?.contentOrNull
         val data = args["data"]?.jsonPrimitive?.contentOrNull
         val appendNewline = args["appendNewline"]?.jsonPrimitive?.booleanOrNull ?: true
+        val bracketedPaste = args["bracketedPaste"]?.jsonPrimitive?.booleanOrNull ?: false
 
         val result = when {
             control != null -> {
@@ -1091,7 +1096,8 @@ class LocalTools(
             }
 
             data != null -> {
-                backgroundProcessManager.sendInput(processId, data, appendNewline)
+                val payload = if (bracketedPaste) "\u001B[200~${data}\u001B[201~" else data
+                backgroundProcessManager.sendInput(processId, payload, appendNewline)
             }
 
             else -> {
@@ -1107,6 +1113,7 @@ class LocalTools(
                 put("success", JsonPrimitive(true))
                 put("processId", JsonPrimitive(processId))
                 put("message", JsonPrimitive("Input sent"))
+                put("bracketedPaste", JsonPrimitive(bracketedPaste && data != null))
             }
         } else {
             buildJsonObject {

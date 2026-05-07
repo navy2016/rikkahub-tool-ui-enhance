@@ -75,6 +75,7 @@ import me.rerere.rikkahub.utils.TerminalEmulator.Key
 import me.rerere.rikkahub.utils.TerminalEmulator.MouseButton
 import me.rerere.rikkahub.utils.TerminalEmulator.MouseEvent
 import me.rerere.rikkahub.utils.TerminalEmulator.MouseEventType
+import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.compose.koinInject
 import android.view.MotionEvent
@@ -523,6 +524,11 @@ private fun TerminalInteractivePanel(
         }
     }
 
+    fun sendPastedText(text: String) {
+        if (text.isEmpty()) return
+        sendRaw(terminalEmulator.wrapPaste(text))
+    }
+
     fun sendKey(key: Key) {
         sendRaw(terminalEmulator.sequenceFor(key))
     }
@@ -537,7 +543,9 @@ private fun TerminalInteractivePanel(
         when {
             value.length > previous.length && value.startsWith(previous) -> {
                 val delta = value.removePrefix(previous)
-                if (delta.isNotEmpty()) sendRaw(delta)
+                if (delta.isNotEmpty()) {
+                    if (delta.length > 1 || delta.contains('\n') || delta.contains('\r')) sendPastedText(delta) else sendRaw(delta)
+                }
             }
             previous.length > value.length && previous.startsWith(value) -> {
                 repeat(previous.length - value.length) { sendKey(Key.DELETE) }
@@ -546,7 +554,9 @@ private fun TerminalInteractivePanel(
                 val common = previous.zip(value).takeWhile { it.first == it.second }.size
                 repeat(previous.length - common) { sendKey(Key.DELETE) }
                 val delta = value.drop(common)
-                if (delta.isNotEmpty()) sendRaw(delta)
+                if (delta.isNotEmpty()) {
+                    if (delta.length > 1 || delta.contains('\n') || delta.contains('\r')) sendPastedText(delta) else sendRaw(delta)
+                }
             }
         }
     }
@@ -734,6 +744,9 @@ private fun TerminalInteractivePanel(
                     ControlChip("本地清屏") { clearLocalTerminal() }
                     ControlChip("复制输出") {
                         context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
+                    }
+                    ControlChip("粘贴") {
+                        sendPastedText(context.readClipboardText())
                     }
                     ControlChip("PTY自检") {
                         sendCommand("tty; stty size; echo ${'$'}TERM", rememberHistory = true)

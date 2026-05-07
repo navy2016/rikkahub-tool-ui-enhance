@@ -722,4 +722,17 @@ class TerminalEmulatorTest {
         assertEquals(" opqr", lines[2].take(5))
     }
 
+
+    @Test
+    fun bracketedPasteWrapsOnlyWhenModeIsEnabled() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        assertEquals("line1\nline2", terminal.wrapPaste("line1\nline2"))
+
+        terminal.feed("\u001B[?2004h")
+        assertEquals("\u001B[200~line1\nline2\u001B[201~", terminal.wrapPaste("line1\nline2"))
+
+        terminal.feed("\u001B[?2004l")
+        assertEquals("plain", terminal.wrapPaste("plain"))
+    }
+
 }

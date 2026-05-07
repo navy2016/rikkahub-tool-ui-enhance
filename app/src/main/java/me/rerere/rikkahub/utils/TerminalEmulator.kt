@@ -429,8 +429,10 @@ class TerminalEmulator(
 
     @Synchronized
     fun wrapPaste(text: String): String {
-        return if (bracketedPaste) "\u001B[200~$text\u001B[201~" else text
+        return if (bracketedPaste) bracketedPasteSequence(text) else text
     }
+
+    fun bracketedPasteSequence(text: String): String = "\u001B[200~$text\u001B[201~"
 
     @Synchronized
     fun isMouseTrackingEnabled(): Boolean = mouseTracking
