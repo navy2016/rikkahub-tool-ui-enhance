@@ -597,4 +597,15 @@ class TerminalEmulatorTest {
         assertEquals(listOf("\u001BP0\$rbad\u001B\\"), terminal.drainResponses())
     }
 
+
+    @Test
+    fun decRequestStatusStringReportsCurrentSgrAttributes() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[1;3;4;7;9;53;73m\u001BP\$qm\u001B\\")
+        assertEquals(listOf("\u001BP1\$r1;3;4;7;9;53;73m\u001B\\"), terminal.drainResponses())
+
+        terminal.feed("\u001B[0m\u001BP\$qm\u001B\\")
+        assertEquals(listOf("\u001BP1\$r0m\u001B\\"), terminal.drainResponses())
+    }
+
 }

@@ -894,7 +894,7 @@ class TerminalEmulator(
     private fun handleRequestStatusString(payload: String) {
         val response = when (payload) {
             " q" -> "${cursorShapeCode()} q"
-            "m" -> "0m"
+            "m" -> sgrStatusString()
             "r" -> "${scrollTop + 1};${scrollBottom + 1}r"
             else -> null
         }
@@ -903,6 +903,25 @@ class TerminalEmulator(
         } else {
             pendingResponses.add("\u001BP1\$r${response}\u001B\\")
         }
+    }
+
+    private fun sgrStatusString(): String {
+        val codes = mutableListOf<Int>()
+        if (currentStyle.bold) codes.add(1)
+        if (currentStyle.faint) codes.add(2)
+        if (currentStyle.italic) codes.add(3)
+        if (currentStyle.underline) codes.add(4)
+        if (currentStyle.inverse) codes.add(7)
+        if (currentStyle.concealed) codes.add(8)
+        if (currentStyle.strike) codes.add(9)
+        if (currentStyle.overline) codes.add(53)
+        when (currentStyle.baselineShift) {
+            BaselineShift.SUPERSCRIPT -> codes.add(73)
+            BaselineShift.SUBSCRIPT -> codes.add(74)
+            BaselineShift.NORMAL -> Unit
+        }
+        if (codes.isEmpty()) codes.add(0)
+        return codes.joinToString(";") + "m"
     }
 
     private fun cursorShapeCode(): Int = when (cursorShape) {
