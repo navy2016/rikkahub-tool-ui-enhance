@@ -769,6 +769,10 @@ class LocalTools(
                             put("type", "integer")
                             put("description", "read 操作最大返回字节数，默认65536")
                         })
+                        put("renderTerminal", buildJsonObject {
+                            put("type", "boolean")
+                            put("description", "read 操作是否将保留的 ANSI/TTY 输出渲染为当前终端纯文本屏幕 terminalScreen，适合读取 vim、codex、claude、opencode 等 TUI 当前界面，默认 false")
+                        })
                         put("data", buildJsonObject {
                             put("type", "string")
                             put("description", "input 操作时发送到交互式会话 stdin 的文本")
@@ -1001,12 +1005,14 @@ class LocalTools(
         val mode = args["mode"]?.jsonPrimitive?.contentOrNull ?: "new"
         val offsetBytes = args["offsetBytes"]?.jsonPrimitive?.longOrNull
         val limitBytes = args["limitBytes"]?.jsonPrimitive?.intOrNull ?: 64 * 1024
+        val renderTerminal = args["renderTerminal"]?.jsonPrimitive?.booleanOrNull ?: false
 
         val result = backgroundProcessManager.readInteractiveOutput(
             processId = processId,
             mode = mode,
             offset = offsetBytes,
-            limitBytes = limitBytes
+            limitBytes = limitBytes,
+            renderTerminal = renderTerminal
         ) ?: return buildJsonObject {
             put("success", JsonPrimitive(false))
             put("error", JsonPrimitive("Interactive session not found: $processId"))
@@ -1022,7 +1028,12 @@ class LocalTools(
             put("totalBytes", JsonPrimitive(result.totalBytes))
             put("baseOffset", JsonPrimitive(result.baseOffset))
             put("hasMore", JsonPrimitive(result.hasMore))
-            put("hint", JsonPrimitive("Default read returns only new output. Use mode=all for full retained buffer, or mode=tail for recent output."))
+            result.terminalScreen?.let { put("terminalScreen", JsonPrimitive(it)) }
+            result.terminalModes?.let { put("terminalModes", JsonPrimitive(it)) }
+            result.terminalTitle?.let { put("terminalTitle", JsonPrimitive(it)) }
+            result.terminalColumns?.let { put("terminalColumns", JsonPrimitive(it)) }
+            result.terminalRows?.let { put("terminalRows", JsonPrimitive(it)) }
+            put("hint", JsonPrimitive("Default read returns only new output. Use mode=all for full retained buffer, mode=tail for recent output, or renderTerminal=true for a plain-text TUI screen snapshot."))
         }
     }
 

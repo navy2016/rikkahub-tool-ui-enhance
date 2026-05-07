@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.utils.TerminalEmulator
 import org.koin.core.context.GlobalContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -26,6 +27,33 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+
+
+internal data class InteractiveTerminalSnapshot(
+    val screen: String,
+    val modes: String,
+    val title: String,
+    val columns: Int,
+    val rows: Int
+)
+
+internal fun renderInteractiveTerminalSnapshot(
+    bytes: ByteArray,
+    columns: Int,
+    rows: Int
+): InteractiveTerminalSnapshot {
+    val safeColumns = columns.coerceIn(20, 240)
+    val safeRows = rows.coerceIn(6, 80)
+    val terminal = TerminalEmulator(initialColumns = safeColumns, initialRows = safeRows)
+    terminal.feed(bytes)
+    return InteractiveTerminalSnapshot(
+        screen = terminal.plainText(includeScrollback = false),
+        modes = terminal.modeSummary(),
+        title = terminal.title,
+        columns = safeColumns,
+        rows = safeRows
+    )
+}
 
 enum class ControlInput {
     CTRL_SPACE,
@@ -767,7 +795,12 @@ class BackgroundProcessManager @Inject constructor(
         val toOffset: Long,
         val totalBytes: Long,
         val baseOffset: Long,
-        val hasMore: Boolean
+        val hasMore: Boolean,
+        val terminalScreen: String? = null,
+        val terminalModes: String? = null,
+        val terminalTitle: String? = null,
+        val terminalColumns: Int? = null,
+        val terminalRows: Int? = null
     )
 
     /**
@@ -1155,9 +1188,11 @@ class BackgroundProcessManager @Inject constructor(
         processId: String,
         mode: String = "new",
         offset: Long? = null,
-        limitBytes: Int = 64 * 1024
+        limitBytes: Int = 64 * 1024,
+        renderTerminal: Boolean = false
     ): BufferRead? {
-        val buffer = interactiveSessions[processId]?.outputBuffer ?: return null
+        val record = interactiveSessions[processId] ?: return null
+        val buffer = record.outputBuffer
         val fromOffset = when (mode) {
             "all" -> 0L
             "tail" -> (buffer.totalBytes() - limitBytes).coerceAtLeast(0L)
@@ -1167,7 +1202,22 @@ class BackgroundProcessManager @Inject constructor(
         if (mode == "new") {
             interactiveReadOffsets[processId] = result.toOffset
         }
-        return result
+        return if (renderTerminal) result.withTerminalSnapshot(record) else result
+    }
+
+    private fun BufferRead.withTerminalSnapshot(record: InteractiveSessionRecord): BufferRead {
+        val snapshot = renderInteractiveTerminalSnapshot(
+            bytes = record.outputBuffer.snapshot(),
+            columns = record.columns,
+            rows = record.rows
+        )
+        return copy(
+            terminalScreen = snapshot.screen,
+            terminalModes = snapshot.modes,
+            terminalTitle = snapshot.title,
+            terminalColumns = snapshot.columns,
+            terminalRows = snapshot.rows
+        )
     }
 
     /**

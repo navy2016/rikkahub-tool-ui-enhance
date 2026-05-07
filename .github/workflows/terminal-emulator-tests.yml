@@ -12,6 +12,7 @@ on:
       - 'app/src/main/java/me/rerere/rikkahub/data/ai/tools/LocalTools.kt'
       - 'app/src/test/java/me/rerere/rikkahub/utils/TerminalEmulatorTest.kt'
       - 'app/src/test/java/me/rerere/rikkahub/data/container/ControlInputTest.kt'
+      - 'app/src/test/java/me/rerere/rikkahub/data/container/InteractiveTerminalSnapshotTest.kt'
       - '.github/workflows/terminal-emulator-tests.yml'
       - 'app/build.gradle.kts'
       - 'build.gradle.kts'
@@ -24,6 +25,7 @@ on:
       - 'app/src/main/java/me/rerere/rikkahub/data/ai/tools/LocalTools.kt'
       - 'app/src/test/java/me/rerere/rikkahub/utils/TerminalEmulatorTest.kt'
       - 'app/src/test/java/me/rerere/rikkahub/data/container/ControlInputTest.kt'
+      - 'app/src/test/java/me/rerere/rikkahub/data/container/InteractiveTerminalSnapshotTest.kt'
       - '.github/workflows/terminal-emulator-tests.yml'
       - 'app/build.gradle.kts'
       - 'build.gradle.kts'
@@ -95,6 +97,7 @@ jobs:
             if ./gradlew :app:testDebugUnitTest \
               --tests me.rerere.rikkahub.utils.TerminalEmulatorTest \
               --tests me.rerere.rikkahub.data.container.ControlInputTest \
+              --tests me.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest \
               --stacktrace; then
               exit 0
             fi
