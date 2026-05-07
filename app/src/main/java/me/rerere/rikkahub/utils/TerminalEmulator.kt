@@ -882,10 +882,37 @@ class TerminalEmulator(
 
     private fun finishDcs() {
         val text = dcsBuffer.toString()
-        if (text.startsWith("+q")) handleXtGetTcap(text.drop(2))
+        when {
+            text.startsWith("+q") -> handleXtGetTcap(text.drop(2))
+            text.startsWith("$q") -> handleRequestStatusString(text.drop(2))
+        }
         dcsBuffer.clear()
         oscEscSeen = false
         parserState = ParserState.NORMAL
+    }
+
+    private fun handleRequestStatusString(payload: String) {
+        val response = when (payload) {
+            " q" -> "${cursorShapeCode()} q"
+            "m" -> "0m"
+            "r" -> "${scrollTop + 1};${scrollBottom + 1}r"
+            else -> null
+        }
+        if (response == null) {
+            pendingResponses.add("\u001BP0\$r${payload}\u001B\\")
+        } else {
+            pendingResponses.add("\u001BP1\$r${response}\u001B\\")
+        }
+    }
+
+    private fun cursorShapeCode(): Int = when (cursorShape) {
+        CursorShape.DEFAULT -> 0
+        CursorShape.BLOCK -> 1
+        CursorShape.STEADY_BLOCK -> 2
+        CursorShape.UNDERLINE -> 3
+        CursorShape.STEADY_UNDERLINE -> 4
+        CursorShape.BAR -> 5
+        CursorShape.STEADY_BAR -> 6
     }
 
     private fun handleXtGetTcap(payload: String) {
