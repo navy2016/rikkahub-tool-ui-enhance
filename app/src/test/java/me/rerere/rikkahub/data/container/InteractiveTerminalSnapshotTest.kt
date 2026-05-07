@@ -20,6 +20,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(6, lines.size)
         assertEquals(lines, snapshot.screenLines)
         assertEquals("top\n    menu", snapshot.visibleContent)
+        assertEquals(listOf("top", "    menu"), snapshot.visibleContentLines)
         assertEquals(listOf(1, 2), snapshot.nonEmptyRows)
         assertEquals(1, snapshot.firstNonEmptyRow)
         assertEquals(2, snapshot.lastNonEmptyRow)
@@ -87,6 +88,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(List(6) { "" }, snapshot.screenLines)
         assertEquals(emptyList<Int>(), snapshot.nonEmptyRows)
         assertEquals("", snapshot.visibleContent)
+        assertEquals(emptyList<String>(), snapshot.visibleContentLines)
         assertEquals(null, snapshot.firstNonEmptyRow)
         assertEquals(null, snapshot.lastNonEmptyRow)
         assertEquals(0, snapshot.contentHeight)
@@ -116,6 +118,7 @@ class InteractiveTerminalSnapshotTest {
 
         assertEquals(listOf(3, 6), snapshot.nonEmptyRows)
         assertEquals("   middle\n\n\nbottom", snapshot.visibleContent)
+        assertEquals(listOf("   middle", "", "", "bottom"), snapshot.visibleContentLines)
         assertEquals(true, snapshot.cursorInVisibleContent)
         assertEquals(4, snapshot.cursorVisibleContentRow)
         assertEquals(3, snapshot.firstNonEmptyRow)
