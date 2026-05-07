@@ -53,12 +53,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key as ComposeKey
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.nativeKeyEvent
+import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
@@ -87,7 +88,6 @@ import me.rerere.rikkahub.utils.TerminalEmulator.MouseEventType
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.compose.koinInject
-import android.view.KeyEvent as AndroidKeyEvent
 import android.view.MotionEvent
 import java.util.concurrent.TimeUnit
 
@@ -568,49 +568,49 @@ private fun TerminalInteractivePanel(
     }
 
     fun sequenceForHardwareSpecialKey(event: KeyEvent, shift: Boolean, alt: Boolean, ctrl: Boolean): String? {
-        val key = when (event.nativeKeyEvent.keyCode) {
-            AndroidKeyEvent.KEYCODE_DPAD_UP -> Key.UP
-            AndroidKeyEvent.KEYCODE_DPAD_DOWN -> Key.DOWN
-            AndroidKeyEvent.KEYCODE_DPAD_LEFT -> Key.LEFT
-            AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> Key.RIGHT
-            AndroidKeyEvent.KEYCODE_MOVE_HOME -> Key.HOME
-            AndroidKeyEvent.KEYCODE_MOVE_END -> Key.END
-            AndroidKeyEvent.KEYCODE_PAGE_UP -> Key.PAGE_UP
-            AndroidKeyEvent.KEYCODE_PAGE_DOWN -> Key.PAGE_DOWN
-            AndroidKeyEvent.KEYCODE_INSERT -> Key.INSERT
-            AndroidKeyEvent.KEYCODE_FORWARD_DEL -> Key.DELETE
-            AndroidKeyEvent.KEYCODE_DEL -> Key.BACKSPACE
-            AndroidKeyEvent.KEYCODE_ENTER -> Key.ENTER
-            AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> Key.KP_ENTER
-            AndroidKeyEvent.KEYCODE_NUMPAD_0 -> Key.KP_0
-            AndroidKeyEvent.KEYCODE_NUMPAD_1 -> Key.KP_1
-            AndroidKeyEvent.KEYCODE_NUMPAD_2 -> Key.KP_2
-            AndroidKeyEvent.KEYCODE_NUMPAD_3 -> Key.KP_3
-            AndroidKeyEvent.KEYCODE_NUMPAD_4 -> Key.KP_4
-            AndroidKeyEvent.KEYCODE_NUMPAD_5 -> Key.KP_5
-            AndroidKeyEvent.KEYCODE_NUMPAD_6 -> Key.KP_6
-            AndroidKeyEvent.KEYCODE_NUMPAD_7 -> Key.KP_7
-            AndroidKeyEvent.KEYCODE_NUMPAD_8 -> Key.KP_8
-            AndroidKeyEvent.KEYCODE_NUMPAD_9 -> Key.KP_9
-            AndroidKeyEvent.KEYCODE_NUMPAD_DOT -> Key.KP_DECIMAL
-            AndroidKeyEvent.KEYCODE_NUMPAD_ADD -> Key.KP_ADD
-            AndroidKeyEvent.KEYCODE_NUMPAD_SUBTRACT -> Key.KP_SUBTRACT
-            AndroidKeyEvent.KEYCODE_NUMPAD_MULTIPLY -> Key.KP_MULTIPLY
-            AndroidKeyEvent.KEYCODE_NUMPAD_DIVIDE -> Key.KP_DIVIDE
-            AndroidKeyEvent.KEYCODE_TAB -> Key.TAB
-            AndroidKeyEvent.KEYCODE_ESCAPE -> Key.ESCAPE
-            AndroidKeyEvent.KEYCODE_F1 -> Key.F1
-            AndroidKeyEvent.KEYCODE_F2 -> Key.F2
-            AndroidKeyEvent.KEYCODE_F3 -> Key.F3
-            AndroidKeyEvent.KEYCODE_F4 -> Key.F4
-            AndroidKeyEvent.KEYCODE_F5 -> Key.F5
-            AndroidKeyEvent.KEYCODE_F6 -> Key.F6
-            AndroidKeyEvent.KEYCODE_F7 -> Key.F7
-            AndroidKeyEvent.KEYCODE_F8 -> Key.F8
-            AndroidKeyEvent.KEYCODE_F9 -> Key.F9
-            AndroidKeyEvent.KEYCODE_F10 -> Key.F10
-            AndroidKeyEvent.KEYCODE_F11 -> Key.F11
-            AndroidKeyEvent.KEYCODE_F12 -> Key.F12
+        val key = when (event.key) {
+            ComposeKey.DirectionUp -> Key.UP
+            ComposeKey.DirectionDown -> Key.DOWN
+            ComposeKey.DirectionLeft -> Key.LEFT
+            ComposeKey.DirectionRight -> Key.RIGHT
+            ComposeKey.MoveHome, ComposeKey.NumPadMoveHome -> Key.HOME
+            ComposeKey.MoveEnd, ComposeKey.NumPadMoveEnd -> Key.END
+            ComposeKey.PageUp, ComposeKey.NumPadPageUp -> Key.PAGE_UP
+            ComposeKey.PageDown, ComposeKey.NumPadPageDown -> Key.PAGE_DOWN
+            ComposeKey.Insert, ComposeKey.NumPadInsert -> Key.INSERT
+            ComposeKey.Delete, ComposeKey.NumPadDelete -> Key.DELETE
+            ComposeKey.Backspace -> Key.BACKSPACE
+            ComposeKey.Enter -> Key.ENTER
+            ComposeKey.NumPadEnter -> Key.KP_ENTER
+            ComposeKey.NumPad0 -> Key.KP_0
+            ComposeKey.NumPad1 -> Key.KP_1
+            ComposeKey.NumPad2 -> Key.KP_2
+            ComposeKey.NumPad3 -> Key.KP_3
+            ComposeKey.NumPad4 -> Key.KP_4
+            ComposeKey.NumPad5 -> Key.KP_5
+            ComposeKey.NumPad6 -> Key.KP_6
+            ComposeKey.NumPad7 -> Key.KP_7
+            ComposeKey.NumPad8 -> Key.KP_8
+            ComposeKey.NumPad9 -> Key.KP_9
+            ComposeKey.NumPadDot -> Key.KP_DECIMAL
+            ComposeKey.NumPadAdd -> Key.KP_ADD
+            ComposeKey.NumPadSubtract -> Key.KP_SUBTRACT
+            ComposeKey.NumPadMultiply -> Key.KP_MULTIPLY
+            ComposeKey.NumPadDivide -> Key.KP_DIVIDE
+            ComposeKey.Tab -> Key.TAB
+            ComposeKey.Escape -> Key.ESCAPE
+            ComposeKey.F1 -> Key.F1
+            ComposeKey.F2 -> Key.F2
+            ComposeKey.F3 -> Key.F3
+            ComposeKey.F4 -> Key.F4
+            ComposeKey.F5 -> Key.F5
+            ComposeKey.F6 -> Key.F6
+            ComposeKey.F7 -> Key.F7
+            ComposeKey.F8 -> Key.F8
+            ComposeKey.F9 -> Key.F9
+            ComposeKey.F10 -> Key.F10
+            ComposeKey.F11 -> Key.F11
+            ComposeKey.F12 -> Key.F12
             else -> return null
         }
         return terminalEmulator.sequenceFor(key, shift = shift, alt = alt, ctrl = ctrl)
