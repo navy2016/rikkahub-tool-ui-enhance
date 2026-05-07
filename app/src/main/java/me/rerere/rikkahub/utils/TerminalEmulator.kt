@@ -1031,7 +1031,7 @@ class TerminalEmulator(
     }
 
     private fun handleDeviceAttributes(seq: CsiSequence) {
-        if (seq.privateMarker == ">") {
+        if (seq.privateMarker == '>') {
             pendingResponses.add("\u001B[>0;276;0c")
         } else if (seq.params.isEmpty() || seq.paramZero(0) == 0) {
             pendingResponses.add("\u001B[?1;2c")
