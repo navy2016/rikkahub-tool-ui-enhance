@@ -119,7 +119,9 @@ class TerminalEmulator(
         private set
     var workingDirectoryUri: String = ""
         private set
-    private var savedTitle: String = ""
+    private var iconTitle: String = ""
+    private val titleStack = ArrayDeque<String>()
+    private val iconTitleStack = ArrayDeque<String>()
     private var cursorVisible = true
     private var reverseVideo = false
     private var wraparound = true
@@ -201,7 +203,9 @@ class TerminalEmulator(
         wraparound = true
         pendingWrap = false
         title = ""
-        savedTitle = ""
+        iconTitle = ""
+        titleStack.clear()
+        iconTitleStack.clear()
         workingDirectoryUri = ""
         originMode = false
         applicationCursorKeys = false
@@ -721,7 +725,13 @@ class TerminalEmulator(
             val code = text.substring(0, sep).toIntOrNull()
             val value = text.substring(sep + 1)
             when (code) {
-                0, 1, 2 -> title = value.take(MAX_STRING_SEQUENCE)
+                0 -> {
+                    val normalized = value.take(MAX_STRING_SEQUENCE)
+                    title = normalized
+                    iconTitle = normalized
+                }
+                1 -> iconTitle = value.take(MAX_STRING_SEQUENCE)
+                2 -> title = value.take(MAX_STRING_SEQUENCE)
                 4 -> applyPaletteOsc(value)
                 7 -> workingDirectoryUri = value.take(MAX_STRING_SEQUENCE)
                 8 -> applyHyperlinkOsc(value)
@@ -1255,7 +1265,7 @@ class TerminalEmulator(
         1034 -> if (metaSendsEscape) 1 else 2
         1036 -> if (modifyCursorKeys > 0) 1 else 2
         1039 -> if (modifyOtherKeys > 0) 1 else 2
-        1047, 1049 -> if (alternateScreen) 1 else 2
+        47, 1047, 1049 -> if (alternateScreen) 1 else 2
         1048 -> if (cursorSaveMode) 1 else 2
         1050, 1051, 1052, 1053 -> if (modifyFunctionKeys == code - 1049) 1 else 2
         1060, 1061 -> if (formatOtherKeys == code - 1059) 1 else 2
@@ -1280,13 +1290,36 @@ class TerminalEmulator(
             11 -> pendingResponses.add("\u001B[1t")
             13 -> pendingResponses.add("\u001B[3;0;0t")
             14 -> pendingResponses.add("\u001B[4;${rows * 14};${columns * 7}t")
+            15 -> pendingResponses.add("\u001B[5;${rows * 14};${columns * 7}t")
             16 -> pendingResponses.add("\u001B[6;14;7t")
             18 -> pendingResponses.add("\u001B[8;${rows};${columns}t")
             19 -> pendingResponses.add("\u001B[9;${rows};${columns}t")
-            20 -> pendingResponses.add("\u001B]L;${title}\u001B\\")
+            20 -> pendingResponses.add("\u001B]L;${iconTitle.ifEmpty { title }}\u001B\\")
             21 -> pendingResponses.add("\u001B]l;${title}\u001B\\")
-            22 -> savedTitle = title
-            23 -> title = savedTitle
+            22 -> saveTitleStack(seq.paramZero(1))
+            23 -> restoreTitleStack(seq.paramZero(1))
+        }
+    }
+
+    private fun saveTitleStack(selector: Int) {
+        when (selector) {
+            1 -> iconTitleStack.addLast(iconTitle)
+            2 -> titleStack.addLast(title)
+            else -> {
+                iconTitleStack.addLast(iconTitle)
+                titleStack.addLast(title)
+            }
+        }
+    }
+
+    private fun restoreTitleStack(selector: Int) {
+        when (selector) {
+            1 -> if (iconTitleStack.isNotEmpty()) iconTitle = iconTitleStack.removeLast()
+            2 -> if (titleStack.isNotEmpty()) title = titleStack.removeLast()
+            else -> {
+                if (iconTitleStack.isNotEmpty()) iconTitle = iconTitleStack.removeLast()
+                if (titleStack.isNotEmpty()) title = titleStack.removeLast()
+            }
         }
     }
 

@@ -484,4 +484,48 @@ class TerminalEmulatorTest {
         assertEquals(listOf("\u001B[?1061;1\$y", "\u001B[?1060;2\$y"), terminal.drainResponses())
     }
 
+
+    @Test
+    fun oscIconAndWindowTitlesAreTrackedSeparatelyAndReported() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B]1;icon-only\u0007\u001B]2;window-only\u0007")
+        terminal.feed("\u001B[20t\u001B[21t")
+        assertEquals(
+            listOf("\u001B]L;icon-only\u001B\\", "\u001B]l;window-only\u001B\\"),
+            terminal.drainResponses()
+        )
+
+        terminal.feed("\u001B]0;both\u0007\u001B[20t\u001B[21t")
+        assertEquals(
+            listOf("\u001B]L;both\u001B\\", "\u001B]l;both\u001B\\"),
+            terminal.drainResponses()
+        )
+    }
+
+    @Test
+    fun xtwinopsTitleStacksSupportNestedAndSelectiveRestore() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B]0;one\u0007\u001B[22t\u001B]2;two\u0007\u001B[22;2t\u001B]2;three\u0007")
+        terminal.feed("\u001B[23;2t")
+        assertEquals("two", terminal.title)
+        terminal.feed("\u001B[23t")
+        assertEquals("one", terminal.title)
+
+        terminal.feed("\u001B]1;icon-a\u0007\u001B]2;window-a\u0007\u001B[22;1t\u001B]1;icon-b\u0007\u001B[23;1t\u001B[20t\u001B[21t")
+        assertEquals(
+            listOf("\u001B]L;icon-a\u001B\\", "\u001B]l;window-a\u001B\\"),
+            terminal.drainResponses()
+        )
+    }
+
+    @Test
+    fun screenPixelReportAndPrivate47ModeReportAreSupported() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[15t\u001B[?47h\u001B[?47\$p\u001B[?47l\u001B[?47\$p")
+        assertEquals(
+            listOf("\u001B[5;84;140t", "\u001B[?47;1\$y", "\u001B[?47;2\$y"),
+            terminal.drainResponses()
+        )
+    }
+
 }
