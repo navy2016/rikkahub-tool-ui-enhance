@@ -68,7 +68,7 @@ class InteractiveTerminalSnapshotTest {
 
         val snapshot = renderInteractiveTerminalSnapshot(bytes, columns = 20, rows = 6)
 
-        assertEquals(listOf("\u001B[1;6R"), snapshot.responses)
+        assertEquals(listOf("\u001B[1;7R"), snapshot.responses)
         assertEquals(listOf("hello"), snapshot.clipboardRequests)
         assertTrue(snapshot.screen.lines().first().contains("beforeafter"))
     }
