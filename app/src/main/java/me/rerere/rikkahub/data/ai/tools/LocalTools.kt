@@ -1,4 +1,4 @@
-﻿package me.rerere.rikkahub.data.ai.tools
+package me.rerere.rikkahub.data.ai.tools
 
 import android.content.Context
 import android.net.Uri
@@ -17,6 +17,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.subagent.SubAgentProgressManager
 import me.rerere.rikkahub.data.ai.subagent.SubAgentResult
+import me.rerere.rikkahub.data.container.ControlInput
 import me.rerere.rikkahub.data.container.NativePtyBridge
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -795,44 +796,9 @@ class LocalTools(
                         put("control", buildJsonObject {
                             put("type", "string")
                             put("enum", buildJsonArray {
-                                add("CTRL_A")
-                                add("CTRL_C")
-                                add("CTRL_D")
-                                add("CTRL_E")
-                                add("CTRL_L")
-                                add("CTRL_R")
-                                add("CTRL_U")
-                                add("CTRL_W")
-                                add("CTRL_Z")
-                                add("TAB")
-                                add("BACK_TAB")
-                                add("ESC")
-                                add("UP")
-                                add("DOWN")
-                                add("LEFT")
-                                add("RIGHT")
-                                add("HOME")
-                                add("END")
-                                add("PAGE_UP")
-                                add("PAGE_DOWN")
-                                add("INSERT")
-                                add("DELETE")
-                                add("ENTER")
-                                add("BACKSPACE")
-                                add("F1")
-                                add("F2")
-                                add("F3")
-                                add("F4")
-                                add("F5")
-                                add("F6")
-                                add("F7")
-                                add("F8")
-                                add("F9")
-                                add("F10")
-                                add("F11")
-                                add("F12")
+                                ControlInput.entries.forEach { add(it.name) }
                             })
-                            put("description", "input 操作时可选的控制输入；与 data 二选一。支持 Ctrl+A/C/D/E/L/R/U/W/Z、Tab/BackTab、方向键、Home/End、PgUp/PgDn、Ins/Del、Enter/Backspace、F1-F12")
+                            put("description", "input 操作时可选的控制输入；与 data 二选一。支持 Ctrl+Space/A-Z、Ctrl+[\\]^_、Tab/BackTab、方向键、Home/End、PgUp/PgDn、Ins/Del、Enter/Backspace、F1-F12；适合 vim、readline、codex、claude、opencode 等 TUI/CLI。")
                         })
                     },
                     required = listOf("action")
@@ -1093,7 +1059,7 @@ class LocalTools(
         val result = when {
             control != null -> {
                 val enumValue = try {
-                    me.rerere.rikkahub.data.container.ControlInput.valueOf(control)
+                    ControlInput.valueOf(control)
                 } catch (_: Exception) {
                     return buildJsonObject {
                         put("success", JsonPrimitive(false))

@@ -8,7 +8,10 @@ on:
       - master
     paths:
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/BackgroundProcessManager.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/ai/tools/LocalTools.kt'
       - 'app/src/test/java/me/rerere/rikkahub/utils/TerminalEmulatorTest.kt'
+      - 'app/src/test/java/me/rerere/rikkahub/data/container/ControlInputTest.kt'
       - '.github/workflows/terminal-emulator-tests.yml'
       - 'app/build.gradle.kts'
       - 'build.gradle.kts'
@@ -17,7 +20,10 @@ on:
   pull_request:
     paths:
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/BackgroundProcessManager.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/ai/tools/LocalTools.kt'
       - 'app/src/test/java/me/rerere/rikkahub/utils/TerminalEmulatorTest.kt'
+      - 'app/src/test/java/me/rerere/rikkahub/data/container/ControlInputTest.kt'
       - '.github/workflows/terminal-emulator-tests.yml'
       - 'app/build.gradle.kts'
       - 'build.gradle.kts'
@@ -86,7 +92,10 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             echo "Gradle test attempt ${attempt}/3"
-            if ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.utils.TerminalEmulatorTest --stacktrace; then
+            if ./gradlew :app:testDebugUnitTest \
+              --tests me.rerere.rikkahub.utils.TerminalEmulatorTest \
+              --tests me.rerere.rikkahub.data.container.ControlInputTest \
+              --stacktrace; then
               exit 0
             fi
             if [ "$attempt" = "3" ]; then

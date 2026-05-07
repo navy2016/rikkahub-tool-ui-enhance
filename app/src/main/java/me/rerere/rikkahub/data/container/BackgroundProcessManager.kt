@@ -28,15 +28,38 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 enum class ControlInput {
+    CTRL_SPACE,
     CTRL_A,
+    CTRL_B,
     CTRL_C,
     CTRL_D,
     CTRL_E,
+    CTRL_F,
+    CTRL_G,
+    CTRL_H,
+    CTRL_I,
+    CTRL_J,
+    CTRL_K,
     CTRL_L,
+    CTRL_M,
+    CTRL_N,
+    CTRL_O,
+    CTRL_P,
+    CTRL_Q,
     CTRL_R,
+    CTRL_S,
+    CTRL_T,
     CTRL_U,
+    CTRL_V,
     CTRL_W,
+    CTRL_X,
+    CTRL_Y,
     CTRL_Z,
+    CTRL_LEFT_BRACKET,
+    CTRL_BACKSLASH,
+    CTRL_RIGHT_BRACKET,
+    CTRL_CARET,
+    CTRL_UNDERSCORE,
     TAB,
     BACK_TAB,
     ESC,
@@ -64,6 +87,71 @@ enum class ControlInput {
     F10,
     F11,
     F12
+}
+
+internal fun controlInputBytes(control: ControlInput): ByteArray {
+    fun esc(suffix: String): ByteArray = ("\u001B" + suffix).toByteArray(Charsets.UTF_8)
+    return when (control) {
+        ControlInput.CTRL_SPACE -> byteArrayOf(0x00)
+        ControlInput.CTRL_A -> byteArrayOf(0x01)
+        ControlInput.CTRL_B -> byteArrayOf(0x02)
+        ControlInput.CTRL_C -> byteArrayOf(0x03)
+        ControlInput.CTRL_D -> byteArrayOf(0x04)
+        ControlInput.CTRL_E -> byteArrayOf(0x05)
+        ControlInput.CTRL_F -> byteArrayOf(0x06)
+        ControlInput.CTRL_G -> byteArrayOf(0x07)
+        ControlInput.CTRL_H -> byteArrayOf(0x08)
+        ControlInput.CTRL_I -> byteArrayOf('\t'.code.toByte())
+        ControlInput.CTRL_J -> byteArrayOf('\n'.code.toByte())
+        ControlInput.CTRL_K -> byteArrayOf(0x0B)
+        ControlInput.CTRL_L -> byteArrayOf(0x0C)
+        ControlInput.CTRL_M -> byteArrayOf('\r'.code.toByte())
+        ControlInput.CTRL_N -> byteArrayOf(0x0E)
+        ControlInput.CTRL_O -> byteArrayOf(0x0F)
+        ControlInput.CTRL_P -> byteArrayOf(0x10)
+        ControlInput.CTRL_Q -> byteArrayOf(0x11)
+        ControlInput.CTRL_R -> byteArrayOf(0x12)
+        ControlInput.CTRL_S -> byteArrayOf(0x13)
+        ControlInput.CTRL_T -> byteArrayOf(0x14)
+        ControlInput.CTRL_U -> byteArrayOf(0x15)
+        ControlInput.CTRL_V -> byteArrayOf(0x16)
+        ControlInput.CTRL_W -> byteArrayOf(0x17)
+        ControlInput.CTRL_X -> byteArrayOf(0x18)
+        ControlInput.CTRL_Y -> byteArrayOf(0x19)
+        ControlInput.CTRL_Z -> byteArrayOf(0x1A)
+        ControlInput.CTRL_LEFT_BRACKET -> byteArrayOf(0x1B)
+        ControlInput.CTRL_BACKSLASH -> byteArrayOf(0x1C)
+        ControlInput.CTRL_RIGHT_BRACKET -> byteArrayOf(0x1D)
+        ControlInput.CTRL_CARET -> byteArrayOf(0x1E)
+        ControlInput.CTRL_UNDERSCORE -> byteArrayOf(0x1F)
+        ControlInput.TAB -> byteArrayOf('\t'.code.toByte())
+        ControlInput.BACK_TAB -> esc("[Z")
+        ControlInput.ESC -> byteArrayOf(0x1B)
+        ControlInput.UP -> esc("[A")
+        ControlInput.DOWN -> esc("[B")
+        ControlInput.LEFT -> esc("[D")
+        ControlInput.RIGHT -> esc("[C")
+        ControlInput.HOME -> esc("[H")
+        ControlInput.END -> esc("[F")
+        ControlInput.PAGE_UP -> esc("[5~")
+        ControlInput.PAGE_DOWN -> esc("[6~")
+        ControlInput.INSERT -> esc("[2~")
+        ControlInput.DELETE -> esc("[3~")
+        ControlInput.ENTER -> byteArrayOf('\n'.code.toByte())
+        ControlInput.BACKSPACE -> byteArrayOf(0x7F)
+        ControlInput.F1 -> esc("OP")
+        ControlInput.F2 -> esc("OQ")
+        ControlInput.F3 -> esc("OR")
+        ControlInput.F4 -> esc("OS")
+        ControlInput.F5 -> esc("[15~")
+        ControlInput.F6 -> esc("[17~")
+        ControlInput.F7 -> esc("[18~")
+        ControlInput.F8 -> esc("[19~")
+        ControlInput.F9 -> esc("[20~")
+        ControlInput.F10 -> esc("[21~")
+        ControlInput.F11 -> esc("[23~")
+        ControlInput.F12 -> esc("[24~")
+    }
 }
 
 /**
@@ -536,45 +624,7 @@ class BackgroundProcessManager @Inject constructor(
             )
 
         try {
-            fun esc(suffix: String): ByteArray = ("\u001B" + suffix).toByteArray(Charsets.UTF_8)
-            val bytes = when (control) {
-                ControlInput.CTRL_A -> byteArrayOf(0x01)
-                ControlInput.CTRL_C -> byteArrayOf(0x03)
-                ControlInput.CTRL_D -> byteArrayOf(0x04)
-                ControlInput.CTRL_E -> byteArrayOf(0x05)
-                ControlInput.CTRL_L -> byteArrayOf(0x0C)
-                ControlInput.CTRL_R -> byteArrayOf(0x12)
-                ControlInput.CTRL_U -> byteArrayOf(0x15)
-                ControlInput.CTRL_W -> byteArrayOf(0x17)
-                ControlInput.CTRL_Z -> byteArrayOf(0x1A)
-                ControlInput.TAB -> byteArrayOf('\t'.code.toByte())
-                ControlInput.BACK_TAB -> esc("[Z")
-                ControlInput.ESC -> byteArrayOf(0x1B)
-                ControlInput.UP -> esc("[A")
-                ControlInput.DOWN -> esc("[B")
-                ControlInput.LEFT -> esc("[D")
-                ControlInput.RIGHT -> esc("[C")
-                ControlInput.HOME -> esc("[H")
-                ControlInput.END -> esc("[F")
-                ControlInput.PAGE_UP -> esc("[5~")
-                ControlInput.PAGE_DOWN -> esc("[6~")
-                ControlInput.INSERT -> esc("[2~")
-                ControlInput.DELETE -> esc("[3~")
-                ControlInput.ENTER -> byteArrayOf('\n'.code.toByte())
-                ControlInput.BACKSPACE -> byteArrayOf(0x7F)
-                ControlInput.F1 -> esc("OP")
-                ControlInput.F2 -> esc("OQ")
-                ControlInput.F3 -> esc("OR")
-                ControlInput.F4 -> esc("OS")
-                ControlInput.F5 -> esc("[15~")
-                ControlInput.F6 -> esc("[17~")
-                ControlInput.F7 -> esc("[18~")
-                ControlInput.F8 -> esc("[19~")
-                ControlInput.F9 -> esc("[20~")
-                ControlInput.F10 -> esc("[21~")
-                ControlInput.F11 -> esc("[23~")
-                ControlInput.F12 -> esc("[24~")
-            }
+            val bytes = controlInputBytes(control)
             record.process.outputStream.write(bytes)
             record.process.outputStream.flush()
             record.lastActivityAt = System.currentTimeMillis()
