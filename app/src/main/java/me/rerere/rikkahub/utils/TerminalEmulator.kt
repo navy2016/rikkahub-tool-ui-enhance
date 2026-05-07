@@ -127,6 +127,10 @@ class TerminalEmulator(
     private var graphemeJoinPending = false
     private val clipboardRequests = mutableListOf<String>()
     private var currentHyperlink: Hyperlink? = null
+    private val paletteOverrides = mutableMapOf<Int, Color>()
+    private var defaultForeground = Color(0xFF00E676)
+    private var defaultBackground = Color(0xFF101010)
+    private var cursorColor = Color(0xFF00E676)
     private var alternateScreen = false
     private var lineDrawing = false
     private var scrollTop = 0
@@ -159,6 +163,10 @@ class TerminalEmulator(
         oscEscSeen = false
         pendingResponses.clear()
         clipboardRequests.clear()
+        paletteOverrides.clear()
+        defaultForeground = Color(0xFF00E676)
+        defaultBackground = Color(0xFF101010)
+        cursorColor = Color(0xFF00E676)
         resetDecoder()
         pendingUtf8 = ByteArray(0)
         cursorVisible = true
@@ -598,14 +606,70 @@ class TerminalEmulator(
             val value = text.substring(sep + 1)
             when (code) {
                 0, 1, 2 -> title = value.take(MAX_STRING_SEQUENCE)
+                4 -> applyPaletteOsc(value)
                 7 -> workingDirectoryUri = value.take(MAX_STRING_SEQUENCE)
                 8 -> applyHyperlinkOsc(value)
+                10 -> applyDynamicColorOsc(10, value)
+                11 -> applyDynamicColorOsc(11, value)
+                12 -> applyDynamicColorOsc(12, value)
                 52 -> applyClipboardOsc(value)
             }
         }
         oscBuffer.clear()
         oscEscSeen = false
         parserState = ParserState.NORMAL
+    }
+
+    private fun applyPaletteOsc(value: String) {
+        val parts = value.split(';')
+        var index = 0
+        while (index + 1 < parts.size) {
+            val colorIndex = parts[index].toIntOrNull()
+            val spec = parts[index + 1]
+            if (colorIndex != null && colorIndex in 0..255) {
+                if (spec == "?") {
+                    pendingResponses.add("\u001B]4;${colorIndex};${colorToOscRgb(xterm256(colorIndex))}\u0007")
+                } else {
+                    parseOscColor(spec)?.let { paletteOverrides[colorIndex] = it }
+                }
+            }
+            index += 2
+        }
+    }
+
+    private fun applyDynamicColorOsc(code: Int, value: String) {
+        if (value == "?") {
+            val color = when (code) {
+                10 -> defaultForeground
+                11 -> defaultBackground
+                12 -> cursorColor
+                else -> defaultForeground
+            }
+            pendingResponses.add("\u001B]${code};${colorToOscRgb(color)}\u0007")
+            return
+        }
+        parseOscColor(value)?.let { color ->
+            when (code) {
+                10 -> defaultForeground = color
+                11 -> defaultBackground = color
+                12 -> cursorColor = color
+            }
+        }
+    }
+
+    private fun parseOscColor(spec: String): Color? {
+        val rgb = Regex("rgb:([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})/([0-9a-fA-F]{1,4})").matchEntire(spec) ?: return null
+        fun parse(component: String): Int {
+            val raw = component.toInt(16)
+            val max = (1 shl (component.length * 4)) - 1
+            return ((raw * 255) / max).coerceIn(0, 255)
+        }
+        return rgbColor(parse(rgb.groupValues[1]), parse(rgb.groupValues[2]), parse(rgb.groupValues[3]))
+    }
+
+    private fun colorToOscRgb(color: Color): String {
+        fun channel(value: Float): String = ((value.coerceIn(0f, 1f) * 65535f).toInt()).coerceIn(0, 65535).toString(16).padStart(4, '0')
+        return "rgb:${channel(color.red)}/${channel(color.green)}/${channel(color.blue)}"
     }
 
     private fun applyClipboardOsc(value: String) {
@@ -731,7 +795,7 @@ class TerminalEmulator(
             'T' -> repeat(seq.paramInt(0, 1)) { scrollDown() }
             'Z' -> moveCursor(col = (cursorCol - seq.paramInt(0, 1) * 8).coerceAtLeast(0))
             'b' -> repeat(seq.paramInt(0, 1)) { if (cursorCol > 0) screen[cursorRow][cursorCol - 1].text.firstOrNull()?.let { putChar(it) } }
-            'c' -> if (seq.privateMarker != '>' && (seq.params.isEmpty() || seq.paramZero(0) == 0)) pendingResponses.add("[?1;2c")
+            'c' -> handleDeviceAttributes(seq)
             'd' -> {
                 val targetRow = seq.paramInt(0, 1) - 1
                 val row = if (originMode) (scrollTop + targetRow).coerceIn(scrollTop, scrollBottom) else targetRow.coerceIn(0, rows - 1)
@@ -740,7 +804,7 @@ class TerminalEmulator(
             'n' -> handleDeviceStatusReport(seq.paramZero(0))
             'g' -> Unit
             'q' -> if (seq.intermediates == " ") setCursorShape(seq.paramZero(0))
-            'p' -> if (seq.intermediates == "!") softReset()
+            'p' -> if (seq.intermediates == "!") softReset() else if (seq.intermediates == "$") handleRequestMode(seq)
             'r' -> setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
             't' -> handleWindowOperation(seq)
             'h' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), true)
@@ -966,6 +1030,40 @@ class TerminalEmulator(
         pendingWrap = false
     }
 
+    private fun handleDeviceAttributes(seq: CsiSequence) {
+        if (seq.privateMarker == ">") {
+            pendingResponses.add("\u001B[>0;276;0c")
+        } else if (seq.params.isEmpty() || seq.paramZero(0) == 0) {
+            pendingResponses.add("\u001B[?1;2c")
+        }
+    }
+
+    private fun handleRequestMode(seq: CsiSequence) {
+        val code = seq.paramZero(0)
+        val value = when (seq.privateMarker) {
+            "?".first() -> privateModeReportValue(code)
+            else -> 0
+        }
+        val prefix = seq.privateMarker?.toString() ?: ""
+        pendingResponses.add("\u001B[${prefix}${code};${value}\$y")
+    }
+
+    private fun privateModeReportValue(code: Int): Int = when (code) {
+        1 -> if (applicationCursorKeys) 1 else 2
+        6 -> if (originMode) 1 else 2
+        7 -> if (wraparound) 1 else 2
+        25 -> if (cursorVisible) 1 else 2
+        1000 -> if (mouseTrackingMode == MouseTrackingMode.NORMAL) 1 else 2
+        1002 -> if (mouseTrackingMode == MouseTrackingMode.BUTTON_EVENT) 1 else 2
+        1003 -> if (mouseTrackingMode == MouseTrackingMode.ANY_EVENT) 1 else 2
+        1004 -> if (focusReporting) 1 else 2
+        1006 -> if (mouseProtocol == MouseProtocol.SGR) 1 else 2
+        1015 -> if (mouseProtocol == MouseProtocol.URXVT) 1 else 2
+        1049 -> if (alternateScreen) 1 else 2
+        2004 -> if (bracketedPaste) 1 else 2
+        else -> 0
+    }
+
     private fun handleDeviceStatusReport(code: Int) {
         when (code) {
             5 -> pendingResponses.add("\u001B[0n")
@@ -1091,12 +1189,12 @@ class TerminalEmulator(
                 27 -> currentStyle = currentStyle.copy(inverse = false)
                 28 -> currentStyle = currentStyle.copy(concealed = false)
                 29 -> currentStyle = currentStyle.copy(strike = false)
-                39 -> currentStyle = currentStyle.copy(fg = defaultStyle.fg)
+                39 -> currentStyle = currentStyle.copy(fg = defaultForeground)
                 49 -> currentStyle = currentStyle.copy(bg = null)
-                in 30..37 -> currentStyle = currentStyle.copy(fg = ansiColor(code - 30, currentStyle.bold))
-                in 90..97 -> currentStyle = currentStyle.copy(fg = ansiColor(code - 90, true))
-                in 40..47 -> currentStyle = currentStyle.copy(bg = ansiColor(code - 40, false))
-                in 100..107 -> currentStyle = currentStyle.copy(bg = ansiColor(code - 100, true))
+                in 30..37 -> currentStyle = currentStyle.copy(fg = paletteOverrides[code - 30] ?: ansiColor(code - 30, currentStyle.bold))
+                in 90..97 -> currentStyle = currentStyle.copy(fg = paletteOverrides[code - 90 + 8] ?: ansiColor(code - 90, true))
+                in 40..47 -> currentStyle = currentStyle.copy(bg = paletteOverrides[code - 40] ?: ansiColor(code - 40, false))
+                in 100..107 -> currentStyle = currentStyle.copy(bg = paletteOverrides[code - 100 + 8] ?: ansiColor(code - 100, true))
                 38, 48 -> {
                     val isFg = code == 38
                     when (params.getOrNull(i + 1)?.toIntOrNull()) {
@@ -1194,6 +1292,7 @@ class TerminalEmulator(
 
     private fun xterm256(code: Int): Color {
         val c = code.coerceIn(0, 255)
+        paletteOverrides[c]?.let { return it }
         if (c < 16) return ansiColor(c % 8, c >= 8)
         if (c in 232..255) {
             val v = 8 + (c - 232) * 10

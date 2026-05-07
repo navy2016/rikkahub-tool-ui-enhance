@@ -198,4 +198,36 @@ class TerminalEmulatorTest {
         assertTrue(terminal.plainText(includeScrollback = false).contains("beforeafter"))
     }
 
+
+    @Test
+    fun secondaryDeviceAttributesAndRequestModeReportsAreSupported() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("[>c")
+        assertEquals(listOf("[>0;276;0c"), terminal.drainResponses())
+
+        terminal.feed("[?2004h[?2004\$p[?1006\$p")
+        assertEquals(
+            listOf("[?2004;1\$y", "[?1006;2\$y"),
+            terminal.drainResponses()
+        )
+    }
+
+    @Test
+    fun oscColorQueriesAndPaletteOverridesAreSupported() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("]10;rgb:ffff/0000/0000]11;rgb:0000/0000/0000]12;rgb:0000/ffff/0000")
+        terminal.feed("]10;?]11;?]12;?")
+        assertEquals(
+            listOf(
+                "]10;rgb:ffff/0000/0000",
+                "]11;rgb:0000/0000/0000",
+                "]12;rgb:0000/ffff/0000"
+            ),
+            terminal.drainResponses()
+        )
+
+        terminal.feed("]4;1;rgb:ffff/0000/0000]4;1;?")
+        assertEquals(listOf("]4;1;rgb:ffff/0000/0000"), terminal.drainResponses())
+    }
+
 }
