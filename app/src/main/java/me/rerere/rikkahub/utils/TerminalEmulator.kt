@@ -884,7 +884,7 @@ class TerminalEmulator(
         val text = dcsBuffer.toString()
         when {
             text.startsWith("+q") -> handleXtGetTcap(text.drop(2))
-            text.startsWith("$q") -> handleRequestStatusString(text.drop(2))
+            text.startsWith("\$q") -> handleRequestStatusString(text.drop(2))
         }
         dcsBuffer.clear()
         oscEscSeen = false
