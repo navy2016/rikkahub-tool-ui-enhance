@@ -543,30 +543,6 @@ private fun TerminalInteractivePanel(
         sendRaw(terminalEmulator.sequenceFor(key))
     }
 
-    fun handleHardwareKey(event: KeyEvent): Boolean {
-        if (!rawInputMode || event.type != KeyEventType.KeyDown) return false
-        val shift = event.isShiftPressed
-        val alt = event.isAltPressed
-        val ctrl = event.isCtrlPressed
-        val specialSequence = sequenceForHardwareSpecialKey(event, shift, alt, ctrl)
-        if (specialSequence != null) {
-            sendRaw(specialSequence)
-            return true
-        }
-
-        val codePoint = event.utf16CodePoint
-        if (codePoint == 0) return false
-        val sequence = terminalEmulator.sequenceForCodePoint(
-            codePoint = codePoint,
-            shift = shift,
-            alt = alt,
-            ctrl = ctrl
-        )
-        if (sequence.isEmpty()) return false
-        sendRaw(sequence)
-        return true
-    }
-
     fun sequenceForHardwareSpecialKey(event: KeyEvent, shift: Boolean, alt: Boolean, ctrl: Boolean): String? {
         val key = when (event.key) {
             ComposeKey.DirectionUp -> Key.UP
@@ -614,6 +590,30 @@ private fun TerminalInteractivePanel(
             else -> return null
         }
         return terminalEmulator.sequenceFor(key, shift = shift, alt = alt, ctrl = ctrl)
+    }
+
+    fun handleHardwareKey(event: KeyEvent): Boolean {
+        if (!rawInputMode || event.type != KeyEventType.KeyDown) return false
+        val shift = event.isShiftPressed
+        val alt = event.isAltPressed
+        val ctrl = event.isCtrlPressed
+        val specialSequence = sequenceForHardwareSpecialKey(event, shift, alt, ctrl)
+        if (specialSequence != null) {
+            sendRaw(specialSequence)
+            return true
+        }
+
+        val codePoint = event.utf16CodePoint
+        if (codePoint == 0) return false
+        val sequence = terminalEmulator.sequenceForCodePoint(
+            codePoint = codePoint,
+            shift = shift,
+            alt = alt,
+            ctrl = ctrl
+        )
+        if (sequence.isEmpty()) return false
+        sendRaw(sequence)
+        return true
     }
 
     fun handleInputChange(value: String) {
