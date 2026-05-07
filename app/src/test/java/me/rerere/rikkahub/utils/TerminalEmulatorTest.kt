@@ -665,4 +665,19 @@ class TerminalEmulatorTest {
         assertTrue(rendered.spanStyles.none { it.start == 3 && it.item.fontWeight == FontWeight.Bold })
     }
 
+
+    @Test
+    fun fillRectangleWritesRequestedCharacterAndClipsArea() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("ABCD\u001B[2;1HEFGH\u001B[88;1;2;2;3\$x")
+        var lines = terminal.plainText(includeScrollback = false).lines()
+        assertEquals("AXXD", lines[0])
+        assertEquals("EXXH", lines[1])
+
+        terminal.feed("\u001B[2J\u001B[1;1HABCD\u001B[2;1HEFGH\u001B[90;2;3;9;30\$x")
+        lines = terminal.plainText(includeScrollback = false).lines()
+        assertEquals("ABCD", lines[0])
+        assertEquals("EFZZ", lines[1])
+    }
+
 }

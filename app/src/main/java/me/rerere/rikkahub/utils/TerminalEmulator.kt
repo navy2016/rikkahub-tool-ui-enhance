@@ -1089,6 +1089,7 @@ class TerminalEmulator(
             }
             'p' -> if (seq.intermediates == "!") softReset() else if (seq.intermediates == "$") handleRequestMode(seq)
             'r' -> if (seq.intermediates == "$") changeRectangleAttributes(seq, reverse = false) else setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
+            'x' -> if (seq.intermediates == "$") fillRectangle(seq)
             'z' -> if (seq.intermediates == "$") eraseRectangle(seq, selective = false)
             '{' -> if (seq.intermediates == "$") eraseRectangle(seq, selective = true)
             't' -> if (seq.intermediates == "$") changeRectangleAttributes(seq, reverse = true) else handleWindowOperation(seq)
@@ -1285,6 +1286,35 @@ class TerminalEmulator(
         val bottom = (seq.paramInt(2, rows) - 1).coerceIn(top, rows - 1)
         val right = (seq.paramInt(3, columns) - 1).coerceIn(left, columns - 1)
         for (row in top..bottom) eraseLineRange(row, left, right, selective)
+    }
+
+    private fun fillRectangle(seq: CsiSequence) {
+        pendingWrap = false
+        val codePoint = seq.paramInt(0, 32).coerceIn(32, 0x10FFFF)
+        val fillText = codePointToString(codePoint) ?: " "
+        val width = charWidth(codePoint)
+        val top = (seq.paramInt(1, 1) - 1).coerceIn(0, rows - 1)
+        val left = (seq.paramInt(2, 1) - 1).coerceIn(0, columns - 1)
+        val bottom = (seq.paramInt(3, rows) - 1).coerceIn(top, rows - 1)
+        val right = (seq.paramInt(4, columns) - 1).coerceIn(left, columns - 1)
+        for (row in top..bottom) {
+            var col = left
+            while (col <= right) {
+                screen[row][col] = Cell(fillText, currentStyle.copy(hyperlink = currentHyperlink), width, continuation = false)
+                if (width == 2 && col + 1 <= right) {
+                    screen[row][col + 1] = Cell("", currentStyle.copy(hyperlink = currentHyperlink), 0, continuation = true)
+                    col += 2
+                } else {
+                    col++
+                }
+            }
+        }
+    }
+
+    private fun codePointToString(codePoint: Int): String? = try {
+        String(Character.toChars(codePoint))
+    } catch (_: IllegalArgumentException) {
+        null
     }
 
     private fun changeRectangleAttributes(seq: CsiSequence, reverse: Boolean) {
