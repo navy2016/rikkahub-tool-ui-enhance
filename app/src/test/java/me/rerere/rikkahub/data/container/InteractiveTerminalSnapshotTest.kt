@@ -112,6 +112,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals("world", snapshot.cursorLineTextAfterCursor)
         assertEquals(true, snapshot.cursorInVisibleContent)
         assertEquals(1, snapshot.cursorVisibleContentRow)
+        assertEquals("prompt> hello world", snapshot.cursorVisibleContentLine)
     }
 
     @Test
@@ -125,6 +126,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(listOf("   middle", "", "", "bottom"), snapshot.visibleContentLines)
         assertEquals(true, snapshot.cursorInVisibleContent)
         assertEquals(4, snapshot.cursorVisibleContentRow)
+        assertEquals("bottom", snapshot.cursorVisibleContentLine)
         assertEquals(3, snapshot.firstNonEmptyRow)
         assertEquals(6, snapshot.lastNonEmptyRow)
         assertEquals("   middle", snapshot.firstNonEmptyLine)
@@ -142,5 +144,6 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(3, snapshot.firstNonEmptyRow)
         assertEquals(false, snapshot.cursorInVisibleContent)
         assertEquals(null, snapshot.cursorVisibleContentRow)
+        assertEquals(null, snapshot.cursorVisibleContentLine)
     }
 }

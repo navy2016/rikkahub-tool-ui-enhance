@@ -52,6 +52,7 @@ internal data class InteractiveTerminalSnapshot(
     val cursorLineTextAfterCursor: String,
     val cursorInVisibleContent: Boolean,
     val cursorVisibleContentRow: Int?,
+    val cursorVisibleContentLine: String?,
     val cursorShape: String,
     val cursorVisible: Boolean,
     val workingDirectoryUri: String,
@@ -98,6 +99,9 @@ internal fun renderInteractiveTerminalSnapshot(
     } else {
         null
     }
+    val cursorVisibleContentLine = cursorVisibleContentRow?.let { row ->
+        visibleContentLines.getOrNull(row - 1)
+    }
     return InteractiveTerminalSnapshot(
         screen = screen,
         screenLines = screenLines,
@@ -121,6 +125,7 @@ internal fun renderInteractiveTerminalSnapshot(
         cursorLineTextAfterCursor = cursorLine.drop(cursorSplitColumn),
         cursorInVisibleContent = cursorInVisibleContent,
         cursorVisibleContentRow = cursorVisibleContentRow,
+        cursorVisibleContentLine = cursorVisibleContentLine,
         cursorShape = terminal.cursorShape().name,
         cursorVisible = terminal.isCursorVisible(),
         workingDirectoryUri = terminal.workingDirectoryUri,
@@ -892,6 +897,7 @@ class BackgroundProcessManager @Inject constructor(
         val terminalCursorLineTextAfterCursor: String? = null,
         val terminalCursorInVisibleContent: Boolean? = null,
         val terminalCursorVisibleContentRow: Int? = null,
+        val terminalCursorVisibleContentLine: String? = null,
         val terminalCursorShape: String? = null,
         val terminalCursorVisible: Boolean? = null,
         val terminalWorkingDirectoryUri: String? = null,
@@ -1330,6 +1336,7 @@ class BackgroundProcessManager @Inject constructor(
             terminalCursorLineTextAfterCursor = snapshot.cursorLineTextAfterCursor,
             terminalCursorInVisibleContent = snapshot.cursorInVisibleContent,
             terminalCursorVisibleContentRow = snapshot.cursorVisibleContentRow,
+            terminalCursorVisibleContentLine = snapshot.cursorVisibleContentLine,
             terminalCursorShape = snapshot.cursorShape,
             terminalCursorVisible = snapshot.cursorVisible,
             terminalWorkingDirectoryUri = snapshot.workingDirectoryUri,
