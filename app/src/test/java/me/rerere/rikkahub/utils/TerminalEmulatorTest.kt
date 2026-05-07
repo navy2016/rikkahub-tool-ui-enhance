@@ -619,4 +619,17 @@ class TerminalEmulatorTest {
         assertEquals(listOf("\u001BP1\$r0\"q\u001B\\"), terminal.drainResponses())
     }
 
+
+    @Test
+    fun selectiveErasePreservesProtectedCharacters() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[1\"qA\u001B[0\"qB\u001B[1G\u001B[?2K")
+        assertEquals("A", terminal.plainText(includeScrollback = false).lines()[0].trimEnd())
+
+        terminal.feed("\u001B[2J\u001B[1;1H\u001B[1\"qC\u001B[0\"qD\u001B[2;1HEF\u001B[1;1H\u001B[?2J")
+        val lines = terminal.plainText(includeScrollback = false).lines()
+        assertEquals("C", lines[0].trimEnd())
+        assertEquals("", lines[1].trimEnd())
+    }
+
 }

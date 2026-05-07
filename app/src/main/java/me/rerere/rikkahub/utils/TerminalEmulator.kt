@@ -1059,8 +1059,8 @@ class TerminalEmulator(
                 val row = if (originMode) (scrollTop + targetRow).coerceIn(scrollTop, scrollBottom) else targetRow.coerceIn(0, rows - 1)
                 moveCursor(row = row, col = seq.paramInt(1, 1) - 1)
             }
-            'J' -> eraseDisplay(seq.paramZero(0))
-            'K' -> eraseLine(seq.paramZero(0))
+            'J' -> eraseDisplay(seq.paramZero(0), selective = seq.privateMarker == '?')
+            'K' -> eraseLine(seq.paramZero(0), selective = seq.privateMarker == '?')
             'm' -> applySgr(seq.params.ifEmpty { listOf("0") })
             's' -> saveCursor()
             'u' -> restoreCursor()
@@ -1238,32 +1238,41 @@ class TerminalEmulator(
         screen[scrollTop] = blankLine()
     }
 
-    private fun eraseDisplay(mode: Int) {
+    private fun eraseDisplay(mode: Int, selective: Boolean = false) {
         pendingWrap = false
         when (mode) {
             0 -> {
-                eraseLine(0)
-                for (r in cursorRow + 1 until rows) screen[r] = blankLine()
+                eraseLine(0, selective)
+                for (r in cursorRow + 1 until rows) eraseLineRange(r, 0, columns - 1, selective)
             }
             1 -> {
-                eraseLine(1)
-                for (r in 0 until cursorRow) screen[r] = blankLine()
+                eraseLine(1, selective)
+                for (r in 0 until cursorRow) eraseLineRange(r, 0, columns - 1, selective)
             }
             2 -> {
-                for (r in 0 until rows) screen[r] = blankLine()
+                for (r in 0 until rows) eraseLineRange(r, 0, columns - 1, selective)
                 cursorRow = 0
                 cursorCol = 0
             }
-            3 -> scrollback.clear()
+            3 -> if (!selective) scrollback.clear()
         }
     }
 
-    private fun eraseLine(mode: Int) {
+    private fun eraseLine(mode: Int, selective: Boolean = false) {
         pendingWrap = false
         when (mode) {
-            0 -> for (c in cursorCol until columns) screen[cursorRow][c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
-            1 -> for (c in 0..cursorCol) screen[cursorRow][c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
-            2 -> screen[cursorRow] = blankLine()
+            0 -> eraseLineRange(cursorRow, cursorCol, columns - 1, selective)
+            1 -> eraseLineRange(cursorRow, 0, cursorCol, selective)
+            2 -> eraseLineRange(cursorRow, 0, columns - 1, selective)
+        }
+    }
+
+    private fun eraseLineRange(row: Int, startCol: Int, endCol: Int, selective: Boolean) {
+        if (row !in 0 until rows || endCol < startCol) return
+        for (c in startCol.coerceAtLeast(0)..endCol.coerceAtMost(columns - 1)) {
+            if (!selective || !screen[row][c].style.protected) {
+                screen[row][c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+            }
         }
     }
 
