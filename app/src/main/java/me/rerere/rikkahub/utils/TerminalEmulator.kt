@@ -1090,6 +1090,7 @@ class TerminalEmulator(
             'p' -> if (seq.intermediates == "!") softReset() else if (seq.intermediates == "$") handleRequestMode(seq)
             'r' -> if (seq.intermediates == "$") changeRectangleAttributes(seq, reverse = false) else setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
             'x' -> if (seq.intermediates == "$") fillRectangle(seq)
+            'y' -> if (seq.intermediates == "*") reportRectangleChecksum(seq)
             'z' -> if (seq.intermediates == "$") eraseRectangle(seq, selective = false)
             '{' -> if (seq.intermediates == "$") eraseRectangle(seq, selective = true)
             't' -> if (seq.intermediates == "$") changeRectangleAttributes(seq, reverse = true) else handleWindowOperation(seq)
@@ -1287,6 +1288,43 @@ class TerminalEmulator(
         val bottom = (seq.paramInt(2, rows) - 1).coerceIn(top, rows - 1)
         val right = (seq.paramInt(3, columns) - 1).coerceIn(left, columns - 1)
         for (row in top..bottom) eraseLineRange(row, left, right, selective)
+    }
+
+    private fun reportRectangleChecksum(seq: CsiSequence) {
+        pendingWrap = false
+        val requestId = seq.paramZero(0).coerceIn(0, 65535)
+        val top = (seq.paramInt(2, 1) - 1).coerceIn(0, rows - 1)
+        val left = (seq.paramInt(3, 1) - 1).coerceIn(0, columns - 1)
+        val bottom = (seq.paramInt(4, rows) - 1).coerceIn(top, rows - 1)
+        val right = (seq.paramInt(5, columns) - 1).coerceIn(left, columns - 1)
+        val checksum = rectangleChecksum(top, left, bottom, right)
+        pendingResponses.add("\u001BP${requestId}!~${checksum.toString(16).uppercase().padStart(4, '0')}\u001B\\")
+    }
+
+    private fun rectangleChecksum(top: Int, left: Int, bottom: Int, right: Int): Int {
+        var checksum = 0
+        for (row in top..bottom) {
+            for (col in left..right) {
+                checksum = (checksum + cellChecksum(screen[row][col])) and 0xFFFF
+            }
+        }
+        return checksum
+    }
+
+    private fun cellChecksum(cell: Cell): Int {
+        var value = cell.width and 0xFF
+        if (cell.continuation) value += 0x80
+        cell.text.codePoints().forEach { value = (value + it) and 0xFFFF }
+        val style = cell.style
+        if (style.bold) value += 0x0100
+        if (style.faint) value += 0x0200
+        if (style.italic) value += 0x0400
+        if (style.underline) value += 0x0800
+        if (style.inverse) value += 0x1000
+        if (style.concealed) value += 0x2000
+        if (style.strike) value += 0x4000
+        if (style.protected) value += 0x8000
+        return value and 0xFFFF
     }
 
     private fun copyRectangle(seq: CsiSequence) {

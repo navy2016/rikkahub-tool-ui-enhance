@@ -694,4 +694,15 @@ class TerminalEmulatorTest {
         assertEquals("aabc", lines[0])
     }
 
+
+    @Test
+    fun rectangleChecksumReportsDeterministicCellChecksum() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("AB\u001B[2;1HCD\u001B[77;1;1;1;2;2*y")
+        assertEquals(listOf("\u001BP77!~010E\u001B\\"), terminal.drainResponses())
+
+        terminal.feed("\u001B[1;1H\u001B[1mA\u001B[0m\u001B[78;1;1;1;1;1*y")
+        assertEquals(listOf("\u001BP78!~0142\u001B\\"), terminal.drainResponses())
+    }
+
 }
