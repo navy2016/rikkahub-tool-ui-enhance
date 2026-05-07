@@ -22,6 +22,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals("top\n    menu", snapshot.visibleContent)
         assertEquals(listOf("top", "    menu"), snapshot.visibleContentLines)
         assertEquals(listOf(1, 2), snapshot.nonEmptyRows)
+        assertEquals(2, snapshot.nonEmptyRowCount)
         assertEquals(1, snapshot.firstNonEmptyRow)
         assertEquals(2, snapshot.lastNonEmptyRow)
         assertEquals("top", snapshot.firstNonEmptyLine)
@@ -89,6 +90,7 @@ class InteractiveTerminalSnapshotTest {
 
         assertEquals(List(6) { "" }, snapshot.screenLines)
         assertEquals(emptyList<Int>(), snapshot.nonEmptyRows)
+        assertEquals(0, snapshot.nonEmptyRowCount)
         assertEquals("", snapshot.visibleContent)
         assertEquals(emptyList<String>(), snapshot.visibleContentLines)
         assertEquals(null, snapshot.firstNonEmptyRow)
@@ -122,6 +124,7 @@ class InteractiveTerminalSnapshotTest {
         val snapshot = renderInteractiveTerminalSnapshot(bytes, columns = 20, rows = 6)
 
         assertEquals(listOf(3, 6), snapshot.nonEmptyRows)
+        assertEquals(2, snapshot.nonEmptyRowCount)
         assertEquals("   middle\n\n\nbottom", snapshot.visibleContent)
         assertEquals(listOf("   middle", "", "", "bottom"), snapshot.visibleContentLines)
         assertEquals(true, snapshot.cursorInVisibleContent)
