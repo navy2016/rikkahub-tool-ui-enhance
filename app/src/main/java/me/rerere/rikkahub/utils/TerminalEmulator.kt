@@ -1093,6 +1093,7 @@ class TerminalEmulator(
             'z' -> if (seq.intermediates == "$") eraseRectangle(seq, selective = false)
             '{' -> if (seq.intermediates == "$") eraseRectangle(seq, selective = true)
             't' -> if (seq.intermediates == "$") changeRectangleAttributes(seq, reverse = true) else handleWindowOperation(seq)
+            'v' -> if (seq.intermediates == "$") copyRectangle(seq)
             'h' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), true) else setModes(seq.intParams(), true)
             'l' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), false) else setModes(seq.intParams(), false)
         }
@@ -1286,6 +1287,28 @@ class TerminalEmulator(
         val bottom = (seq.paramInt(2, rows) - 1).coerceIn(top, rows - 1)
         val right = (seq.paramInt(3, columns) - 1).coerceIn(left, columns - 1)
         for (row in top..bottom) eraseLineRange(row, left, right, selective)
+    }
+
+    private fun copyRectangle(seq: CsiSequence) {
+        pendingWrap = false
+        val sourceTop = (seq.paramInt(0, 1) - 1).coerceIn(0, rows - 1)
+        val sourceLeft = (seq.paramInt(1, 1) - 1).coerceIn(0, columns - 1)
+        val sourceBottom = (seq.paramInt(2, rows) - 1).coerceIn(sourceTop, rows - 1)
+        val sourceRight = (seq.paramInt(3, columns) - 1).coerceIn(sourceLeft, columns - 1)
+        val destTop = (seq.paramInt(5, 1) - 1).coerceIn(0, rows - 1)
+        val destLeft = (seq.paramInt(6, 1) - 1).coerceIn(0, columns - 1)
+        val snapshot = (sourceTop..sourceBottom).map { row ->
+            (sourceLeft..sourceRight).map { col -> screen[row][col].copy() }
+        }
+        snapshot.forEachIndexed { rowOffset, copiedRow ->
+            val destRow = destTop + rowOffset
+            if (destRow in 0 until rows) {
+                copiedRow.forEachIndexed { colOffset, cell ->
+                    val destCol = destLeft + colOffset
+                    if (destCol in 0 until columns) screen[destRow][destCol] = cell.copy()
+                }
+            }
+        }
     }
 
     private fun fillRectangle(seq: CsiSequence) {

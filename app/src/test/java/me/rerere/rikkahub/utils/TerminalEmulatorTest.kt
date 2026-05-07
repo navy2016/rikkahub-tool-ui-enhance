@@ -680,4 +680,18 @@ class TerminalEmulatorTest {
         assertEquals("EF" + "Z".repeat(18), lines[1])
     }
 
+
+    @Test
+    fun copyRectangleCopiesCellsAndUsesSnapshotForOverlap() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("abcd\u001B[2;1Hefgh\u001B[1;2;2;3;1;3;1;1\$v")
+        var lines = terminal.plainText(includeScrollback = false).lines()
+        assertEquals("bc", lines[2])
+        assertEquals("fg", lines[3])
+
+        terminal.feed("\u001B[2J\u001B[1;1Habcd\u001B[1;1;1;3;1;1;2;1\$v")
+        lines = terminal.plainText(includeScrollback = false).lines()
+        assertEquals("aabc", lines[0])
+    }
+
 }
