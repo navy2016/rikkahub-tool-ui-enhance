@@ -767,7 +767,7 @@ class TerminalEmulatorTest {
 
         terminal.feed("\u001B[?1039h")
         assertEquals("\u001B[27;5;97~", terminal.sequenceForCodePoint('a'.code, ctrl = true))
-        assertEquals("\u001B[27;7;65~", terminal.sequenceForCodePoint('A'.code, shift = true, alt = true))
+        assertEquals("\u001B[27;4;65~", terminal.sequenceForCodePoint('A'.code, shift = true, alt = true))
 
         terminal.feed("\u001B[?1061h")
         assertEquals("\u001B[97;5u", terminal.sequenceForCodePoint('a'.code, ctrl = true))
