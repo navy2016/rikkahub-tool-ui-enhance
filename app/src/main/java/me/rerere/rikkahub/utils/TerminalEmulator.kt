@@ -591,6 +591,20 @@ class TerminalEmulator(
                 oscEscSeen = false
                 parserState = ParserState.STRING_IGNORE
             }
+            '\u0084' -> {
+                pendingWrap = false
+                lineFeed()
+            }
+            '\u0085' -> {
+                pendingWrap = false
+                cursorCol = 0
+                lineFeed()
+            }
+            '\u0088' -> tabStops.add(cursorCol)
+            '\u008D' -> {
+                pendingWrap = false
+                reverseIndex()
+            }
             '\r' -> {
                 pendingWrap = false
                 cursorCol = 0
