@@ -81,7 +81,7 @@ class ControlInputTest {
         assertArrayEquals(byteArrayOf(0x1B, '9'.code.toByte()), controlInputBytes(ControlInput.ALT_9))
         assertArrayEquals(byteArrayOf(0x1B, '.'.code.toByte()), controlInputBytes(ControlInput.ALT_PERIOD))
         assertArrayEquals(byteArrayOf(0x1B, '/'.code.toByte()), controlInputBytes(ControlInput.ALT_SLASH))
-        assertArrayEquals(byteArrayOf(0x1B, '\'.code.toByte()), controlInputBytes(ControlInput.ALT_BACKSLASH))
+        assertArrayEquals(byteArrayOf(0x1B, '\\'.code.toByte()), controlInputBytes(ControlInput.ALT_BACKSLASH))
         assertArrayEquals(byteArrayOf(0x1B, "'".single().code.toByte()), controlInputBytes(ControlInput.ALT_APOSTROPHE))
         assertArrayEquals(byteArrayOf(0x1B, '`'.code.toByte()), controlInputBytes(ControlInput.ALT_GRAVE))
     }
