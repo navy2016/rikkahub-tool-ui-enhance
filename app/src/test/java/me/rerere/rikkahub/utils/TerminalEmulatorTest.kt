@@ -579,7 +579,7 @@ class TerminalEmulatorTest {
     fun decRequestStatusStringReportsCursorStyleSgrAndScrollRegion() {
         val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
         terminal.feed("\u001B[5 q\u001B[2;5r")
-        terminal.feed("\u001BP$q q\u001B\\\u001BP$qm\u001B\\\u001BP$qr\u001B\\")
+        terminal.feed("\u001BP\$q q\u001B\\\u001BP\$qm\u001B\\\u001BP\$qr\u001B\\")
         assertEquals(
             listOf(
                 "\u001BP1\$r5 q\u001B\\",
@@ -593,7 +593,7 @@ class TerminalEmulatorTest {
     @Test
     fun decRequestStatusStringReportsUnknownSelectorsAsInvalid() {
         val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
-        terminal.feed("\u001BP$qbad\u001B\\")
+        terminal.feed("\u001BP\$qbad\u001B\\")
         assertEquals(listOf("\u001BP0\$rbad\u001B\\"), terminal.drainResponses())
     }
 
