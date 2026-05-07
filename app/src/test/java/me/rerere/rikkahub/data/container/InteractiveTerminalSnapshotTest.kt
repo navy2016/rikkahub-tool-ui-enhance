@@ -18,6 +18,9 @@ class InteractiveTerminalSnapshotTest {
         assertEquals("top", lines[0])
         assertEquals("    menu", lines[1])
         assertEquals(6, lines.size)
+        assertEquals(lines, snapshot.screenLines)
+        assertEquals(listOf(1, 2), snapshot.nonEmptyRows)
+        assertEquals(false, snapshot.isEmpty)
     }
 
     @Test
@@ -71,5 +74,14 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(listOf("\u001B[1;7R"), snapshot.responses)
         assertEquals(listOf("hello"), snapshot.clipboardRequests)
         assertTrue(snapshot.screen.lines().first().contains("beforeafter"))
+    }
+
+    @Test
+    fun renderInteractiveTerminalSnapshotMarksBlankScreenEmpty() {
+        val snapshot = renderInteractiveTerminalSnapshot("\u001B[2J".toByteArray(), columns = 20, rows = 6)
+
+        assertEquals(List(6) { "" }, snapshot.screenLines)
+        assertEquals(emptyList<Int>(), snapshot.nonEmptyRows)
+        assertEquals(true, snapshot.isEmpty)
     }
 }

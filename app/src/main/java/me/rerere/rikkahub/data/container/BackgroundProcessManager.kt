@@ -31,6 +31,9 @@ import javax.inject.Singleton
 
 internal data class InteractiveTerminalSnapshot(
     val screen: String,
+    val screenLines: List<String>,
+    val nonEmptyRows: List<Int>,
+    val isEmpty: Boolean,
     val modes: String,
     val title: String,
     val columns: Int,
@@ -53,8 +56,16 @@ internal fun renderInteractiveTerminalSnapshot(
     val safeRows = rows.coerceIn(6, 80)
     val terminal = TerminalEmulator(initialColumns = safeColumns, initialRows = safeRows)
     terminal.feed(bytes)
+    val screen = terminal.plainText(includeScrollback = false)
+    val screenLines = screen.lines()
+    val nonEmptyRows = screenLines.mapIndexedNotNull { index, line ->
+        if (line.isNotBlank()) index + 1 else null
+    }
     return InteractiveTerminalSnapshot(
-        screen = terminal.plainText(includeScrollback = false),
+        screen = screen,
+        screenLines = screenLines,
+        nonEmptyRows = nonEmptyRows,
+        isEmpty = nonEmptyRows.isEmpty(),
         modes = terminal.modeSummary(),
         title = terminal.title,
         columns = safeColumns,
@@ -811,6 +822,9 @@ class BackgroundProcessManager @Inject constructor(
         val baseOffset: Long,
         val hasMore: Boolean,
         val terminalScreen: String? = null,
+        val terminalScreenLines: List<String>? = null,
+        val terminalNonEmptyRows: List<Int>? = null,
+        val terminalIsEmpty: Boolean? = null,
         val terminalModes: String? = null,
         val terminalTitle: String? = null,
         val terminalColumns: Int? = null,
@@ -1234,6 +1248,9 @@ class BackgroundProcessManager @Inject constructor(
         )
         return copy(
             terminalScreen = snapshot.screen,
+            terminalScreenLines = snapshot.screenLines,
+            terminalNonEmptyRows = snapshot.nonEmptyRows,
+            terminalIsEmpty = snapshot.isEmpty,
             terminalModes = snapshot.modes,
             terminalTitle = snapshot.title,
             terminalColumns = snapshot.columns,
