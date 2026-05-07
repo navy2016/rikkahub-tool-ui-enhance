@@ -771,7 +771,7 @@ class LocalTools(
                         })
                         put("renderTerminal", buildJsonObject {
                             put("type", "boolean")
-                            put("description", "read 操作是否将保留的 ANSI/TTY 输出渲染为当前终端纯文本屏幕 terminalScreen，并返回 screen lines/visible content/content bounds/cursor line/title/mode/cwd、query responses、OSC52 clipboard request 元数据；适合读取 vim、codex、claude、opencode 等 TUI 当前界面，默认 false")
+                            put("description", "read 操作是否将保留的 ANSI/TTY 输出渲染为当前终端纯文本屏幕 terminalScreen，并返回 screen lines/visible content/content bounds/cursor visible-row/cursor line/title/mode/cwd、query responses、OSC52 clipboard request 元数据；适合读取 vim、codex、claude、opencode 等 TUI 当前界面，默认 false")
                         })
                         put("data", buildJsonObject {
                             put("type", "string")
@@ -1049,6 +1049,8 @@ class LocalTools(
             result.terminalCursorLine?.let { put("terminalCursorLine", JsonPrimitive(it)) }
             result.terminalCursorLineTextBeforeCursor?.let { put("terminalCursorLineTextBeforeCursor", JsonPrimitive(it)) }
             result.terminalCursorLineTextAfterCursor?.let { put("terminalCursorLineTextAfterCursor", JsonPrimitive(it)) }
+            result.terminalCursorInVisibleContent?.let { put("terminalCursorInVisibleContent", JsonPrimitive(it)) }
+            result.terminalCursorVisibleContentRow?.let { put("terminalCursorVisibleContentRow", JsonPrimitive(it)) }
             result.terminalCursorShape?.let { put("terminalCursorShape", JsonPrimitive(it)) }
             result.terminalCursorVisible?.let { put("terminalCursorVisible", JsonPrimitive(it)) }
             result.terminalWorkingDirectoryUri?.let { put("terminalWorkingDirectoryUri", JsonPrimitive(it)) }
@@ -1058,7 +1060,7 @@ class LocalTools(
             result.terminalClipboardRequests?.let { requests ->
                 put("terminalClipboardRequests", JsonArray(requests.map { JsonPrimitive(it) }))
             }
-            put("hint", JsonPrimitive("Default read returns only new output. Use mode=all for full retained buffer, mode=tail for recent output, or renderTerminal=true for a plain-text TUI screen snapshot with screen-line/visible-content/content-bounds/cursor-line/title/mode/cwd/query-response metadata."))
+            put("hint", JsonPrimitive("Default read returns only new output. Use mode=all for full retained buffer, mode=tail for recent output, or renderTerminal=true for a plain-text TUI screen snapshot with screen-line/visible-content/content-bounds/cursor-visible-row/cursor-line/title/mode/cwd/query-response metadata."))
         }
     }
 

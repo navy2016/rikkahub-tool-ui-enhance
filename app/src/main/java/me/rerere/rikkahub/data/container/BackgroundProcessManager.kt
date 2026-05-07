@@ -47,6 +47,8 @@ internal data class InteractiveTerminalSnapshot(
     val cursorLine: String,
     val cursorLineTextBeforeCursor: String,
     val cursorLineTextAfterCursor: String,
+    val cursorInVisibleContent: Boolean,
+    val cursorVisibleContentRow: Int?,
     val cursorShape: String,
     val cursorVisible: Boolean,
     val workingDirectoryUri: String,
@@ -84,6 +86,12 @@ internal fun renderInteractiveTerminalSnapshot(
     val cursorColumn = terminal.cursorColumn()
     val cursorLine = screenLines.getOrElse(cursorRow - 1) { "" }
     val cursorSplitColumn = (cursorColumn - 1).coerceIn(0, cursorLine.length)
+    val cursorInVisibleContent = firstNonEmptyRow != null && lastNonEmptyRow != null && cursorRow in firstNonEmptyRow..lastNonEmptyRow
+    val cursorVisibleContentRow = if (cursorInVisibleContent && firstNonEmptyRow != null) {
+        cursorRow - firstNonEmptyRow + 1
+    } else {
+        null
+    }
     return InteractiveTerminalSnapshot(
         screen = screen,
         screenLines = screenLines,
@@ -102,6 +110,8 @@ internal fun renderInteractiveTerminalSnapshot(
         cursorLine = cursorLine,
         cursorLineTextBeforeCursor = cursorLine.take(cursorSplitColumn),
         cursorLineTextAfterCursor = cursorLine.drop(cursorSplitColumn),
+        cursorInVisibleContent = cursorInVisibleContent,
+        cursorVisibleContentRow = cursorVisibleContentRow,
         cursorShape = terminal.cursorShape().name,
         cursorVisible = terminal.isCursorVisible(),
         workingDirectoryUri = terminal.workingDirectoryUri,
@@ -868,6 +878,8 @@ class BackgroundProcessManager @Inject constructor(
         val terminalCursorLine: String? = null,
         val terminalCursorLineTextBeforeCursor: String? = null,
         val terminalCursorLineTextAfterCursor: String? = null,
+        val terminalCursorInVisibleContent: Boolean? = null,
+        val terminalCursorVisibleContentRow: Int? = null,
         val terminalCursorShape: String? = null,
         val terminalCursorVisible: Boolean? = null,
         val terminalWorkingDirectoryUri: String? = null,
@@ -1301,6 +1313,8 @@ class BackgroundProcessManager @Inject constructor(
             terminalCursorLine = snapshot.cursorLine,
             terminalCursorLineTextBeforeCursor = snapshot.cursorLineTextBeforeCursor,
             terminalCursorLineTextAfterCursor = snapshot.cursorLineTextAfterCursor,
+            terminalCursorInVisibleContent = snapshot.cursorInVisibleContent,
+            terminalCursorVisibleContentRow = snapshot.cursorVisibleContentRow,
             terminalCursorShape = snapshot.cursorShape,
             terminalCursorVisible = snapshot.cursorVisible,
             terminalWorkingDirectoryUri = snapshot.workingDirectoryUri,

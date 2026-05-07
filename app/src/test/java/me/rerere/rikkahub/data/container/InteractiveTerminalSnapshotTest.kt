@@ -104,6 +104,8 @@ class InteractiveTerminalSnapshotTest {
         assertEquals("prompt> hello world", snapshot.cursorLine)
         assertEquals("prompt> hello ", snapshot.cursorLineTextBeforeCursor)
         assertEquals("world", snapshot.cursorLineTextAfterCursor)
+        assertEquals(true, snapshot.cursorInVisibleContent)
+        assertEquals(1, snapshot.cursorVisibleContentRow)
     }
 
     @Test
@@ -114,8 +116,22 @@ class InteractiveTerminalSnapshotTest {
 
         assertEquals(listOf(3, 6), snapshot.nonEmptyRows)
         assertEquals("   middle\n\n\nbottom", snapshot.visibleContent)
+        assertEquals(true, snapshot.cursorInVisibleContent)
+        assertEquals(4, snapshot.cursorVisibleContentRow)
         assertEquals(3, snapshot.firstNonEmptyRow)
         assertEquals(6, snapshot.lastNonEmptyRow)
         assertEquals(4, snapshot.contentHeight)
+    }
+
+    @Test
+    fun renderInteractiveTerminalSnapshotReportsCursorOutsideVisibleContent() {
+        val bytes = "\u001B[3;1Hcontent\u001B[1;1H".toByteArray(Charsets.UTF_8)
+
+        val snapshot = renderInteractiveTerminalSnapshot(bytes, columns = 20, rows = 6)
+
+        assertEquals(1, snapshot.cursorRow)
+        assertEquals(3, snapshot.firstNonEmptyRow)
+        assertEquals(false, snapshot.cursorInVisibleContent)
+        assertEquals(null, snapshot.cursorVisibleContentRow)
     }
 }
