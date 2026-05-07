@@ -80,7 +80,9 @@ class TerminalEmulator(
     private enum class BaselineShift { NORMAL, SUPERSCRIPT, SUBSCRIPT }
     enum class Key {
         UP, DOWN, LEFT, RIGHT, HOME, END, PAGE_UP, PAGE_DOWN, INSERT, DELETE,
-        F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12
+        F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+        KP_0, KP_1, KP_2, KP_3, KP_4, KP_5, KP_6, KP_7, KP_8, KP_9,
+        KP_DECIMAL, KP_ADD, KP_SUBTRACT, KP_MULTIPLY, KP_DIVIDE, KP_ENTER
     }
 
     private enum class ParserState { NORMAL, ESC, CSI, OSC, STRING_IGNORE, ESC_CHARSET_G0, ESC_CHARSET_G1 }
@@ -121,6 +123,7 @@ class TerminalEmulator(
     private var pendingWrap = false
     private var originMode = false
     private var applicationCursorKeys = false
+    private var applicationKeypad = false
     private var insertMode = false
     private var bracketedPaste = false
     private var mouseTracking = false
@@ -129,6 +132,9 @@ class TerminalEmulator(
     private var focusReporting = false
     private var cursorShape = CursorShape.DEFAULT
     private var cursorSaveMode = false
+    private var synchronizedOutput = false
+    private var alternateScroll = false
+    private var metaSendsEscape = false
     private var graphemeJoinPending = false
     private var lastGraphicText: String = ""
     private var lastGraphicCodePoint: Int = 0
@@ -189,6 +195,7 @@ class TerminalEmulator(
         workingDirectoryUri = ""
         originMode = false
         applicationCursorKeys = false
+        applicationKeypad = false
         insertMode = false
         bracketedPaste = false
         mouseTracking = false
@@ -197,6 +204,9 @@ class TerminalEmulator(
         focusReporting = false
         cursorShape = CursorShape.DEFAULT
         cursorSaveMode = false
+        synchronizedOutput = false
+        alternateScroll = false
+        metaSendsEscape = false
         graphemeJoinPending = false
         lastGraphicText = ""
         lastGraphicCodePoint = 0
@@ -251,6 +261,7 @@ class TerminalEmulator(
         pendingWrap = false
         originMode = false
         applicationCursorKeys = false
+        applicationKeypad = false
         insertMode = false
         bracketedPaste = false
         mouseTracking = false
@@ -259,6 +270,9 @@ class TerminalEmulator(
         focusReporting = false
         cursorShape = CursorShape.DEFAULT
         cursorSaveMode = false
+        synchronizedOutput = false
+        alternateScroll = false
+        metaSendsEscape = false
         graphemeJoinPending = false
         lastGraphicText = ""
         lastGraphicCodePoint = 0
@@ -353,6 +367,22 @@ class TerminalEmulator(
         Key.F10 -> "\u001B[21~"
         Key.F11 -> "\u001B[23~"
         Key.F12 -> "\u001B[24~"
+        Key.KP_0 -> if (applicationKeypad) "\u001BOp" else "0"
+        Key.KP_1 -> if (applicationKeypad) "\u001BOq" else "1"
+        Key.KP_2 -> if (applicationKeypad) "\u001BOr" else "2"
+        Key.KP_3 -> if (applicationKeypad) "\u001BOs" else "3"
+        Key.KP_4 -> if (applicationKeypad) "\u001BOt" else "4"
+        Key.KP_5 -> if (applicationKeypad) "\u001BOu" else "5"
+        Key.KP_6 -> if (applicationKeypad) "\u001BOv" else "6"
+        Key.KP_7 -> if (applicationKeypad) "\u001BOw" else "7"
+        Key.KP_8 -> if (applicationKeypad) "\u001BOx" else "8"
+        Key.KP_9 -> if (applicationKeypad) "\u001BOy" else "9"
+        Key.KP_DECIMAL -> if (applicationKeypad) "\u001BOn" else "."
+        Key.KP_ADD -> if (applicationKeypad) "\u001BOk" else "+"
+        Key.KP_SUBTRACT -> if (applicationKeypad) "\u001BOm" else "-"
+        Key.KP_MULTIPLY -> if (applicationKeypad) "\u001BOj" else "*"
+        Key.KP_DIVIDE -> if (applicationKeypad) "\u001BOo" else "/"
+        Key.KP_ENTER -> if (applicationKeypad) "\u001BOM" else "\r"
     }
 
     @Synchronized
@@ -429,7 +459,9 @@ class TerminalEmulator(
     fun modeSummary(): String = buildList {
         if (alternateScreen) add("ALT")
         if (applicationCursorKeys) add("APP-CURSOR")
+        if (applicationKeypad) add("APP-KEYPAD")
         if (bracketedPaste) add("BRACKETED-PASTE")
+        if (synchronizedOutput) add("SYNC-OUTPUT")
         if (focusReporting) add("FOCUS")
         if (mouseTracking) add(mouseModeSummary())
         if (cursorShape != CursorShape.DEFAULT) add(cursorShape.name.replace('_', '-'))
@@ -577,6 +609,14 @@ class TerminalEmulator(
             }
             'Z' -> {
                 pendingResponses.add("\u001B[?1;2c")
+                parserState = ParserState.NORMAL
+            }
+            '=' -> {
+                applicationKeypad = true
+                parserState = ParserState.NORMAL
+            }
+            '>' -> {
+                applicationKeypad = false
                 parserState = ParserState.NORMAL
             }
             '7' -> saveCursor()
@@ -841,10 +881,13 @@ class TerminalEmulator(
                 val row = if (originMode) (scrollTop + targetRow).coerceIn(scrollTop, scrollBottom) else targetRow.coerceIn(0, rows - 1)
                 moveCursor(row = row)
             }
-            'n' -> handleDeviceStatusReport(seq.paramZero(0))
+            'n' -> handleDeviceStatusReport(seq)
             'g' -> clearTabStops(seq.paramZero(0))
             'W' -> handleCursorTabControl(seq)
-            'q' -> if (seq.intermediates == " ") setCursorShape(seq.paramZero(0))
+            'q' -> when {
+                seq.intermediates == " " -> setCursorShape(seq.paramZero(0))
+                seq.privateMarker == '>' -> pendingResponses.add("\u001BP>|RikkaHubTerminal 1.0\u001B\\")
+            }
             'p' -> if (seq.intermediates == "!") softReset() else if (seq.intermediates == "$") handleRequestMode(seq)
             'r' -> setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
             't' -> handleWindowOperation(seq)
@@ -1007,12 +1050,12 @@ class TerminalEmulator(
                 eraseLine(1)
                 for (r in 0 until cursorRow) screen[r] = blankLine()
             }
-            2, 3 -> {
+            2 -> {
                 for (r in 0 until rows) screen[r] = blankLine()
                 cursorRow = 0
                 cursorCol = 0
-                if (mode == 3) scrollback.clear()
             }
+            3 -> scrollback.clear()
         }
     }
 
@@ -1158,16 +1201,23 @@ class TerminalEmulator(
         1005 -> if (mouseProtocol == MouseProtocol.UTF8) 1 else 2
         1006 -> if (mouseProtocol == MouseProtocol.SGR) 1 else 2
         1015 -> if (mouseProtocol == MouseProtocol.URXVT) 1 else 2
+        1007 -> if (alternateScroll) 1 else 2
+        1034 -> if (metaSendsEscape) 1 else 2
         1047, 1049 -> if (alternateScreen) 1 else 2
         1048 -> if (cursorSaveMode) 1 else 2
         2004 -> if (bracketedPaste) 1 else 2
+        2026 -> if (synchronizedOutput) 1 else 2
         else -> 0
     }
 
-    private fun handleDeviceStatusReport(code: Int) {
-        when (code) {
-            5 -> pendingResponses.add("\u001B[0n")
-            6 -> pendingResponses.add("\u001B[${cursorRow + 1};${cursorCol + 1}R")
+    private fun handleDeviceStatusReport(seq: CsiSequence) {
+        val code = seq.paramZero(0)
+        when {
+            seq.privateMarker == '?' && code == 6 -> pendingResponses.add("\u001B[?${cursorRow + 1};${cursorCol + 1}R")
+            seq.privateMarker == '?' && code == 15 -> pendingResponses.add("\u001B[?13n")
+            seq.privateMarker == '?' && code == 25 -> pendingResponses.add("\u001B[?20n")
+            code == 5 -> pendingResponses.add("\u001B[0n")
+            code == 6 -> pendingResponses.add("\u001B[${cursorRow + 1};${cursorCol + 1}R")
         }
     }
 
@@ -1213,6 +1263,8 @@ class TerminalEmulator(
                 1006 -> if (enabled) mouseProtocol = MouseProtocol.SGR else mouseProtocol = MouseProtocol.DEFAULT
                 1015 -> if (enabled) mouseProtocol = MouseProtocol.URXVT else mouseProtocol = MouseProtocol.DEFAULT
                 1004 -> focusReporting = enabled
+                1007 -> alternateScroll = enabled
+                1034 -> metaSendsEscape = enabled
                 1048 -> {
                     if (enabled) {
                         saveCursor()
@@ -1223,6 +1275,7 @@ class TerminalEmulator(
                     }
                 }
                 2004 -> bracketedPaste = enabled
+                2026 -> synchronizedOutput = enabled
             }
         }
     }
@@ -1346,6 +1399,10 @@ class TerminalEmulator(
     private fun applyColonSgr(token: String) {
         val parts = token.split(':')
         val code = parts.firstOrNull()?.toIntOrNull() ?: return
+        if (code == 4) {
+            currentStyle = currentStyle.copy(underline = parts.getOrNull(1)?.toIntOrNull() != 0)
+            return
+        }
         val isFg = code == 38
         val isBg = code == 48
         if (!isFg && !isBg) return

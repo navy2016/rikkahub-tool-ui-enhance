@@ -350,4 +350,49 @@ class TerminalEmulatorTest {
         assertEquals(listOf("\u001B[?1048;1\$y", "\u001B[?1048;2\$y"), terminal.drainResponses())
     }
 
+
+    @Test
+    fun clearScrollbackApplicationKeypadAndSyncOutputModesAreSupported() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 20)
+        terminal.feed((1..8).joinToString("\n") { "line$it" })
+        assertTrue(terminal.plainText(includeScrollback = true).contains("line1"))
+        terminal.feed("\u001B[3J")
+        assertFalse(terminal.plainText(includeScrollback = true).contains("line1"))
+        assertTrue(terminal.plainText(includeScrollback = false).contains("line8"))
+
+        assertEquals("1", terminal.sequenceFor(TerminalEmulator.Key.KP_1))
+        terminal.feed("\u001B=")
+        assertEquals("\u001BOq", terminal.sequenceFor(TerminalEmulator.Key.KP_1))
+        assertTrue(terminal.modeSummary().contains("APP-KEYPAD"))
+        terminal.feed("\u001B>")
+        assertEquals("1", terminal.sequenceFor(TerminalEmulator.Key.KP_1))
+
+        terminal.feed("\u001B[?2026h\u001B[?2026\$p\u001B[?2026l\u001B[?2026\$p")
+        assertEquals(listOf("\u001B[?2026;1\$y", "\u001B[?2026;2\$y"), terminal.drainResponses())
+    }
+
+    @Test
+    fun privateDeviceStatusAndXtermVersionReportsAreSupported() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[2;4H\u001B[?6n\u001B[?15n\u001B[?25n\u001B[>q")
+        assertEquals(
+            listOf(
+                "\u001B[?2;4R",
+                "\u001B[?13n",
+                "\u001B[?20n",
+                "\u001BP>|RikkaHubTerminal 1.0\u001B\\"
+            ),
+            terminal.drainResponses()
+        )
+    }
+
+    @Test
+    fun alternateScrollMetaEscapeAndColonUnderlineModesAreTolerated() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[?1007h\u001B[?1034h\u001B[?1007\$p\u001B[?1034\$p")
+        assertEquals(listOf("\u001B[?1007;1\$y", "\u001B[?1034;1\$y"), terminal.drainResponses())
+        terminal.feed("\u001B[4:3mcurly\u001B[4:0mplain")
+        assertTrue(terminal.plainText(includeScrollback = false).contains("curlyplain"))
+    }
+
 }
