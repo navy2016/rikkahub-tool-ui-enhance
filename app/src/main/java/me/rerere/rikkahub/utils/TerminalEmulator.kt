@@ -373,6 +373,15 @@ class TerminalEmulator(
     fun cursorShape(): CursorShape = cursorShape
 
     @Synchronized
+    fun cursorRow(): Int = cursorRow + 1
+
+    @Synchronized
+    fun cursorColumn(): Int = cursorCol + 1
+
+    @Synchronized
+    fun isCursorVisible(): Boolean = cursorVisible
+
+    @Synchronized
     fun sequenceFor(key: Key, shift: Boolean = false, alt: Boolean = false, ctrl: Boolean = false): String {
         fun modifier(): Int = keyModifier(shift, alt, ctrl)
         fun maybeAlt(sequence: String): String = if (alt && !shift && !ctrl) "\u001B$sequence" else sequence

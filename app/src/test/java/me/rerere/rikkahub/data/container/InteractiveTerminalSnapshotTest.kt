@@ -38,4 +38,22 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(20, snapshot.columns)
         assertEquals(6, snapshot.rows)
     }
+
+    @Test
+    fun renderInteractiveTerminalSnapshotIncludesCursorMetadataAndWorkingDirectory() {
+        val bytes = (
+            "\u001B]7;file://sandbox/workspace/project\u001B\\" +
+                "\u001B[?25l" +
+                "\u001B[3 q" +
+                "\u001B[4;7Hcursor"
+        ).toByteArray(Charsets.UTF_8)
+
+        val snapshot = renderInteractiveTerminalSnapshot(bytes, columns = 20, rows = 6)
+
+        assertEquals(4, snapshot.cursorRow)
+        assertEquals(13, snapshot.cursorColumn)
+        assertEquals("BLINK_UNDERLINE", snapshot.cursorShape)
+        assertEquals(false, snapshot.cursorVisible)
+        assertEquals("file://sandbox/workspace/project", snapshot.workingDirectoryUri)
+    }
 }

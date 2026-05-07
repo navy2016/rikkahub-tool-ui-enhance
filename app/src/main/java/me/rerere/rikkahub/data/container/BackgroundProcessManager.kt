@@ -34,7 +34,12 @@ internal data class InteractiveTerminalSnapshot(
     val modes: String,
     val title: String,
     val columns: Int,
-    val rows: Int
+    val rows: Int,
+    val cursorRow: Int,
+    val cursorColumn: Int,
+    val cursorShape: String,
+    val cursorVisible: Boolean,
+    val workingDirectoryUri: String
 )
 
 internal fun renderInteractiveTerminalSnapshot(
@@ -51,7 +56,12 @@ internal fun renderInteractiveTerminalSnapshot(
         modes = terminal.modeSummary(),
         title = terminal.title,
         columns = safeColumns,
-        rows = safeRows
+        rows = safeRows,
+        cursorRow = terminal.cursorRow(),
+        cursorColumn = terminal.cursorColumn(),
+        cursorShape = terminal.cursorShape().name,
+        cursorVisible = terminal.isCursorVisible(),
+        workingDirectoryUri = terminal.workingDirectoryUri
     )
 }
 
@@ -800,7 +810,12 @@ class BackgroundProcessManager @Inject constructor(
         val terminalModes: String? = null,
         val terminalTitle: String? = null,
         val terminalColumns: Int? = null,
-        val terminalRows: Int? = null
+        val terminalRows: Int? = null,
+        val terminalCursorRow: Int? = null,
+        val terminalCursorColumn: Int? = null,
+        val terminalCursorShape: String? = null,
+        val terminalCursorVisible: Boolean? = null,
+        val terminalWorkingDirectoryUri: String? = null
     )
 
     /**
@@ -1216,7 +1231,12 @@ class BackgroundProcessManager @Inject constructor(
             terminalModes = snapshot.modes,
             terminalTitle = snapshot.title,
             terminalColumns = snapshot.columns,
-            terminalRows = snapshot.rows
+            terminalRows = snapshot.rows,
+            terminalCursorRow = snapshot.cursorRow,
+            terminalCursorColumn = snapshot.cursorColumn,
+            terminalCursorShape = snapshot.cursorShape,
+            terminalCursorVisible = snapshot.cursorVisible,
+            terminalWorkingDirectoryUri = snapshot.workingDirectoryUri
         )
     }
 
