@@ -121,12 +121,14 @@ class TerminalEmulator(
     private var pendingWrap = false
     private var originMode = false
     private var applicationCursorKeys = false
+    private var insertMode = false
     private var bracketedPaste = false
     private var mouseTracking = false
     private var mouseTrackingMode = MouseTrackingMode.OFF
     private var mouseProtocol = MouseProtocol.DEFAULT
     private var focusReporting = false
     private var cursorShape = CursorShape.DEFAULT
+    private var cursorSaveMode = false
     private var graphemeJoinPending = false
     private var lastGraphicText: String = ""
     private var lastGraphicCodePoint: Int = 0
@@ -187,12 +189,14 @@ class TerminalEmulator(
         workingDirectoryUri = ""
         originMode = false
         applicationCursorKeys = false
+        insertMode = false
         bracketedPaste = false
         mouseTracking = false
         mouseTrackingMode = MouseTrackingMode.OFF
         mouseProtocol = MouseProtocol.DEFAULT
         focusReporting = false
         cursorShape = CursorShape.DEFAULT
+        cursorSaveMode = false
         graphemeJoinPending = false
         lastGraphicText = ""
         lastGraphicCodePoint = 0
@@ -247,12 +251,14 @@ class TerminalEmulator(
         pendingWrap = false
         originMode = false
         applicationCursorKeys = false
+        insertMode = false
         bracketedPaste = false
         mouseTracking = false
         mouseTrackingMode = MouseTrackingMode.OFF
         mouseProtocol = MouseProtocol.DEFAULT
         focusReporting = false
         cursorShape = CursorShape.DEFAULT
+        cursorSaveMode = false
         graphemeJoinPending = false
         lastGraphicText = ""
         lastGraphicCodePoint = 0
@@ -807,7 +813,7 @@ class TerminalEmulator(
             'E' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1)).coerceAtMost(scrollBottom), col = 0)
             'F' -> moveCursor(row = (cursorRow - seq.paramInt(0, 1)).coerceAtLeast(scrollTop), col = 0)
             'G', '`' -> moveCursor(col = seq.paramInt(0, 1) - 1)
-            'I' -> moveCursor(col = (cursorCol + seq.paramInt(0, 1) * 8).coerceAtMost(columns - 1))
+            'I' -> moveCursor(col = nextTabStop(seq.paramInt(0, 1)))
             'a' -> moveCursor(col = (cursorCol + seq.paramInt(0, 1)).coerceAtMost(columns - 1))
             'e' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1)).coerceAtMost(scrollBottom))
             'H', 'f' -> {
@@ -827,7 +833,7 @@ class TerminalEmulator(
             'X' -> eraseChars(seq.paramInt(0, 1))
             'S' -> repeat(seq.paramInt(0, 1)) { scrollUp() }
             'T' -> repeat(seq.paramInt(0, 1)) { scrollDown() }
-            'Z' -> moveCursor(col = (cursorCol - seq.paramInt(0, 1) * 8).coerceAtLeast(0))
+            'Z' -> moveCursor(col = previousTabStop(seq.paramInt(0, 1)))
             'b' -> repeatLastGraphic(seq.paramInt(0, 1))
             'c' -> handleDeviceAttributes(seq)
             'd' -> {
@@ -842,8 +848,8 @@ class TerminalEmulator(
             'p' -> if (seq.intermediates == "!") softReset() else if (seq.intermediates == "$") handleRequestMode(seq)
             'r' -> setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
             't' -> handleWindowOperation(seq)
-            'h' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), true)
-            'l' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), false)
+            'h' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), true) else setModes(seq.intParams(), true)
+            'l' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), false) else setModes(seq.intParams(), false)
         }
     }
 
@@ -872,6 +878,7 @@ class TerminalEmulator(
             cursorCol = 0
             lineFeed()
         }
+        if (insertMode) insertChars(width)
         clearCellForWrite(cursorRow, cursorCol)
         screen[cursorRow][cursorCol] = Cell(text, currentStyle.copy(hyperlink = currentHyperlink), width, continuation = false)
         if (width == 2 && cursorCol + 1 < columns) {
@@ -1083,8 +1090,20 @@ class TerminalEmulator(
         }
     }
 
-    private fun nextTabStop(): Int {
-        return tabStops.firstOrNull { it > cursorCol } ?: (columns - 1)
+    private fun nextTabStop(count: Int = 1): Int {
+        var col = cursorCol
+        repeat(count.coerceAtLeast(1)) {
+            col = tabStops.firstOrNull { it > col } ?: (columns - 1)
+        }
+        return col.coerceIn(0, columns - 1)
+    }
+
+    private fun previousTabStop(count: Int = 1): Int {
+        var col = cursorCol
+        repeat(count.coerceAtLeast(1)) {
+            col = tabStops.lastOrNull { it < col } ?: 0
+        }
+        return col.coerceIn(0, columns - 1)
     }
 
     private fun clearTabStops(mode: Int) {
@@ -1121,7 +1140,7 @@ class TerminalEmulator(
     }
 
     private fun ansiModeReportValue(code: Int): Int = when (code) {
-        4 -> 2 // insert mode is not currently enabled
+        4 -> if (insertMode) 1 else 2
         20 -> 2 // automatic newline mode is not currently enabled
         else -> 0
     }
@@ -1139,7 +1158,8 @@ class TerminalEmulator(
         1005 -> if (mouseProtocol == MouseProtocol.UTF8) 1 else 2
         1006 -> if (mouseProtocol == MouseProtocol.SGR) 1 else 2
         1015 -> if (mouseProtocol == MouseProtocol.URXVT) 1 else 2
-        1047, 1048, 1049 -> if (alternateScreen) 1 else 2
+        1047, 1049 -> if (alternateScreen) 1 else 2
+        1048 -> if (cursorSaveMode) 1 else 2
         2004 -> if (bracketedPaste) 1 else 2
         else -> 0
     }
@@ -1157,6 +1177,15 @@ class TerminalEmulator(
             16 -> pendingResponses.add("\u001B[6;14;7t")
             18 -> pendingResponses.add("\u001B[8;${rows};${columns}t")
         }
+    }
+
+    private fun setModes(params: List<Int>, enabled: Boolean) {
+        params.forEach { code ->
+            when (code) {
+                4 -> insertMode = enabled
+            }
+        }
+        pendingWrap = false
     }
 
     private fun setPrivateModes(params: List<Int>, enabled: Boolean) {
@@ -1184,7 +1213,15 @@ class TerminalEmulator(
                 1006 -> if (enabled) mouseProtocol = MouseProtocol.SGR else mouseProtocol = MouseProtocol.DEFAULT
                 1015 -> if (enabled) mouseProtocol = MouseProtocol.URXVT else mouseProtocol = MouseProtocol.DEFAULT
                 1004 -> focusReporting = enabled
-                1048 -> if (enabled) saveCursor() else restoreCursor()
+                1048 -> {
+                    if (enabled) {
+                        saveCursor()
+                        cursorSaveMode = true
+                    } else {
+                        restoreCursor()
+                        cursorSaveMode = false
+                    }
+                }
                 2004 -> bracketedPaste = enabled
             }
         }
@@ -1213,6 +1250,7 @@ class TerminalEmulator(
         if (enabled == alternateScreen) return
         if (enabled) {
             saveCursor()
+            cursorSaveMode = true
             alternateScreen = true
             if (clear) altScreen.resetScreen()
             cursorRow = 0
@@ -1221,6 +1259,7 @@ class TerminalEmulator(
         } else {
             alternateScreen = false
             restoreCursor()
+            cursorSaveMode = false
         }
         parserState = ParserState.NORMAL
     }
