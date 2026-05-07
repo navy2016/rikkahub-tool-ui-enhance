@@ -3,6 +3,8 @@ package me.rerere.rikkahub.utils
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 
 class TerminalEmulatorTest {
     @Test
@@ -642,6 +644,25 @@ class TerminalEmulatorTest {
 
         terminal.feed("\u001B[2J\u001B[1;1H\u001B[1\"qE\u001B[0\"qF\u001B[1;1H\u001B[1;1;1;2\$z")
         assertEquals("", terminal.plainText(includeScrollback = false).lines()[0].trimEnd())
+    }
+
+
+    @Test
+    fun rectangularCharacterAttributesCanBeChangedAndReversed() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("AB\u001B[2;1HCD\u001B[1;1;2;1;1;4\$r")
+        var rendered = terminal.render(includeScrollback = false)
+        val boldUnderlined = rendered.spanStyles.filter { it.item.fontWeight == FontWeight.Bold && it.item.textDecoration == TextDecoration.Underline }
+        assertEquals(listOf(0 until 1, 3 until 4), boldUnderlined.map { it.start until it.end })
+
+        terminal.feed("\u001B[1;1;1;1;1;4\$t")
+        rendered = terminal.render(includeScrollback = false)
+        val remainingBoldUnderlined = rendered.spanStyles.filter { it.item.fontWeight == FontWeight.Bold && it.item.textDecoration == TextDecoration.Underline }
+        assertEquals(listOf(3 until 4), remainingBoldUnderlined.map { it.start until it.end })
+
+        terminal.feed("\u001B[2;1;2;1;0\$r")
+        rendered = terminal.render(includeScrollback = false)
+        assertTrue(rendered.spanStyles.none { it.start == 3 && it.item.fontWeight == FontWeight.Bold })
     }
 
 }

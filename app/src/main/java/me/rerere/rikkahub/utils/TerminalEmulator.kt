@@ -1088,10 +1088,10 @@ class TerminalEmulator(
                 seq.privateMarker == '>' -> pendingResponses.add("\u001BP>|RikkaHubTerminal 1.0\u001B\\")
             }
             'p' -> if (seq.intermediates == "!") softReset() else if (seq.intermediates == "$") handleRequestMode(seq)
-            'r' -> setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
+            'r' -> if (seq.intermediates == "$") changeRectangleAttributes(seq, reverse = false) else setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
             'z' -> if (seq.intermediates == "$") eraseRectangle(seq, selective = false)
             '{' -> if (seq.intermediates == "$") eraseRectangle(seq, selective = true)
-            't' -> handleWindowOperation(seq)
+            't' -> if (seq.intermediates == "$") changeRectangleAttributes(seq, reverse = true) else handleWindowOperation(seq)
             'h' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), true) else setModes(seq.intParams(), true)
             'l' -> if (seq.privateMarker == '?') setPrivateModes(seq.intParams(), false) else setModes(seq.intParams(), false)
         }
@@ -1285,6 +1285,61 @@ class TerminalEmulator(
         val bottom = (seq.paramInt(2, rows) - 1).coerceIn(top, rows - 1)
         val right = (seq.paramInt(3, columns) - 1).coerceIn(left, columns - 1)
         for (row in top..bottom) eraseLineRange(row, left, right, selective)
+    }
+
+    private fun changeRectangleAttributes(seq: CsiSequence, reverse: Boolean) {
+        pendingWrap = false
+        val top = (seq.paramInt(0, 1) - 1).coerceIn(0, rows - 1)
+        val left = (seq.paramInt(1, 1) - 1).coerceIn(0, columns - 1)
+        val bottom = (seq.paramInt(2, rows) - 1).coerceIn(top, rows - 1)
+        val right = (seq.paramInt(3, columns) - 1).coerceIn(left, columns - 1)
+        val attributes = seq.params.drop(4).map { it.substringBefore(':').toIntOrNull() ?: 0 }.ifEmpty { listOf(0) }
+        for (row in top..bottom) {
+            for (col in left..right) {
+                val cell = screen[row][col]
+                cell.style = if (reverse) reverseCharacterAttributes(cell.style, attributes) else changeCharacterAttributes(cell.style, attributes)
+            }
+        }
+    }
+
+    private fun changeCharacterAttributes(style: Style, attributes: List<Int>): Style {
+        var updated = style
+        attributes.forEach { code ->
+            updated = when (code) {
+                0 -> updated.copy(
+                    bold = false,
+                    faint = false,
+                    italic = false,
+                    underline = false,
+                    inverse = false,
+                    concealed = false,
+                    strike = false,
+                    overline = false,
+                    baselineShift = BaselineShift.NORMAL
+                )
+                1 -> updated.copy(bold = true, faint = false)
+                4 -> updated.copy(underline = true)
+                7 -> updated.copy(inverse = true)
+                22 -> updated.copy(bold = false, faint = false)
+                24 -> updated.copy(underline = false)
+                27 -> updated.copy(inverse = false)
+                else -> updated
+            }
+        }
+        return updated
+    }
+
+    private fun reverseCharacterAttributes(style: Style, attributes: List<Int>): Style {
+        var updated = style
+        attributes.forEach { code ->
+            updated = when (code) {
+                1 -> updated.copy(bold = !updated.bold, faint = false)
+                4 -> updated.copy(underline = !updated.underline)
+                7 -> updated.copy(inverse = !updated.inverse)
+                else -> updated
+            }
+        }
+        return updated
     }
 
     private fun insertLine() {
