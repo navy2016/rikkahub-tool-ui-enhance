@@ -49,6 +49,7 @@ class TerminalEmulator(
         val inverse: Boolean = false,
         val concealed: Boolean = false,
         val strike: Boolean = false,
+        val overline: Boolean = false,
         val hyperlink: Hyperlink? = null
     )
 
@@ -125,6 +126,7 @@ class TerminalEmulator(
     private var focusReporting = false
     private var cursorShape = CursorShape.DEFAULT
     private var graphemeJoinPending = false
+    private val tabStops = sortedSetOf<Int>()
     private val clipboardRequests = mutableListOf<String>()
     private var currentHyperlink: Hyperlink? = null
     private val paletteOverrides = mutableMapOf<Int, Color>()
@@ -145,6 +147,10 @@ class TerminalEmulator(
     private val mainScreen = MutableList(rows) { blankLine() }
     private val altScreen = MutableList(rows) { blankLine() }
     private val screen: MutableList<Array<Cell>> get() = if (alternateScreen) altScreen else mainScreen
+
+    init {
+        resetTabStops()
+    }
 
     @Synchronized
     fun reset() {
@@ -170,6 +176,7 @@ class TerminalEmulator(
         resetDecoder()
         pendingUtf8 = ByteArray(0)
         cursorVisible = true
+        resetTabStops()
         wraparound = true
         pendingWrap = false
         title = ""
@@ -198,6 +205,8 @@ class TerminalEmulator(
 
         this.columns = newColumns
         this.rows = newRows
+        tabStops.removeIf { it >= newColumns }
+        if (tabStops.isEmpty()) resetTabStops()
         mainScreen.resizeScreen(newRows, newColumns)
         altScreen.resizeScreen(newRows, newColumns)
         val resizedScrollback = scrollback.map { resizedLine(it, newColumns, defaultStyle) }
@@ -531,7 +540,7 @@ class TerminalEmulator(
                 pendingWrap = false
                 if (cursorCol > 0) cursorCol--
             }
-            '\t' -> repeat(8 - (cursorCol % 8)) { putChar(' ') }
+            '\t' -> moveCursor(col = nextTabStop())
             in '\u0000'..'\u001F' -> Unit
             else -> putChar(if (lineDrawing) mapLineDrawing(ch) else ch)
         }
@@ -571,6 +580,10 @@ class TerminalEmulator(
             'M' -> {
                 pendingWrap = false
                 reverseIndex()
+            }
+            'H' -> {
+                tabStops.add(cursorCol)
+                parserState = ParserState.NORMAL
             }
             '(' -> parserState = ParserState.ESC_CHARSET_G0
             ')' -> parserState = ParserState.ESC_CHARSET_G1
@@ -613,11 +626,23 @@ class TerminalEmulator(
                 11 -> applyDynamicColorOsc(11, value)
                 12 -> applyDynamicColorOsc(12, value)
                 52 -> applyClipboardOsc(value)
+                104 -> resetPaletteOsc(value)
+                110 -> defaultForeground = defaultStyle.fg
+                111 -> defaultBackground = Color(0xFF101010)
+                112 -> cursorColor = defaultStyle.fg
             }
         }
         oscBuffer.clear()
         oscEscSeen = false
         parserState = ParserState.NORMAL
+    }
+
+    private fun resetPaletteOsc(value: String) {
+        if (value.isBlank()) {
+            paletteOverrides.clear()
+            return
+        }
+        value.split(';').mapNotNull { it.toIntOrNull() }.forEach { paletteOverrides.remove(it.coerceIn(0, 255)) }
     }
 
     private fun applyPaletteOsc(value: String) {
@@ -802,7 +827,8 @@ class TerminalEmulator(
                 moveCursor(row = row)
             }
             'n' -> handleDeviceStatusReport(seq.paramZero(0))
-            'g' -> Unit
+            'g' -> clearTabStops(seq.paramZero(0))
+            'W' -> handleCursorTabControl(seq)
             'q' -> if (seq.intermediates == " ") setCursorShape(seq.paramZero(0))
             'p' -> if (seq.intermediates == "!") softReset() else if (seq.intermediates == "$") handleRequestMode(seq)
             'r' -> setScrollRegion(seq.paramInt(0, 1), seq.paramInt(1, rows))
@@ -1030,6 +1056,34 @@ class TerminalEmulator(
         pendingWrap = false
     }
 
+    private fun resetTabStops() {
+        tabStops.clear()
+        var col = 8
+        while (col < columns) {
+            tabStops.add(col)
+            col += 8
+        }
+    }
+
+    private fun nextTabStop(): Int {
+        return tabStops.firstOrNull { it > cursorCol } ?: (columns - 1)
+    }
+
+    private fun clearTabStops(mode: Int) {
+        when (mode) {
+            0 -> tabStops.remove(cursorCol)
+            3 -> tabStops.clear()
+        }
+    }
+
+    private fun handleCursorTabControl(seq: CsiSequence) {
+        when (seq.paramZero(0)) {
+            0 -> tabStops.add(cursorCol)
+            2 -> tabStops.remove(cursorCol)
+            5 -> tabStops.clear()
+        }
+    }
+
     private fun handleDeviceAttributes(seq: CsiSequence) {
         if (seq.privateMarker == '>') {
             pendingResponses.add("\u001B[>0;276;0c")
@@ -1053,13 +1107,15 @@ class TerminalEmulator(
         6 -> if (originMode) 1 else 2
         7 -> if (wraparound) 1 else 2
         25 -> if (cursorVisible) 1 else 2
+        9 -> if (mouseTrackingMode == MouseTrackingMode.X10) 1 else 2
         1000 -> if (mouseTrackingMode == MouseTrackingMode.NORMAL) 1 else 2
         1002 -> if (mouseTrackingMode == MouseTrackingMode.BUTTON_EVENT) 1 else 2
         1003 -> if (mouseTrackingMode == MouseTrackingMode.ANY_EVENT) 1 else 2
         1004 -> if (focusReporting) 1 else 2
+        1005 -> if (mouseProtocol == MouseProtocol.UTF8) 1 else 2
         1006 -> if (mouseProtocol == MouseProtocol.SGR) 1 else 2
         1015 -> if (mouseProtocol == MouseProtocol.URXVT) 1 else 2
-        1049 -> if (alternateScreen) 1 else 2
+        1047, 1048, 1049 -> if (alternateScreen) 1 else 2
         2004 -> if (bracketedPaste) 1 else 2
         else -> 0
     }
@@ -1173,7 +1229,7 @@ class TerminalEmulator(
                 continue
             }
             when (val code = token.toIntOrNull() ?: 0) {
-                0 -> currentStyle = defaultStyle
+                0 -> currentStyle = defaultStyle.copy(fg = defaultForeground)
                 1 -> currentStyle = currentStyle.copy(bold = true, faint = false)
                 2 -> currentStyle = currentStyle.copy(faint = true, bold = false)
                 3 -> currentStyle = currentStyle.copy(italic = true)
@@ -1213,6 +1269,8 @@ class TerminalEmulator(
                         }
                     }
                 }
+                53 -> currentStyle = currentStyle.copy(overline = true)
+                55 -> currentStyle = currentStyle.copy(overline = false)
                 58, 59 -> Unit
             }
             i++

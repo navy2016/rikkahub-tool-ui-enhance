@@ -230,4 +230,54 @@ class TerminalEmulatorTest {
         assertEquals(listOf("]4;1;rgb:ffff/0000/0000"), terminal.drainResponses())
     }
 
+
+    @Test
+    fun tabStopsCanBeSetAndCleared() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("a\tb")
+        assertEquals("a       b", terminal.plainText(includeScrollback = false).lines()[0])
+
+        val custom = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        custom.feed("\u001B[3g") // clear all default tab stops
+        custom.feed("abc\u001BH") // HTS at column 3
+        custom.feed("\rX\tY")
+        assertEquals("X  Y", custom.plainText(includeScrollback = false).lines()[0])
+
+        val ctc = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        ctc.feed("\u001B[3gabc\u001B[W\rZ\tQ")
+        assertEquals("Z  Q", ctc.plainText(includeScrollback = false).lines()[0])
+        ctc.feed("\u001B[2W\rR\tS")
+        assertEquals("R                  S", ctc.plainText(includeScrollback = false).lines()[0])
+    }
+
+    @Test
+    fun oscColorResetsRestoreDefaultsAndPaletteEntries() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("]10;rgb:ffff/0000/0000]10;?")
+        assertEquals(listOf("]10;rgb:ffff/0000/0000"), terminal.drainResponses())
+        terminal.feed("]110;]10;?")
+        assertEquals(listOf("]10;rgb:0000/e575/75da"), terminal.drainResponses())
+
+        terminal.feed("]4;2;rgb:0000/ffff/0000]4;2;?")
+        assertEquals(listOf("]4;2;rgb:0000/ffff/0000"), terminal.drainResponses())
+        terminal.feed("]104;2]4;2;?")
+        assertEquals(listOf("]4;2;rgb:4e4e/9a9a/0606"), terminal.drainResponses())
+    }
+
+    @Test
+    fun requestModeReportsMoreMouseAndAlternateModes() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("[?9h[?9\$p[?1005h[?1005\$p")
+        assertEquals(
+            listOf("[?9;1\$y", "[?1005;1\$y"),
+            terminal.drainResponses()
+        )
+
+        terminal.feed("[?1049h[?1047\$p[?1048\$p[?1049\$p")
+        assertEquals(
+            listOf("[?1047;1\$y", "[?1048;1\$y", "[?1049;1\$y"),
+            terminal.drainResponses()
+        )
+    }
+
 }
