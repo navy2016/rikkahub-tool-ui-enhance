@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -94,6 +96,30 @@ fun SettingAdvancedPage() {
                         headlineContent = { Text("定时任务") },
                         supportingContent = { Text("按计划触发助手执行任务并查看运行记录") },
                     )
+                }
+            }
+
+            item {
+                Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                    CardGroup(
+                        title = { Text("容器网络") },
+                    ) {
+                        item(
+                            headlineContent = {
+                                SaveOnBlurTextField(
+                                    label = "自定义 /etc/hosts 内容",
+                                    description = "追加写入容器 /etc/hosts。每行格式示例：1.2.3.4 example.com。留空则只使用默认 localhost。",
+                                    value = settings.containerCustomHosts,
+                                    placeholder = "1.2.3.4 example.com\n2606:4700:4700::1111 dns.example",
+                                    onSave = { value ->
+                                        scope.launch {
+                                            settingsStore.update { s -> s.copy(containerCustomHosts = value) }
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                    }
                 }
             }
 
@@ -307,6 +333,85 @@ private fun SaveOnBlurNumberField(
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(top = 4.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun SaveOnBlurTextField(
+    label: String,
+    description: String,
+    value: String,
+    placeholder: String,
+    onSave: (String) -> Unit,
+) {
+    val focusManager = LocalFocusManager.current
+    var textValue by remember(value) { mutableStateOf(value) }
+    var hasFocus by remember { mutableStateOf(false) }
+
+    LaunchedEffect(value) {
+        if (!hasFocus && textValue != value) {
+            textValue = value
+        }
+    }
+
+    fun commit() {
+        val normalized = textValue.replace("\r\n", "\n").replace("\r", "\n").trimEnd()
+        if (normalized != value) {
+            textValue = normalized
+            onSave(normalized)
+        }
+    }
+
+    Column {
+        Text(text = label, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+        )
+        OutlinedTextField(
+            value = textValue,
+            onValueChange = { textValue = it },
+            minLines = 4,
+            maxLines = 10,
+            placeholder = { Text(placeholder) },
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Default
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 132.dp)
+                .onFocusChanged { state ->
+                    val lostFocus = hasFocus && !state.isFocused
+                    hasFocus = state.isFocused
+                    if (lostFocus) commit()
+                },
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(
+                onClick = {
+                    textValue = ""
+                    if (value.isNotBlank()) onSave("")
+                    focusManager.clearFocus()
+                }
+            ) {
+                Text("清空")
+            }
+            TextButton(
+                onClick = {
+                    commit()
+                    focusManager.clearFocus()
+                }
+            ) {
+                Text("保存")
+            }
         }
     }
 }

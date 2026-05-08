@@ -45,7 +45,7 @@ data class MemoryChunk(
  */
 @Serializable
 data class WorkflowState(
-    val phase: WorkflowPhase? = WorkflowPhase.PLAN,
+    val phase: WorkflowPhase? = null,
     val autoContinue: Boolean = false,
     val autoContinueMaxCount: Int = 10,
     val autoContinueDelayMs: Long = 1000L,

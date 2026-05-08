@@ -154,6 +154,7 @@ class SettingsStore(
         val MAX_GENERATION_STEPS = intPreferencesKey("max_generation_steps")
         val MAX_SUBAGENT_STEPS = intPreferencesKey("max_subagent_steps")
         val WEB_SERVER_LOCALHOST_ONLY = booleanPreferencesKey("web_server_localhost_only")
+        val CONTAINER_CUSTOM_HOSTS = stringPreferencesKey("container_custom_hosts")
 
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
@@ -269,6 +270,7 @@ class SettingsStore(
                 maxGenerationSteps = preferences[MAX_GENERATION_STEPS] ?: 256,
                 maxSubagentSteps = preferences[MAX_SUBAGENT_STEPS] ?: 50,
                 webServerLocalhostOnly = preferences[WEB_SERVER_LOCALHOST_ONLY] == true,
+                containerCustomHosts = preferences[CONTAINER_CUSTOM_HOSTS] ?: "",
                 backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: BackupReminderConfig(),
@@ -515,6 +517,11 @@ class SettingsStore(
             preferences[MAX_GENERATION_STEPS] = settings.maxGenerationSteps.coerceAtLeast(1)
             preferences[MAX_SUBAGENT_STEPS] = settings.maxSubagentSteps.coerceAtLeast(1)
             preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
+            if (settings.containerCustomHosts.isBlank()) {
+                preferences.remove(CONTAINER_CUSTOM_HOSTS)
+            } else {
+                preferences[CONTAINER_CUSTOM_HOSTS] = settings.containerCustomHosts
+            }
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
@@ -660,6 +667,7 @@ data class Settings(
     val maxGenerationSteps: Int = 256,
     val maxSubagentSteps: Int = 50,
     val webServerLocalhostOnly: Boolean = false,
+    val containerCustomHosts: String = "",
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,

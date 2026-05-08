@@ -24,6 +24,7 @@ import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
 import javax.inject.Singleton
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.sandbox.SandboxEngine
 
@@ -43,7 +44,8 @@ import me.rerere.rikkahub.sandbox.SandboxEngine
  */
 @Singleton
 class PRootManager(
-    private val context: Context
+    private val context: Context,
+    private val settingsStore: SettingsStore
 ) {
 
     data class ContainerDirectoryEntry(
@@ -1232,6 +1234,7 @@ fi
                     "options timeout:2 attempts:2\n"
             )
             File(etcDir, "nsswitch.conf").writeText("hosts: files dns\n")
+            writeContainerHostsFile(File(containerDir, "upper"))
             File(rootfsDir, "tmp").apply {
                 mkdirs()
                 setReadable(true, false)
@@ -2499,6 +2502,26 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
         }
     }
 
+
+    private fun writeContainerHostsFile(upperDir: File) {
+        runCatching {
+            val etcDir = File(upperDir, "etc").apply { mkdirs() }
+            File(etcDir, "hosts").writeText(buildContainerHostsContent())
+        }.onFailure {
+            Log.w(TAG, "Failed to write container hosts file", it)
+        }
+    }
+
+    private fun buildContainerHostsContent(): String {
+        val customHosts = settingsStore.settingsFlow.value.containerCustomHosts.trim()
+        val baseHosts = "127.0.0.1\tlocalhost\n::1\tlocalhost ip6-localhost ip6-loopback\n"
+        return if (customHosts.isBlank()) {
+            baseHosts
+        } else {
+            baseHosts + "\n# Custom hosts from RikkaHub settings\n" + customHosts + "\n"
+        }
+    }
+
     /**
      * 设置进程环境变量
      */
@@ -2547,7 +2570,9 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
         val deliveryDir = SandboxEngine.getDeliveryDir(context, sandboxId).apply { mkdirs() }
         val runtimeSkillsDir = SandboxEngine.getRuntimeSkillsDir(context, sandboxId).apply { mkdirs() }
         val skillLibraryDir = File(context.filesDir, FileFolders.SKILLS).apply { mkdirs() }
-        ensureContainerRuntimeFiles(File(container.upperDir))
+        val upperDir = File(container.upperDir)
+        ensureContainerRuntimeFiles(upperDir)
+        writeContainerHostsFile(upperDir)
 
         return buildList {
             add(prootBinary)
@@ -2586,6 +2611,8 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
             add("${container.upperDir}/etc/apk/repositories:/etc/apk/repositories")
             add("-b")
             add("${container.upperDir}/etc/resolv.conf:/etc/resolv.conf")
+            add("-b")
+            add("${container.upperDir}/etc/hosts:/etc/hosts")
 
             // 根目录使用基础 rootfs（只读）- 必须在 -b 之后
             add("-R")

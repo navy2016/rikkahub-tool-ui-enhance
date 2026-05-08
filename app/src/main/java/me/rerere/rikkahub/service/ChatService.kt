@@ -1,4 +1,4 @@
-﻿package me.rerere.rikkahub.service
+package me.rerere.rikkahub.service
 
 import android.app.Application
 import android.app.PendingIntent
@@ -30,6 +30,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
@@ -131,6 +133,7 @@ import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.rikkahub.utils.sendNotification
 import java.time.Instant
+import kotlin.time.Clock
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.ceil
@@ -825,7 +828,7 @@ class ChatService(
         val model = settings.getCurrentChatModel() ?: return
         var promptCharsForCalibration = 0
 
-        runCatching {
+        val generationResult = runCatching {
             var conversation = getConversationFlow(conversationId).value
             val assistant = settings.getCurrentAssistant()
             val hasKnowledgeBaseDocuments = assistant.enableKnowledgeBaseTool &&
@@ -1131,7 +1134,9 @@ class ChatService(
                     }
                 }
             }
-        }.onFailure {
+        }
+
+        generationResult.onFailure {
             // 取消 Live Update 通知
             cancelLiveUpdateNotification(conversationId)
 
@@ -1139,7 +1144,13 @@ class ChatService(
             addError(it, conversationId, title = context.getString(R.string.error_title_generation))
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
-        }.onSuccess {
+
+            // Preserve the latest streamed assistant message even when generation is
+            // interrupted by a network/provider/process failure instead of a user stop.
+            saveInterruptedGenerationSnapshot(conversationId)
+        }
+
+        generationResult.onSuccess {
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
             calibrateTokenEstimator(
@@ -1154,6 +1165,33 @@ class ChatService(
                 generateSuggestion(conversationId, finalConversation)
             }
         }
+    }
+
+    private suspend fun saveInterruptedGenerationSnapshot(conversationId: Uuid) {
+        val now = Clock.System.now()
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+        val currentConversation = getConversationFlow(conversationId).value
+        val updatedConversation = currentConversation.copy(
+            messageNodes = currentConversation.messageNodes.mapIndexed { index, node ->
+                node.copy(
+                    messages = node.messages.mapIndexed { messageIndex, message ->
+                        val selectedMessage = messageIndex == node.selectIndex
+                        val lastNode = index == currentConversation.messageNodes.lastIndex
+                        val shouldFinishMessage = selectedMessage && lastNode &&
+                            message.role == MessageRole.ASSISTANT &&
+                            message.finishedAt == null
+                        val finishedMessage = if (shouldFinishMessage) {
+                            message.copy(finishedAt = now)
+                        } else {
+                            message
+                        }
+                        finishedMessage.finishReasoning()
+                    }
+                )
+            },
+            updateAt = Instant.now()
+        )
+        saveConversation(conversationId, updatedConversation)
     }
 
     // ---- 检查无效消息 ----

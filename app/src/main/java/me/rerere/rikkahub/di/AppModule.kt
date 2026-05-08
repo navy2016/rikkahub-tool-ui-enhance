@@ -75,7 +75,7 @@ val appModule = module {
     }
 
     single {
-        PRootManager(get())
+        PRootManager(get(), get())
     }
 
     single {

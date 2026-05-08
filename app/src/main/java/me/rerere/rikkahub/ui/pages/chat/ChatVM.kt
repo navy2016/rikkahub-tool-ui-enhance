@@ -632,14 +632,8 @@ class ChatVM(
             val currentConversation = conversation.value
             val currentState = currentConversation.workflowState
             if (currentState != null) {
-                val nextPhase = when {
-                    enabled -> null
-                    currentState.phase == null -> me.rerere.rikkahub.data.model.WorkflowPhase.PLAN
-                    else -> currentState.phase
-                }
                 val newState = currentState.copy(
-                    autoContinue = enabled,
-                    phase = nextPhase
+                    autoContinue = enabled
                 )
                 val updatedConversation = currentConversation.copy(workflowState = newState)
                 chatService.saveConversation(_conversationId, updatedConversation)
