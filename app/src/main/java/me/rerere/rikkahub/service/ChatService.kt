@@ -3286,7 +3286,49 @@ class ChatService(
 
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid) {
-        preserveGenerationSnapshot(conversationId, markAssistantFinished = true)
+        preserveCancelledToolGenerationSnapshot(conversationId)
         sessions[conversationId]?.getJob()?.cancel()
     }
+
+    private suspend fun preserveCancelledToolGenerationSnapshot(conversationId: Uuid) {
+        val currentConversation = getConversationFlow(conversationId).value
+        val cancellationOutput = listOf(
+            UIMessagePart.Text(
+                """{"error":"Tool execution was cancelled by user","error_code":"TOOL_EXECUTION_CANCELLED"}"""
+            )
+        )
+        val conversationWithCancelledTools = currentConversation.copy(
+            messageNodes = currentConversation.messageNodes.map { node ->
+                val currentMessage = node.currentMessage
+                val updatedParts = currentMessage.parts.map { part ->
+                    if (part is UIMessagePart.Tool && !part.isExecuted) {
+                        part.copy(
+                            output = cancellationOutput,
+                            approvalState = ToolApprovalState.Cancelled("Cancelled by user")
+                        )
+                    } else {
+                        part
+                    }
+                }
+
+                if (updatedParts == currentMessage.parts) {
+                    node
+                } else {
+                    node.copy(
+                        messages = node.messages.mapIndexed { messageIndex, message ->
+                            if (messageIndex == node.selectIndex) {
+                                message.copy(parts = updatedParts)
+                            } else {
+                                message
+                            }
+                        }
+                    )
+                }
+            }
+        )
+        val preservedConversation = conversationWithCancelledTools.toPreservedGenerationSnapshot(markAssistantFinished = true)
+        saveConversation(conversationId, preservedConversation)
+        lastStreamingSaveAt[conversationId] = System.currentTimeMillis()
+    }
+
 }
