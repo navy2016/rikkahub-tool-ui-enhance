@@ -341,12 +341,12 @@ class InteractiveTerminalSnapshotTest {
     fun renderInteractiveTerminalSnapshotReportsCursorLineTextPaddingSegments() {
         val snapshot = renderInteractiveTerminalSnapshot("\u001B[3;4Hmiddle  \u001B[3;7H".toByteArray(Charsets.UTF_8), columns = 20, rows = 6)
 
-        assertEquals("   middle  ", snapshot.cursorLine)
+        assertEquals("   middle", snapshot.cursorLine)
         assertEquals("middle", snapshot.cursorLineTextContent)
         assertEquals("   ", snapshot.cursorLineTextLeadingPadding)
-        assertEquals("  ", snapshot.cursorLineTextTrailingPadding)
+        assertEquals("", snapshot.cursorLineTextTrailingPadding)
         assertEquals(3, snapshot.cursorLineTextLeadingPaddingLength)
-        assertEquals(2, snapshot.cursorLineTextTrailingPaddingLength)
+        assertEquals(0, snapshot.cursorLineTextTrailingPaddingLength)
         assertEquals(snapshot.cursorLine, snapshot.cursorLineTextLeadingPadding + snapshot.cursorLineTextContent + snapshot.cursorLineTextTrailingPadding)
         assertEquals(6, snapshot.cursorLineTextLength)
         assertEquals(3, snapshot.cursorLineTextCursorOffset)
