@@ -562,7 +562,12 @@ class ChatService(
     fun cleanup() = runCatching {
         runBlocking {
             sessions.keys.toList().forEach { conversationId ->
-                preserveGenerationSnapshot(conversationId, markAssistantFinished = true)
+                preserveInterruptedToolGenerationSnapshot(
+                    conversationId = conversationId,
+                    error = "Tool execution was interrupted because the app was closed",
+                    errorCode = "TOOL_EXECUTION_INTERRUPTED",
+                    reason = "App closed"
+                )
             }
         }
         ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
@@ -1161,9 +1166,14 @@ class ChatService(
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
 
-            // Preserve the latest streamed assistant message even when generation is
-            // interrupted by a network/provider/process failure instead of a user stop.
-            preserveGenerationSnapshot(conversationId, markAssistantFinished = true)
+            // Preserve the latest streamed assistant message and any unfinished tool
+            // details when generation is interrupted by a provider/process failure.
+            preserveInterruptedToolGenerationSnapshot(
+                conversationId = conversationId,
+                error = "Tool execution was interrupted before completion",
+                errorCode = "TOOL_EXECUTION_INTERRUPTED",
+                reason = "Generation interrupted"
+            )
         }
 
         generationResult.onSuccess {
@@ -3286,25 +3296,35 @@ class ChatService(
 
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid) {
-        preserveCancelledToolGenerationSnapshot(conversationId)
+        preserveInterruptedToolGenerationSnapshot(
+            conversationId = conversationId,
+            error = "Tool execution was cancelled by user",
+            errorCode = "TOOL_EXECUTION_CANCELLED",
+            reason = "Cancelled by user"
+        )
         sessions[conversationId]?.getJob()?.cancel()
     }
 
-    private suspend fun preserveCancelledToolGenerationSnapshot(conversationId: Uuid) {
+    private suspend fun preserveInterruptedToolGenerationSnapshot(
+        conversationId: Uuid,
+        error: String,
+        errorCode: String,
+        reason: String,
+    ) {
         val currentConversation = getConversationFlow(conversationId).value
-        val cancellationOutput = listOf(
+        val interruptionOutput = listOf(
             UIMessagePart.Text(
-                """{"error":"Tool execution was cancelled by user","error_code":"TOOL_EXECUTION_CANCELLED"}"""
+                """{"error":"$error","error_code":"$errorCode"}"""
             )
         )
-        val conversationWithCancelledTools = currentConversation.copy(
+        val conversationWithInterruptedTools = currentConversation.copy(
             messageNodes = currentConversation.messageNodes.map { node ->
                 val currentMessage = node.currentMessage
                 val updatedParts = currentMessage.parts.map { part ->
                     if (part is UIMessagePart.Tool && !part.isExecuted) {
                         part.copy(
-                            output = cancellationOutput,
-                            approvalState = ToolApprovalState.Cancelled("Cancelled by user")
+                            output = interruptionOutput,
+                            approvalState = ToolApprovalState.Cancelled(reason)
                         )
                     } else {
                         part
@@ -3326,7 +3346,7 @@ class ChatService(
                 }
             }
         )
-        val preservedConversation = conversationWithCancelledTools.toPreservedGenerationSnapshot(markAssistantFinished = true)
+        val preservedConversation = conversationWithInterruptedTools.toPreservedGenerationSnapshot(markAssistantFinished = true)
         saveConversation(conversationId, preservedConversation)
         lastStreamingSaveAt[conversationId] = System.currentTimeMillis()
     }
