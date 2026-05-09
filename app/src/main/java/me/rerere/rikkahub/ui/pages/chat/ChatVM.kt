@@ -25,17 +25,11 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlin.time.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import kotlinx.coroutines.runBlocking
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.subagent.SubAgentProgressManager
@@ -408,64 +402,9 @@ class ChatVM(
 
     fun stopGeneration() {
         viewModelScope.launch {
-            // 在取消前，先将正在执行的工具标记为已取消并保存
-            val currentConversation = conversation.value
-            val updatedNodes = currentConversation.messageNodes.map { node ->
-                val updatedParts = node.currentMessage.parts.map { part ->
-                    if (part is UIMessagePart.Tool && !part.isExecuted) {
-                        // 将未执行的工具标记为已取消
-                        part.copy(
-                            output = listOf(
-                                UIMessagePart.Text(
-                                    buildJsonObject {
-                                        put("error", JsonPrimitive("Tool execution was cancelled by user"))
-                                        put("error_code", JsonPrimitive("TOOL_EXECUTION_CANCELLED"))
-                                    }.toString()
-                                )
-                            ),
-                            approvalState = ToolApprovalState.Cancelled("Cancelled by user")
-                        )
-                    } else part
-                }
-                if (updatedParts != node.currentMessage.parts) {
-                    node.copy(
-                        messages = node.messages.mapIndexed { index, msg ->
-                            if (index == node.selectIndex) {
-                                msg.copy(parts = updatedParts)
-                            } else msg
-                        }
-                    )
-                } else node
-            }
-            
-            // 标记最后一条消息为已完成（设置 finishedAt）
-            val nodesWithFinished = updatedNodes.mapIndexed { index, node ->
-                if (index == updatedNodes.lastIndex) {
-                    // 最后一条消息，检查是否需要设置 finishedAt
-                    val lastMsg = node.currentMessage
-                    if (lastMsg.finishedAt == null) {
-                        node.copy(
-                            messages = node.messages.mapIndexed { msgIndex, msg ->
-                                if (msgIndex == node.selectIndex) {
-                                    msg.copy(
-                                        finishedAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
-                                    )
-                                } else msg
-                            }
-                        )
-                    } else node
-                } else node
-            }
-            
-            // 保存更新后的对话状态
-            if (nodesWithFinished != currentConversation.messageNodes) {
-                val updatedConversation = currentConversation.copy(messageNodes = nodesWithFinished)
-                chatService.saveConversation(_conversationId, updatedConversation)
-            }
-            
-            // 然后取消生成
+            // Service handles preserving the latest streamed assistant output before cancellation.
             chatService.stopGeneration(_conversationId)
-            
+
             // 清理所有进行中的子代理任务
             SubAgentProgressManager.cleanupAll()
         }

@@ -1469,69 +1469,7 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
                     stderr = "Global container not created"
                 )
 
-            // 构建 PRoot 命令
-            val prootBinary = File(prootDir, "proot").absolutePath
-            val sandboxDir = File(context.filesDir, "sandboxes/$sandboxId")
-            val deliveryDir = SandboxEngine.getDeliveryDir(context, sandboxId)
-            val runtimeSkillsDir = SandboxEngine.getRuntimeSkillsDir(context, sandboxId)
-            val skillLibraryDir = File(context.filesDir, FileFolders.SKILLS).apply { mkdirs() }
-
-            // 确保沙箱目录存在
-            sandboxDir.mkdirs()
-
-            // 检查 termux-exec 是否可用
-            val nativeLibDir = context.applicationInfo.nativeLibraryDir
-            val termuxExecLib = File(nativeLibDir, "libtermux-exec.so")
-            val hasTermuxExec = termuxExecLib.exists()
-
-            val prootCmd = buildList {
-                add(prootBinary)
-
-                // 绑定挂载系统目录（必要）
-                add("-b")
-                add("/dev")
-                add("-b")
-                add("/proc")
-                add("-b")
-                add("/sys")
-
-                // 绑定挂载对话的沙箱目录到 /workspace
-                add("-b")
-                add("${sandboxDir.absolutePath}:/workspace")
-                add("-b")
-                add("${deliveryDir.absolutePath}:/delivery")
-                add("-b")
-                add("${skillLibraryDir.absolutePath}:/skills")
-                add("-b")
-                add("${runtimeSkillsDir.absolutePath}:/opt/rikkahub/skills")
-
-                // 绑定挂载容器的 upper 层到 /usr/local（pip 安装位置）
-                add("-b")
-                add("${container.upperDir}/usr/local:/usr/local")
-
-                // 绑定挂载 upper 层到 /root（用户级 pip 配置）
-                add("-b")
-                add("${container.upperDir}/root:/root")
-
-                // 额外绑定挂载 usr/lib 以确保库文件可访问
-                // 使用 ! 后缀表示不追踪符号链接，确保覆盖 rootfs 中的同名目录
-                add("-b")
-                add("${container.upperDir}/usr/lib:/usr/lib!")
-
-                // 根目录使用基础 rootfs（只读）- 必须在 -b 之后
-                add("-R")
-                add(rootfsDir.absolutePath)
-
-                // 设置工作目录
-                add("-w")
-                add("/workspace")
-
-                // 启用符号链接修复
-                add("--link2symlink")
-
-                // 执行的命令
-                addAll(command)
-            }
+            val prootCmd = buildProotCommand(sandboxId, command, env, container)
 
             // 执行命令
             val processBuilder = ProcessBuilder(prootCmd)
@@ -1539,24 +1477,7 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 
             // 设置环境变量
             val processEnv = processBuilder.environment()
-            processEnv["HOME"] = "/root"
-            processEnv["TMPDIR"] = "/tmp"
-            processEnv["PROOT_TMP_DIR"] = context.cacheDir.absolutePath
-            processEnv["PREFIX"] = "/usr"
-            processEnv["NPM_CONFIG_PREFIX"] = "/usr/local"
-            processEnv["npm_config_prefix"] = "/usr/local"
-            processEnv["NPM_CONFIG_CACHE"] = "/tmp/npm-cache"
-            processEnv["NODE_PATH"] = "/usr/local/lib/node_modules:/usr/lib/node_modules"
-            processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-
-            // 如果 termux-exec 可用，设置 LD_PRELOAD
-            if (hasTermuxExec) {
-                processEnv["LD_PRELOAD"] = termuxExecLib.absolutePath
-                Log.d(TAG, "Using termux-exec: ${termuxExecLib.absolutePath}")
-            }
-
-            // 合并用户传入的环境变量
-            processEnv.putAll(env)
+            setupProcessEnvironment(processEnv, env)
 
             Log.d(TAG, "[ExecInContainer] ========== Executing command ==========")
             Log.d(TAG, "[ExecInContainer] Command: $command")
@@ -2505,8 +2426,11 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 
     private fun writeContainerHostsFile(upperDir: File) {
         runCatching {
-            val etcDir = File(upperDir, "etc").apply { mkdirs() }
-            File(etcDir, "hosts").writeText(buildContainerHostsContent())
+            val hostsContent = buildContainerHostsContent()
+            val upperEtcDir = File(upperDir, "etc").apply { mkdirs() }
+            File(upperEtcDir, "hosts").writeText(hostsContent)
+            val rootfsEtcDir = File(rootfsDir, "etc").apply { mkdirs() }
+            File(rootfsEtcDir, "hosts").writeText(hostsContent)
         }.onFailure {
             Log.w(TAG, "Failed to write container hosts file", it)
         }

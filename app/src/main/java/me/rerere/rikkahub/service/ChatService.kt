@@ -13,6 +13,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -256,6 +257,7 @@ class ChatService(
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
+    private val lastStreamingSaveAt = ConcurrentHashMap<Uuid, Long>()
 
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
@@ -540,7 +542,14 @@ class ChatService(
     private val lifecycleObserver = LifecycleEventObserver { _, event ->
         when (event) {
             Lifecycle.Event.ON_START -> _isForeground.value = true
-            Lifecycle.Event.ON_STOP -> _isForeground.value = false
+            Lifecycle.Event.ON_STOP -> {
+                _isForeground.value = false
+                appScope.launch {
+                    sessions.keys.toList().forEach { conversationId ->
+                        preserveGenerationSnapshot(conversationId, markAssistantFinished = false)
+                    }
+                }
+            }
             else -> {}
         }
     }
@@ -551,9 +560,15 @@ class ChatService(
     }
 
     fun cleanup() = runCatching {
+        runBlocking {
+            sessions.keys.toList().forEach { conversationId ->
+                preserveGenerationSnapshot(conversationId, markAssistantFinished = true)
+            }
+        }
         ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
         sessions.values.forEach { it.cleanup() }
         sessions.clear()
+        lastStreamingSaveAt.clear()
     }
 
     // ---- Session 管理 ----
@@ -1126,6 +1141,7 @@ class ChatService(
                                 startIndex = generationWriteBackStartIndex
                             )
                         updateConversation(conversationId, updatedConversation)
+                        saveStreamingSnapshotIfDue(conversationId, updatedConversation)
 
                         // 如果应用不在前台，发送 Live Update 通知
                         if (!isForeground.value && settings.displaySetting.enableNotificationOnMessageGeneration && settings.displaySetting.enableLiveUpdateNotification) {
@@ -1147,7 +1163,7 @@ class ChatService(
 
             // Preserve the latest streamed assistant message even when generation is
             // interrupted by a network/provider/process failure instead of a user stop.
-            saveInterruptedGenerationSnapshot(conversationId)
+            preserveGenerationSnapshot(conversationId, markAssistantFinished = true)
         }
 
         generationResult.onSuccess {
@@ -1164,20 +1180,30 @@ class ChatService(
             launchWithConversationReference(conversationId) {
                 generateSuggestion(conversationId, finalConversation)
             }
+            lastStreamingSaveAt.remove(conversationId)
         }
     }
 
-    private suspend fun saveInterruptedGenerationSnapshot(conversationId: Uuid) {
+    private suspend fun preserveGenerationSnapshot(
+        conversationId: Uuid,
+        markAssistantFinished: Boolean,
+    ) {
+        val currentConversation = getConversationFlow(conversationId).value
+        val preservedConversation = currentConversation.toPreservedGenerationSnapshot(markAssistantFinished)
+        saveConversation(conversationId, preservedConversation)
+        lastStreamingSaveAt[conversationId] = System.currentTimeMillis()
+    }
+
+    private fun Conversation.toPreservedGenerationSnapshot(markAssistantFinished: Boolean): Conversation {
         val now = Clock.System.now()
             .toLocalDateTime(TimeZone.currentSystemDefault())
-        val currentConversation = getConversationFlow(conversationId).value
-        val updatedConversation = currentConversation.copy(
-            messageNodes = currentConversation.messageNodes.mapIndexed { index, node ->
+        return copy(
+            messageNodes = messageNodes.mapIndexed { index, node ->
                 node.copy(
                     messages = node.messages.mapIndexed { messageIndex, message ->
                         val selectedMessage = messageIndex == node.selectIndex
-                        val lastNode = index == currentConversation.messageNodes.lastIndex
-                        val shouldFinishMessage = selectedMessage && lastNode &&
+                        val lastNode = index == messageNodes.lastIndex
+                        val shouldFinishMessage = markAssistantFinished && selectedMessage && lastNode &&
                             message.role == MessageRole.ASSISTANT &&
                             message.finishedAt == null
                         val finishedMessage = if (shouldFinishMessage) {
@@ -1191,7 +1217,17 @@ class ChatService(
             },
             updateAt = Instant.now()
         )
-        saveConversation(conversationId, updatedConversation)
+    }
+
+    private suspend fun saveStreamingSnapshotIfDue(conversationId: Uuid, conversation: Conversation) {
+        val now = System.currentTimeMillis()
+        val lastSaveAt = lastStreamingSaveAt[conversationId] ?: 0L
+        if (now - lastSaveAt < 1_500L) return
+        saveConversation(
+            conversationId,
+            conversation.toPreservedGenerationSnapshot(markAssistantFinished = false)
+        )
+        lastStreamingSaveAt[conversationId] = now
     }
 
     // ---- 检查无效消息 ----
@@ -3249,7 +3285,8 @@ class ChatService(
     }
 
     // 停止当前会话生成任务（不清理会话缓存）
-    fun stopGeneration(conversationId: Uuid) {
+    suspend fun stopGeneration(conversationId: Uuid) {
+        preserveGenerationSnapshot(conversationId, markAssistantFinished = true)
         sessions[conversationId]?.getJob()?.cancel()
     }
 }

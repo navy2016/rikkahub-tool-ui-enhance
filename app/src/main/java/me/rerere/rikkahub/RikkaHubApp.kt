@@ -28,6 +28,7 @@ import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.container.PRootManager
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.KnowledgeBaseIndexForegroundService
 import me.rerere.rikkahub.service.KnowledgeBaseService
 import me.rerere.rikkahub.service.ScheduledPromptManager
@@ -257,6 +258,7 @@ class RikkaHubApp : Application() {
 
     override fun onTerminate() {
         super.onTerminate()
+        runCatching { get<ChatService>().cleanup() }
         get<AppScope>().cancel()
         stopService(Intent(this, WebServerService::class.java))
         stopService(Intent(this, KnowledgeBaseIndexForegroundService::class.java))
