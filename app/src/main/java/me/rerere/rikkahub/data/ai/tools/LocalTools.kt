@@ -771,7 +771,7 @@ class LocalTools(
                         })
                         put("renderTerminal", buildJsonObject {
                             put("type", "boolean")
-                            put("description", "read 操作是否将保留的 ANSI/TTY 输出渲染为当前终端纯文本屏幕 terminalScreen，并返回 screen lines/top-bottom viewport lines/visible content lines/non-empty rows+lines/internal/edge blank row counts/content/viewport density/content edge lines/content bounds/cursor visible-line/cursor distance/cursor neighborhood/cursor line metrics/region booleans/text segments/text offsets/title/mode/cwd、query responses、OSC52 clipboard request 元数据；适合读取 vim、codex、claude、opencode 等 TUI 当前界面，默认 false")
+                            put("description", "read 操作是否将保留的 ANSI/TTY 输出渲染为当前终端纯文本屏幕 terminalScreen，并返回 screen lines/top-bottom viewport lines/visible content lines/non-empty rows+lines/internal/edge blank row counts/content/viewport density/content edge lines/content bounds/cursor visible-line/cursor distance/cursor neighborhood/cursor line metrics/region booleans/text segments/text offsets/text padding/title/mode/cwd、query responses、OSC52 clipboard request 元数据；适合读取 vim、codex、claude、opencode 等 TUI 当前界面，默认 false")
                         })
                         put("data", buildJsonObject {
                             put("type", "string")
@@ -1102,6 +1102,10 @@ class LocalTools(
             result.terminalCursorLineTextAfterCursor?.let { put("terminalCursorLineTextAfterCursor", JsonPrimitive(it)) }
             result.terminalCursorLineTextContent?.let { put("terminalCursorLineTextContent", JsonPrimitive(it)) }
             result.terminalCursorLineTextLength?.let { put("terminalCursorLineTextLength", JsonPrimitive(it)) }
+            result.terminalCursorLineTextLeadingPadding?.let { put("terminalCursorLineTextLeadingPadding", JsonPrimitive(it)) }
+            result.terminalCursorLineTextTrailingPadding?.let { put("terminalCursorLineTextTrailingPadding", JsonPrimitive(it)) }
+            result.terminalCursorLineTextLeadingPaddingLength?.let { put("terminalCursorLineTextLeadingPaddingLength", JsonPrimitive(it)) }
+            result.terminalCursorLineTextTrailingPaddingLength?.let { put("terminalCursorLineTextTrailingPaddingLength", JsonPrimitive(it)) }
             result.terminalCursorLineTextBeforeCursorInText?.let { put("terminalCursorLineTextBeforeCursorInText", JsonPrimitive(it)) }
             result.terminalCursorLineTextAtCursor?.let { put("terminalCursorLineTextAtCursor", JsonPrimitive(it)) }
             result.terminalCursorLineTextAfterCursorInText?.let { put("terminalCursorLineTextAfterCursorInText", JsonPrimitive(it)) }
@@ -1119,7 +1123,7 @@ class LocalTools(
             result.terminalClipboardRequests?.let { requests ->
                 put("terminalClipboardRequests", JsonArray(requests.map { JsonPrimitive(it) }))
             }
-            put("hint", JsonPrimitive("Default read returns only new output. Use mode=all for full retained buffer, mode=tail for recent output, or renderTerminal=true for a plain-text TUI screen snapshot with screen-line/top-bottom-viewport-lines/visible-content-lines/non-empty-rows-lines/internal/edge-blank-row-counts/content/viewport-density/content-edge-lines/content-bounds/cursor-visible-line/cursor-distance/cursor-neighborhood/cursor-line-metrics/cursor-line-region-booleans/cursor-line-region/cursor-line-text-offsets/cursor-line-text-segments/cursor-line-text-distance/cursor-line-whitespace/cursor-line/title/mode/cwd/query-response metadata."))
+            put("hint", JsonPrimitive("Default read returns only new output. Use mode=all for full retained buffer, mode=tail for recent output, or renderTerminal=true for a plain-text TUI screen snapshot with screen-line/top-bottom-viewport-lines/visible-content-lines/non-empty-rows-lines/internal/edge-blank-row-counts/content/viewport-density/content-edge-lines/content-bounds/cursor-visible-line/cursor-distance/cursor-neighborhood/cursor-line-metrics/cursor-line-region-booleans/cursor-line-region/cursor-line-text-padding/cursor-line-text-offsets/cursor-line-text-segments/cursor-line-text-distance/cursor-line-whitespace/cursor-line/title/mode/cwd/query-response metadata."))
         }
     }
 

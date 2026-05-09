@@ -90,6 +90,10 @@ internal data class InteractiveTerminalSnapshot(
     val cursorLineTextAfterCursor: String,
     val cursorLineTextContent: String?,
     val cursorLineTextLength: Int?,
+    val cursorLineTextLeadingPadding: String?,
+    val cursorLineTextTrailingPadding: String?,
+    val cursorLineTextLeadingPaddingLength: Int?,
+    val cursorLineTextTrailingPaddingLength: Int?,
     val cursorLineTextBeforeCursorInText: String?,
     val cursorLineTextAtCursor: String?,
     val cursorLineTextAfterCursorInText: String?,
@@ -195,6 +199,14 @@ internal fun renderInteractiveTerminalSnapshot(
         null
     }
     val cursorLineTextLength = cursorLineTextContent?.length
+    val cursorLineTextLeadingPadding = cursorLineFirstNonBlankColumn?.let { firstColumn ->
+        cursorLine.substring(0, firstColumn - 1)
+    }
+    val cursorLineTextTrailingPadding = cursorLineLastNonBlankColumn?.let { lastColumn ->
+        cursorLine.substring(lastColumn)
+    }
+    val cursorLineTextLeadingPaddingLength = cursorLineTextLeadingPadding?.length
+    val cursorLineTextTrailingPaddingLength = cursorLineTextTrailingPadding?.length
     val cursorLineTextCursorOffset = cursorLineTextContent?.let { text ->
         (cursorSplitColumn - (cursorLineFirstNonBlankColumn!! - 1)).coerceIn(0, text.length)
     }
@@ -279,6 +291,10 @@ internal fun renderInteractiveTerminalSnapshot(
         cursorLineTextAfterCursor = cursorLine.drop(cursorSplitColumn),
         cursorLineTextContent = cursorLineTextContent,
         cursorLineTextLength = cursorLineTextLength,
+        cursorLineTextLeadingPadding = cursorLineTextLeadingPadding,
+        cursorLineTextTrailingPadding = cursorLineTextTrailingPadding,
+        cursorLineTextLeadingPaddingLength = cursorLineTextLeadingPaddingLength,
+        cursorLineTextTrailingPaddingLength = cursorLineTextTrailingPaddingLength,
         cursorLineTextBeforeCursorInText = cursorLineTextBeforeCursorInText,
         cursorLineTextAtCursor = cursorLineTextAtCursor,
         cursorLineTextAfterCursorInText = cursorLineTextAfterCursorInText,
@@ -1096,6 +1112,10 @@ class BackgroundProcessManager @Inject constructor(
         val terminalCursorLineTextAfterCursor: String? = null,
         val terminalCursorLineTextContent: String? = null,
         val terminalCursorLineTextLength: Int? = null,
+        val terminalCursorLineTextLeadingPadding: String? = null,
+        val terminalCursorLineTextTrailingPadding: String? = null,
+        val terminalCursorLineTextLeadingPaddingLength: Int? = null,
+        val terminalCursorLineTextTrailingPaddingLength: Int? = null,
         val terminalCursorLineTextBeforeCursorInText: String? = null,
         val terminalCursorLineTextAtCursor: String? = null,
         val terminalCursorLineTextAfterCursorInText: String? = null,
@@ -1580,6 +1600,10 @@ class BackgroundProcessManager @Inject constructor(
             terminalCursorLineTextAfterCursor = snapshot.cursorLineTextAfterCursor,
             terminalCursorLineTextContent = snapshot.cursorLineTextContent,
             terminalCursorLineTextLength = snapshot.cursorLineTextLength,
+            terminalCursorLineTextLeadingPadding = snapshot.cursorLineTextLeadingPadding,
+            terminalCursorLineTextTrailingPadding = snapshot.cursorLineTextTrailingPadding,
+            terminalCursorLineTextLeadingPaddingLength = snapshot.cursorLineTextLeadingPaddingLength,
+            terminalCursorLineTextTrailingPaddingLength = snapshot.cursorLineTextTrailingPaddingLength,
             terminalCursorLineTextBeforeCursorInText = snapshot.cursorLineTextBeforeCursorInText,
             terminalCursorLineTextAtCursor = snapshot.cursorLineTextAtCursor,
             terminalCursorLineTextAfterCursorInText = snapshot.cursorLineTextAfterCursorInText,

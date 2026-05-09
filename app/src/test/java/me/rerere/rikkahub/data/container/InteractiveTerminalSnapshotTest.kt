@@ -125,6 +125,10 @@ class InteractiveTerminalSnapshotTest {
         assertCursorRegionFlags(snapshot, onBlankLine = true)
         assertEquals(null, snapshot.cursorLineTextContent)
         assertEquals(null, snapshot.cursorLineTextLength)
+        assertEquals(null, snapshot.cursorLineTextLeadingPadding)
+        assertEquals(null, snapshot.cursorLineTextTrailingPadding)
+        assertEquals(null, snapshot.cursorLineTextLeadingPaddingLength)
+        assertEquals(null, snapshot.cursorLineTextTrailingPaddingLength)
         assertEquals(null, snapshot.cursorLineTextBeforeCursorInText)
         assertEquals(null, snapshot.cursorLineTextAtCursor)
         assertEquals(null, snapshot.cursorLineTextAfterCursorInText)
@@ -256,6 +260,11 @@ class InteractiveTerminalSnapshotTest {
         assertCursorRegionFlags(snapshot, atLineTextEnd = true)
         assertEquals("middle", snapshot.cursorLineTextContent)
         assertEquals(6, snapshot.cursorLineTextLength)
+        assertEquals("   ", snapshot.cursorLineTextLeadingPadding)
+        assertEquals("", snapshot.cursorLineTextTrailingPadding)
+        assertEquals(3, snapshot.cursorLineTextLeadingPaddingLength)
+        assertEquals(0, snapshot.cursorLineTextTrailingPaddingLength)
+        assertEquals(snapshot.cursorLine, snapshot.cursorLineTextLeadingPadding + snapshot.cursorLineTextContent + snapshot.cursorLineTextTrailingPadding)
         assertEquals("middle", snapshot.cursorLineTextBeforeCursorInText)
         assertEquals(null, snapshot.cursorLineTextAtCursor)
         assertEquals("", snapshot.cursorLineTextAfterCursorInText)
@@ -272,6 +281,11 @@ class InteractiveTerminalSnapshotTest {
         assertCursorRegionFlags(beforeText, beforeLineText = true)
         assertEquals("middle", beforeText.cursorLineTextContent)
         assertEquals(6, beforeText.cursorLineTextLength)
+        assertEquals("   ", beforeText.cursorLineTextLeadingPadding)
+        assertEquals("", beforeText.cursorLineTextTrailingPadding)
+        assertEquals(3, beforeText.cursorLineTextLeadingPaddingLength)
+        assertEquals(0, beforeText.cursorLineTextTrailingPaddingLength)
+        assertEquals(beforeText.cursorLine, beforeText.cursorLineTextLeadingPadding + beforeText.cursorLineTextContent + beforeText.cursorLineTextTrailingPadding)
         assertEquals("", beforeText.cursorLineTextBeforeCursorInText)
         assertEquals("m", beforeText.cursorLineTextAtCursor)
         assertEquals("middle", beforeText.cursorLineTextAfterCursorInText)
@@ -321,6 +335,23 @@ class InteractiveTerminalSnapshotTest {
         assertEquals("dle", snapshot.cursorLineTextAfterCursorInText)
         assertEquals(3, snapshot.cursorLineTextCursorOffset)
         assertEquals(3, snapshot.cursorLineTextCursorOffsetFromEnd)
+    }
+
+    @Test
+    fun renderInteractiveTerminalSnapshotReportsCursorLineTextPaddingSegments() {
+        val snapshot = renderInteractiveTerminalSnapshot("\u001B[3;4Hmiddle  \u001B[3;7H".toByteArray(Charsets.UTF_8), columns = 20, rows = 6)
+
+        assertEquals("   middle  ", snapshot.cursorLine)
+        assertEquals("middle", snapshot.cursorLineTextContent)
+        assertEquals("   ", snapshot.cursorLineTextLeadingPadding)
+        assertEquals("  ", snapshot.cursorLineTextTrailingPadding)
+        assertEquals(3, snapshot.cursorLineTextLeadingPaddingLength)
+        assertEquals(2, snapshot.cursorLineTextTrailingPaddingLength)
+        assertEquals(snapshot.cursorLine, snapshot.cursorLineTextLeadingPadding + snapshot.cursorLineTextContent + snapshot.cursorLineTextTrailingPadding)
+        assertEquals(6, snapshot.cursorLineTextLength)
+        assertEquals(3, snapshot.cursorLineTextCursorOffset)
+        assertEquals(3, snapshot.cursorLineTextCursorOffsetFromEnd)
+        assertEquals("INSIDE_TEXT", snapshot.cursorLineCursorRegion)
     }
 
     @Test
