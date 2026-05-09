@@ -266,7 +266,7 @@ class InteractiveTerminalSnapshotTest {
         assertCursorRegionFlags(beforeText, beforeLineText = true)
         assertEquals("middle", beforeText.cursorLineTextContent)
         assertEquals("", beforeText.cursorLineTextBeforeCursorInText)
-        assertEquals(null, beforeText.cursorLineTextAtCursor)
+        assertEquals("m", beforeText.cursorLineTextAtCursor)
         assertEquals("middle", beforeText.cursorLineTextAfterCursorInText)
         assertEquals(0, beforeText.cursorLineTextCursorOffset)
         assertEquals(-2, beforeText.cursorDistanceFromLineTextStart)
