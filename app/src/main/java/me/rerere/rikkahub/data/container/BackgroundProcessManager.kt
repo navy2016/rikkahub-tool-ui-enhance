@@ -53,6 +53,10 @@ internal data class InteractiveTerminalSnapshot(
     val rows: Int,
     val cursorRow: Int,
     val cursorColumn: Int,
+    val rowsAboveCursor: Int,
+    val rowsBelowCursor: Int,
+    val cursorDistanceFromContentTop: Int?,
+    val cursorDistanceFromContentBottom: Int?,
     val cursorLine: String,
     val cursorLineTextBeforeCursor: String,
     val cursorLineTextAfterCursor: String,
@@ -106,6 +110,10 @@ internal fun renderInteractiveTerminalSnapshot(
     val lastNonEmptyLine = lastNonEmptyRow?.let { row -> screenLines.getOrNull(row - 1) }
     val cursorRow = terminal.cursorRow()
     val cursorColumn = terminal.cursorColumn()
+    val rowsAboveCursor = cursorRow - 1
+    val rowsBelowCursor = safeRows - cursorRow
+    val cursorDistanceFromContentTop = firstNonEmptyRow?.let { cursorRow - it }
+    val cursorDistanceFromContentBottom = lastNonEmptyRow?.let { it - cursorRow }
     val cursorLine = screenLines.getOrElse(cursorRow - 1) { "" }
     val cursorSplitColumn = (cursorColumn - 1).coerceIn(0, cursorLine.length)
     val cursorInVisibleContent = firstNonEmptyRow != null && lastNonEmptyRow != null && cursorRow in firstNonEmptyRow..lastNonEmptyRow
@@ -141,6 +149,10 @@ internal fun renderInteractiveTerminalSnapshot(
         rows = safeRows,
         cursorRow = cursorRow,
         cursorColumn = cursorColumn,
+        rowsAboveCursor = rowsAboveCursor,
+        rowsBelowCursor = rowsBelowCursor,
+        cursorDistanceFromContentTop = cursorDistanceFromContentTop,
+        cursorDistanceFromContentBottom = cursorDistanceFromContentBottom,
         cursorLine = cursorLine,
         cursorLineTextBeforeCursor = cursorLine.take(cursorSplitColumn),
         cursorLineTextAfterCursor = cursorLine.drop(cursorSplitColumn),
@@ -919,6 +931,10 @@ class BackgroundProcessManager @Inject constructor(
         val terminalRows: Int? = null,
         val terminalCursorRow: Int? = null,
         val terminalCursorColumn: Int? = null,
+        val terminalRowsAboveCursor: Int? = null,
+        val terminalRowsBelowCursor: Int? = null,
+        val terminalCursorDistanceFromContentTop: Int? = null,
+        val terminalCursorDistanceFromContentBottom: Int? = null,
         val terminalCursorLine: String? = null,
         val terminalCursorLineTextBeforeCursor: String? = null,
         val terminalCursorLineTextAfterCursor: String? = null,
@@ -1364,6 +1380,10 @@ class BackgroundProcessManager @Inject constructor(
             terminalRows = snapshot.rows,
             terminalCursorRow = snapshot.cursorRow,
             terminalCursorColumn = snapshot.cursorColumn,
+            terminalRowsAboveCursor = snapshot.rowsAboveCursor,
+            terminalRowsBelowCursor = snapshot.rowsBelowCursor,
+            terminalCursorDistanceFromContentTop = snapshot.cursorDistanceFromContentTop,
+            terminalCursorDistanceFromContentBottom = snapshot.cursorDistanceFromContentBottom,
             terminalCursorLine = snapshot.cursorLine,
             terminalCursorLineTextBeforeCursor = snapshot.cursorLineTextBeforeCursor,
             terminalCursorLineTextAfterCursor = snapshot.cursorLineTextAfterCursor,
