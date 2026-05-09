@@ -121,6 +121,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(null, snapshot.cursorLineLastNonBlankColumn)
         assertEquals(null, snapshot.cursorDistanceFromLineTextStart)
         assertEquals(null, snapshot.cursorDistanceFromLineTextEnd)
+        assertEquals("BLANK_LINE", snapshot.cursorLineCursorRegion)
         assertEquals(0, snapshot.cursorTextColumn)
         assertEquals(0, snapshot.cursorDistanceFromLineEnd)
         assertEquals(listOf("", "", ""), snapshot.topLines)
@@ -164,6 +165,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(19, snapshot.cursorLineLastNonBlankColumn)
         assertEquals(14, snapshot.cursorDistanceFromLineTextStart)
         assertEquals(-5, snapshot.cursorDistanceFromLineTextEnd)
+        assertEquals("INSIDE_TEXT", snapshot.cursorLineCursorRegion)
         assertEquals(14, snapshot.cursorTextColumn)
         assertEquals(-5, snapshot.cursorDistanceFromLineEnd)
         assertEquals("prompt> hello ", snapshot.cursorLineTextBeforeCursor)
@@ -202,6 +204,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(6, snapshot.cursorLineLastNonBlankColumn)
         assertEquals(6, snapshot.cursorDistanceFromLineTextStart)
         assertEquals(0, snapshot.cursorDistanceFromLineTextEnd)
+        assertEquals("TEXT_END", snapshot.cursorLineCursorRegion)
         assertEquals(6, snapshot.cursorTextColumn)
         assertEquals(0, snapshot.cursorDistanceFromLineEnd)
         assertEquals(3, snapshot.cursorDistanceFromContentTop)
@@ -232,8 +235,27 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(9, snapshot.cursorLineLastNonBlankColumn)
         assertEquals(6, snapshot.cursorDistanceFromLineTextStart)
         assertEquals(0, snapshot.cursorDistanceFromLineTextEnd)
+        assertEquals("TEXT_END", snapshot.cursorLineCursorRegion)
         assertEquals(9, snapshot.cursorTextColumn)
         assertEquals(0, snapshot.cursorDistanceFromLineEnd)
+    }
+
+    @Test
+    fun renderInteractiveTerminalSnapshotReportsCursorLineRegionBeforeAndAfterText() {
+        val beforeText = renderInteractiveTerminalSnapshot("\u001B[3;4Hmiddle\u001B[3;2H".toByteArray(Charsets.UTF_8), columns = 20, rows = 6)
+        assertEquals("BEFORE_TEXT", beforeText.cursorLineCursorRegion)
+        assertEquals(-2, beforeText.cursorDistanceFromLineTextStart)
+        assertEquals(-8, beforeText.cursorDistanceFromLineTextEnd)
+
+        val atTextStart = renderInteractiveTerminalSnapshot("\u001B[3;4Hmiddle\u001B[3;4H".toByteArray(Charsets.UTF_8), columns = 20, rows = 6)
+        assertEquals("TEXT_START", atTextStart.cursorLineCursorRegion)
+        assertEquals(0, atTextStart.cursorDistanceFromLineTextStart)
+        assertEquals(-6, atTextStart.cursorDistanceFromLineTextEnd)
+
+        val afterText = renderInteractiveTerminalSnapshot("\u001B[3;4Hmiddle\u001B[3;12H".toByteArray(Charsets.UTF_8), columns = 20, rows = 6)
+        assertEquals("AFTER_TEXT", afterText.cursorLineCursorRegion)
+        assertEquals(8, afterText.cursorDistanceFromLineTextStart)
+        assertEquals(2, afterText.cursorDistanceFromLineTextEnd)
     }
 
     @Test
