@@ -115,6 +115,10 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(null, snapshot.cursorDistanceFromContentBottom)
         assertEquals(true, snapshot.cursorLineIsBlank)
         assertEquals(0, snapshot.cursorLineLength)
+        assertEquals(0, snapshot.cursorLineLeadingBlankCount)
+        assertEquals(0, snapshot.cursorLineTrailingBlankCount)
+        assertEquals(null, snapshot.cursorLineFirstNonBlankColumn)
+        assertEquals(null, snapshot.cursorLineLastNonBlankColumn)
         assertEquals(0, snapshot.cursorTextColumn)
         assertEquals(0, snapshot.cursorDistanceFromLineEnd)
         assertEquals(listOf("", "", ""), snapshot.topLines)
@@ -152,6 +156,10 @@ class InteractiveTerminalSnapshotTest {
         assertEquals("prompt> hello world", snapshot.cursorLine)
         assertEquals(false, snapshot.cursorLineIsBlank)
         assertEquals(19, snapshot.cursorLineLength)
+        assertEquals(0, snapshot.cursorLineLeadingBlankCount)
+        assertEquals(0, snapshot.cursorLineTrailingBlankCount)
+        assertEquals(1, snapshot.cursorLineFirstNonBlankColumn)
+        assertEquals(19, snapshot.cursorLineLastNonBlankColumn)
         assertEquals(14, snapshot.cursorTextColumn)
         assertEquals(-5, snapshot.cursorDistanceFromLineEnd)
         assertEquals("prompt> hello ", snapshot.cursorLineTextBeforeCursor)
@@ -184,6 +192,10 @@ class InteractiveTerminalSnapshotTest {
         assertEquals("bottom", snapshot.cursorVisibleContentLine)
         assertEquals(false, snapshot.cursorLineIsBlank)
         assertEquals(6, snapshot.cursorLineLength)
+        assertEquals(0, snapshot.cursorLineLeadingBlankCount)
+        assertEquals(0, snapshot.cursorLineTrailingBlankCount)
+        assertEquals(1, snapshot.cursorLineFirstNonBlankColumn)
+        assertEquals(6, snapshot.cursorLineLastNonBlankColumn)
         assertEquals(6, snapshot.cursorTextColumn)
         assertEquals(0, snapshot.cursorDistanceFromLineEnd)
         assertEquals(3, snapshot.cursorDistanceFromContentTop)
@@ -200,6 +212,23 @@ class InteractiveTerminalSnapshotTest {
     }
 
     @Test
+    fun renderInteractiveTerminalSnapshotReportsCursorLineWhitespaceBounds() {
+        val bytes = "\u001B[3;4Hmiddle\u001B[3;10H".toByteArray(Charsets.UTF_8)
+
+        val snapshot = renderInteractiveTerminalSnapshot(bytes, columns = 20, rows = 6)
+
+        assertEquals("   middle", snapshot.cursorLine)
+        assertEquals(false, snapshot.cursorLineIsBlank)
+        assertEquals(9, snapshot.cursorLineLength)
+        assertEquals(3, snapshot.cursorLineLeadingBlankCount)
+        assertEquals(0, snapshot.cursorLineTrailingBlankCount)
+        assertEquals(4, snapshot.cursorLineFirstNonBlankColumn)
+        assertEquals(9, snapshot.cursorLineLastNonBlankColumn)
+        assertEquals(9, snapshot.cursorTextColumn)
+        assertEquals(0, snapshot.cursorDistanceFromLineEnd)
+    }
+
+    @Test
     fun renderInteractiveTerminalSnapshotReportsCursorOutsideVisibleContent() {
         val bytes = "\u001B[3;1Hcontent\u001B[1;1H".toByteArray(Charsets.UTF_8)
 
@@ -212,6 +241,8 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(-2, snapshot.cursorDistanceFromContentTop)
         assertEquals(2, snapshot.cursorDistanceFromContentBottom)
         assertEquals(false, snapshot.cursorInVisibleContent)
+        assertEquals(0, snapshot.cursorLineLeadingBlankCount)
+        assertEquals(0, snapshot.cursorLineTrailingBlankCount)
         assertEquals(null, snapshot.cursorVisibleContentRow)
         assertEquals(null, snapshot.cursorVisibleContentLine)
     }

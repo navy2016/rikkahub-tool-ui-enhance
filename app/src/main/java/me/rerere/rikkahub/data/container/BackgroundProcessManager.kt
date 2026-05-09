@@ -71,6 +71,10 @@ internal data class InteractiveTerminalSnapshot(
     val cursorLine: String,
     val cursorLineIsBlank: Boolean,
     val cursorLineLength: Int,
+    val cursorLineLeadingBlankCount: Int,
+    val cursorLineTrailingBlankCount: Int,
+    val cursorLineFirstNonBlankColumn: Int?,
+    val cursorLineLastNonBlankColumn: Int?,
     val cursorTextColumn: Int,
     val cursorDistanceFromLineEnd: Int,
     val cursorLineTextBeforeCursor: String,
@@ -144,6 +148,14 @@ internal fun renderInteractiveTerminalSnapshot(
     val cursorLine = screenLines.getOrElse(cursorRow - 1) { "" }
     val cursorLineIsBlank = cursorLine.isBlank()
     val cursorLineLength = cursorLine.length
+    val cursorLineLeadingBlankCount = cursorLine.indexOfFirst { !it.isWhitespace() }.let { index ->
+        if (index == -1) cursorLineLength else index
+    }
+    val cursorLineTrailingBlankCount = cursorLine.indexOfLast { !it.isWhitespace() }.let { index ->
+        if (index == -1) cursorLineLength else cursorLineLength - index - 1
+    }
+    val cursorLineFirstNonBlankColumn = cursorLine.indexOfFirst { !it.isWhitespace() }.takeIf { it >= 0 }?.let { it + 1 }
+    val cursorLineLastNonBlankColumn = cursorLine.indexOfLast { !it.isWhitespace() }.takeIf { it >= 0 }?.let { it + 1 }
     val cursorSplitColumn = (cursorColumn - 1).coerceIn(0, cursorLineLength)
     val cursorDistanceFromLineEnd = cursorColumn - (cursorLineLength + 1)
     val cursorInVisibleContent = firstNonEmptyRow != null && lastNonEmptyRow != null && cursorRow in firstNonEmptyRow..lastNonEmptyRow
@@ -197,6 +209,10 @@ internal fun renderInteractiveTerminalSnapshot(
         cursorLine = cursorLine,
         cursorLineIsBlank = cursorLineIsBlank,
         cursorLineLength = cursorLineLength,
+        cursorLineLeadingBlankCount = cursorLineLeadingBlankCount,
+        cursorLineTrailingBlankCount = cursorLineTrailingBlankCount,
+        cursorLineFirstNonBlankColumn = cursorLineFirstNonBlankColumn,
+        cursorLineLastNonBlankColumn = cursorLineLastNonBlankColumn,
         cursorTextColumn = cursorSplitColumn,
         cursorDistanceFromLineEnd = cursorDistanceFromLineEnd,
         cursorLineTextBeforeCursor = cursorLine.take(cursorSplitColumn),
@@ -994,6 +1010,10 @@ class BackgroundProcessManager @Inject constructor(
         val terminalCursorLine: String? = null,
         val terminalCursorLineIsBlank: Boolean? = null,
         val terminalCursorLineLength: Int? = null,
+        val terminalCursorLineLeadingBlankCount: Int? = null,
+        val terminalCursorLineTrailingBlankCount: Int? = null,
+        val terminalCursorLineFirstNonBlankColumn: Int? = null,
+        val terminalCursorLineLastNonBlankColumn: Int? = null,
         val terminalCursorTextColumn: Int? = null,
         val terminalCursorDistanceFromLineEnd: Int? = null,
         val terminalCursorLineTextBeforeCursor: String? = null,
@@ -1458,6 +1478,10 @@ class BackgroundProcessManager @Inject constructor(
             terminalCursorLine = snapshot.cursorLine,
             terminalCursorLineIsBlank = snapshot.cursorLineIsBlank,
             terminalCursorLineLength = snapshot.cursorLineLength,
+            terminalCursorLineLeadingBlankCount = snapshot.cursorLineLeadingBlankCount,
+            terminalCursorLineTrailingBlankCount = snapshot.cursorLineTrailingBlankCount,
+            terminalCursorLineFirstNonBlankColumn = snapshot.cursorLineFirstNonBlankColumn,
+            terminalCursorLineLastNonBlankColumn = snapshot.cursorLineLastNonBlankColumn,
             terminalCursorTextColumn = snapshot.cursorTextColumn,
             terminalCursorDistanceFromLineEnd = snapshot.cursorDistanceFromLineEnd,
             terminalCursorLineTextBeforeCursor = snapshot.cursorLineTextBeforeCursor,

@@ -1083,6 +1083,10 @@ class LocalTools(
             result.terminalCursorLine?.let { put("terminalCursorLine", JsonPrimitive(it)) }
             result.terminalCursorLineIsBlank?.let { put("terminalCursorLineIsBlank", JsonPrimitive(it)) }
             result.terminalCursorLineLength?.let { put("terminalCursorLineLength", JsonPrimitive(it)) }
+            result.terminalCursorLineLeadingBlankCount?.let { put("terminalCursorLineLeadingBlankCount", JsonPrimitive(it)) }
+            result.terminalCursorLineTrailingBlankCount?.let { put("terminalCursorLineTrailingBlankCount", JsonPrimitive(it)) }
+            result.terminalCursorLineFirstNonBlankColumn?.let { put("terminalCursorLineFirstNonBlankColumn", JsonPrimitive(it)) }
+            result.terminalCursorLineLastNonBlankColumn?.let { put("terminalCursorLineLastNonBlankColumn", JsonPrimitive(it)) }
             result.terminalCursorTextColumn?.let { put("terminalCursorTextColumn", JsonPrimitive(it)) }
             result.terminalCursorDistanceFromLineEnd?.let { put("terminalCursorDistanceFromLineEnd", JsonPrimitive(it)) }
             result.terminalCursorLineTextBeforeCursor?.let { put("terminalCursorLineTextBeforeCursor", JsonPrimitive(it)) }
@@ -1099,7 +1103,7 @@ class LocalTools(
             result.terminalClipboardRequests?.let { requests ->
                 put("terminalClipboardRequests", JsonArray(requests.map { JsonPrimitive(it) }))
             }
-            put("hint", JsonPrimitive("Default read returns only new output. Use mode=all for full retained buffer, mode=tail for recent output, or renderTerminal=true for a plain-text TUI screen snapshot with screen-line/top-bottom-viewport-lines/visible-content-lines/non-empty-rows-lines/internal/edge-blank-row-counts/content/viewport-density/content-edge-lines/content-bounds/cursor-visible-line/cursor-distance/cursor-neighborhood/cursor-line-metrics/cursor-line/title/mode/cwd/query-response metadata."))
+            put("hint", JsonPrimitive("Default read returns only new output. Use mode=all for full retained buffer, mode=tail for recent output, or renderTerminal=true for a plain-text TUI screen snapshot with screen-line/top-bottom-viewport-lines/visible-content-lines/non-empty-rows-lines/internal/edge-blank-row-counts/content/viewport-density/content-edge-lines/content-bounds/cursor-visible-line/cursor-distance/cursor-neighborhood/cursor-line-metrics/cursor-line-whitespace/cursor-line/title/mode/cwd/query-response metadata."))
         }
     }
 
