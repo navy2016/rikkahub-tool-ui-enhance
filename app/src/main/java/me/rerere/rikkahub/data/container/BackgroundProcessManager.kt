@@ -87,7 +87,9 @@ internal data class InteractiveTerminalSnapshot(
     val cursorTextColumn: Int,
     val cursorDistanceFromLineEnd: Int,
     val cursorLineTextBeforeCursor: String,
+    val cursorLineCharBeforeCursor: String?,
     val cursorLineCharAtCursor: String?,
+    val cursorLineCharAfterCursor: String?,
     val cursorLineTextAfterCursor: String,
     val cursorLineTextContent: String?,
     val cursorLineTextLength: Int?,
@@ -197,7 +199,9 @@ internal fun renderInteractiveTerminalSnapshot(
     val cursorAtLineTextEnd = cursorLineCursorRegion == "TEXT_END"
     val cursorAfterLineText = cursorLineCursorRegion == "AFTER_TEXT"
     val cursorSplitColumn = (cursorColumn - 1).coerceIn(0, cursorLineLength)
-    val cursorLineCharAtCursor = cursorLine.getOrNull(cursorColumn - 1)?.toString()
+    val cursorLineCharBeforeCursor = cursorLine.getOrNull(cursorSplitColumn - 1)?.toString()
+    val cursorLineCharAtCursor = cursorLine.getOrNull(cursorSplitColumn)?.toString()
+    val cursorLineCharAfterCursor = cursorLine.getOrNull(cursorSplitColumn + 1)?.toString()
     val cursorLineTextContent = if (cursorLineFirstNonBlankColumn != null && cursorLineLastNonBlankColumn != null) {
         cursorLine.substring(cursorLineFirstNonBlankColumn - 1, cursorLineLastNonBlankColumn)
     } else {
@@ -322,7 +326,9 @@ internal fun renderInteractiveTerminalSnapshot(
         cursorTextColumn = cursorSplitColumn,
         cursorDistanceFromLineEnd = cursorDistanceFromLineEnd,
         cursorLineTextBeforeCursor = cursorLine.take(cursorSplitColumn),
+        cursorLineCharBeforeCursor = cursorLineCharBeforeCursor,
         cursorLineCharAtCursor = cursorLineCharAtCursor,
+        cursorLineCharAfterCursor = cursorLineCharAfterCursor,
         cursorLineTextAfterCursor = cursorLine.drop(cursorSplitColumn),
         cursorLineTextContent = cursorLineTextContent,
         cursorLineTextLength = cursorLineTextLength,
@@ -1147,7 +1153,9 @@ class BackgroundProcessManager @Inject constructor(
         val terminalCursorTextColumn: Int? = null,
         val terminalCursorDistanceFromLineEnd: Int? = null,
         val terminalCursorLineTextBeforeCursor: String? = null,
+        val terminalCursorLineCharBeforeCursor: String? = null,
         val terminalCursorLineCharAtCursor: String? = null,
+        val terminalCursorLineCharAfterCursor: String? = null,
         val terminalCursorLineTextAfterCursor: String? = null,
         val terminalCursorLineTextContent: String? = null,
         val terminalCursorLineTextLength: Int? = null,
@@ -1639,7 +1647,9 @@ class BackgroundProcessManager @Inject constructor(
             terminalCursorTextColumn = snapshot.cursorTextColumn,
             terminalCursorDistanceFromLineEnd = snapshot.cursorDistanceFromLineEnd,
             terminalCursorLineTextBeforeCursor = snapshot.cursorLineTextBeforeCursor,
+            terminalCursorLineCharBeforeCursor = snapshot.cursorLineCharBeforeCursor,
             terminalCursorLineCharAtCursor = snapshot.cursorLineCharAtCursor,
+            terminalCursorLineCharAfterCursor = snapshot.cursorLineCharAfterCursor,
             terminalCursorLineTextAfterCursor = snapshot.cursorLineTextAfterCursor,
             terminalCursorLineTextContent = snapshot.cursorLineTextContent,
             terminalCursorLineTextLength = snapshot.cursorLineTextLength,
