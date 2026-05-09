@@ -87,6 +87,7 @@ internal data class InteractiveTerminalSnapshot(
     val cursorTextColumn: Int,
     val cursorDistanceFromLineEnd: Int,
     val cursorLineTextBeforeCursor: String,
+    val cursorLineCharAtCursor: String?,
     val cursorLineTextAfterCursor: String,
     val cursorLineTextContent: String?,
     val cursorLineTextLength: Int?,
@@ -196,6 +197,7 @@ internal fun renderInteractiveTerminalSnapshot(
     val cursorAtLineTextEnd = cursorLineCursorRegion == "TEXT_END"
     val cursorAfterLineText = cursorLineCursorRegion == "AFTER_TEXT"
     val cursorSplitColumn = (cursorColumn - 1).coerceIn(0, cursorLineLength)
+    val cursorLineCharAtCursor = cursorLine.getOrNull(cursorColumn - 1)?.toString()
     val cursorLineTextContent = if (cursorLineFirstNonBlankColumn != null && cursorLineLastNonBlankColumn != null) {
         cursorLine.substring(cursorLineFirstNonBlankColumn - 1, cursorLineLastNonBlankColumn)
     } else {
@@ -320,6 +322,7 @@ internal fun renderInteractiveTerminalSnapshot(
         cursorTextColumn = cursorSplitColumn,
         cursorDistanceFromLineEnd = cursorDistanceFromLineEnd,
         cursorLineTextBeforeCursor = cursorLine.take(cursorSplitColumn),
+        cursorLineCharAtCursor = cursorLineCharAtCursor,
         cursorLineTextAfterCursor = cursorLine.drop(cursorSplitColumn),
         cursorLineTextContent = cursorLineTextContent,
         cursorLineTextLength = cursorLineTextLength,
@@ -1144,6 +1147,7 @@ class BackgroundProcessManager @Inject constructor(
         val terminalCursorTextColumn: Int? = null,
         val terminalCursorDistanceFromLineEnd: Int? = null,
         val terminalCursorLineTextBeforeCursor: String? = null,
+        val terminalCursorLineCharAtCursor: String? = null,
         val terminalCursorLineTextAfterCursor: String? = null,
         val terminalCursorLineTextContent: String? = null,
         val terminalCursorLineTextLength: Int? = null,
@@ -1635,6 +1639,7 @@ class BackgroundProcessManager @Inject constructor(
             terminalCursorTextColumn = snapshot.cursorTextColumn,
             terminalCursorDistanceFromLineEnd = snapshot.cursorDistanceFromLineEnd,
             terminalCursorLineTextBeforeCursor = snapshot.cursorLineTextBeforeCursor,
+            terminalCursorLineCharAtCursor = snapshot.cursorLineCharAtCursor,
             terminalCursorLineTextAfterCursor = snapshot.cursorLineTextAfterCursor,
             terminalCursorLineTextContent = snapshot.cursorLineTextContent,
             terminalCursorLineTextLength = snapshot.cursorLineTextLength,
