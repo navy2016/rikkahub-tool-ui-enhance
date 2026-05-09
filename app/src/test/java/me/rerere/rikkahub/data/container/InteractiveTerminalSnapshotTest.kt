@@ -122,6 +122,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(null, snapshot.cursorDistanceFromLineTextStart)
         assertEquals(null, snapshot.cursorDistanceFromLineTextEnd)
         assertEquals("BLANK_LINE", snapshot.cursorLineCursorRegion)
+        assertCursorRegionFlags(snapshot, onBlankLine = true)
         assertEquals(0, snapshot.cursorTextColumn)
         assertEquals(0, snapshot.cursorDistanceFromLineEnd)
         assertEquals(listOf("", "", ""), snapshot.topLines)
@@ -166,6 +167,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(14, snapshot.cursorDistanceFromLineTextStart)
         assertEquals(-5, snapshot.cursorDistanceFromLineTextEnd)
         assertEquals("INSIDE_TEXT", snapshot.cursorLineCursorRegion)
+        assertCursorRegionFlags(snapshot, insideLineText = true)
         assertEquals(14, snapshot.cursorTextColumn)
         assertEquals(-5, snapshot.cursorDistanceFromLineEnd)
         assertEquals("prompt> hello ", snapshot.cursorLineTextBeforeCursor)
@@ -205,6 +207,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(6, snapshot.cursorDistanceFromLineTextStart)
         assertEquals(0, snapshot.cursorDistanceFromLineTextEnd)
         assertEquals("TEXT_END", snapshot.cursorLineCursorRegion)
+        assertCursorRegionFlags(snapshot, atLineTextEnd = true)
         assertEquals(6, snapshot.cursorTextColumn)
         assertEquals(0, snapshot.cursorDistanceFromLineEnd)
         assertEquals(3, snapshot.cursorDistanceFromContentTop)
@@ -236,6 +239,7 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(6, snapshot.cursorDistanceFromLineTextStart)
         assertEquals(0, snapshot.cursorDistanceFromLineTextEnd)
         assertEquals("TEXT_END", snapshot.cursorLineCursorRegion)
+        assertCursorRegionFlags(snapshot, atLineTextEnd = true)
         assertEquals(9, snapshot.cursorTextColumn)
         assertEquals(0, snapshot.cursorDistanceFromLineEnd)
     }
@@ -244,16 +248,19 @@ class InteractiveTerminalSnapshotTest {
     fun renderInteractiveTerminalSnapshotReportsCursorLineRegionBeforeAndAfterText() {
         val beforeText = renderInteractiveTerminalSnapshot("\u001B[3;4Hmiddle\u001B[3;2H".toByteArray(Charsets.UTF_8), columns = 20, rows = 6)
         assertEquals("BEFORE_TEXT", beforeText.cursorLineCursorRegion)
+        assertCursorRegionFlags(beforeText, beforeLineText = true)
         assertEquals(-2, beforeText.cursorDistanceFromLineTextStart)
         assertEquals(-8, beforeText.cursorDistanceFromLineTextEnd)
 
         val atTextStart = renderInteractiveTerminalSnapshot("\u001B[3;4Hmiddle\u001B[3;4H".toByteArray(Charsets.UTF_8), columns = 20, rows = 6)
         assertEquals("TEXT_START", atTextStart.cursorLineCursorRegion)
+        assertCursorRegionFlags(atTextStart, atLineTextStart = true)
         assertEquals(0, atTextStart.cursorDistanceFromLineTextStart)
         assertEquals(-6, atTextStart.cursorDistanceFromLineTextEnd)
 
         val afterText = renderInteractiveTerminalSnapshot("\u001B[3;4Hmiddle\u001B[3;12H".toByteArray(Charsets.UTF_8), columns = 20, rows = 6)
         assertEquals("AFTER_TEXT", afterText.cursorLineCursorRegion)
+        assertCursorRegionFlags(afterText, afterLineText = true)
         assertEquals(8, afterText.cursorDistanceFromLineTextStart)
         assertEquals(2, afterText.cursorDistanceFromLineTextEnd)
     }
@@ -276,4 +283,31 @@ class InteractiveTerminalSnapshotTest {
         assertEquals(null, snapshot.cursorVisibleContentRow)
         assertEquals(null, snapshot.cursorVisibleContentLine)
     }
+
+
+    private fun assertCursorRegionFlags(
+        snapshot: InteractiveTerminalSnapshot,
+        onBlankLine: Boolean = false,
+        beforeLineText: Boolean = false,
+        atLineTextStart: Boolean = false,
+        insideLineText: Boolean = false,
+        atLineTextEnd: Boolean = false,
+        afterLineText: Boolean = false
+    ) {
+        assertEquals(onBlankLine, snapshot.cursorOnBlankLine)
+        assertEquals(beforeLineText, snapshot.cursorBeforeLineText)
+        assertEquals(atLineTextStart, snapshot.cursorAtLineTextStart)
+        assertEquals(insideLineText, snapshot.cursorInsideLineText)
+        assertEquals(atLineTextEnd, snapshot.cursorAtLineTextEnd)
+        assertEquals(afterLineText, snapshot.cursorAfterLineText)
+        assertEquals(1, listOf(
+            snapshot.cursorOnBlankLine,
+            snapshot.cursorBeforeLineText,
+            snapshot.cursorAtLineTextStart,
+            snapshot.cursorInsideLineText,
+            snapshot.cursorAtLineTextEnd,
+            snapshot.cursorAfterLineText
+        ).count { it })
+    }
+
 }
