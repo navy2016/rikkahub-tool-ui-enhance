@@ -40,6 +40,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -106,6 +107,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val ledgerGenerationUiState by vm.ledgerGenerationUiState.collectAsStateWithLifecycle()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val focusManager = LocalFocusManager.current
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
 
     // Handle back press when drawer is open
@@ -115,9 +117,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     }
 
-    // Hide keyboard when drawer is open
+    // Hide keyboard and clear chat input focus when drawer is open.
     LaunchedEffect(drawerState.isOpen) {
         if (drawerState.isOpen) {
+            focusManager.clearFocus(force = true)
             softwareKeyboardController?.hide()
         }
     }
@@ -295,6 +298,8 @@ private fun ChatPageContent(
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
 ) {
+    val focusManager = LocalFocusManager.current
+    val softwareKeyboardController = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     var previewMode by rememberSaveable { mutableStateOf(false) }
@@ -374,6 +379,8 @@ private fun ChatPageContent(
                         }
                     },
                     onOpenSandboxFileManager = {
+                        focusManager.clearFocus(force = true)
+                        softwareKeyboardController?.hide()
                         showSandboxFileManager = true
                     },
                     onSendClick = {

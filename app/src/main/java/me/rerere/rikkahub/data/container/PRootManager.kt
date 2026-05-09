@@ -2501,6 +2501,10 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
         return buildList {
             add(prootBinary)
 
+            // 根目录使用基础 rootfs（只读）；先设置 rootfs，再让后续 bind 覆盖 /etc/hosts 等路径。
+            add("-R")
+            add(rootfsDir.absolutePath)
+
             // 绑定挂载系统目录（必要）
             add("-b")
             add("/dev")
@@ -2537,10 +2541,6 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
             add("${container.upperDir}/etc/resolv.conf:/etc/resolv.conf")
             add("-b")
             add("${container.upperDir}/etc/hosts:/etc/hosts")
-
-            // 根目录使用基础 rootfs（只读）- 必须在 -b 之后
-            add("-R")
-            add(rootfsDir.absolutePath)
 
             // 设置工作目录
             add("-w")
