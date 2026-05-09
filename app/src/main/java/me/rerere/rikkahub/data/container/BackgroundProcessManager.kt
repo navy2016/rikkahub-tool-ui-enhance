@@ -34,6 +34,12 @@ internal data class InteractiveTerminalSnapshot(
     val screenLines: List<String>,
     val visibleContent: String,
     val visibleContentLines: List<String>,
+    val topLines: List<String>,
+    val topLinesStartRow: Int,
+    val topLinesEndRow: Int,
+    val bottomLines: List<String>,
+    val bottomLinesStartRow: Int,
+    val bottomLinesEndRow: Int,
     val nonEmptyRows: List<Int>,
     val nonEmptyRowCount: Int,
     val internalBlankRowCount: Int,
@@ -85,6 +91,13 @@ internal fun renderInteractiveTerminalSnapshot(
     terminal.feed(bytes)
     val screen = terminal.plainText(includeScrollback = false)
     val screenLines = screen.lines()
+    val edgeBandSize = safeRows.coerceAtMost(3)
+    val topLinesStartRow = 1
+    val topLinesEndRow = edgeBandSize
+    val topLines = screenLines.take(edgeBandSize)
+    val bottomLinesStartRow = safeRows - edgeBandSize + 1
+    val bottomLinesEndRow = safeRows
+    val bottomLines = screenLines.takeLast(edgeBandSize)
     val nonEmptyRows = screenLines.mapIndexedNotNull { index, line ->
         if (line.isNotBlank()) index + 1 else null
     }
@@ -138,6 +151,12 @@ internal fun renderInteractiveTerminalSnapshot(
         screenLines = screenLines,
         visibleContent = visibleContent,
         visibleContentLines = visibleContentLines,
+        topLines = topLines,
+        topLinesStartRow = topLinesStartRow,
+        topLinesEndRow = topLinesEndRow,
+        bottomLines = bottomLines,
+        bottomLinesStartRow = bottomLinesStartRow,
+        bottomLinesEndRow = bottomLinesEndRow,
         nonEmptyRows = nonEmptyRows,
         nonEmptyRowCount = nonEmptyRows.size,
         internalBlankRowCount = internalBlankRowCount,
@@ -924,6 +943,12 @@ class BackgroundProcessManager @Inject constructor(
         val terminalScreenLines: List<String>? = null,
         val terminalVisibleContent: String? = null,
         val terminalVisibleContentLines: List<String>? = null,
+        val terminalTopLines: List<String>? = null,
+        val terminalTopLinesStartRow: Int? = null,
+        val terminalTopLinesEndRow: Int? = null,
+        val terminalBottomLines: List<String>? = null,
+        val terminalBottomLinesStartRow: Int? = null,
+        val terminalBottomLinesEndRow: Int? = null,
         val terminalNonEmptyRows: List<Int>? = null,
         val terminalNonEmptyRowCount: Int? = null,
         val terminalInternalBlankRowCount: Int? = null,
@@ -1377,6 +1402,12 @@ class BackgroundProcessManager @Inject constructor(
             terminalScreenLines = snapshot.screenLines,
             terminalVisibleContent = snapshot.visibleContent,
             terminalVisibleContentLines = snapshot.visibleContentLines,
+            terminalTopLines = snapshot.topLines,
+            terminalTopLinesStartRow = snapshot.topLinesStartRow,
+            terminalTopLinesEndRow = snapshot.topLinesEndRow,
+            terminalBottomLines = snapshot.bottomLines,
+            terminalBottomLinesStartRow = snapshot.bottomLinesStartRow,
+            terminalBottomLinesEndRow = snapshot.bottomLinesEndRow,
             terminalNonEmptyRows = snapshot.nonEmptyRows,
             terminalNonEmptyRowCount = snapshot.nonEmptyRowCount,
             terminalInternalBlankRowCount = snapshot.internalBlankRowCount,
