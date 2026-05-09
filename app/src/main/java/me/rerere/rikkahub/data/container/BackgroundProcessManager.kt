@@ -41,6 +41,7 @@ internal data class InteractiveTerminalSnapshot(
     val bottomLinesStartRow: Int,
     val bottomLinesEndRow: Int,
     val nonEmptyRows: List<Int>,
+    val nonEmptyLines: List<String>,
     val nonEmptyRowCount: Int,
     val internalBlankRowCount: Int,
     val leadingBlankRowCount: Int,
@@ -101,6 +102,7 @@ internal fun renderInteractiveTerminalSnapshot(
     val nonEmptyRows = screenLines.mapIndexedNotNull { index, line ->
         if (line.isNotBlank()) index + 1 else null
     }
+    val nonEmptyLines = nonEmptyRows.mapNotNull { row -> screenLines.getOrNull(row - 1) }
     val firstNonEmptyRow = nonEmptyRows.firstOrNull()
     val lastNonEmptyRow = nonEmptyRows.lastOrNull()
     val contentHeight = if (firstNonEmptyRow != null && lastNonEmptyRow != null) {
@@ -158,6 +160,7 @@ internal fun renderInteractiveTerminalSnapshot(
         bottomLinesStartRow = bottomLinesStartRow,
         bottomLinesEndRow = bottomLinesEndRow,
         nonEmptyRows = nonEmptyRows,
+        nonEmptyLines = nonEmptyLines,
         nonEmptyRowCount = nonEmptyRows.size,
         internalBlankRowCount = internalBlankRowCount,
         leadingBlankRowCount = leadingBlankRowCount,
@@ -950,6 +953,7 @@ class BackgroundProcessManager @Inject constructor(
         val terminalBottomLinesStartRow: Int? = null,
         val terminalBottomLinesEndRow: Int? = null,
         val terminalNonEmptyRows: List<Int>? = null,
+        val terminalNonEmptyLines: List<String>? = null,
         val terminalNonEmptyRowCount: Int? = null,
         val terminalInternalBlankRowCount: Int? = null,
         val terminalLeadingBlankRowCount: Int? = null,
@@ -1409,6 +1413,7 @@ class BackgroundProcessManager @Inject constructor(
             terminalBottomLinesStartRow = snapshot.bottomLinesStartRow,
             terminalBottomLinesEndRow = snapshot.bottomLinesEndRow,
             terminalNonEmptyRows = snapshot.nonEmptyRows,
+            terminalNonEmptyLines = snapshot.nonEmptyLines,
             terminalNonEmptyRowCount = snapshot.nonEmptyRowCount,
             terminalInternalBlankRowCount = snapshot.internalBlankRowCount,
             terminalLeadingBlankRowCount = snapshot.leadingBlankRowCount,
