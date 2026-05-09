@@ -99,6 +99,9 @@ internal data class InteractiveTerminalSnapshot(
     val cursorLineTextAfterCursorInText: String?,
     val cursorLineTextCursorOffset: Int?,
     val cursorLineTextCursorOffsetFromEnd: Int?,
+    val cursorLineTextCursorSegment: String?,
+    val cursorLineTextLeadingPaddingCursorOffset: Int?,
+    val cursorLineTextTrailingPaddingCursorOffset: Int?,
     val cursorInVisibleContent: Boolean,
     val cursorVisibleContentRow: Int?,
     val cursorVisibleContentLine: String?,
@@ -220,6 +223,35 @@ internal fun renderInteractiveTerminalSnapshot(
         cursorLineTextCursorOffset?.let { offset -> text.getOrNull(offset)?.toString() }
     }
     val cursorLineTextAfterCursorInText = cursorLineTextContent?.drop(cursorLineTextCursorOffset ?: 0)
+    val cursorLineTextCursorSegment = if (
+        cursorLineTextContent != null && cursorLineTextLeadingPaddingLength != null && cursorLineTextLength != null
+    ) {
+        val textStart = cursorLineTextLeadingPaddingLength
+        val textEnd = textStart + cursorLineTextLength
+        when {
+            cursorSplitColumn < textStart -> "LEADING_PADDING"
+            cursorSplitColumn < textEnd -> "TEXT_CONTENT"
+            else -> "TRAILING_PADDING"
+        }
+    } else {
+        null
+    }
+    val cursorLineTextLeadingPaddingCursorOffset = if (cursorLineTextCursorSegment == "LEADING_PADDING") {
+        cursorSplitColumn
+    } else {
+        null
+    }
+    val cursorLineTextTrailingPaddingCursorOffset = if (
+        cursorLineTextCursorSegment == "TRAILING_PADDING" &&
+        cursorLineTextLeadingPaddingLength != null &&
+        cursorLineTextLength != null &&
+        cursorLineTextTrailingPaddingLength != null
+    ) {
+        val textEnd = cursorLineTextLeadingPaddingLength + cursorLineTextLength
+        (cursorSplitColumn - textEnd).coerceIn(0, cursorLineTextTrailingPaddingLength)
+    } else {
+        null
+    }
     val cursorDistanceFromLineEnd = cursorColumn - (cursorLineLength + 1)
     val cursorInVisibleContent = firstNonEmptyRow != null && lastNonEmptyRow != null && cursorRow in firstNonEmptyRow..lastNonEmptyRow
     val cursorVisibleContentRow = if (cursorInVisibleContent && firstNonEmptyRow != null) {
@@ -300,6 +332,9 @@ internal fun renderInteractiveTerminalSnapshot(
         cursorLineTextAfterCursorInText = cursorLineTextAfterCursorInText,
         cursorLineTextCursorOffset = cursorLineTextCursorOffset,
         cursorLineTextCursorOffsetFromEnd = cursorLineTextCursorOffsetFromEnd,
+        cursorLineTextCursorSegment = cursorLineTextCursorSegment,
+        cursorLineTextLeadingPaddingCursorOffset = cursorLineTextLeadingPaddingCursorOffset,
+        cursorLineTextTrailingPaddingCursorOffset = cursorLineTextTrailingPaddingCursorOffset,
         cursorInVisibleContent = cursorInVisibleContent,
         cursorVisibleContentRow = cursorVisibleContentRow,
         cursorVisibleContentLine = cursorVisibleContentLine,
@@ -1121,6 +1156,9 @@ class BackgroundProcessManager @Inject constructor(
         val terminalCursorLineTextAfterCursorInText: String? = null,
         val terminalCursorLineTextCursorOffset: Int? = null,
         val terminalCursorLineTextCursorOffsetFromEnd: Int? = null,
+        val terminalCursorLineTextCursorSegment: String? = null,
+        val terminalCursorLineTextLeadingPaddingCursorOffset: Int? = null,
+        val terminalCursorLineTextTrailingPaddingCursorOffset: Int? = null,
         val terminalCursorInVisibleContent: Boolean? = null,
         val terminalCursorVisibleContentRow: Int? = null,
         val terminalCursorVisibleContentLine: String? = null,
@@ -1609,6 +1647,9 @@ class BackgroundProcessManager @Inject constructor(
             terminalCursorLineTextAfterCursorInText = snapshot.cursorLineTextAfterCursorInText,
             terminalCursorLineTextCursorOffset = snapshot.cursorLineTextCursorOffset,
             terminalCursorLineTextCursorOffsetFromEnd = snapshot.cursorLineTextCursorOffsetFromEnd,
+            terminalCursorLineTextCursorSegment = snapshot.cursorLineTextCursorSegment,
+            terminalCursorLineTextLeadingPaddingCursorOffset = snapshot.cursorLineTextLeadingPaddingCursorOffset,
+            terminalCursorLineTextTrailingPaddingCursorOffset = snapshot.cursorLineTextTrailingPaddingCursorOffset,
             terminalCursorInVisibleContent = snapshot.cursorInVisibleContent,
             terminalCursorVisibleContentRow = snapshot.cursorVisibleContentRow,
             terminalCursorVisibleContentLine = snapshot.cursorVisibleContentLine,
