@@ -544,10 +544,21 @@ class ChatService(
             Lifecycle.Event.ON_START -> _isForeground.value = true
             Lifecycle.Event.ON_STOP -> {
                 _isForeground.value = false
-                appScope.launch {
-                    sessions.keys.toList().forEach { conversationId ->
-                        preserveGenerationSnapshot(conversationId, markAssistantFinished = false)
+                runCatching {
+                    runBlocking {
+                        sessions.keys.toList().forEach { conversationId ->
+                            persistInterruptedToolGenerationSnapshot(
+                                conversationId = conversationId,
+                                error = "Tool execution was interrupted because the app went to background",
+                                errorCode = "TOOL_EXECUTION_INTERRUPTED",
+                                reason = "App backgrounded",
+                                markAssistantFinished = true,
+                                updateSessionState = false
+                            )
+                        }
                     }
+                }.onFailure {
+                    Log.e(TAG, "Failed to persist interrupted generation snapshot on app background", it)
                 }
             }
             else -> {}
@@ -562,11 +573,13 @@ class ChatService(
     fun cleanup() = runCatching {
         runBlocking {
             sessions.keys.toList().forEach { conversationId ->
-                preserveInterruptedToolGenerationSnapshot(
+                persistInterruptedToolGenerationSnapshot(
                     conversationId = conversationId,
                     error = "Tool execution was interrupted because the app was closed",
                     errorCode = "TOOL_EXECUTION_INTERRUPTED",
-                    reason = "App closed"
+                    reason = "App closed",
+                    markAssistantFinished = true,
+                    updateSessionState = true
                 )
             }
         }
@@ -1168,11 +1181,13 @@ class ChatService(
 
             // Preserve the latest streamed assistant message and any unfinished tool
             // details when generation is interrupted by a provider/process failure.
-            preserveInterruptedToolGenerationSnapshot(
+            persistInterruptedToolGenerationSnapshot(
                 conversationId = conversationId,
                 error = "Tool execution was interrupted before completion",
                 errorCode = "TOOL_EXECUTION_INTERRUPTED",
-                reason = "Generation interrupted"
+                reason = "Generation interrupted",
+                markAssistantFinished = true,
+                updateSessionState = true
             )
         }
 
@@ -1232,10 +1247,18 @@ class ChatService(
     private suspend fun saveStreamingSnapshotIfDue(conversationId: Uuid, conversation: Conversation) {
         val now = System.currentTimeMillis()
         val lastSaveAt = lastStreamingSaveAt[conversationId] ?: 0L
-        if (now - lastSaveAt < 1_500L) return
-        saveConversation(
+        val hasPendingTools = conversation.messageNodes.any { node ->
+            node.currentMessage.getTools().any { tool -> !tool.isExecuted }
+        }
+        if (!hasPendingTools && now - lastSaveAt < 1_500L) return
+        persistConversationSnapshot(
             conversationId,
-            conversation.toPreservedGenerationSnapshot(markAssistantFinished = false)
+            conversation.toInterruptedToolGenerationSnapshot(
+                error = "Tool execution was interrupted because the app stopped before the tool completed",
+                errorCode = "TOOL_EXECUTION_INTERRUPTED",
+                reason = "Generation interrupted",
+                markAssistantFinished = false
+            )
         )
         lastStreamingSaveAt[conversationId] = now
     }
@@ -3296,29 +3319,53 @@ class ChatService(
 
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid) {
-        preserveInterruptedToolGenerationSnapshot(
+        persistInterruptedToolGenerationSnapshot(
             conversationId = conversationId,
             error = "Tool execution was cancelled by user",
             errorCode = "TOOL_EXECUTION_CANCELLED",
-            reason = "Cancelled by user"
+            reason = "Cancelled by user",
+            markAssistantFinished = true,
+            updateSessionState = true
         )
         sessions[conversationId]?.getJob()?.cancel()
     }
 
-    private suspend fun preserveInterruptedToolGenerationSnapshot(
+    private suspend fun persistInterruptedToolGenerationSnapshot(
         conversationId: Uuid,
         error: String,
         errorCode: String,
         reason: String,
+        markAssistantFinished: Boolean,
+        updateSessionState: Boolean,
     ) {
         val currentConversation = getConversationFlow(conversationId).value
+        val preservedConversation = currentConversation.toInterruptedToolGenerationSnapshot(
+            error = error,
+            errorCode = errorCode,
+            reason = reason,
+            markAssistantFinished = markAssistantFinished
+        )
+        if (updateSessionState) {
+            saveConversation(conversationId, preservedConversation)
+        } else {
+            persistConversationSnapshot(conversationId, preservedConversation)
+        }
+        lastStreamingSaveAt[conversationId] = System.currentTimeMillis()
+    }
+
+    private fun Conversation.toInterruptedToolGenerationSnapshot(
+        error: String,
+        errorCode: String,
+        reason: String,
+        markAssistantFinished: Boolean,
+    ): Conversation {
         val interruptionOutput = listOf(
             UIMessagePart.Text(
                 """{"error":"$error","error_code":"$errorCode"}"""
             )
         )
-        val conversationWithInterruptedTools = currentConversation.copy(
-            messageNodes = currentConversation.messageNodes.map { node ->
+        val conversationWithInterruptedTools = copy(
+            messageNodes = messageNodes.map { node ->
                 val currentMessage = node.currentMessage
                 val updatedParts = currentMessage.parts.map { part ->
                     if (part is UIMessagePart.Tool && !part.isExecuted) {
@@ -3346,9 +3393,22 @@ class ChatService(
                 }
             }
         )
-        val preservedConversation = conversationWithInterruptedTools.toPreservedGenerationSnapshot(markAssistantFinished = true)
-        saveConversation(conversationId, preservedConversation)
-        lastStreamingSaveAt[conversationId] = System.currentTimeMillis()
+        return conversationWithInterruptedTools.toPreservedGenerationSnapshot(markAssistantFinished)
+    }
+
+    private suspend fun persistConversationSnapshot(conversationId: Uuid, conversation: Conversation) {
+        if (conversation.id != conversationId) return
+        val exists = conversationRepo.existsConversationById(conversation.id)
+        if (!exists && conversation.title.isBlank() && conversation.messageNodes.isEmpty()) {
+            return
+        }
+
+        val updatedConversation = normalizeCompressionState(conversation.copy())
+        if (!exists) {
+            conversationRepo.insertConversation(updatedConversation)
+        } else {
+            conversationRepo.updateConversation(updatedConversation)
+        }
     }
 
 }
