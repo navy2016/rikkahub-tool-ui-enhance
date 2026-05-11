@@ -60,7 +60,7 @@ private fun Conversation.uncompressedVisibleMessages(): List<CompressionPreviewM
                 index = startIndex + offset,
                 role = message.role.name,
                 tokens = estimatePreviewTokens(text),
-                text = text.replace("\s+".toRegex(), " ").take(220)
+                text = text.replace(Regex("\\s+"), " ").take(220)
             )
         }
 }

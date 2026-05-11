@@ -75,6 +75,10 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
 
     val conversations by vm.conversations.collectAsStateWithLifecycle()
     val selectionMode = selectedConversationIds.isNotEmpty()
+    val snackMessageDeleted = stringResource(R.string.history_page_conversation_deleted)
+    val snackMessageUndo = stringResource(R.string.history_page_undo)
+    val selectedCountForMessage = selectedConversationIds.size
+    val snackMessageBulkDeleted = stringResource(R.string.history_page_conversations_deleted, selectedCountForMessage)
 
     LaunchedEffect(conversations) {
         selectedConversationIds.removeAll { id -> conversations.none { it.id == id } }
@@ -150,9 +154,6 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
             SnackbarHost(hostState = snackbarHostState)
         }
     ) { contentPadding ->
-        val snackMessageDeleted = stringResource(R.string.history_page_conversation_deleted)
-        val snackMessageUndo = stringResource(R.string.history_page_undo)
-        val snackMessageBulkDeleted = stringResource(R.string.history_page_conversations_deleted, selectedConversationIds.size)
         LazyColumn(
             contentPadding = contentPadding + PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
