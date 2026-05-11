@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -688,6 +689,7 @@ private fun TerminalInteractivePanel(
                 .fillMaxSize()
                 .padding(if (fullscreen) 6.dp else 10.dp)
                 .imePadding()
+                .navigationBarsPadding()
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -793,6 +795,7 @@ private fun TerminalInteractivePanel(
                     fontSize = 11.sp,
                     lineHeight = 14.sp
                 )
+                Spacer(modifier = Modifier.height(if (fullscreen) 28.dp else 12.dp))
             }
 
             if (!fullscreen) {

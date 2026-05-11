@@ -271,6 +271,12 @@
   <string name="history_page_cancel">Cancel</string>
   <string name="history_page_clear">Clear</string>
   <string name="history_page_conversation_deleted">Conversation deleted</string>
+  <string name="history_page_conversations_deleted">%1$d conversations deleted</string>
+  <string name="history_page_selected_count">%1$d selected</string>
+  <string name="history_page_select_all">Select all</string>
+  <string name="history_page_cancel_selection">Cancel selection</string>
+  <string name="history_page_delete_selected">Delete selected</string>
+  <string name="history_page_delete_selected_confirmation">Delete %1$d selected conversations? This action can be undone from the snackbar.</string>
   <string name="history_page_delete">Delete</string>
   <string name="history_page_delete_all">Delete All</string>
   <string name="history_page_delete_all_confirmation">Are you sure you want to delete all conversations? This action cannot be undone.</string>
@@ -765,7 +771,7 @@
   <string name="regenerate_confirm_message">Are you sure you want to regenerate this message?</string>
   <string name="chat_page_compress_context">Compress History</string>
   <string name="chat_page_compress_context_title">Compress Conversation History</string>
-  <string name="chat_page_compress_context_desc">维护一份滚动摘要，不改写原始消息时间线</string>
+  <string name="chat_page_compress_context_desc">Compress selected uncompressed messages into the rolling summary. The original message timeline remains unchanged.</string>
   <string name="chat_page_compress_target_tokens">Target Token Size</string>
   <string name="chat_page_compress_additional_prompt">Additional Instructions (Optional)</string>
   <string name="chat_page_compress_additional_prompt_hint">Specify what to preserve or focus on</string>

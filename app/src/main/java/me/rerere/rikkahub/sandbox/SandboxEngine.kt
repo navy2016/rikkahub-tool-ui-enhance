@@ -25,7 +25,7 @@ import kotlinx.serialization.json.put
 import me.rerere.rikkahub.data.files.FileFolders
 
 object SandboxEngine {
-    private const val MAX_SANDBOX_SIZE = 1024L * 1024 * 1024
+    private const val MAX_SANDBOX_SIZE = 2L * 1024 * 1024 * 1024
     private const val SANDBOX_ROOT = "sandboxes"
     private const val DELIVERY_DIR = "delivery"
     private const val RUNTIME_DIR = ".runtime"
@@ -75,7 +75,7 @@ object SandboxEngine {
         return runCatching {
             val sandboxDir = getSandboxDir(context, assistantId)
             if (getSandboxUsage(context, assistantId).usedBytes > MAX_SANDBOX_SIZE) {
-                return errorResult("Sandbox storage limit exceeded (1GB max). Please delete some files.")
+                return errorResult("Sandbox storage limit exceeded (2GB max). Please delete some files.")
             }
 
             when (operation) {

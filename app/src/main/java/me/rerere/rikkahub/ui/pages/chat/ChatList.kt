@@ -368,13 +368,12 @@ private fun ChatListNormal(
         // 鑷姩婊氬姩鍒板簳閮?
         if (settings.displaySetting.enableAutoScroll) {
             LaunchedEffect(state) {
-                snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
-                    // println("is bottom = ${visibleItemsInfo.isAtBottom()}, scroll = ${state.isScrollInProgress}, can_scroll = ${state.canScrollForward}, loading = $loading")
-                    if (!state.isScrollInProgress && loadingState) {
-                        if (visibleItemsInfo.isAtBottom()) {
-                            state.requestScrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
-                            // Log.i(TAG, "ChatList: scroll to ${conversationUpdated.messageNodes.lastIndex}")
-                        }
+                snapshotFlow {
+                    val visibleItems = state.layoutInfo.visibleItemsInfo
+                    visibleItems.lastOrNull()?.index to visibleItems.isAtBottom()
+                }.collect { (_, atBottom) ->
+                    if (!state.isScrollInProgress && loadingState && atBottom) {
+                        state.requestScrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
                     }
                 }
             }
@@ -397,6 +396,7 @@ private fun ChatListNormal(
             contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
+            userScrollEnabled = !LocalScrollCaptureInProgress.current,
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(state = hazeState)

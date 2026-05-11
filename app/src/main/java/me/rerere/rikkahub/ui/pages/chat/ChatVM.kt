@@ -259,6 +259,11 @@ class ChatVM(
      * @param content 娑堟伅鍐呭
      * @param answer 鏄惁瑙﹀彂娑堟伅鐢熸垚锛屽鏋滀负false锛屽垯浠呮坊鍔犳秷鎭埌娑堟伅鍒楄〃涓?
      */
+
+    fun estimateCurrentPromptTokens(): Int {
+        return chatService.estimateCurrentPromptTokens(conversation.value)
+    }
+
     fun handleMessageSend(content: List<UIMessagePart>, answer: Boolean = true, fromAutoContinue: Boolean = false) {
         clearDeleteUndoState()
         if (content.isEmptyInputMessage()) return
@@ -295,23 +300,28 @@ class ChatVM(
 
     fun handleCompressContext(
         additionalPrompt: String,
-        keepRecentMessages: Int,
+        compressMessageCount: Int,
         autoCompressEnabled: Boolean,
         autoCompressTriggerTokens: Int,
         generateMemoryLedger: Boolean,
     ): Job {
         return viewModelScope.launch {
+            val normalizedCompressCount = compressMessageCount.coerceAtLeast(1)
             settingsStore.update {
                 it.copy(
                     autoCompressEnabled = autoCompressEnabled,
                     autoCompressTriggerTokens = autoCompressTriggerTokens,
-                    manualCompressKeepRecentMessages = keepRecentMessages,
+                    // Legacy preference key/name; UI semantics are now "messages to compress".
+                    manualCompressKeepRecentMessages = normalizedCompressCount,
                     manualCompressGenerateMemoryLedger = generateMemoryLedger,
                 )
             }
+            val currentConversation = conversation.value
+            val uncompressedVisibleCount = chatService.countUncompressedVisibleMessages(currentConversation)
+            val keepRecentMessages = (uncompressedVisibleCount - normalizedCompressCount).coerceAtLeast(0)
             chatService.compressConversation(
                 _conversationId,
-                conversation.value,
+                currentConversation,
                 additionalPrompt,
                 keepRecentMessages,
                 generateMemoryLedger,

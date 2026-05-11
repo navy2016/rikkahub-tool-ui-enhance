@@ -478,7 +478,7 @@ class SettingsStore(
             preferences[AUTO_COMPRESS_ENABLED] = settings.autoCompressEnabled
             preferences[AUTO_COMPRESS_TRIGGER_TOKENS] = settings.autoCompressTriggerTokens.coerceAtLeast(1000)
             preferences[MANUAL_COMPRESS_KEEP_RECENT_MESSAGES] =
-                settings.manualCompressKeepRecentMessages.coerceAtLeast(0)
+                settings.manualCompressKeepRecentMessages.coerceAtLeast(1)
             preferences[MANUAL_COMPRESS_GENERATE_MEMORY_LEDGER] = settings.manualCompressGenerateMemoryLedger
             preferences[TOKEN_ESTIMATOR_CHARS_PER_TOKEN] = settings.tokenEstimatorCharsPerToken.toString()
 

@@ -44,6 +44,7 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.countsTowardKeepRecent
 import me.rerere.ai.ui.findKeepStartIndexForVisibleMessages
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
@@ -670,6 +671,20 @@ class ChatService(
         }
     }
 
+    fun countUncompressedVisibleMessages(conversation: Conversation): Int {
+        val startIndex = (conversation.compressionState.lastCompressedMessageIndex + 1).coerceAtLeast(0)
+        return conversation.currentMessages
+            .drop(startIndex)
+            .count { it.countsTowardKeepRecent() }
+    }
+
+    fun estimateCurrentPromptTokens(conversation: Conversation): Int {
+        return estimatePromptTokenUsage(
+            conversation = conversation,
+            charsPerToken = settingsStore.settingsFlow.value.tokenEstimatorCharsPerToken
+        )
+    }
+
     // ---- 初始化对话 ----
 
     suspend fun initializeConversation(conversationId: Uuid) {
@@ -898,17 +913,20 @@ class ChatService(
             }
 
             if (messageRange == null && settings.autoCompressEnabled) {
-                val estimatedPromptTokens = estimatePromptTokenUsage(
+                val nextSendPromptTokens = estimatePromptTokenUsage(
                     conversation = conversation,
                     charsPerToken = settings.tokenEstimatorCharsPerToken
                 )
-                if (estimatedPromptTokens >= settings.autoCompressTriggerTokens) {
+                if (nextSendPromptTokens >= settings.autoCompressTriggerTokens) {
                     runCatching {
+                        val compressMessageCount = settings.manualCompressKeepRecentMessages.coerceAtLeast(1)
+                        val keepRecentMessages = (countUncompressedVisibleMessages(conversation) - compressMessageCount)
+                            .coerceAtLeast(0)
                         compressConversationInternal(
                             conversationId = conversationId,
                             conversation = conversation,
                             additionalPrompt = "",
-                            keepRecentMessages = 6,
+                            keepRecentMessages = keepRecentMessages,
                             trigger = "auto-threshold",
                             generateMemoryLedger = true,
                         )
@@ -1251,14 +1269,14 @@ class ChatService(
             node.currentMessage.getTools().any { tool -> !tool.isExecuted }
         }
         if (!hasPendingTools && now - lastSaveAt < 1_500L) return
+        // Do not let regular streaming snapshots mutate a running tool into an interrupted
+        // result. They are also written when a ChatPage ViewModel is disposed during an
+        // in-app conversation switch; marking the tool interrupted here makes the previous
+        // conversation look cancelled even though generation is still alive in ChatService.
+        // Real app background/process-stop paths use ON_STOP/cleanup/failure handlers.
         persistConversationSnapshot(
             conversationId,
-            conversation.toInterruptedToolGenerationSnapshot(
-                error = "Tool execution was interrupted because the app stopped before the tool completed",
-                errorCode = "TOOL_EXECUTION_INTERRUPTED",
-                reason = "Generation interrupted",
-                markAssistantFinished = false
-            )
+            conversation.toPreservedGenerationSnapshot(markAssistantFinished = false)
         )
         lastStreamingSaveAt[conversationId] = now
     }

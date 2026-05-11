@@ -1,5 +1,5 @@
 <resources>
-  <string name="chat_page_compress_context_desc_v2">维护一份服务主对话的连续摘要；原始消息不会被改写或删除。</string>
+  <string name="chat_page_compress_context_desc_v2">将指定数量的未压缩消息写入连续摘要；原始消息不会被改写或删除。</string>
   <string name="chat_page_generate_memory_ledger_with_compress">同时生成记忆账本</string>
   <string name="chat_page_generate_memory_ledger_with_compress_desc">压缩完成后立刻继续生成记忆账本并重建索引。</string>
   <string name="chat_page_skip_memory_ledger_with_compress_desc">这次只更新主摘要，记忆账本稍后再补账。</string>
@@ -32,4 +32,9 @@
   <string name="setting_model_page_compress_prompt_vars_v2">可用变量：{dialogue_summary_text}、{incremental_messages}、{incremental_input_tokens}、{target_output_tokens}、{hard_cap_tokens}、{additional_context}、{locale}</string>
   <string name="memory_index_updated_title_v2">记忆索引已更新</string>
   <string name="memory_index_updated_v2">记忆账本和索引已完成更新。</string>
+  <string name="chat_page_compress_message_count">要压缩的消息条数</string>
+  <string name="chat_page_compress_uncompressed_total">当前未压缩总条数：%1$d</string>
+  <string name="chat_page_compress_current_send_tokens">本次发送 prompt tokens：%1$d</string>
+  <string name="chat_page_compress_preview_expand">展开未压缩消息预览</string>
+  <string name="chat_page_compress_preview_collapse">收起未压缩消息预览</string>
 </resources>

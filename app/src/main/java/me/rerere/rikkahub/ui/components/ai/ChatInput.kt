@@ -172,12 +172,13 @@ fun ChatInput(
     onOpenSandboxFileManager: () -> Unit,
     onCompressContext: (
         additionalPrompt: String,
-        keepRecentMessages: Int,
+        compressMessageCount: Int,
         autoCompressEnabled: Boolean,
         autoCompressTriggerTokens: Int,
         generateMemoryLedger: Boolean,
     ) -> Job,
     autoCompressionUiState: me.rerere.rikkahub.service.CompressionUiState? = null,
+    currentSendTokens: Int = 0,
     onCancelCompressionProgress: () -> Unit = {},
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
@@ -438,7 +439,7 @@ fun ChatInput(
                 color = if (settings.displaySetting.enableBlurEffect) Color.Transparent else hazeTintColor,
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(start = 6.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (state.messageContent.isNotEmpty()) {
@@ -453,15 +454,15 @@ fun ChatInput(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp),
+                            .padding(start = 0.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Row(
                             modifier = Modifier
                                 .weight(1f)
                                 .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             // Model Picker
                             ModelSelector(
@@ -624,6 +625,7 @@ fun ChatInput(
                             assistant = assistant,
                             onOpenSandboxFileManager = onOpenSandboxFileManager,
                             onCompressContext = onCompressContext,
+                            currentSendTokens = currentSendTokens,
                             onStartManualCompression = { manualCompressionJob = it },
                             onUpdateAssistant = onUpdateAssistant,
                             showInjectionSheet = showInjectionSheet,
@@ -1057,11 +1059,12 @@ private fun FilesPicker(
     onOpenSandboxFileManager: () -> Unit,
     onCompressContext: (
         additionalPrompt: String,
-        keepRecentMessages: Int,
+        compressMessageCount: Int,
         autoCompressEnabled: Boolean,
         autoCompressTriggerTokens: Int,
         generateMemoryLedger: Boolean,
     ) -> Job,
+    currentSendTokens: Int,
     onStartManualCompression: (Job) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
     showInjectionSheet: Boolean,
@@ -1199,18 +1202,20 @@ private fun FilesPicker(
             },
             initialAutoCompressEnabled = settings.autoCompressEnabled,
             initialAutoCompressTriggerTokens = settings.autoCompressTriggerTokens,
-            initialKeepRecentMessages = settings.manualCompressKeepRecentMessages,
+            initialCompressMessageCount = settings.manualCompressKeepRecentMessages,
+            conversation = conversation,
+            currentSendTokens = currentSendTokens,
             // Persist the user's last manual choice so reopening the dialog does not silently
             // flip the ledger toggle based on the conversation's transient stale/ready status.
             initialGenerateMemoryLedger = settings.manualCompressGenerateMemoryLedger,
-            onConfirmManual = { additionalPrompt, keepRecentMessages, autoCompressEnabled, autoCompressTriggerTokens, generateMemoryLedger ->
+            onConfirmManual = { additionalPrompt, compressMessageCount, autoCompressEnabled, autoCompressTriggerTokens, generateMemoryLedger ->
                 // Close the manual config dialog immediately after confirmation so the user
                 // can see the shared compression -> ledger -> indexing phase dialogs instead
                 // of a stale one-off loading state that hides the split pipeline.
                 onStartManualCompression(
                     onCompressContext(
                         additionalPrompt,
-                        keepRecentMessages,
+                        compressMessageCount,
                         autoCompressEnabled,
                         autoCompressTriggerTokens,
                         generateMemoryLedger,

@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -105,6 +106,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val errors by vm.errors.collectAsStateWithLifecycle()
     val compressionUiState by vm.compressionUiState.collectAsStateWithLifecycle()
     val ledgerGenerationUiState by vm.ledgerGenerationUiState.collectAsStateWithLifecycle()
+    val currentSendTokens = remember(
+        conversation.compressionState,
+        conversation.messageNodes.size,
+        conversation.updateAt,
+    ) {
+        vm.estimateCurrentPromptTokens()
+    }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val focusManager = LocalFocusManager.current
@@ -233,6 +241,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     currentChatModel = currentChatModel,
                     bigScreen = true,
                     compressionUiState = compressionUiState,
+                    currentSendTokens = currentSendTokens,
                     ledgerGenerationUiState = ledgerGenerationUiState,
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
@@ -266,6 +275,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     currentChatModel = currentChatModel,
                     bigScreen = false,
                     compressionUiState = compressionUiState,
+                    currentSendTokens = currentSendTokens,
                     ledgerGenerationUiState = ledgerGenerationUiState,
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
@@ -293,6 +303,7 @@ private fun ChatPageContent(
     enableWebSearch: Boolean,
     currentChatModel: Model?,
     compressionUiState: me.rerere.rikkahub.service.CompressionUiState?,
+    currentSendTokens: Int,
     ledgerGenerationUiState: me.rerere.rikkahub.service.LedgerGenerationUiState?,
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
@@ -359,6 +370,7 @@ private fun ChatPageContent(
                     mcpManager = vm.mcpManager,
                     hazeState = hazeState,
                     autoCompressionUiState = compressionUiState,
+                    currentSendTokens = currentSendTokens,
                     onCancelClick = {
                         vm.stopGeneration()
                     },
@@ -438,10 +450,10 @@ private fun ChatPageContent(
                             )
                         )
                     },
-                    onCompressContext = { additionalPrompt, keepRecentMessages, autoCompressEnabled, autoCompressTriggerTokens, generateMemoryLedger ->
+                    onCompressContext = { additionalPrompt, compressMessageCount, autoCompressEnabled, autoCompressTriggerTokens, generateMemoryLedger ->
                         vm.handleCompressContext(
                             additionalPrompt = additionalPrompt,
-                            keepRecentMessages = keepRecentMessages,
+                            compressMessageCount = compressMessageCount,
                             autoCompressEnabled = autoCompressEnabled,
                             autoCompressTriggerTokens = autoCompressTriggerTokens,
                             generateMemoryLedger = generateMemoryLedger,

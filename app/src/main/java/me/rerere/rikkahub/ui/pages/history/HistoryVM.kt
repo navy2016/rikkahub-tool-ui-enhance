@@ -38,6 +38,24 @@ class HistoryVM(
         }
     }
 
+    fun deleteConversations(conversations: List<Conversation>) {
+        if (conversations.isEmpty()) return
+        viewModelScope.launch {
+            conversations.forEach { conversation ->
+                conversationRepo.deleteConversation(conversation)
+            }
+        }
+    }
+
+    fun restoreConversations(conversations: List<Conversation>) {
+        if (conversations.isEmpty()) return
+        viewModelScope.launch {
+            conversations.forEach { conversation ->
+                conversationRepo.insertConversation(conversation)
+            }
+        }
+    }
+
     fun deleteAllConversations() {
         val assistant = assistant.value ?: return
         viewModelScope.launch {
