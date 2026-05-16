@@ -568,7 +568,7 @@ class GenerationHandler(
     ): String {
         val message = error.message?.ifBlank { null }
             ?: error.javaClass.simpleName.ifBlank { "tool execution failed" }
-        val offset = Regex("offset\s+(\d+)").find(message)?.groupValues?.getOrNull(1)?.toIntOrNull()
+        val offset = Regex("""offset\s+(\d+)""").find(message)?.groupValues?.getOrNull(1)?.toIntOrNull()
         val pointer = offset?.let { buildJsonErrorPointer(rawInput, it) }.orEmpty()
         val fullInput = rawInput.ifBlank { "{}" }
         return buildString {
