@@ -545,21 +545,21 @@ class ChatService(
             Lifecycle.Event.ON_START -> _isForeground.value = true
             Lifecycle.Event.ON_STOP -> {
                 _isForeground.value = false
+                // Going to background must keep generation alive. Persist the latest streamed
+                // state for process-death recovery, but do not mutate pending tools into an
+                // interrupted/cancelled result while the service job may continue running.
                 runCatching {
                     runBlocking {
                         sessions.keys.toList().forEach { conversationId ->
-                            persistInterruptedToolGenerationSnapshot(
+                            preserveGenerationSnapshot(
                                 conversationId = conversationId,
-                                error = "Tool execution was interrupted because the app went to background",
-                                errorCode = "TOOL_EXECUTION_INTERRUPTED",
-                                reason = "App backgrounded",
-                                markAssistantFinished = true,
-                                updateSessionState = false
+                                markAssistantFinished = false,
+                                force = true,
                             )
                         }
                     }
                 }.onFailure {
-                    Log.e(TAG, "Failed to persist interrupted generation snapshot on app background", it)
+                    Log.e(TAG, "Failed to persist generation snapshot on app background", it)
                 }
             }
             else -> {}
@@ -691,8 +691,12 @@ class ChatService(
         getOrCreateSession(conversationId) // 确保 session 存在
         val conversation = conversationRepo.getConversationById(conversationId)
         if (conversation != null) {
-            updateConversation(conversationId, conversation)
-            settingsStore.updateAssistant(conversation.assistantId)
+            val restoredConversation = conversation.toInterruptedSnapshotIfStaleAfterProcessDeath()
+            updateConversation(conversationId, restoredConversation)
+            if (restoredConversation !== conversation) {
+                persistConversationSnapshot(conversationId, restoredConversation)
+            }
+            settingsStore.updateAssistant(restoredConversation.assistantId)
         } else {
             // 新建对话, 并添加预设消息
             val currentSettings = settingsStore.settingsFlowRaw.first()
@@ -1230,10 +1234,15 @@ class ChatService(
     private suspend fun preserveGenerationSnapshot(
         conversationId: Uuid,
         markAssistantFinished: Boolean,
+        force: Boolean = false,
     ) {
         val currentConversation = getConversationFlow(conversationId).value
         val preservedConversation = currentConversation.toPreservedGenerationSnapshot(markAssistantFinished)
-        saveConversation(conversationId, preservedConversation)
+        if (force) {
+            persistConversationSnapshot(conversationId, preservedConversation)
+        } else {
+            saveConversation(conversationId, preservedConversation)
+        }
         lastStreamingSaveAt[conversationId] = System.currentTimeMillis()
     }
 
@@ -1262,13 +1271,30 @@ class ChatService(
         )
     }
 
+    private fun Conversation.toInterruptedSnapshotIfStaleAfterProcessDeath(): Conversation {
+        val selectedMessages = messageNodes.mapNotNull { node ->
+            node.messages.getOrNull(node.selectIndex)
+        }
+        val hasUnfinishedAssistant = selectedMessages.any { message ->
+            message.role == MessageRole.ASSISTANT && message.finishedAt == null
+        }
+        val hasUnfinishedTool = selectedMessages.any { message ->
+            message.getTools().any { tool -> !tool.isExecuted }
+        }
+        if (!hasUnfinishedAssistant && !hasUnfinishedTool) return this
+        return toInterruptedToolGenerationSnapshot(
+            error = "Tool execution was interrupted because the app process stopped before completion",
+            errorCode = "TOOL_EXECUTION_INTERRUPTED",
+            reason = "App process stopped",
+            markAssistantFinished = true,
+        )
+    }
+
     private suspend fun saveStreamingSnapshotIfDue(conversationId: Uuid, conversation: Conversation) {
         val now = System.currentTimeMillis()
-        val lastSaveAt = lastStreamingSaveAt[conversationId] ?: 0L
-        val hasPendingTools = conversation.messageNodes.any { node ->
-            node.currentMessage.getTools().any { tool -> !tool.isExecuted }
-        }
-        if (!hasPendingTools && now - lastSaveAt < 1_500L) return
+        // Persist every streamed update. This deliberately avoids the old 1.5s debounce so
+        // a just-created assistant/tool message survives immediate user cancellation or OS
+        // process death.
         // Do not let regular streaming snapshots mutate a running tool into an interrupted
         // result. They are also written when a ChatPage ViewModel is disposed during an
         // in-app conversation switch; marking the tool interrupted here makes the previous

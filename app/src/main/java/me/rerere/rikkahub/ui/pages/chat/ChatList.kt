@@ -365,29 +365,37 @@ private fun ChatListNormal(
         modifier = Modifier
             .fillMaxSize(),
     ) {
-        // 鑷姩婊氬姩鍒板簳閮?
-        if (settings.displaySetting.enableAutoScroll) {
-            LaunchedEffect(state) {
-                snapshotFlow {
-                    val visibleItems = state.layoutInfo.visibleItemsInfo
-                    visibleItems.lastOrNull()?.index to visibleItems.isAtBottom()
-                }.collect { (_, atBottom) ->
-                    if (!state.isScrollInProgress && loadingState && atBottom) {
-                        state.requestScrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
+        // 自动跟随底部：只在用户没有主动离开底部时跟随新生成内容。
+        var followStreamingOutput by remember(conversation.id) { mutableStateOf(false) }
+        LaunchedEffect(state, conversation.id, settings.displaySetting.enableAutoScroll) {
+            snapshotFlow { state.isScrollInProgress }
+                .collect { scrolling ->
+                    if (scrolling) {
+                        isRecentScroll = true
+                    } else {
+                        if (settings.displaySetting.enableAutoScroll) {
+                            followStreamingOutput = state.layoutInfo.visibleItemsInfo.isAtBottom() || !state.canScrollForward
+                        }
+                        delay(900)
+                        isRecentScroll = false
                     }
                 }
-            }
         }
-
-        // 鍒ゆ柇鏈€杩戞槸鍚︽粴鍔?
-        LaunchedEffect(state.isScrollInProgress) {
-            if (state.isScrollInProgress) {
-                isRecentScroll = true
-                delay(1500)
-                isRecentScroll = false
-            } else {
-                delay(1500)
-                isRecentScroll = false
+        if (settings.displaySetting.enableAutoScroll) {
+            LaunchedEffect(loadingState, conversation.id) {
+                if (loadingState) {
+                    followStreamingOutput = state.layoutInfo.visibleItemsInfo.isAtBottom() || !state.canScrollForward
+                }
+            }
+            LaunchedEffect(
+                conversation.messageNodes.size,
+                conversation.updateAt,
+                loadingState,
+                followStreamingOutput,
+            ) {
+                if (loadingState && followStreamingOutput && !isRecentScroll) {
+                    state.scrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
+                }
             }
         }
 

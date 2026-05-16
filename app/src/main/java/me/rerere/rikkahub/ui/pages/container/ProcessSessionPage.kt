@@ -788,14 +788,17 @@ private fun TerminalInteractivePanel(
                     }
                     .verticalScroll(outputScroll)
             ) {
-                Text(
-                    text = if (terminalText.text.isEmpty()) AnnotatedString("等待输出...") else terminalText,
-                    color = terminalForeground,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp
-                )
-                Spacer(modifier = Modifier.height(if (fullscreen) 28.dp else 12.dp))
+                Column {
+                    Spacer(modifier = Modifier.height(if (fullscreen) 18.dp else 8.dp))
+                    Text(
+                        text = if (terminalText.text.isEmpty()) AnnotatedString("等待输出...") else terminalText,
+                        color = terminalForeground,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(if (fullscreen) 28.dp else 12.dp))
+                }
             }
 
             if (!fullscreen) {

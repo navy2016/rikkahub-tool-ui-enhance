@@ -178,7 +178,7 @@ fun ChatInput(
         generateMemoryLedger: Boolean,
     ) -> Job,
     autoCompressionUiState: me.rerere.rikkahub.service.CompressionUiState? = null,
-    currentSendTokens: Int = 0,
+    currentSendTokensProvider: () -> Int = { 0 },
     onCancelCompressionProgress: () -> Unit = {},
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
@@ -625,7 +625,7 @@ fun ChatInput(
                             assistant = assistant,
                             onOpenSandboxFileManager = onOpenSandboxFileManager,
                             onCompressContext = onCompressContext,
-                            currentSendTokens = currentSendTokens,
+                            currentSendTokensProvider = currentSendTokensProvider,
                             onStartManualCompression = { manualCompressionJob = it },
                             onUpdateAssistant = onUpdateAssistant,
                             showInjectionSheet = showInjectionSheet,
@@ -1064,7 +1064,7 @@ private fun FilesPicker(
         autoCompressTriggerTokens: Int,
         generateMemoryLedger: Boolean,
     ) -> Job,
-    currentSendTokens: Int,
+    currentSendTokensProvider: () -> Int,
     onStartManualCompression: (Job) -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
     showInjectionSheet: Boolean,
@@ -1080,6 +1080,9 @@ private fun FilesPicker(
 ) {
     val settings = LocalSettings.current
     val provider = settings.getCurrentChatModel()?.findProvider(providers = settings.providers)
+    val currentSendTokens = remember(showCompressDialog, conversation.id, conversation.updateAt) {
+        if (showCompressDialog) currentSendTokensProvider() else 0
+    }
 
     Column(
         modifier = Modifier
