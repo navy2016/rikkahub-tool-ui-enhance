@@ -26,6 +26,7 @@ data class ToolApprovalRequest(
     val approved: Boolean,
     val reason: String = "",
     val answer: String? = null,
+    val inputOverride: String? = null,
 )
 
 @Serializable

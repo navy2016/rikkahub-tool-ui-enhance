@@ -815,6 +815,7 @@ class ChatService(
         approved: Boolean,
         reason: String = "",
         answer: String? = null,
+        inputOverride: String? = null,
     ) {
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
@@ -836,7 +837,10 @@ class ChatService(
                                 parts = msg.parts.map { part ->
                                     when {
                                         part is UIMessagePart.Tool && part.toolCallId == toolCallId -> {
-                                            part.copy(approvalState = newApprovalState)
+                                            part.copy(
+                                                input = inputOverride ?: part.input,
+                                                approvalState = newApprovalState,
+                                            )
                                         }
 
                                         else -> part

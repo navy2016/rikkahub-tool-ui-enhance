@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -91,6 +92,7 @@ import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.event.AppEvent
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
@@ -101,11 +103,13 @@ import me.rerere.rikkahub.ui.components.ui.DotLoading
 import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.components.ui.FaviconRow
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import me.rerere.rikkahub.utils.openUrl
+import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.compose.koinInject
 private object ToolNames {
     const val MEMORY = "memory_tool"
@@ -149,11 +153,26 @@ private fun getToolIcon(toolName: String, action: String?) = when (toolName) {
 private fun JsonElement?.getStringContent(key: String): String? =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.contentOrNull
 
+private fun buildToolApprovalSuggestion(toolName: String, input: String): String {
+    return buildString {
+        appendLine("Review this tool call before approving.")
+        appendLine("Tool: $toolName")
+        appendLine("Checklist:")
+        appendLine("- JSON must be valid and fully escaped.")
+        appendLine("- Arguments should match the user's request.")
+        appendLine("- File paths, shell commands, URLs, and destructive operations should be intentional.")
+        appendLine("- If invalid, edit the JSON input here before allowing.")
+        appendLine()
+        appendLine("Original JSON input:")
+        append(input.ifBlank { "{}" })
+    }.trim()
+}
+
 @Composable
 fun ChainOfThoughtScope.ChatMessageToolStep(
     tool: UIMessagePart.Tool,
     loading: Boolean = false,
-    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
+    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String, inputOverride: String?) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onStopGeneration: (() -> Unit)? = null,
     onDeleteToolCall: ((toolCallId: String) -> Unit)? = null,
@@ -165,11 +184,17 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         return
     }
     var showResult by remember { mutableStateOf(false) }
-    var showDenyDialog by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(true) }
     val eventBus: AppEventBus = koinInject()
+    val settingsStore = koinInject<SettingsStore>()
+    val appSettings = LocalSettings.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val isPending = tool.approvalState is ToolApprovalState.Pending
+    var showApprovalDialog by remember(tool.toolCallId) { mutableStateOf(false) }
+    LaunchedEffect(isPending, tool.toolCallId) {
+        if (isPending) showApprovalDialog = true
+    }
     val isDenied = tool.approvalState is ToolApprovalState.Denied
     val isCancelled = tool.approvalState is ToolApprovalState.Cancelled
     val arguments = tool.inputAsJson()
@@ -269,7 +294,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     FilledTonalIconButton(
-                        onClick = { showDenyDialog = true },
+                        onClick = { showApprovalDialog = true },
                         modifier = Modifier.size(28.dp),
                     ) {
                         Icon(
@@ -279,7 +304,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                         )
                     }
                     FilledTonalIconButton(
-                        onClick = { onToolApproval(tool.toolCallId, true, "") },
+                        onClick = { showApprovalDialog = true },
                         modifier = Modifier.size(28.dp),
                     ) {
                         Icon(
@@ -444,13 +469,26 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         },
     )
 
-    if (showDenyDialog && onToolApproval != null) {
-        ToolDenyReasonDialog(
-            onDismiss = { showDenyDialog = false },
-            onConfirm = { reason ->
-                showDenyDialog = false
-                onToolApproval(tool.toolCallId, false, reason)
-            }
+    if (showApprovalDialog && isPending && onToolApproval != null) {
+        ToolApprovalDialog(
+            toolName = tool.toolName,
+            initialInput = tool.input,
+            manualApprovalEnabled = appSettings.manualToolApprovalEnabled,
+            onManualApprovalEnabledChange = { enabled ->
+                scope.launch {
+                    settingsStore.update { settings -> settings.copy(manualToolApprovalEnabled = enabled) }
+                }
+            },
+            onDismiss = { showApprovalDialog = false },
+            onApprove = { editedInput ->
+                showApprovalDialog = false
+                onToolApproval(tool.toolCallId, true, "", editedInput)
+            },
+            onDeny = { reason, editedInput ->
+                showApprovalDialog = false
+                onToolApproval(tool.toolCallId, false, reason, editedInput)
+            },
+            onCopyText = { text -> context.writeClipboardText(text) },
         )
     }
 
@@ -461,6 +499,12 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             content = content,
             output = tool.output,
             isRunning = loading,
+            manualApprovalEnabled = appSettings.manualToolApprovalEnabled,
+            onManualApprovalEnabledChange = { enabled ->
+                scope.launch {
+                    settingsStore.update { settings -> settings.copy(manualToolApprovalEnabled = enabled) }
+                }
+            },
             onStopGeneration = onStopGeneration,
             onDismissRequest = { showResult = false }
         )
@@ -474,6 +518,8 @@ private fun ToolCallPreviewSheet(
     content: JsonElement?,
     output: List<UIMessagePart>,
     isRunning: Boolean = false,
+    manualApprovalEnabled: Boolean = false,
+    onManualApprovalEnabledChange: (Boolean) -> Unit = {},
     onStopGeneration: (() -> Unit)? = null,
     onDismissRequest: () -> Unit = {}
 ) {
@@ -505,7 +551,13 @@ private fun ToolCallPreviewSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         onDismissRequest = dismissSheet,
         content = {
-            when {
+            Column {
+                ManualToolApprovalToggle(
+                    enabled = manualApprovalEnabled,
+                    onCheckedChange = onManualApprovalEnabledChange,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                when {
                 content == null && isRunning -> RunningToolPreview(
                     toolName = toolName,
                     arguments = arguments,
@@ -540,6 +592,7 @@ private fun ToolCallPreviewSheet(
                     scope = scope,
                     onDismissRequest = dismissSheet
                 )
+            }
             }
         },
     )
@@ -1028,6 +1081,117 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                 }
             }
         },
+    )
+}
+
+
+@Composable
+private fun ManualToolApprovalToggle(
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.chat_message_tool_manual_approval),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(R.string.chat_message_tool_manual_approval_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+            )
+        }
+        Switch(
+            checked = enabled,
+            onCheckedChange = onCheckedChange,
+        )
+    }
+}
+
+@Composable
+private fun ToolApprovalDialog(
+    toolName: String,
+    initialInput: String,
+    manualApprovalEnabled: Boolean,
+    onManualApprovalEnabledChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onApprove: (String) -> Unit,
+    onDeny: (reason: String, editedInput: String) -> Unit,
+    onCopyText: (String) -> Unit,
+) {
+    var editedInput by remember(initialInput) { mutableStateOf(initialInput.ifBlank { "{}" }) }
+    var denyReason by remember { mutableStateOf("") }
+    val approvalSuggestion = remember(toolName, initialInput) {
+        buildToolApprovalSuggestion(toolName, initialInput.ifBlank { "{}" })
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.chat_message_tool_approval_title)) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                ManualToolApprovalToggle(
+                    enabled = manualApprovalEnabled,
+                    onCheckedChange = onManualApprovalEnabledChange,
+                )
+                Text(
+                    text = stringResource(R.string.chat_message_tool_approval_desc, toolName),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { onCopyText(initialInput.ifBlank { "{}" }) }) {
+                        Text(stringResource(R.string.chat_message_tool_copy_original_input))
+                    }
+                    TextButton(onClick = { onCopyText(approvalSuggestion) }) {
+                        Text(stringResource(R.string.chat_message_tool_copy_approval_suggestion))
+                    }
+                }
+                OutlinedTextField(
+                    value = editedInput,
+                    onValueChange = { editedInput = it },
+                    label = { Text(stringResource(R.string.chat_message_tool_edit_json_input)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = false,
+                    minLines = 8,
+                    maxLines = 18,
+                    textStyle = TextStyle(fontSize = 12.sp, lineHeight = 15.sp),
+                )
+                OutlinedTextField(
+                    value = denyReason,
+                    onValueChange = { denyReason = it },
+                    label = { Text(stringResource(R.string.chat_message_tool_deny_dialog_hint)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = false,
+                    minLines = 1,
+                    maxLines = 4,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onApprove(editedInput) }) {
+                Text(stringResource(R.string.chat_message_tool_approve))
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { onDeny(denyReason, editedInput) }) {
+                    Text(stringResource(R.string.chat_message_tool_deny))
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        }
     )
 }
 

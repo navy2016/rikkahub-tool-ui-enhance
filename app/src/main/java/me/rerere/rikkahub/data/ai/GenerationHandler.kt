@@ -186,8 +186,9 @@ class GenerationHandler(
                 val updatedTools = tools.map { tool ->
                     val toolDef = toolsInternal.find { it.name == tool.toolName }
                     when {
-                        // Tool needs approval and state is Auto -> set to Pending
-                        toolDef?.needsApproval == true && tool.approvalState is ToolApprovalState.Auto -> {
+                        // Tool needs approval and state is Auto -> set to Pending. The global
+                        // manual approval switch forces every tool through this editable gate.
+                        (settings.manualToolApprovalEnabled || toolDef?.needsApproval == true) && tool.approvalState is ToolApprovalState.Auto -> {
                             hasPendingApproval = true
                             tool.copy(approvalState = ToolApprovalState.Pending)
                         }

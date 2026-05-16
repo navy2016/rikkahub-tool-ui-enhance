@@ -1005,4 +1005,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_preview_delete">删除</string>
   <string name="chat_page_preview_undo">撤销</string>
   <string name="chat_page_preview_exit_selection">退出</string>
+  <string name="chat_message_tool_manual_approval">所有工具调用都需要人工审批</string>
+  <string name="chat_message_tool_manual_approval_desc">开启后，每次工具调用都会先等待你检查，并可在执行前编辑 JSON input。</string>
+  <string name="chat_message_tool_approval_title">审批工具调用</string>
+  <string name="chat_message_tool_approval_desc">执行 %1$s 前，检查并可编辑 JSON input。</string>
+  <string name="chat_message_tool_copy_original_input">复制原始 input</string>
+  <string name="chat_message_tool_copy_approval_suggestion">复制审批建议</string>
+  <string name="chat_message_tool_edit_json_input">可编辑 JSON input</string>
 </resources>

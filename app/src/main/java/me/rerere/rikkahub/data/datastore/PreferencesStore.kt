@@ -109,6 +109,7 @@ class SettingsStore(
         val MANUAL_COMPRESS_GENERATE_MEMORY_LEDGER =
             booleanPreferencesKey("manual_compress_generate_memory_ledger")
         val TOKEN_ESTIMATOR_CHARS_PER_TOKEN = stringPreferencesKey("token_estimator_chars_per_token")
+        val MANUAL_TOOL_APPROVAL_ENABLED = booleanPreferencesKey("manual_tool_approval_enabled")
 
         // 提供商
         val PROVIDERS = stringPreferencesKey("providers")
@@ -212,6 +213,7 @@ class SettingsStore(
                 manualCompressKeepRecentMessages = preferences[MANUAL_COMPRESS_KEEP_RECENT_MESSAGES] ?: 6,
                 manualCompressGenerateMemoryLedger = preferences[MANUAL_COMPRESS_GENERATE_MEMORY_LEDGER] != false,
                 tokenEstimatorCharsPerToken = preferences[TOKEN_ESTIMATOR_CHARS_PER_TOKEN]?.toFloatOrNull() ?: 4.0f,
+                manualToolApprovalEnabled = preferences[MANUAL_TOOL_APPROVAL_ENABLED] == true,
                 assistantId = preferences[SELECT_ASSISTANT]?.let { Uuid.parse(it) }
                     ?: DEFAULT_ASSISTANT_ID,
                 assistantTags = preferences[ASSISTANT_TAGS]?.let {
@@ -481,6 +483,7 @@ class SettingsStore(
                 settings.manualCompressKeepRecentMessages.coerceAtLeast(1)
             preferences[MANUAL_COMPRESS_GENERATE_MEMORY_LEDGER] = settings.manualCompressGenerateMemoryLedger
             preferences[TOKEN_ESTIMATOR_CHARS_PER_TOKEN] = settings.tokenEstimatorCharsPerToken.toString()
+            preferences[MANUAL_TOOL_APPROVAL_ENABLED] = settings.manualToolApprovalEnabled
 
             preferences[PROVIDERS] = JsonInstant.encodeToString(settings.providers)
 
@@ -636,6 +639,7 @@ data class Settings(
     val manualCompressKeepRecentMessages: Int = 6,
     val manualCompressGenerateMemoryLedger: Boolean = true,
     val tokenEstimatorCharsPerToken: Float = 4.0f,
+    val manualToolApprovalEnabled: Boolean = false,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,
     val providers: List<ProviderSetting> = DEFAULT_PROVIDERS,
     val assistants: List<Assistant> = DEFAULT_ASSISTANTS,
