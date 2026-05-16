@@ -287,6 +287,7 @@ class ClaudeProvider(
                     messages = messages,
                     promptCaching = providerSetting.promptCaching,
                     kimiToolReplayReasoningCompat = kimiToolReplayReasoningCompat,
+                    sendReasoningContent = providerSetting.sendReasoningContent,
                 )
             )
             put("max_tokens", params.maxTokens ?: 64_000)
@@ -365,12 +366,13 @@ class ClaudeProvider(
         messages: List<UIMessage>,
         promptCaching: Boolean,
         kimiToolReplayReasoningCompat: Boolean,
+        sendReasoningContent: Boolean = false,
     ) = buildJsonArray {
         messages
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {
-                    addAssistantMessage(message, kimiToolReplayReasoningCompat)
+                    addAssistantMessage(message, kimiToolReplayReasoningCompat, sendReasoningContent)
                 } else {
                     addUserMessage(message)
                 }
@@ -424,6 +426,7 @@ class ClaudeProvider(
     private fun JsonArrayBuilder.addAssistantMessage(
         message: UIMessage,
         kimiToolReplayReasoningCompat: Boolean,
+        sendReasoningContent: Boolean = false,
     ) {
         val groups = groupPartsByToolBoundary(message.parts)
         val contentBuffer = mutableListOf<JsonObject>()
@@ -435,7 +438,11 @@ class ClaudeProvider(
                     group.parts.filterIsInstance<UIMessagePart.Reasoning>().lastOrNull()?.let {
                         lastReasoningPart = it
                     }
-                    group.parts.mapNotNull { it.toContentBlock() }.forEach { contentBuffer.add(it) }
+                    group.parts.mapNotNull { part ->
+                        // Skip reasoning parts if sendReasoningContent is false
+                        if (!sendReasoningContent && part is UIMessagePart.Reasoning) null
+                        else part.toContentBlock()
+                    }.forEach { contentBuffer.add(it) }
                 }
 
                 is PartGroup.Tools -> {

@@ -789,7 +789,7 @@ private fun TerminalInteractivePanel(
                     .verticalScroll(outputScroll)
             ) {
                 Column {
-                    Spacer(modifier = Modifier.height(if (fullscreen) 18.dp else 8.dp))
+                    Spacer(modifier = Modifier.height(if (fullscreen) 2.dp else 8.dp))
                     Text(
                         text = if (terminalText.text.isEmpty()) AnnotatedString("等待输出...") else terminalText,
                         color = terminalForeground,

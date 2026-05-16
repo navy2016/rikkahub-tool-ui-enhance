@@ -168,6 +168,54 @@ private fun buildToolApprovalSuggestion(toolName: String, input: String): String
     }.trim()
 }
 
+/**
+ * Validate JSON input and return a list of error descriptions with locations.
+ * Returns empty list if JSON is valid.
+ */
+private fun validateJsonInput(rawInput: String): List<JsonValidationError> {
+    val input = rawInput.trim().ifBlank { "{}" }
+    val errors = mutableListOf<JsonValidationError>()
+    try {
+        kotlinx.serialization.json.Json.parseToJsonElement(input)
+    } catch (e: Exception) {
+        val message = e.message ?: "Unknown JSON error"
+        // Extract offset from error message
+        val offsetMatch = Regex("""offset\s+(\d+)""").find(message)
+        val offset = offsetMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
+        if (offset != null) {
+            val safeOffset = offset.coerceIn(0, input.length)
+            val lineStart = input.lastIndexOf('\n', (safeOffset - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+            val column = safeOffset - lineStart + 1
+            val lineEnd = input.indexOf('\n', safeOffset).let { if (it < 0) input.length else it }
+            val contextLine = input.substring(lineStart, lineEnd)
+            errors.add(JsonValidationError(
+                offset = offset,
+                column = column,
+                message = message,
+                contextLine = contextLine,
+                pointerColumn = safeOffset - lineStart,
+            ))
+        } else {
+            errors.add(JsonValidationError(
+                offset = -1,
+                column = -1,
+                message = message,
+                contextLine = "",
+                pointerColumn = 0,
+            ))
+        }
+    }
+    return errors
+}
+
+private data class JsonValidationError(
+    val offset: Int,
+    val column: Int,
+    val message: String,
+    val contextLine: String,
+    val pointerColumn: Int,
+)
+
 @Composable
 fun ChainOfThoughtScope.ChatMessageToolStep(
     tool: UIMessagePart.Tool,
@@ -210,6 +258,11 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     }
     val images = tool.output.filterIsInstance<UIMessagePart.Image>()
     val documents = tool.output.filterIsInstance<UIMessagePart.Document>()
+
+    // Detect if tool output contains errors (TOOL_EXECUTION_FAILED)
+    val hasToolError = tool.isExecuted && tool.output.filterIsInstance<UIMessagePart.Text>().any { textPart ->
+        textPart.text.contains("TOOL_EXECUTION_FAILED") || textPart.text.contains("TOOL_EXECUTION_CANCELLED")
+    }
 
     val title = when (tool.toolName) {
         ToolNames.MEMORY -> when (memoryAction) {
@@ -282,7 +335,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.secondary,
+                color = if (hasToolError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.shimmer(isLoading = loading),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -1096,17 +1149,10 @@ private fun ManualToolApprovalToggle(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.chat_message_tool_manual_approval),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                text = stringResource(R.string.chat_message_tool_manual_approval_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-            )
-        }
+        Text(
+            text = stringResource(R.string.chat_message_tool_manual_approval),
+            style = MaterialTheme.typography.bodyMedium,
+        )
         Switch(
             checked = enabled,
             onCheckedChange = onCheckedChange,
@@ -1130,6 +1176,8 @@ private fun ToolApprovalDialog(
     val approvalSuggestion = remember(toolName, initialInput) {
         buildToolApprovalSuggestion(toolName, initialInput.ifBlank { "{}" })
     }
+    // Live JSON validation
+    val jsonErrors = remember(editedInput) { validateJsonInput(editedInput) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1142,11 +1190,6 @@ private fun ToolApprovalDialog(
                 ManualToolApprovalToggle(
                     enabled = manualApprovalEnabled,
                     onCheckedChange = onManualApprovalEnabledChange,
-                )
-                Text(
-                    text = stringResource(R.string.chat_message_tool_approval_desc, toolName),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { onCopyText(initialInput.ifBlank { "{}" }) }) {
@@ -1165,7 +1208,58 @@ private fun ToolApprovalDialog(
                     minLines = 8,
                     maxLines = 18,
                     textStyle = TextStyle(fontSize = 12.sp, lineHeight = 15.sp),
+                    isError = jsonErrors.isNotEmpty(),
                 )
+                // JSON validation result display
+                if (jsonErrors.isNotEmpty()) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.chat_message_tool_json_validation_errors),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        jsonErrors.forEach { err ->
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                if (err.offset >= 0) {
+                                    Text(
+                                        text = stringResource(R.string.chat_message_tool_error_at_offset, err.offset, err.column),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                                Text(
+                                    text = err.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
+                                    maxLines = 4,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (err.contextLine.isNotBlank()) {
+                                    Text(
+                                        text = err.contextLine,
+                                        style = TextStyle(fontSize = 11.sp, lineHeight = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                        maxLines = 2,
+                                    )
+                                    Text(
+                                        text = " ".repeat(err.pointerColumn.coerceAtLeast(0)) + "^",
+                                        style = TextStyle(fontSize = 11.sp, lineHeight = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        text = stringResource(R.string.chat_message_tool_json_valid),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 OutlinedTextField(
                     value = denyReason,
                     onValueChange = { denyReason = it },

@@ -20,6 +20,7 @@ sealed class ProviderSetting {
     abstract val name: String
     abstract val models: List<Model>
     abstract val balanceOption: BalanceOption
+    abstract val sendReasoningContent: Boolean
 
     abstract val builtIn: Boolean
     abstract val description: @Composable() () -> Unit
@@ -55,6 +56,7 @@ sealed class ProviderSetting {
         var baseUrl: String = "https://api.openai.com/v1",
         var chatCompletionsPath: String = "/chat/completions",
         var useResponseApi: Boolean = false,
+        override var sendReasoningContent: Boolean = false,
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)
@@ -119,6 +121,7 @@ sealed class ProviderSetting {
         var serviceAccountEmail: String = "", // only for vertex AI
         var location: String = "us-central1", // only for vertex AI
         var projectId: String = "", // only for vertex AI
+        override var sendReasoningContent: Boolean = false,
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)
@@ -179,6 +182,7 @@ sealed class ProviderSetting {
         var apiKey: String = "",
         var baseUrl: String = "https://api.anthropic.com/v1",
         var promptCaching: Boolean = false,
+        override var sendReasoningContent: Boolean = false,
     ) : ProviderSetting() {
         override fun addModel(model: Model): ProviderSetting {
             return copy(models = models + model)

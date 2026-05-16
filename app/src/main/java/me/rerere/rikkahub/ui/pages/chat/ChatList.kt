@@ -387,13 +387,19 @@ private fun ChatListNormal(
                     followStreamingOutput = state.layoutInfo.visibleItemsInfo.isAtBottom() || !state.canScrollForward
                 }
             }
+            // Also set followStreamingOutput when user sends a new message (size increases)
+            LaunchedEffect(conversation.messageNodes.size) {
+                if (loadingState) {
+                    followStreamingOutput = true
+                }
+            }
             LaunchedEffect(
                 conversation.messageNodes.size,
                 conversation.updateAt,
                 loadingState,
                 followStreamingOutput,
             ) {
-                if (loadingState && followStreamingOutput && !isRecentScroll) {
+                if (loadingState && followStreamingOutput) {
                     state.scrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
                 }
             }

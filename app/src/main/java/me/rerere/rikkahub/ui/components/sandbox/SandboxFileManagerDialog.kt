@@ -315,7 +315,10 @@ fun SandboxFileManagerDialog(
                 context = context,
                 assistantId = sandboxId,
                 operation = "delete",
-                params = mapOf("file_path" to item.path),
+                params = buildMap {
+                    put("file_path", item.path)
+                    if (item.isDirectory) put("recursive", true)
+                },
             )
             if (result["success"]?.jsonPrimitive?.boolean == true) {
                 loadDirectory()
@@ -707,13 +710,19 @@ fun SandboxFileManagerDialog(
     }
 
     if (showDeleteDialog && selectedFile != null) {
+        val isDir = selectedFile!!.isDirectory
         AlertDialog(
             onDismissRequest = {
                 showDeleteDialog = false
                 selectedFile = null
             },
-            title = { Text("删除文件") },
-            text = { Text("确定要删除文件 \"${selectedFile!!.name}\" 吗？此操作不可撤销。") },
+            title = { Text(if (isDir) "删除文件夹" else "删除文件") },
+            text = {
+                Text(
+                    if (isDir) "确定要删除文件夹 \"${selectedFile!!.name}\" 及其所有内容吗？此操作不可撤销。"
+                    else "确定要删除文件 \"${selectedFile!!.name}\" 吗？此操作不可撤销。"
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -841,7 +850,7 @@ private fun SandboxFileInfo.toWorkspaceItem(
         hostFile = hostFile,
         canShare = true,
         canEdit = !isDirectory,
-        canDelete = !isDirectory,
+        canDelete = true,
     )
 }
 
