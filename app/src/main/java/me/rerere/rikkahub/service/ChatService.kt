@@ -37,6 +37,7 @@ import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.EmbeddingGenerationParams
+import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderManager
@@ -679,9 +680,13 @@ class ChatService(
     }
 
     fun estimateCurrentPromptTokens(conversation: Conversation): Int {
+        val settings = settingsStore.settingsFlow.value
+        val model = settings.getCurrentChatModel()
+        val provider = model?.findProvider(settings.providers)
         return estimatePromptTokenUsage(
             conversation = conversation,
-            charsPerToken = settingsStore.settingsFlow.value.tokenEstimatorCharsPerToken
+            charsPerToken = settings.tokenEstimatorCharsPerToken,
+            sendReasoningContent = provider?.sendReasoningContent == true,
         )
     }
 
@@ -923,9 +928,14 @@ class ChatService(
             if (messageRange == null && settings.autoCompressEnabled) {
                 val nextSendPromptTokens = estimatePromptTokenUsage(
                     conversation = conversation,
-                    charsPerToken = settings.tokenEstimatorCharsPerToken
+                    charsPerToken = settings.tokenEstimatorCharsPerToken,
+                    sendReasoningContent = model.findProvider(settings.providers)?.sendReasoningContent == true,
                 )
-                if (nextSendPromptTokens >= settings.autoCompressTriggerTokens) {
+                val contextLimit = model.contextSize
+                val triggerTokens = contextLimit?.let { limit ->
+                    (limit * (settings.autoCompressTriggerTokens.coerceIn(1, 100) / 100.0)).toInt()
+                }
+                if (triggerTokens != null && nextSendPromptTokens >= triggerTokens) {
                     runCatching {
                         val compressMessageCount = settings.manualCompressKeepRecentMessages.coerceAtLeast(1)
                         val keepRecentMessages = (countUncompressedVisibleMessages(conversation) - compressMessageCount)
@@ -1723,17 +1733,22 @@ class ChatService(
         val providerHandler = providerManager.getProviderByType(provider)
 
         val normalizedKeepRecent = keepRecentMessages.coerceAtLeast(0)
-        val keepStartIndex = conversation.currentMessages.findKeepStartIndexForVisibleMessages(normalizedKeepRecent)
-            ?: throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
-        val compressEndIndex = compressEndIndexOverride ?: (keepStartIndex - 1)
-        if (compressEndIndex < 0) {
-            throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
-        }
-
         val startIndex = compressStartIndexOverride
             ?: (conversation.compressionState.lastCompressedMessageIndex + 1).coerceAtLeast(0)
-        if (startIndex > compressEndIndex) {
-            throw IllegalStateException(context.getString(R.string.chat_page_compress_no_new_messages))
+        if (startIndex > conversation.currentMessages.lastIndex) {
+            throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
+        }
+        val keepStartIndex = conversation.currentMessages.findKeepStartIndexForVisibleMessages(normalizedKeepRecent)
+            ?: conversation.currentMessages.size
+        val requestedCompressEndIndex = compressEndIndexOverride ?: (keepStartIndex - 1)
+        // Manual/auto compression must run as long as at least one uncompressed message exists.
+        // If the keep-recent boundary would make the selected range empty, compress one message
+        // from the uncompressed frontier instead of surfacing "No new messages...".
+        val compressEndIndex = requestedCompressEndIndex
+            .coerceAtLeast(startIndex)
+            .coerceAtMost(conversation.currentMessages.lastIndex)
+        if (compressEndIndex < startIndex) {
+            throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
         }
 
         val showCompressionProgress = trigger in setOf(
@@ -2380,12 +2395,12 @@ class ChatService(
         }.getOrElse { Instant.now() }
     }
 
-    private fun UIMessage.toCompressionText(): String {
+    private fun UIMessage.toCompressionText(sendReasoningContent: Boolean = true): String {
         val text = buildString {
             parts.forEach { part ->
                 when (part) {
                     is UIMessagePart.Text -> appendLine(part.text)
-                    is UIMessagePart.Reasoning -> appendLine("[reasoning] ${part.reasoning.take(1200)}")
+                    is UIMessagePart.Reasoning -> if (sendReasoningContent) appendLine("[reasoning] ${part.reasoning.take(1200)}")
                     is UIMessagePart.Tool -> {
                         appendLine(renderToolCompressionEnvelope(part))
                     }
@@ -2890,6 +2905,7 @@ class ChatService(
     private fun estimatePromptTokenUsage(
         conversation: Conversation,
         charsPerToken: Float,
+        sendReasoningContent: Boolean = true,
     ): Int {
         val compressedUntil = conversation.compressionState.lastCompressedMessageIndex
             .coerceAtMost(conversation.currentMessages.lastIndex)
@@ -2902,6 +2918,7 @@ class ChatService(
             messages = activeMessages,
             dialogueSummaryText = conversation.compressionState.dialogueSummaryText,
             legacyRollingSummaryJson = conversation.compressionState.rollingSummaryJson,
+            sendReasoningContent = sendReasoningContent,
         )
         val ratio = charsPerToken.coerceIn(2.0f, 8.0f).toDouble()
         return (estimatedChars / ratio).toInt().coerceAtLeast(1)
@@ -2911,9 +2928,10 @@ class ChatService(
         messages: List<UIMessage>,
         dialogueSummaryText: String,
         legacyRollingSummaryJson: String,
+        sendReasoningContent: Boolean = true,
     ): Int {
         val messageChars = messages.sumOf { message ->
-            message.toCompressionText().length
+            message.toCompressionText(sendReasoningContent).length
         }
         val summaryChars = when {
             dialogueSummaryText.isNotBlank() -> dialogueSummaryText.length

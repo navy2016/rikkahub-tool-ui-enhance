@@ -209,7 +209,7 @@ class SettingsStore(
                 embeddingBatchSize = preferences[EMBEDDING_BATCH_SIZE] ?: 8,
                 embeddingRequestDelayMs = preferences[EMBEDDING_REQUEST_DELAY_MS] ?: 750,
                 autoCompressEnabled = preferences[AUTO_COMPRESS_ENABLED] == true,
-                autoCompressTriggerTokens = preferences[AUTO_COMPRESS_TRIGGER_TOKENS] ?: 12000,
+                autoCompressTriggerTokens = preferences[AUTO_COMPRESS_TRIGGER_TOKENS]?.let { if (it in 1..100) it else 80 } ?: 80,
                 manualCompressKeepRecentMessages = preferences[MANUAL_COMPRESS_KEEP_RECENT_MESSAGES] ?: 6,
                 manualCompressGenerateMemoryLedger = preferences[MANUAL_COMPRESS_GENERATE_MEMORY_LEDGER] != false,
                 tokenEstimatorCharsPerToken = preferences[TOKEN_ESTIMATOR_CHARS_PER_TOKEN]?.toFloatOrNull() ?: 4.0f,
@@ -478,7 +478,7 @@ class SettingsStore(
             preferences[EMBEDDING_BATCH_SIZE] = settings.embeddingBatchSize
             preferences[EMBEDDING_REQUEST_DELAY_MS] = settings.embeddingRequestDelayMs
             preferences[AUTO_COMPRESS_ENABLED] = settings.autoCompressEnabled
-            preferences[AUTO_COMPRESS_TRIGGER_TOKENS] = settings.autoCompressTriggerTokens.coerceAtLeast(1000)
+            preferences[AUTO_COMPRESS_TRIGGER_TOKENS] = settings.autoCompressTriggerTokens.coerceIn(1, 100)
             preferences[MANUAL_COMPRESS_KEEP_RECENT_MESSAGES] =
                 settings.manualCompressKeepRecentMessages.coerceAtLeast(1)
             preferences[MANUAL_COMPRESS_GENERATE_MEMORY_LEDGER] = settings.manualCompressGenerateMemoryLedger
@@ -635,7 +635,7 @@ data class Settings(
     val embeddingBatchSize: Int = 8,
     val embeddingRequestDelayMs: Int = 750,
     val autoCompressEnabled: Boolean = false,
-    val autoCompressTriggerTokens: Int = 12000,
+    val autoCompressTriggerTokens: Int = 80,
     val manualCompressKeepRecentMessages: Int = 6,
     val manualCompressGenerateMemoryLedger: Boolean = true,
     val tokenEstimatorCharsPerToken: Float = 4.0f,

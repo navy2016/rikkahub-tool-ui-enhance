@@ -15,6 +15,8 @@ data class Model(
     val inputModalities: List<Modality> = listOf(Modality.TEXT),
     val outputModalities: List<Modality> = listOf(Modality.TEXT),
     val abilities: List<ModelAbility> = emptyList(),
+    // Maximum context window of this model. Null means unknown and can be set by user.
+    val contextSize: Int? = null,
     val tools: Set<BuiltInTools> = emptySet(),
     val providerOverwrite: ProviderSetting? = null,
 )
