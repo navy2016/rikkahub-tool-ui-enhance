@@ -154,18 +154,75 @@ private fun JsonElement?.getStringContent(key: String): String? =
     this?.jsonObjectOrNull?.get(key)?.jsonPrimitiveOrNull?.contentOrNull
 
 private fun buildToolApprovalSuggestion(toolName: String, input: String): String {
+    val jsonInput = input.ifBlank { "{}" }
+    val jsonErrors = validateJsonInput(jsonInput)
+    val escapeIssues = detectJsonEscapeIssues(jsonInput)
     return buildString {
-        appendLine("Review this tool call before approving.")
         appendLine("Tool: $toolName")
+        appendLine()
+        if (jsonErrors.isEmpty()) {
+            appendLine("✓ JSON format is valid.")
+        } else {
+            appendLine("⚠ JSON format errors:")
+            jsonErrors.forEach { err ->
+                if (err.offset >= 0) {
+                    appendLine("- offset ${err.offset}, column ${err.column}: ${err.message.take(160)}")
+                    if (err.contextLine.isNotBlank()) {
+                        appendLine("  ${err.contextLine}")
+                        appendLine("  ${" ".repeat(err.pointerColumn.coerceAtLeast(0))}^")
+                    }
+                } else {
+                    appendLine("- ${err.message.take(160)}")
+                }
+            }
+        }
+        if (escapeIssues.isNotEmpty()) {
+            appendLine()
+            appendLine("⚠ Escape / command issues:")
+            escapeIssues.forEach { issue -> appendLine("- $issue") }
+        }
+        appendLine()
         appendLine("Checklist:")
-        appendLine("- JSON must be valid and fully escaped.")
         appendLine("- Arguments should match the user's request.")
         appendLine("- File paths, shell commands, URLs, and destructive operations should be intentional.")
         appendLine("- If invalid, edit the JSON input here before allowing.")
         appendLine()
-        appendLine("Original JSON input:")
-        append(input.ifBlank { "{}" })
+        appendLine("Current JSON input:")
+        append(jsonInput)
     }.trim()
+}
+
+private fun detectJsonEscapeIssues(input: String): List<String> {
+    val issues = mutableListOf<String>()
+    val invalidEscapeRegex = Regex("\\\\[^\"\\\\/bfnrtu]")
+    invalidEscapeRegex.findAll(input).take(8).forEach { match ->
+        val pos = match.range.first
+        val snippet = input.substring(maxOf(0, pos - 12), minOf(input.length, pos + 20))
+        issues += "Invalid JSON escape ${match.value} at offset $pos: ...$snippet..."
+    }
+    if ('\t' in input) {
+        issues += "Contains a literal tab character; JSON strings should use \\t."
+    }
+    if ('\r' in input) {
+        issues += "Contains a literal carriage return; JSON strings should use \\r."
+    }
+    val commandKeyIndex = input.indexOf("\"command\"")
+    if (commandKeyIndex >= 0) {
+        val commandFragment = input.substring(commandKeyIndex).take(800)
+        if (commandFragment.contains("\\ ")) {
+            issues += "Command contains backslash-space (\\ ). In JSON this is invalid; use a normal space or escape the backslash as \\\\."
+        }
+        if (commandFragment.contains("\\(")) {
+            issues += "Command contains backslash-parenthesis (\\(). In JSON this is invalid; use '(' or escape the backslash as \\\\."
+        }
+        if (commandFragment.contains("\\)")) {
+            issues += "Command contains backslash-parenthesis (\\)). In JSON this is invalid; use ')' or escape the backslash as \\\\."
+        }
+        if ('\n' in commandFragment) {
+            issues += "Command contains a literal newline. Prefer &&, semicolon, or an escaped newline sequence inside JSON."
+        }
+    }
+    return issues
 }
 
 /**
@@ -1173,8 +1230,9 @@ private fun ToolApprovalDialog(
 ) {
     var editedInput by remember(initialInput) { mutableStateOf(initialInput.ifBlank { "{}" }) }
     var denyReason by remember { mutableStateOf("") }
-    val approvalSuggestion = remember(toolName, initialInput) {
-        buildToolApprovalSuggestion(toolName, initialInput.ifBlank { "{}" })
+    // Real-time approval suggestion based on current edited input
+    val approvalSuggestion = remember(toolName, editedInput) {
+        buildToolApprovalSuggestion(toolName, editedInput)
     }
     // Live JSON validation
     val jsonErrors = remember(editedInput) { validateJsonInput(editedInput) }
@@ -1198,6 +1256,18 @@ private fun ToolApprovalDialog(
                     TextButton(onClick = { onCopyText(approvalSuggestion) }) {
                         Text(stringResource(R.string.chat_message_tool_copy_approval_suggestion))
                     }
+                }
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Text(
+                        text = approvalSuggestion,
+                        modifier = Modifier.padding(10.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (jsonErrors.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 OutlinedTextField(
                     value = editedInput,

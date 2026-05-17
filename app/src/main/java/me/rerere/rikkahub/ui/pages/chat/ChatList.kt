@@ -400,7 +400,12 @@ private fun ChatListNormal(
                 followStreamingOutput,
             ) {
                 if (loadingState && followStreamingOutput) {
-                    state.scrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
+                    // Small delay to let Compose lay out new items before scrolling
+                    delay(50)
+                    val targetIndex = (conversationUpdated.messageNodes.lastIndex + 10)
+                        .coerceAtMost(state.layoutInfo.totalItemsCount - 1)
+                        .coerceAtLeast(0)
+                    state.scrollToItem(targetIndex)
                 }
             }
         }

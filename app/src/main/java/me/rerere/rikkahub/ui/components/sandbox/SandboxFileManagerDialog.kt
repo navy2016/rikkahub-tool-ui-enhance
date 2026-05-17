@@ -189,7 +189,7 @@ fun SandboxFileManagerDialog(
     // Capacity tracking
     var showCapacityDialog by remember { mutableStateOf(false) }
     var customCapacityInput by remember { mutableStateOf("") }
-    var maxCapacityBytes by remember { mutableStateOf(2L * 1024 * 1024 * 1024) } // default 2 GB
+    var maxCapacityBytes by remember(sandboxId) { mutableStateOf(SandboxEngine.getMaxSandboxSizeBytes(context, sandboxId)) }
     var totalWorkspaceSize by remember { mutableStateOf(0L) }
 
     // 当路径或浏览模式改变时，只隐藏搜索结果视图，保留搜索数据
@@ -855,6 +855,7 @@ fun SandboxFileManagerDialog(
                         val mb = customCapacityInput.toLongOrNull()
                         if (mb != null && mb > 0) {
                             maxCapacityBytes = mb * 1024 * 1024
+                            SandboxEngine.setMaxSandboxSizeBytes(context, sandboxId, maxCapacityBytes)
                         }
                         showCapacityDialog = false
                     },

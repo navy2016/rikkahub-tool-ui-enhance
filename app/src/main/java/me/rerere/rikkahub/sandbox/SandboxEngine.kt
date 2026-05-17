@@ -33,6 +33,22 @@ object SandboxEngine {
     private const val RUNTIME_DIR = ".runtime"
     private const val RUNTIME_SKILLS_DIR = "skills"
     private const val SHARE_CACHE_DIR = ".share-cache"
+    private const val SANDBOX_LIMIT_PREFS = "sandbox_limits"
+
+    fun getMaxSandboxSizeBytes(context: Context, assistantId: String): Long {
+        return context.getSharedPreferences(SANDBOX_LIMIT_PREFS, Context.MODE_PRIVATE)
+            .getLong(assistantId, DEFAULT_MAX_SANDBOX_SIZE)
+            .coerceAtLeast(1L)
+    }
+
+    fun setMaxSandboxSizeBytes(context: Context, assistantId: String, bytes: Long) {
+        val safeBytes = bytes.coerceAtLeast(1L)
+        context.getSharedPreferences(SANDBOX_LIMIT_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(assistantId, safeBytes)
+            .apply()
+        // Keep maxSandboxSizeBytes as legacy/global default only; per-sandbox value is persisted above.
+    }
 
     fun getSandboxDir(context: Context, assistantId: String): File {
         return File(context.filesDir, "$SANDBOX_ROOT/$assistantId").apply {
@@ -60,11 +76,12 @@ object SandboxEngine {
     fun getSandboxUsage(context: Context, assistantId: String): SandboxUsage {
         val sandboxDir = getSandboxDir(context, assistantId)
         val totalSize = calculateDirectorySize(sandboxDir)
+        val maxBytes = getMaxSandboxSizeBytes(context, assistantId)
         return SandboxUsage(
             usedBytes = totalSize,
-            maxBytes = maxSandboxSizeBytes,
+            maxBytes = maxBytes,
             fileCount = countFiles(sandboxDir),
-            usagePercent = (totalSize * 100 / maxSandboxSizeBytes).toInt()
+            usagePercent = (totalSize * 100 / maxBytes).toInt()
         )
     }
 
@@ -76,8 +93,9 @@ object SandboxEngine {
     ): JsonObject {
         return runCatching {
             val sandboxDir = getSandboxDir(context, assistantId)
-            if (getSandboxUsage(context, assistantId).usedBytes > maxSandboxSizeBytes) {
-                val maxGb = String.format("%.1f", maxSandboxSizeBytes / (1024.0 * 1024.0 * 1024.0))
+            val maxBytes = getMaxSandboxSizeBytes(context, assistantId)
+            if (getSandboxUsage(context, assistantId).usedBytes > maxBytes) {
+                val maxGb = String.format("%.1f", maxBytes / (1024.0 * 1024.0 * 1024.0))
                 return errorResult("Sandbox storage limit exceeded (${maxGb}GB max). Please delete some files.")
             }
 
