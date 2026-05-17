@@ -618,6 +618,29 @@ private fun ModelSettingsForm(
                                 }
                             )
                         }
+
+                        // Context size (tokens)
+                        OutlinedTextField(
+                            value = model.contextSize?.toString() ?: "",
+                            onValueChange = { input ->
+                                val size = input.filter(Char::isDigit).toIntOrNull()
+                                onModelChange(model.copy(contextSize = size))
+                            },
+                            label = { Text("Context size (tokens)") },
+                            placeholder = { Text("e.g. 128000") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            supportingText = {
+                                Text(
+                                    text = if (model.contextSize != null) {
+                                        "Used for auto-compress threshold calculation"
+                                    } else {
+                                        "Not set — auto-compress by context % will be disabled"
+                                    }
+                                )
+                            }
+                        )
                     }
                 }
 
