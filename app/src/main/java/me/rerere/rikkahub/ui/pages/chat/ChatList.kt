@@ -365,8 +365,12 @@ private fun ChatListNormal(
         modifier = Modifier
             .fillMaxSize(),
     ) {
-        // 自动跟随底部：只在用户没有主动离开底部时跟随新生成内容。
-        var followStreamingOutput by remember(conversation.id) { mutableStateOf(false) }
+        // 自动跟随底部：生成期间如果用户仍停在底部，则持续保持最后一行可见；用户主动上滑后停止抢滚动。
+        var followStreamingOutput by remember(conversation.id) { mutableStateOf(true) }
+        var wasAtBottomBeforeGeneration by remember(conversation.id) { mutableStateOf(true) }
+        fun isListAtBottom(): Boolean {
+            return state.layoutInfo.visibleItemsInfo.isAtBottom() || !state.canScrollForward
+        }
         LaunchedEffect(state, conversation.id, settings.displaySetting.enableAutoScroll) {
             snapshotFlow { state.isScrollInProgress }
                 .collect { scrolling ->
@@ -374,7 +378,9 @@ private fun ChatListNormal(
                         isRecentScroll = true
                     } else {
                         if (settings.displaySetting.enableAutoScroll) {
-                            followStreamingOutput = state.layoutInfo.visibleItemsInfo.isAtBottom() || !state.canScrollForward
+                            val atBottom = isListAtBottom()
+                            followStreamingOutput = atBottom
+                            if (!loadingState) wasAtBottomBeforeGeneration = atBottom
                         }
                         delay(900)
                         isRecentScroll = false
@@ -384,13 +390,9 @@ private fun ChatListNormal(
         if (settings.displaySetting.enableAutoScroll) {
             LaunchedEffect(loadingState, conversation.id) {
                 if (loadingState) {
-                    followStreamingOutput = state.layoutInfo.visibleItemsInfo.isAtBottom() || !state.canScrollForward
-                }
-            }
-            // Also set followStreamingOutput when user sends a new message (size increases)
-            LaunchedEffect(conversation.messageNodes.size) {
-                if (loadingState) {
-                    followStreamingOutput = true
+                    followStreamingOutput = wasAtBottomBeforeGeneration || isListAtBottom()
+                } else {
+                    wasAtBottomBeforeGeneration = isListAtBottom()
                 }
             }
             LaunchedEffect(
@@ -400,11 +402,8 @@ private fun ChatListNormal(
                 followStreamingOutput,
             ) {
                 if (loadingState && followStreamingOutput) {
-                    // Small delay to let Compose lay out new items before scrolling
-                    delay(50)
-                    val targetIndex = (conversationUpdated.messageNodes.lastIndex + 10)
-                        .coerceAtMost(state.layoutInfo.totalItemsCount - 1)
-                        .coerceAtLeast(0)
+                    delay(80)
+                    val targetIndex = (state.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
                     state.scrollToItem(targetIndex)
                 }
             }

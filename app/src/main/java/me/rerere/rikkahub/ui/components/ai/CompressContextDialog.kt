@@ -85,10 +85,11 @@ fun CompressContextDialog(
     mode: CompressContextDialogMode,
     onDismiss: () -> Unit,
     initialAutoCompressEnabled: Boolean = false,
-    initialAutoCompressTriggerTokens: Int = 12000,
+    initialAutoCompressTriggerTokens: Int = 80,
     initialCompressMessageCount: Int = 6,
     conversation: Conversation? = null,
     currentSendTokens: Int = 0,
+    currentModelContextSize: Int? = null,
     progressMessage: String = "",
     regenerateTitle: String? = null,
     regenerateDescription: String? = null,
@@ -99,6 +100,7 @@ fun CompressContextDialog(
         compressMessageCount: Int,
         autoCompressEnabled: Boolean,
         autoCompressTriggerTokens: Int,
+        modelContextSize: Int?,
         generateMemoryLedger: Boolean,
     ) -> Unit)? = null,
     onCancelProgress: (() -> Unit)? = null,
@@ -111,6 +113,7 @@ fun CompressContextDialog(
     var showUncompressedPreview by remember { mutableStateOf(false) }
     var autoCompressEnabled by remember { mutableStateOf(initialAutoCompressEnabled) }
     var autoCompressTriggerTokensInput by remember { mutableStateOf(initialAutoCompressTriggerTokens.toString()) }
+    var modelContextSizeInput by remember(currentModelContextSize) { mutableStateOf(currentModelContextSize?.toString().orEmpty()) }
     var generateMemoryLedger by remember { mutableStateOf(initialGenerateMemoryLedger) }
     val uncompressedMessages = remember(conversation) {
         conversation?.uncompressedVisibleMessages().orEmpty()
@@ -152,12 +155,23 @@ fun CompressContextDialog(
                         )
 
                         Text(
-                            text = stringResource(
-                                R.string.chat_page_compress_current_send_tokens,
-                                currentSendTokens.coerceAtLeast(0)
-                            ),
+                            text = "当前会话总 token: ${currentSendTokens.coerceAtLeast(0)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = "当前模型上下文限制: ${currentModelContextSize?.toString() ?: "null"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (currentModelContextSize == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedTextField(
+                            value = modelContextSizeInput,
+                            onValueChange = { modelContextSizeInput = it.filter(Char::isDigit) },
+                            label = { Text("自定义上下文限制 tokens（自动获取失败时填写）") },
+                            placeholder = { Text("例如 128000") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         )
 
                         OutlinedTextField(
@@ -228,7 +242,7 @@ fun CompressContextDialog(
                         OutlinedTextField(
                             value = autoCompressTriggerTokensInput,
                             onValueChange = { autoCompressTriggerTokensInput = it.filter(Char::isDigit) },
-                            label = { Text(stringResource(R.string.chat_page_auto_compress_threshold)) },
+                            label = { Text("自动压缩阈值（上下文百分比）") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -308,12 +322,14 @@ fun CompressContextDialog(
                     TextButton(
                         onClick = {
                             val compressMessageCount = compressMessageCountInput.toIntOrNull()?.coerceAtLeast(1) ?: 6
-                            val autoThreshold = autoCompressTriggerTokensInput.toIntOrNull()?.coerceAtLeast(1000) ?: 12000
+                            val autoThreshold = autoCompressTriggerTokensInput.toIntOrNull()?.coerceIn(1, 100) ?: 80
+                            val modelContextSize = modelContextSizeInput.toIntOrNull()?.takeIf { it > 0 }
                             onConfirmManual?.invoke(
                                 additionalPrompt,
                                 compressMessageCount,
                                 autoCompressEnabled,
                                 autoThreshold,
+                                modelContextSize,
                                 generateMemoryLedger,
                             )
                             onDismiss()

@@ -1,7 +1,9 @@
-﻿package me.rerere.rikkahub.ui.pages.assistant.detail
+package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import android.content.Intent
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
@@ -59,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -570,6 +574,8 @@ private fun SandboxManagerForConversation(
     var usage by remember { mutableStateOf<SandboxUsage?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var showFileManager by remember { mutableStateOf(false) }
+    var showCapacityDialog by remember { mutableStateOf(false) }
+    var customCapacityInput by remember { mutableStateOf("") }
     
     // 加载沙箱使用情况
     LaunchedEffect(conversation.id) {
@@ -635,11 +641,25 @@ private fun SandboxManagerForConversation(
                             text = "存储使用",
                             style = MaterialTheme.typography.labelMedium
                         )
-                        Text(
-                            text = "${formatFileSize(sandboxUsage.usedBytes)} / ${formatFileSize(sandboxUsage.maxBytes)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        @OptIn(ExperimentalFoundationApi::class)
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    customCapacityInput = (sandboxUsage.maxBytes / (1024 * 1024)).toString()
+                                    showCapacityDialog = true
+                                },
+                            )
+                        ) {
+                            Text(
+                                text = "${formatFileSize(sandboxUsage.usedBytes)} / ${formatFileSize(sandboxUsage.maxBytes)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                     
                     LinearProgressIndicator(
@@ -702,6 +722,43 @@ private fun SandboxManagerForConversation(
                 }
             }
         }
+    }
+
+    if (showCapacityDialog) {
+        AlertDialog(
+            onDismissRequest = { showCapacityDialog = false },
+            title = { Text("自定义沙箱容量") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("长按存储使用详情可再次修改。")
+                    OutlinedTextField(
+                        value = customCapacityInput,
+                        onValueChange = { customCapacityInput = it.filter(Char::isDigit) },
+                        label = { Text("容量上限 (MB)") },
+                        placeholder = { Text("例如 2048") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    customCapacityInput.toLongOrNull()?.takeIf { it > 0 }?.let { mb ->
+                        SandboxEngine.setMaxSandboxSizeBytes(context, conversation.id.toString(), mb * 1024 * 1024)
+                        scope.launch {
+                            usage = withContext(Dispatchers.IO) {
+                                SandboxEngine.getSandboxUsage(context, conversation.id.toString())
+                            }
+                        }
+                    }
+                    showCapacityDialog = false
+                }) { Text("确定") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCapacityDialog = false }) { Text("取消") }
+            }
+        )
     }
 }
 

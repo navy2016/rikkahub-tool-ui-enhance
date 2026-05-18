@@ -236,15 +236,21 @@ class ChatVM(
         viewModelScope.launch {
             settingsStore.update { settings ->
                 settings.copy(
+                    providers = settings.providers.map { provider ->
+                        if (provider.models.any { it.id == model.id }) {
+                            provider.editModel(model)
+                        } else {
+                            provider
+                        }
+                    },
                     assistants = settings.assistants.map {
                         if (it.id == assistant.id) {
-                            it.copy(
-                                chatModelId = model.id
-                            )
+                            it.copy(chatModelId = model.id)
                         } else {
                             it
                         }
-                    })
+                    }
+                )
             }
         }
     }
@@ -303,12 +309,26 @@ class ChatVM(
         compressMessageCount: Int,
         autoCompressEnabled: Boolean,
         autoCompressTriggerTokens: Int,
+        modelContextSize: Int?,
         generateMemoryLedger: Boolean,
     ): Job {
         return viewModelScope.launch {
             val normalizedCompressCount = compressMessageCount.coerceAtLeast(1)
-            settingsStore.update {
-                it.copy(
+            settingsStore.update { settings ->
+                val currentModel = settings.getCurrentChatModel()
+                val updatedProviders = if (currentModel != null && modelContextSize != null && currentModel.contextSize != modelContextSize) {
+                    settings.providers.map { provider ->
+                        if (provider.models.any { it.id == currentModel.id }) {
+                            provider.editModel(currentModel.copy(contextSize = modelContextSize))
+                        } else {
+                            provider
+                        }
+                    }
+                } else {
+                    settings.providers
+                }
+                settings.copy(
+                    providers = updatedProviders,
                     autoCompressEnabled = autoCompressEnabled,
                     autoCompressTriggerTokens = autoCompressTriggerTokens,
                     // Legacy preference key/name; UI semantics are now "messages to compress".

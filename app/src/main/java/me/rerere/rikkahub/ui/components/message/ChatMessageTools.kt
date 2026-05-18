@@ -192,6 +192,64 @@ private fun buildToolApprovalSuggestion(toolName: String, input: String): String
     }.trim()
 }
 
+private fun extractJsonStringField(input: String, key: String): String? {
+    return runCatching {
+        kotlinx.serialization.json.Json.parseToJsonElement(input)
+            .jsonObject[key]
+            ?.jsonPrimitive
+            ?.contentOrNull
+    }.getOrNull()
+}
+
+private fun detectShellCommandSyntaxIssues(command: String): List<String> {
+    val issues = mutableListOf<String>()
+    var singleQuoteOpen = false
+    var doubleQuoteOpen = false
+    var backtickOpen = false
+    var escaped = false
+    var parenDepth = 0
+    command.forEachIndexed { index, ch ->
+        if (escaped) {
+            escaped = false
+            return@forEachIndexed
+        }
+        if (ch == '\\') {
+            escaped = true
+            return@forEachIndexed
+        }
+        when (ch) {
+            '\'' -> if (!doubleQuoteOpen && !backtickOpen) singleQuoteOpen = !singleQuoteOpen
+            '"' -> if (!singleQuoteOpen && !backtickOpen) doubleQuoteOpen = !doubleQuoteOpen
+            '`' -> if (!singleQuoteOpen) backtickOpen = !backtickOpen
+            '(' -> if (!singleQuoteOpen && !doubleQuoteOpen && !backtickOpen) parenDepth++
+            ')' -> if (!singleQuoteOpen && !doubleQuoteOpen && !backtickOpen) {
+                parenDepth--
+                if (parenDepth < 0) {
+                    issues += "Shell command has unmatched ')' near command offset $index."
+                    parenDepth = 0
+                }
+            }
+        }
+    }
+    if (escaped) issues += "Shell command ends with a trailing backslash; it may escape the closing quote/newline."
+    if (singleQuoteOpen) issues += "Shell command has an unclosed single quote (')."
+    if (doubleQuoteOpen) issues += "Shell command has an unclosed double quote (\")."
+    if (backtickOpen) issues += "Shell command has an unclosed backtick (`)."
+    if (parenDepth > 0) issues += "Shell command has unclosed parenthesis group: $parenDepth unmatched '('."
+    if (command.contains("\r")) issues += "Shell command contains carriage return; use LF or command separators."
+    if (Regex("""(?<![&|;])\n(?!\s*(then|do|else|elif|fi|done|case|esac)\b)""").containsMatchIn(command)) {
+        issues += "Shell command contains literal newlines. If this is a one-line tool input, prefer && or ; unless writing a heredoc/script intentionally."
+    }
+    val trimmed = command.trim()
+    if (trimmed.endsWith("&&") || trimmed.endsWith("||") || trimmed.endsWith("|")) {
+        issues += "Shell command ends with an operator (${trimmed.takeLast(2)}); another command is expected after it."
+    }
+    if (Regex("""(^|[;&|])\s*(rm|mv|cp)\s+(-rf|-fr|--recursive)""").containsMatchIn(command)) {
+        issues += "Command contains recursive/destructive file operation; verify target path before allowing."
+    }
+    return issues
+}
+
 private fun detectJsonEscapeIssues(input: String): List<String> {
     val issues = mutableListOf<String>()
     val invalidEscapeRegex = Regex("\\\\[^\"\\\\/bfnrtu]")
@@ -221,6 +279,9 @@ private fun detectJsonEscapeIssues(input: String): List<String> {
         if ('\n' in commandFragment) {
             issues += "Command contains a literal newline. Prefer &&, semicolon, or an escaped newline sequence inside JSON."
         }
+    }
+    extractJsonStringField(input, "command")?.let { command ->
+        issues += detectShellCommandSyntaxIssues(command)
     }
     return issues
 }

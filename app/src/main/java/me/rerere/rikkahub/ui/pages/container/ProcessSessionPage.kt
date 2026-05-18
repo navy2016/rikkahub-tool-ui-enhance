@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -687,7 +688,8 @@ private fun TerminalInteractivePanel(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(if (fullscreen) 6.dp else 10.dp)
+                .then(if (fullscreen) Modifier.statusBarsPadding() else Modifier)
+                .padding(if (fullscreen) 12.dp else 10.dp)
                 .imePadding()
                 .navigationBarsPadding()
         ) {
@@ -750,7 +752,7 @@ private fun TerminalInteractivePanel(
                     .fillMaxWidth()
                     .then(if (fullscreen) Modifier.weight(1f) else Modifier.height(300.dp))
                     .background(terminalBackground, if (fullscreen) RoundedCornerShape(0.dp) else RoundedCornerShape(8.dp))
-                    .padding(if (fullscreen) 6.dp else 10.dp)
+                    .padding(if (fullscreen) 12.dp else 10.dp)
                     .onSizeChanged { size ->
                         terminalCellWidthPx = 7
                         terminalCellHeightPx = 14
@@ -789,7 +791,7 @@ private fun TerminalInteractivePanel(
                     .verticalScroll(outputScroll)
             ) {
                 Column {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(if (fullscreen) 18.dp else 8.dp))
                     Text(
                         text = if (terminalText.text.isEmpty()) AnnotatedString("等待输出...") else terminalText,
                         color = terminalForeground,

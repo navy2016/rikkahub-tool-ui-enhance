@@ -175,6 +175,7 @@ fun ChatInput(
         compressMessageCount: Int,
         autoCompressEnabled: Boolean,
         autoCompressTriggerTokens: Int,
+        modelContextSize: Int?,
         generateMemoryLedger: Boolean,
     ) -> Job,
     autoCompressionUiState: me.rerere.rikkahub.service.CompressionUiState? = null,
@@ -1062,6 +1063,7 @@ private fun FilesPicker(
         compressMessageCount: Int,
         autoCompressEnabled: Boolean,
         autoCompressTriggerTokens: Int,
+        modelContextSize: Int?,
         generateMemoryLedger: Boolean,
     ) -> Job,
     currentSendTokensProvider: () -> Int,
@@ -1208,10 +1210,11 @@ private fun FilesPicker(
             initialCompressMessageCount = settings.manualCompressKeepRecentMessages,
             conversation = conversation,
             currentSendTokens = currentSendTokens,
+            currentModelContextSize = settings.getCurrentChatModel()?.contextSize,
             // Persist the user's last manual choice so reopening the dialog does not silently
             // flip the ledger toggle based on the conversation's transient stale/ready status.
             initialGenerateMemoryLedger = settings.manualCompressGenerateMemoryLedger,
-            onConfirmManual = { additionalPrompt, compressMessageCount, autoCompressEnabled, autoCompressTriggerTokens, generateMemoryLedger ->
+            onConfirmManual = { additionalPrompt, compressMessageCount, autoCompressEnabled, autoCompressTriggerTokens, modelContextSize, generateMemoryLedger ->
                 // Close the manual config dialog immediately after confirmation so the user
                 // can see the shared compression -> ledger -> indexing phase dialogs instead
                 // of a stale one-off loading state that hides the split pipeline.
@@ -1221,6 +1224,7 @@ private fun FilesPicker(
                         compressMessageCount,
                         autoCompressEnabled,
                         autoCompressTriggerTokens,
+                        modelContextSize,
                         generateMemoryLedger,
                     )
                 )

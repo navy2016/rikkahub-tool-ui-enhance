@@ -2,8 +2,6 @@ package me.rerere.rikkahub.ui.components.sandbox
 
 import android.content.Intent
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.horizontalScroll
@@ -186,11 +184,6 @@ fun SandboxFileManagerDialog(
     
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
-    // Capacity tracking
-    var showCapacityDialog by remember { mutableStateOf(false) }
-    var customCapacityInput by remember { mutableStateOf("") }
-    var maxCapacityBytes by remember(sandboxId) { mutableStateOf(SandboxEngine.getMaxSandboxSizeBytes(context, sandboxId)) }
-    var totalWorkspaceSize by remember { mutableStateOf(0L) }
 
     // 当路径或浏览模式改变时，只隐藏搜索结果视图，保留搜索数据
     LaunchedEffect(browserMode, currentPath) {
@@ -354,15 +347,6 @@ fun SandboxFileManagerDialog(
         loadDirectory()
     }
 
-    // Calculate total workspace size
-    LaunchedEffect(sandboxId, currentItems, browserMode) {
-        totalWorkspaceSize = withContext(Dispatchers.IO) {
-            try {
-                val allFiles = collectAllFiles("", BrowserMode.Workspace)
-                allFiles.filter { !it.isDirectory }.sumOf { it.size }
-            } catch (_: Exception) { 0L }
-        }
-    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -379,26 +363,6 @@ fun SandboxFileManagerDialog(
                             text = if (browserMode == BrowserMode.Workspace) "工作区文件" else "容器目录",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    @OptIn(ExperimentalFoundationApi::class)
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .combinedClickable(
-                                onClick = {},
-                                onLongClick = {
-                                    customCapacityInput = (maxCapacityBytes / (1024 * 1024)).toString()
-                                    showCapacityDialog = true
-                                },
-                            ),
-                    ) {
-                        Text(
-                            text = "${formatFileSize(totalWorkspaceSize)} / ${formatFileSize(maxCapacityBytes)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         )
                     }
                     IconButton(onClick = onDismiss) {
@@ -823,53 +787,6 @@ fun SandboxFileManagerDialog(
         )
     }
 
-    if (showCapacityDialog) {
-        AlertDialog(
-            onDismissRequest = { showCapacityDialog = false },
-            title = { Text("自定义容量上限") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "当前使用: ${formatFileSize(totalWorkspaceSize)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    OutlinedTextField(
-                        value = customCapacityInput,
-                        onValueChange = { input ->
-                            customCapacityInput = input.filter(Char::isDigit)
-                        },
-                        label = { Text("容量上限 (MB)") },
-                        placeholder = { Text("例如 2048") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        supportingText = {
-                            Text("长按容量标签可再次修改")
-                        },
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val mb = customCapacityInput.toLongOrNull()
-                        if (mb != null && mb > 0) {
-                            maxCapacityBytes = mb * 1024 * 1024
-                            SandboxEngine.setMaxSandboxSizeBytes(context, sandboxId, maxCapacityBytes)
-                        }
-                        showCapacityDialog = false
-                    },
-                ) {
-                    Text("确定")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCapacityDialog = false }) {
-                    Text("取消")
-                }
-            },
-        )
-    }
 }
 
 private suspend fun loadContainerItems(
