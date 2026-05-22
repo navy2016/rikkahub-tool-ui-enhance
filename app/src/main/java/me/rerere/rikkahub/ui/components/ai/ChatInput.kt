@@ -1211,6 +1211,8 @@ private fun FilesPicker(
             conversation = conversation,
             currentSendTokens = currentSendTokens,
             currentModelContextSize = settings.getCurrentChatModel()?.contextSize,
+            tokenEstimatorCharsPerToken = settings.tokenEstimatorCharsPerToken,
+            sendReasoningContent = provider?.sendReasoningContent == true,
             // Persist the user's last manual choice so reopening the dialog does not silently
             // flip the ledger toggle based on the conversation's transient stale/ready status.
             initialGenerateMemoryLedger = settings.manualCompressGenerateMemoryLedger,

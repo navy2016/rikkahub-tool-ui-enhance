@@ -753,7 +753,6 @@ private fun TerminalInteractivePanel(
                     .then(if (fullscreen) Modifier.weight(1f) else Modifier.height(300.dp))
                     .background(terminalBackground, if (fullscreen) RoundedCornerShape(0.dp) else RoundedCornerShape(8.dp))
                     .padding(if (fullscreen) 12.dp else 10.dp)
-                    .padding(top = if (fullscreen) 24.dp else 0.dp)
                     .onSizeChanged { size ->
                         terminalCellWidthPx = 7
                         terminalCellHeightPx = 14
@@ -789,10 +788,13 @@ private fun TerminalInteractivePanel(
                         sendRaw(sequence)
                         true
                     }
-                    .verticalScroll(outputScroll)
             ) {
-                Column {
-                    Spacer(modifier = Modifier.height(if (fullscreen) 0.dp else 8.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = if (fullscreen) 36.dp else 8.dp)
+                        .verticalScroll(outputScroll)
+                ) {
                     Text(
                         text = if (terminalText.text.isEmpty()) AnnotatedString("等待输出...") else terminalText,
                         color = terminalForeground,
@@ -800,7 +802,7 @@ private fun TerminalInteractivePanel(
                         fontSize = 11.sp,
                         lineHeight = 14.sp
                     )
-                    Spacer(modifier = Modifier.height(if (fullscreen) 28.dp else 12.dp))
+                    Spacer(modifier = Modifier.height(if (fullscreen) 36.dp else 12.dp))
                 }
             }
 

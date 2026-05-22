@@ -24,7 +24,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -246,29 +245,12 @@ private fun ChatListNormal(
     val conversationUpdated by rememberUpdatedState(conversation)
     val density = LocalDensity.current
 
-    fun LazyListState.messageVisibleBottom(): Int {
-        val inputBarHeight = with(density) { innerPadding.calculateBottomPadding().toPx() }
-        val tolerance = with(density) { 24.dp.toPx() }
-        return (layoutInfo.viewportEndOffset - inputBarHeight + tolerance).roundToInt()
-    }
-
     fun List<LazyListItemInfo>.isAtBottom(): Boolean {
-        val totalItems = state.layoutInfo.totalItemsCount
-        if (totalItems <= 0) return true
-        val lastItem = lastOrNull { it.index == totalItems - 1 } ?: return false
+        val lastItem = lastOrNull() ?: return false
+        val inputBarHeight = with(density) { innerPadding.calculateBottomPadding().toPx() }
         val lastPos = lastItem.offset + lastItem.size
-        return lastPos <= state.messageVisibleBottom()
-    }
-
-    suspend fun scrollLastMessageBottomIntoView() {
-        val lastIndex = (state.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
-        state.scrollToItem(lastIndex)
-        delay(32)
-        val lastItem = state.layoutInfo.visibleItemsInfo.lastOrNull { it.index == lastIndex } ?: return
-        val overshoot = lastItem.offset + lastItem.size - state.messageVisibleBottom()
-        if (overshoot > 0) {
-            state.scrollBy(overshoot.toFloat())
-        }
+        val inputPos = (state.layoutInfo.viewportEndOffset - inputBarHeight.roundToInt())
+        return lastPos <= inputPos - 8
     }
 
     // Selection state for chat messages
@@ -382,46 +364,26 @@ private fun ChatListNormal(
         modifier = Modifier
             .fillMaxSize(),
     ) {
-        // 自动跟随底部：生成期间如果用户仍停在底部，则持续保持最后一行可见；用户主动上滑后停止抢滚动。
-        var followStreamingOutput by remember(conversation.id) { mutableStateOf(true) }
-        var wasAtBottomBeforeGeneration by remember(conversation.id) { mutableStateOf(true) }
-        fun isListAtBottom(): Boolean {
-            return state.layoutInfo.visibleItemsInfo.isAtBottom() || !state.canScrollForward
-        }
-        LaunchedEffect(state, conversation.id, settings.displaySetting.enableAutoScroll) {
-            snapshotFlow { state.isScrollInProgress }
-                .collect { scrolling ->
-                    if (scrolling) {
-                        isRecentScroll = true
-                    } else {
-                        if (settings.displaySetting.enableAutoScroll) {
-                            val atBottom = isListAtBottom()
-                            followStreamingOutput = atBottom
-                            if (!loadingState) wasAtBottomBeforeGeneration = atBottom
+        // 自动滚动到底部：回到上游稳定实现。只在用户没有正在滚动、且当前可见内容仍贴底时跟随流式输出。
+        if (settings.displaySetting.enableAutoScroll) {
+            LaunchedEffect(state) {
+                snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
+                    if (!state.isScrollInProgress && loadingState) {
+                        if (visibleItemsInfo.isAtBottom()) {
+                            state.requestScrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
                         }
-                        delay(900)
-                        isRecentScroll = false
                     }
                 }
-        }
-        if (settings.displaySetting.enableAutoScroll) {
-            LaunchedEffect(loadingState, conversation.id) {
-                if (loadingState) {
-                    followStreamingOutput = wasAtBottomBeforeGeneration || isListAtBottom()
-                } else {
-                    wasAtBottomBeforeGeneration = isListAtBottom()
-                }
             }
-            LaunchedEffect(
-                conversation.messageNodes.size,
-                conversation.updateAt,
-                loadingState,
-                followStreamingOutput,
-            ) {
-                if (loadingState && followStreamingOutput) {
-                    delay(80)
-                    scrollLastMessageBottomIntoView()
-                }
+        }
+
+        // 判断最近是否滚动
+        LaunchedEffect(state.isScrollInProgress) {
+            if (state.isScrollInProgress) {
+                isRecentScroll = true
+            } else {
+                delay(900)
+                isRecentScroll = false
             }
         }
 

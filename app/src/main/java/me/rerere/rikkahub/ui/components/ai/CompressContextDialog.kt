@@ -2,6 +2,8 @@ package me.rerere.rikkahub.ui.components.ai
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -49,26 +51,29 @@ private data class CompressionPreviewMessage(
     val text: String,
 )
 
-private fun Conversation.uncompressedVisibleMessages(): List<CompressionPreviewMessage> {
+private fun Conversation.uncompressedVisibleMessages(
+    charsPerToken: Float,
+    sendReasoningContent: Boolean,
+): List<CompressionPreviewMessage> {
     val startIndex = (compressionState.lastCompressedMessageIndex + 1).coerceAtLeast(0)
     return currentMessages
         .drop(startIndex)
         .mapIndexedNotNull { offset, message ->
             if (message.role != MessageRole.USER && message.role != MessageRole.ASSISTANT) return@mapIndexedNotNull null
-            val text = message.previewText().ifBlank { "[empty]" }
+            val text = message.previewText(sendReasoningContent).ifBlank { "[empty]" }
             CompressionPreviewMessage(
                 index = startIndex + offset,
                 role = message.role.name,
-                tokens = estimatePreviewTokens(text),
-                text = text.replace(Regex("\\s+"), " ").take(220)
+                tokens = estimateInputTokenDelta(message, charsPerToken, sendReasoningContent),
+                text = text.replace(Regex("\s+"), " ").take(220)
             )
         }
 }
 
-private fun UIMessage.previewText(): String = parts.joinToString(" ") { part ->
+private fun UIMessage.previewText(sendReasoningContent: Boolean): String = parts.joinToString(" ") { part ->
     when (part) {
         is UIMessagePart.Text -> part.text
-        is UIMessagePart.Reasoning -> "[reasoning] ${part.reasoning.take(200)}"
+        is UIMessagePart.Reasoning -> if (sendReasoningContent) "[reasoning] ${part.reasoning.take(200)}" else ""
         is UIMessagePart.Tool -> "[tool:${part.toolName}] input=${part.input.take(120)} output=${part.output.joinToString(" ") { output -> if (output is UIMessagePart.Text) output.text else output.toString() }.take(200)}"
         is UIMessagePart.Image -> "[image]"
         is UIMessagePart.Video -> "[video]"
@@ -78,7 +83,15 @@ private fun UIMessage.previewText(): String = parts.joinToString(" ") { part ->
     }
 }
 
-private fun estimatePreviewTokens(text: String): Int = (text.length / 4).coerceAtLeast(1)
+private fun estimateInputTokenDelta(
+    message: UIMessage,
+    charsPerToken: Float,
+    sendReasoningContent: Boolean,
+): Int {
+    val chars = message.previewText(sendReasoningContent).length
+    val ratio = charsPerToken.coerceIn(2.0f, 8.0f)
+    return (chars / ratio).toInt().coerceAtLeast(1)
+}
 
 @Composable
 fun CompressContextDialog(
@@ -90,6 +103,8 @@ fun CompressContextDialog(
     conversation: Conversation? = null,
     currentSendTokens: Int = 0,
     currentModelContextSize: Int? = null,
+    tokenEstimatorCharsPerToken: Float = 4.0f,
+    sendReasoningContent: Boolean = true,
     progressMessage: String = "",
     regenerateTitle: String? = null,
     regenerateDescription: String? = null,
@@ -118,8 +133,8 @@ fun CompressContextDialog(
     val effectiveContextSize = modelContextSizeInput.toIntOrNull()?.takeIf { it > 0 } ?: currentModelContextSize
     val autoCompressPercent = autoCompressTriggerTokensInput.toIntOrNull()?.coerceIn(1, 100) ?: initialAutoCompressTriggerTokens.coerceIn(1, 100)
     val autoCompressTriggerLine = effectiveContextSize?.let { (it * (autoCompressPercent / 100.0)).toInt() }
-    val uncompressedMessages = remember(conversation) {
-        conversation?.uncompressedVisibleMessages().orEmpty()
+    val uncompressedMessages = remember(conversation, tokenEstimatorCharsPerToken, sendReasoningContent) {
+        conversation?.uncompressedVisibleMessages(tokenEstimatorCharsPerToken, sendReasoningContent).orEmpty()
     }
 
     val titleText = when (mode) {
@@ -142,6 +157,9 @@ fun CompressContextDialog(
             when (mode) {
                 CompressContextDialogMode.Manual -> {
                     Column(
+                        modifier = Modifier
+                            .heightIn(max = 560.dp)
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
@@ -217,7 +235,7 @@ fun CompressContextDialog(
                                     ) {
                                         items(uncompressedMessages) { preview ->
                                             Text(
-                                                text = "#${preview.index + 1} · ${preview.tokens} tokens · ${preview.role}: ${preview.text}",
+                                                text = "#${preview.index + 1} · -${preview.tokens} Input Tokens · ${preview.role}: ${preview.text}",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
