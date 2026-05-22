@@ -2,8 +2,6 @@ package me.rerere.rikkahub.ui.components.ai
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -156,169 +154,181 @@ fun CompressContextDialog(
         text = {
             when (mode) {
                 CompressContextDialogMode.Manual -> {
-                    Column(
-                        modifier = Modifier
-                            .heightIn(max = 560.dp)
-                            .verticalScroll(rememberScrollState()),
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 560.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Text(
-                            text = stringResource(R.string.chat_page_compress_context_desc_v2),
-                            style = MaterialTheme.typography.bodySmall
-                        )
-
-                        Text(
-                            text = stringResource(
-                                R.string.chat_page_compress_uncompressed_total,
-                                uncompressedMessages.size
-                            ),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-
-                        Text(
-                            text = "预计下一次 Input Tokens: ${currentSendTokens.coerceAtLeast(0)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "当前模型上下文限制: ${currentModelContextSize?.toString() ?: "null"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (currentModelContextSize == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        OutlinedTextField(
-                            value = modelContextSizeInput,
-                            onValueChange = { modelContextSizeInput = it.filter(Char::isDigit) },
-                            label = { Text("自定义上下文限制 tokens（自动获取失败时填写）") },
-                            placeholder = { Text("例如 128000") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-
-                        OutlinedTextField(
-                            value = compressMessageCountInput,
-                            onValueChange = { compressMessageCountInput = it.filter(Char::isDigit) },
-                            label = { Text(stringResource(R.string.chat_page_compress_message_count)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showUncompressedPreview = !showUncompressedPreview },
-                            shape = MaterialTheme.shapes.medium,
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                        ) {
-                            Column(
+                        item {
+                            Text(
+                                text = stringResource(R.string.chat_page_compress_context_desc_v2),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        item {
+                            Text(
+                                text = stringResource(
+                                    R.string.chat_page_compress_uncompressed_total,
+                                    uncompressedMessages.size
+                                ),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        item {
+                            Text(
+                                text = "预计下一次 Input Tokens: ${currentSendTokens.coerceAtLeast(0)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        item {
+                            Text(
+                                text = "当前模型上下文限制: ${currentModelContextSize?.toString() ?: "null"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (currentModelContextSize == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        item {
+                            OutlinedTextField(
+                                value = modelContextSizeInput,
+                                onValueChange = { modelContextSizeInput = it.filter(Char::isDigit) },
+                                label = { Text("自定义上下文限制 tokens（自动获取失败时填写）") },
+                                placeholder = { Text("例如 128000") },
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            )
+                        }
+                        item {
+                            OutlinedTextField(
+                                value = compressMessageCountInput,
+                                onValueChange = { compressMessageCountInput = it.filter(Char::isDigit) },
+                                label = { Text(stringResource(R.string.chat_page_compress_message_count)) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            )
+                        }
+                        item {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showUncompressedPreview = !showUncompressedPreview },
+                                shape = MaterialTheme.shapes.medium,
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                             ) {
-                                Text(
-                                    text = stringResource(
-                                        if (showUncompressedPreview) {
-                                            R.string.chat_page_compress_preview_collapse
-                                        } else {
-                                            R.string.chat_page_compress_preview_expand
-                                        }
-                                    ),
+                                Column(
                                     modifier = Modifier.fillMaxWidth(),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                if (showUncompressedPreview) {
-                                    LazyColumn(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(max = 260.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        items(uncompressedMessages) { preview ->
-                                            Text(
-                                                text = "#${preview.index + 1} · -${preview.tokens} Input Tokens · ${preview.role}: ${preview.text}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(
+                                            if (showUncompressedPreview) {
+                                                R.string.chat_page_compress_preview_collapse
+                                            } else {
+                                                R.string.chat_page_compress_preview_expand
+                                            }
+                                        ),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    if (showUncompressedPreview) {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            uncompressedMessages.forEach { preview ->
+                                                Text(
+                                                    text = "#${preview.index + 1} · -${preview.tokens} Input Tokens · ${preview.role}: ${preview.text}",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Switch(
-                                checked = autoCompressEnabled,
-                                onCheckedChange = { autoCompressEnabled = it }
-                            )
-                            Text(
-                                text = stringResource(R.string.chat_page_auto_compress),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-
-                        OutlinedTextField(
-                            value = autoCompressTriggerTokensInput,
-                            onValueChange = { autoCompressTriggerTokensInput = it.filter(Char::isDigit) },
-                            label = { Text("自动压缩阈值（上下文百分比）") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-
-                        Text(
-                            text = "自动压缩触发线: ${autoCompressTriggerLine?.toString() ?: "null"} tokens（${autoCompressPercent}%）",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (autoCompressTriggerLine == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        OutlinedTextField(
-                            value = additionalPrompt,
-                            onValueChange = { additionalPrompt = it },
-                            label = { Text(stringResource(R.string.chat_page_compress_additional_prompt)) },
-                            placeholder = {
-                                Text(stringResource(R.string.chat_page_compress_additional_prompt_hint))
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 4,
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Switch(
-                                checked = generateMemoryLedger,
-                                onCheckedChange = { generateMemoryLedger = it }
-                            )
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Text(
-                                    text = stringResource(R.string.chat_page_generate_memory_ledger_with_compress),
-                                    style = MaterialTheme.typography.bodyMedium
+                                Switch(
+                                    checked = autoCompressEnabled,
+                                    onCheckedChange = { autoCompressEnabled = it }
                                 )
                                 Text(
-                                    text = if (generateMemoryLedger) {
-                                        stringResource(R.string.chat_page_generate_memory_ledger_with_compress_desc)
-                                    } else {
-                                        stringResource(R.string.chat_page_skip_memory_ledger_with_compress_desc)
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = stringResource(R.string.chat_page_auto_compress),
+                                    style = MaterialTheme.typography.bodyMedium
                                 )
                             }
                         }
-
-                        Text(
-                            text = stringResource(R.string.chat_page_compress_warning),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
+                        item {
+                            OutlinedTextField(
+                                value = autoCompressTriggerTokensInput,
+                                onValueChange = { autoCompressTriggerTokensInput = it.filter(Char::isDigit) },
+                                label = { Text("自动压缩阈值（上下文百分比）") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            )
+                        }
+                        item {
+                            Text(
+                                text = "自动压缩触发线: ${autoCompressTriggerLine?.toString() ?: "null"} tokens（${autoCompressPercent}%）",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (autoCompressTriggerLine == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        item {
+                            OutlinedTextField(
+                                value = additionalPrompt,
+                                onValueChange = { additionalPrompt = it },
+                                label = { Text(stringResource(R.string.chat_page_compress_additional_prompt)) },
+                                placeholder = {
+                                    Text(stringResource(R.string.chat_page_compress_additional_prompt_hint))
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 4,
+                            )
+                        }
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Switch(
+                                    checked = generateMemoryLedger,
+                                    onCheckedChange = { generateMemoryLedger = it }
+                                )
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.chat_page_generate_memory_ledger_with_compress),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = if (generateMemoryLedger) {
+                                            stringResource(R.string.chat_page_generate_memory_ledger_with_compress_desc)
+                                        } else {
+                                            stringResource(R.string.chat_page_skip_memory_ledger_with_compress_desc)
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        item {
+                            Text(
+                                text = stringResource(R.string.chat_page_compress_warning),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
 
