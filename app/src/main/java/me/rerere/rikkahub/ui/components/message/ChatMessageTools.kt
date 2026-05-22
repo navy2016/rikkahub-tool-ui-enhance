@@ -358,6 +358,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     val context = LocalContext.current
     val isPending = tool.approvalState is ToolApprovalState.Pending
     var showApprovalDialog by remember(tool.toolCallId) { mutableStateOf(false) }
+    var showDeleteConfirmDialog by remember(tool.toolCallId) { mutableStateOf(false) }
     LaunchedEffect(isPending, tool.toolCallId) {
         if (isPending) showApprovalDialog = true
     }
@@ -486,25 +487,16 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                     }
                 }
             }
-        } else if (tool.isExecuted && onDeleteToolCall != null) {
-            {
-                IconButton(
-                    onClick = { onDeleteToolCall(tool.toolCallId) },
-                    modifier = Modifier.size(24.dp),
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.Delete01,
-                        contentDescription = stringResource(R.string.chat_message_tool_delete),
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    )
-                }
-            }
         } else {
             null
         },
         onClick = if (content != null || isPending || loading || images.isNotEmpty() || documents.isNotEmpty()) {
             { showResult = true }
+        } else {
+            null
+        },
+        onLongClick = if (tool.isExecuted && onDeleteToolCall != null) {
+            { showDeleteConfirmDialog = true }
         } else {
             null
         },
@@ -639,6 +631,27 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             null
         },
     )
+
+    if (showDeleteConfirmDialog && tool.isExecuted && onDeleteToolCall != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text(stringResource(R.string.chat_message_tool_delete)) },
+            text = { Text("确认删除这条工具调用记录？此操作不可撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteConfirmDialog = false
+                    onDeleteToolCall(tool.toolCallId)
+                }) {
+                    Text(stringResource(R.string.chat_message_tool_delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
 
     if (showApprovalDialog && isPending && onToolApproval != null) {
         ToolApprovalDialog(

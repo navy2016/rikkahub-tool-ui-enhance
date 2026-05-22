@@ -115,6 +115,9 @@ fun CompressContextDialog(
     var autoCompressTriggerTokensInput by remember { mutableStateOf(initialAutoCompressTriggerTokens.toString()) }
     var modelContextSizeInput by remember(currentModelContextSize) { mutableStateOf(currentModelContextSize?.toString().orEmpty()) }
     var generateMemoryLedger by remember { mutableStateOf(initialGenerateMemoryLedger) }
+    val effectiveContextSize = modelContextSizeInput.toIntOrNull()?.takeIf { it > 0 } ?: currentModelContextSize
+    val autoCompressPercent = autoCompressTriggerTokensInput.toIntOrNull()?.coerceIn(1, 100) ?: initialAutoCompressTriggerTokens.coerceIn(1, 100)
+    val autoCompressTriggerLine = effectiveContextSize?.let { (it * (autoCompressPercent / 100.0)).toInt() }
     val uncompressedMessages = remember(conversation) {
         conversation?.uncompressedVisibleMessages().orEmpty()
     }
@@ -155,7 +158,7 @@ fun CompressContextDialog(
                         )
 
                         Text(
-                            text = "当前会话总 token: ${currentSendTokens.coerceAtLeast(0)}",
+                            text = "预计下一次 Input Tokens: ${currentSendTokens.coerceAtLeast(0)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -246,6 +249,12 @@ fun CompressContextDialog(
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+
+                        Text(
+                            text = "自动压缩触发线: ${autoCompressTriggerLine?.toString() ?: "null"} tokens（${autoCompressPercent}%）",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (autoCompressTriggerLine == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
                         OutlinedTextField(

@@ -1,8 +1,10 @@
 package me.rerere.rikkahub.ui.components.ui
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -194,6 +196,7 @@ interface ChainOfThoughtScope {
         label: (@Composable () -> Unit),
         extra: (@Composable () -> Unit)? = null,
         onClick: (() -> Unit)? = null,
+        onLongClick: (() -> Unit)? = null,
         collapsedAdaptiveWidth: Boolean = false,
         content: (@Composable () -> Unit)? = null,
     )
@@ -221,6 +224,7 @@ interface ChainOfThoughtScope {
         label: (@Composable () -> Unit),
         extra: (@Composable () -> Unit)? = null,
         onClick: (() -> Unit)? = null,
+        onLongClick: (() -> Unit)? = null,
         collapsedAdaptiveWidth: Boolean = false,
         contentVisible: Boolean = expanded,
         content: (@Composable () -> Unit)? = null,
@@ -234,6 +238,7 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
         label: @Composable (() -> Unit),
         extra: @Composable (() -> Unit)?,
         onClick: (() -> Unit)?,
+        onLongClick: (() -> Unit)?,
         collapsedAdaptiveWidth: Boolean,
         content: @Composable (() -> Unit)?
     ) {
@@ -243,6 +248,7 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
             label = label,
             extra = extra,
             onClick = onClick,
+            onLongClick = onLongClick,
             collapsedAdaptiveWidth = collapsedAdaptiveWidth,
             expanded = expanded,
             onExpandedChange = { expanded = it },
@@ -259,6 +265,7 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
         label: @Composable (() -> Unit),
         extra: @Composable (() -> Unit)?,
         onClick: (() -> Unit)?,
+        onLongClick: (() -> Unit)?,
         collapsedAdaptiveWidth: Boolean,
         contentVisible: Boolean,
         content: @Composable (() -> Unit)?
@@ -268,6 +275,7 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
             label = label,
             extra = extra,
             onClick = onClick,
+            onLongClick = onLongClick,
             collapsedAdaptiveWidth = collapsedAdaptiveWidth,
             expanded = expanded,
             onExpandedChange = onExpandedChange,
@@ -276,12 +284,14 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
         )
     }
 
+    @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun ChainOfThoughtStepContent(
         icon: @Composable (() -> Unit)?,
         label: @Composable (() -> Unit),
         extra: @Composable (() -> Unit)?,
         onClick: (() -> Unit)?,
+        onLongClick: (() -> Unit)?,
         collapsedAdaptiveWidth: Boolean,
         expanded: Boolean,
         onExpandedChange: (Boolean) -> Unit,
@@ -311,16 +321,17 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
                         }
                     )
                     .then(
-                        if (onClick != null) {
-                            Modifier
+                        when {
+                            onClick != null || onLongClick != null -> Modifier
                                 .clip(MaterialTheme.shapes.small)
-                                .clickable { onClick() }
-                        } else if (hasContent) {
-                            Modifier
+                                .combinedClickable(
+                                    onClick = { onClick?.invoke() ?: if (hasContent) onExpandedChange(!expanded) else Unit },
+                                    onLongClick = onLongClick,
+                                )
+                            hasContent -> Modifier
                                 .clip(MaterialTheme.shapes.small)
                                 .clickable { onExpandedChange(!expanded) }
-                        } else {
-                            Modifier
+                            else -> Modifier
                         }
                     )
                     .padding(vertical = 8.dp),

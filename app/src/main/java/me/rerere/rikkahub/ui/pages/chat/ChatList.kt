@@ -24,6 +24,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -245,13 +246,29 @@ private fun ChatListNormal(
     val conversationUpdated by rememberUpdatedState(conversation)
     val density = LocalDensity.current
 
-    fun List<LazyListItemInfo>.isAtBottom(): Boolean {
-        val lastItem = lastOrNull() ?: return false
+    fun LazyListState.messageVisibleBottom(): Int {
         val inputBarHeight = with(density) { innerPadding.calculateBottomPadding().toPx() }
+        val tolerance = with(density) { 24.dp.toPx() }
+        return (layoutInfo.viewportEndOffset - inputBarHeight + tolerance).roundToInt()
+    }
+
+    fun List<LazyListItemInfo>.isAtBottom(): Boolean {
+        val totalItems = state.layoutInfo.totalItemsCount
+        if (totalItems <= 0) return true
+        val lastItem = lastOrNull { it.index == totalItems - 1 } ?: return false
         val lastPos = lastItem.offset + lastItem.size
-        val inputPos = (state.layoutInfo.viewportEndOffset - inputBarHeight.roundToInt())
-        // println("lastPos = $lastPos, inputPos = $inputPos  | ${lastPos <= inputPos - 8}")
-        return lastPos <= inputPos - 8
+        return lastPos <= state.messageVisibleBottom()
+    }
+
+    suspend fun scrollLastMessageBottomIntoView() {
+        val lastIndex = (state.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+        state.scrollToItem(lastIndex)
+        delay(32)
+        val lastItem = state.layoutInfo.visibleItemsInfo.lastOrNull { it.index == lastIndex } ?: return
+        val overshoot = lastItem.offset + lastItem.size - state.messageVisibleBottom()
+        if (overshoot > 0) {
+            state.scrollBy(overshoot.toFloat())
+        }
     }
 
     // Selection state for chat messages
@@ -403,8 +420,7 @@ private fun ChatListNormal(
             ) {
                 if (loadingState && followStreamingOutput) {
                     delay(80)
-                    val targetIndex = (state.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
-                    state.scrollToItem(targetIndex)
+                    scrollLastMessageBottomIntoView()
                 }
             }
         }
