@@ -63,7 +63,7 @@ private fun Conversation.uncompressedVisibleMessages(
                 index = startIndex + offset,
                 role = message.role.name,
                 tokens = estimateInputTokenDelta(message, charsPerToken, sendReasoningContent),
-                text = text.replace(Regex("\s+"), " ").take(220)
+                text = text.replace(Regex("\\s+"), " ").take(220)
             )
         }
 }
