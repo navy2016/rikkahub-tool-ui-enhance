@@ -1306,9 +1306,12 @@ class ChatService(
 
     private suspend fun saveStreamingSnapshotIfDue(conversationId: Uuid, conversation: Conversation) {
         val now = System.currentTimeMillis()
-        // Persist every streamed update. This deliberately avoids the old 1.5s debounce so
-        // a just-created assistant/tool message survives immediate user cancellation or OS
-        // process death.
+        val lastSaveAt = lastStreamingSaveAt[conversationId] ?: 0L
+        val isFirstSave = lastSaveAt == 0L
+        val hasPendingTools = conversation.messageNodes.any { node ->
+            node.currentMessage.getTools().any { tool -> !tool.isExecuted }
+        }
+        if (!isFirstSave && !hasPendingTools && now - lastSaveAt < 1_500L) return
         // Do not let regular streaming snapshots mutate a running tool into an interrupted
         // result. They are also written when a ChatPage ViewModel is disposed during an
         // in-app conversation switch; marking the tool interrupted here makes the previous

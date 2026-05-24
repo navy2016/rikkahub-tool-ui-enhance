@@ -5,7 +5,6 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.serialization.SerializationException
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -305,11 +304,12 @@ class GenerationHandler(
                                 return@forEach
                             }
                             Log.e(TAG, "generateText: tool ${tool.toolName} failed", error)
-                            val errorMessage = buildToolExecutionErrorMessage(
-                                toolName = tool.toolName,
-                                rawInput = tool.input,
-                                error = error,
-                            )
+                            val errorMessage = error.message
+                                ?.lineSequence()
+                                ?.firstOrNull()
+                                ?.take(240)
+                                ?.ifBlank { null }
+                                ?: error.javaClass.simpleName.ifBlank { "tool execution failed" }
                             executedTools += tool.copy(
                                 output = listOf(
                                     UIMessagePart.Text(
@@ -562,45 +562,5 @@ class GenerationHandler(
         }
     }.flowOn(Dispatchers.IO)
 
-    private fun buildToolExecutionErrorMessage(
-        toolName: String,
-        rawInput: String,
-        error: Throwable,
-    ): String {
-        val message = error.message?.ifBlank { null }
-            ?: error.javaClass.simpleName.ifBlank { "tool execution failed" }
-        val offset = Regex("""offset\s+(\d+)""").find(message)?.groupValues?.getOrNull(1)?.toIntOrNull()
-        val pointer = offset?.let { buildJsonErrorPointer(rawInput, it) }.orEmpty()
-        val fullInput = rawInput.ifBlank { "{}" }
-        return buildString {
-            appendLine("Tool '$toolName' failed before/during execution.")
-            appendLine("Parser/runtime error: $message")
-            if (error is SerializationException || offset != null) {
-                appendLine("The JSON input below is invalid or cannot be parsed. Fix every escaping/comma/string error in the original input, then retry the tool call.")
-            }
-            if (pointer.isNotBlank()) {
-                appendLine()
-                appendLine(pointer)
-            }
-            appendLine()
-            appendLine("Complete JSON input:")
-            append(fullInput)
-        }.trim()
-    }
-
-    private fun buildJsonErrorPointer(rawInput: String, offset: Int): String {
-        if (rawInput.isBlank()) return ""
-        val safeOffset = offset.coerceIn(0, rawInput.length)
-        val lineStart = rawInput.lastIndexOf('\n', (safeOffset - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
-        val lineEnd = rawInput.indexOf('\n', safeOffset).let { if (it < 0) rawInput.length else it }
-        val line = rawInput.substring(lineStart, lineEnd)
-        val column = safeOffset - lineStart
-        return buildString {
-            appendLine("JSON error location: offset $offset, column ${column + 1}")
-            appendLine(line)
-            append(" ".repeat(column.coerceAtLeast(0)))
-            append('^')
-        }
-    }
 
 }
