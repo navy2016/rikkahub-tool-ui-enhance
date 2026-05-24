@@ -13,6 +13,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -3385,15 +3386,25 @@ class ChatService(
 
     // 停止当前会话生成任务（不清理会话缓存）
     suspend fun stopGeneration(conversationId: Uuid) {
-        persistInterruptedToolGenerationSnapshot(
-            conversationId = conversationId,
-            error = "Tool execution was cancelled by user",
-            errorCode = "TOOL_EXECUTION_CANCELLED",
-            reason = "Cancelled by user",
-            markAssistantFinished = true,
-            updateSessionState = true
-        )
-        sessions[conversationId]?.getJob()?.cancel()
+        val job = sessions[conversationId]?.getJob()
+        job?.cancel()
+
+        // Wait for the generation coroutine to run its cancellation/failure handlers before
+        // taking the final preservation snapshot. Cancelling after the pre-stop snapshot could
+        // otherwise persist an older state that does not yet contain the just-created tool call,
+        // making the tool details disappear when the user stops at the exact moment the tool is
+        // starting.
+        withContext(NonCancellable) {
+            job?.join()
+            persistInterruptedToolGenerationSnapshot(
+                conversationId = conversationId,
+                error = "Tool execution was cancelled by user",
+                errorCode = "TOOL_EXECUTION_CANCELLED",
+                reason = "Cancelled by user",
+                markAssistantFinished = true,
+                updateSessionState = true
+            )
+        }
     }
 
     private suspend fun persistInterruptedToolGenerationSnapshot(
