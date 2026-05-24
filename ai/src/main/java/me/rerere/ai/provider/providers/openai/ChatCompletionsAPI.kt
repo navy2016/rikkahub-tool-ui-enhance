@@ -260,7 +260,7 @@ class ChatCompletionsAPI(
         val host = providerSetting.baseUrl.toHttpUrl().host
         return buildJsonObject {
             put("model", params.model.modelId)
-            put("messages", buildMessages(messages, providerSetting.sendReasoningContent))
+            put("messages", buildMessages(messages))
 
             if (isModelAllowTemperature(params.model)) {
                 if (params.temperature != null) put("temperature", params.temperature)
@@ -402,14 +402,13 @@ class ChatCompletionsAPI(
         return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && !ModelRegistry.GPT_5.match(model.modelId)
     }
 
-    private fun buildMessages(messages: List<UIMessage>, sendReasoningContent: Boolean = false) = buildJsonArray {
+    private fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
         val filteredMessages = messages.filter { it.isValidToUpload() }
         val lastUserMessageIndex = filteredMessages.indexOfLast { it.role == MessageRole.USER }
 
         filteredMessages.forEachIndexed { index, message ->
             if (message.role == MessageRole.ASSISTANT) {
-                // Include reasoning if provider setting enables it, or if after last user message (original behavior)
-                addAssistantMessages(message, sendReasoningContent || index > lastUserMessageIndex)
+                addAssistantMessages(message, index > lastUserMessageIndex)
             } else {
                 addNonAssistantMessage(message)
             }
