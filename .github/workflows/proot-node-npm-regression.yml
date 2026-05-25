@@ -28,7 +28,7 @@ jobs:
   node-npm-regression:
     name: Real npm workflow inside Android PRoot
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
@@ -86,6 +86,15 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Build debug and instrumentation APKs
+        run: ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PincludeX86_64AbiForTests=true --stacktrace
+
+      - name: Inspect APK sizes
+        run: |
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          ls -lh app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          du -h app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+
       - name: Run Android PRoot Node/npm regression test
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -100,15 +109,14 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             set -eux
-            ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PincludeX86_64AbiForTests=true --stacktrace
             adb wait-for-device
             adb devices
             adb shell getprop sys.boot_completed
             adb shell df -h || true
             adb shell pm trim-caches 999G || true
-            adb install -r -d -g -t --no-incremental app/build/outputs/apk/debug/app-debug.apk
-            adb install -r -d -g -t --no-incremental app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            adb shell am instrument -w -r               -e class me.rerere.rikkahub.data.container.PRootNodeNpmRegressionTest               me.rerere.rikkahub.dev.next.debug.test/androidx.test.runner.AndroidJUnitRunner
+            timeout 300 adb install -r -d -g -t --no-incremental app/build/outputs/apk/debug/app-debug.apk
+            timeout 300 adb install -r -d -g -t --no-incremental app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            timeout 1200 adb shell am instrument -w -r               -e class me.rerere.rikkahub.data.container.PRootNodeNpmRegressionTest               me.rerere.rikkahub.dev.next.debug.test/androidx.test.runner.AndroidJUnitRunner
 
       - name: Upload instrumentation reports
         if: always()
