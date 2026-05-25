@@ -64,6 +64,12 @@ class PRootManager(
         // Rootfs 版本控制 - 每次更新 alpine rootfs 时递增此版本号
         private const val ROOTFS_VERSION = 2
         private const val ROOTFS_VERSION_FILE = "rootfs_version.txt"
+
+        // PRoot runtime 版本控制 - 每次更新/替换 PRoot 二进制或随附 loader/lib 时递增。
+        // 当前资产来自 Termux proot 5.1.107.72 + libtalloc 2.4.3，用于修复现代 Node/npm
+        // 在 Android PRoot 环境下 stat/realpath/openat/worker-thread 不一致的问题。
+        private const val PROOT_RUNTIME_VERSION = "termux-proot-5.1.107.72-libtalloc-2.4.3-r1"
+        private const val PROOT_RUNTIME_VERSION_FILE = "proot_runtime_version.txt"
     }
 
     // 目录
@@ -131,7 +137,16 @@ class PRootManager(
                     "shSize=${if (shFile.exists()) shFile.length() else 0}")
         }
 
-        return prootBinary.exists() && rootfsValid
+        return prootBinary.exists() && isPRootRuntimeCurrent() && rootfsValid
+    }
+
+    private fun isPRootRuntimeCurrent(): Boolean {
+        val prootBinary = File(prootDir, "proot")
+        val versionFile = File(prootDir, PROOT_RUNTIME_VERSION_FILE)
+        return runCatching {
+            prootBinary.exists() && versionFile.exists() &&
+                versionFile.readText().trim() == PROOT_RUNTIME_VERSION
+        }.getOrDefault(false)
     }
 
     /**
@@ -176,486 +191,10 @@ class PRootManager(
             createGlobalContainer()
             Log.d(TAG, "Global container created successfully")
 
-            // [修复 npm] 补丁代码写入独立 wrapper
-            try {
-                Log.i(TAG, "Repairing node and npm paths...")
-
-                // JS 补丁代码：通过 heredoc 传入 node stdin，无 execve 参数长度限制
-                val patchCode = """
-try {
-process.stdout.write('PATCH_INIT\n');
-process.on('uncaughtException', function(err) {
-    process.stdout.write('UNCAUGHT: ' + err.message + '\n' + (err.stack || '') + '\n');
-    process.exit(4);
-});
-process.on('unhandledRejection', function(reason, promise) {
-    process.stdout.write('UNHANDLED_REJECTION: ' + (reason instanceof Error ? reason.message + '\n' + reason.stack : String(reason)) + '\n');
-});
-process.on('exit', function(code) {
-    process.stdout.write('PROCESS_EXIT: ' + code + '\n');
-});
-var _origExit = process.exit;
-process.exit = function(code) {
-    if (code !== 0) {
-        process.stdout.write('EXIT_CALL: code=' + code + ' stack=' + new Error().stack + '\n');
-    }
-    _origExit.call(process, code);
-};
-var _origStderrWrite = process.stderr.write;
-process.stderr.write = function(chunk) {
-    process.stdout.write('STDERR: ' + chunk);
-    return _origStderrWrite.apply(process.stderr, arguments);
-};
-var _origEmit = process.emit;
-process.emit = function(event) {
-    if (event === 'log') {
-        var args = Array.prototype.slice.call(arguments, 1);
-        var detail = args.map(function(a) {
-            if (a === undefined) return '';
-            if (a instanceof Error) return '[Error:' + a.message + '] ' + (a.stack || '');
-            if (typeof a === 'object') { try { return JSON.stringify(a); } catch(e) { return String(a); } }
-            return String(a);
-        }).join(' ');
-        process.stdout.write('NPMLOG: ' + detail + '\n');
-    }
-    return _origEmit.apply(process, arguments);
-};
-var _origConsoleError = console.error;
-console.error = function() {
-    var args = Array.prototype.slice.call(arguments);
-    var detail = args.map(function(a) {
-        if (a === undefined) return '[undefined]';
-        if (a === null) return '[null]';
-        if (a === '') return '[empty-string]';
-        if (a instanceof Error) return '[Error:' + a.message + '] ' + (a.stack || '');
-        if (typeof a === 'object') { try { return JSON.stringify(a); } catch(e) { return String(a); } }
-        return String(a);
-    }).join(' ');
-    process.stdout.write('CERR[' + args.length + ']: ' + detail + '\n');
-    return _origConsoleError.apply(console, arguments);
-};
-var _origConsoleWarn = console.warn;
-console.warn = function() {
-    var args = Array.prototype.slice.call(arguments);
-    var detail = args.map(function(a) {
-        if (a === undefined) return '[undefined]';
-        if (a === null) return '[null]';
-        if (a === '') return '[empty-string]';
-        if (a instanceof Error) return '[Error:' + a.message + '] ' + (a.stack || '');
-        if (typeof a === 'object') { try { return JSON.stringify(a); } catch(e) { return String(a); } }
-        return String(a);
-    }).join(' ');
-    process.stdout.write('CWARN[' + args.length + ']: ' + detail + '\n');
-    return _origConsoleWarn.apply(console, arguments);
-};
-var Module = require('module');
-var fs = require('fs');
-var path = require('path');
-var origFindPath = Module._findPath;
-Module._findPath = function(request, paths, isMain) {
-    var result = origFindPath.call(Module, request, paths, isMain);
-    if (result) return result;
-    for (var i = 0; i < paths.length; i++) {
-        var basePath = path.resolve(paths[i], request);
-        var tries = [basePath, basePath + '.js', basePath + '.json',
-                     path.join(basePath, 'index.js'), path.join(basePath, 'index.json')];
-        try {
-            var pkgContent = fs.readFileSync(path.join(basePath, 'package.json'), 'utf8');
-            var pkg = JSON.parse(pkgContent);
-            if (pkg.main) {
-                var mainPath = path.resolve(basePath, pkg.main);
-                tries.splice(1, 0, mainPath, mainPath + '.js', mainPath + '/index.js');
-            }
-        } catch(e) {}
-        for (var j = 0; j < tries.length; j++) {
-            try {
-                var fd = fs.openSync(tries[j], 'r');
-                var s = fs.fstatSync(fd);
-                fs.closeSync(fd);
-                if (s.isFile()) {
-                    Module._pathCache[request + '\x00' + paths.join('\x00')] = tries[j];
-                    return tries[j];
-                }
-            } catch(e) {}
-        }
-    }
-    return false;
-};
-var origStatSync = fs.statSync;
-fs.statSync = function(p, options) {
-    try { return origStatSync.call(fs, p, options); }
-    catch (err) {
-        if (err.code === 'ENOENT') {
-            try {
-                var fd = fs.openSync(p, 'r');
-                var stats = fs.fstatSync(fd);
-                fs.closeSync(fd);
-                return stats;
-            } catch (z) {}
-        }
-        throw err;
-    }
-};
-var origLstatSync = fs.lstatSync;
-fs.lstatSync = function(p, options) {
-    try { return origLstatSync.call(fs, p, options); }
-    catch (err) {
-        if (err.code === 'ENOENT') {
-            try {
-                var fd = fs.openSync(p, 'r');
-                var stats = fs.fstatSync(fd);
-                fs.closeSync(fd);
-                return stats;
-            } catch (z) {}
-        }
-        throw err;
-    }
-};
-var origRealpathSync = fs.realpathSync;
-fs.realpathSync = function(p, options) {
-    try { return origRealpathSync.call(fs, p, options); }
-    catch (err) {
-        if (err.code === 'ENOENT') {
-            try {
-                var fd = fs.openSync(p, 'r');
-                fs.closeSync(fd);
-                return path.resolve(p);
-            } catch(e) {
-                try { fs.readdirSync(p); return path.resolve(p); }
-                catch(e2) {}
-            }
-        }
-        throw err;
-    }
-};
-var origExistsSync = fs.existsSync;
-fs.existsSync = function(p) {
-    var result = origExistsSync.call(fs, p);
-    if (!result) {
-        try {
-            var fd = fs.openSync(p, 'r');
-            fs.closeSync(fd);
-            return true;
-        } catch(e) {
-            try { fs.readdirSync(p); return true; }
-            catch(e2) { return false; }
-        }
-    }
-    return result;
-};
-var origAccessSync = fs.accessSync;
-fs.accessSync = function(p, mode) {
-    try { return origAccessSync.call(fs, p, mode); }
-    catch (err) {
-        if (err.code === 'ENOENT') {
-            try { var fd = fs.openSync(p, 'r'); fs.closeSync(fd); return; } catch(z) {}
-        }
-        throw err;
-    }
-};
-var _stat = fs.stat;
-fs.stat = function(p, o, cb) {
-    if (typeof o === 'function') { cb = o; o = {}; }
-    _stat.call(fs, p, o, function(e, s) {
-        if (e && e.code === 'ENOENT') { try { var f = fs.openSync(p,'r'); s = fs.fstatSync(f); fs.closeSync(f); return cb(null,s); } catch(x) {} }
-        cb(e, s);
-    });
-};
-var _lstat = fs.lstat;
-fs.lstat = function(p, o, cb) {
-    if (typeof o === 'function') { cb = o; o = {}; }
-    _lstat.call(fs, p, o, function(e, s) {
-        if (e && e.code === 'ENOENT') { try { var f = fs.openSync(p,'r'); s = fs.fstatSync(f); fs.closeSync(f); return cb(null,s); } catch(x) {} }
-        cb(e, s);
-    });
-};
-var _realpath = fs.realpath;
-fs.realpath = function(p, o, cb) {
-    if (typeof o === 'function') { cb = o; o = {}; }
-    _realpath.call(fs, p, o, function(e, r) {
-        if (e && e.code === 'ENOENT') { try { var f = fs.openSync(p,'r'); fs.closeSync(f); return cb(null,path.resolve(p)); } catch(x) { try { fs.readdirSync(p); return cb(null,path.resolve(p)); } catch(x2) {} } }
-        cb(e, r);
-    });
-};
-var _access = fs.access;
-fs.access = function(p, m, cb) {
-    if (typeof m === 'function') { cb = m; m = fs.constants.F_OK; }
-    _access.call(fs, p, m, function(e) {
-        if (e && e.code === 'ENOENT') { try { var f = fs.openSync(p,'r'); fs.closeSync(f); return cb(null); } catch(x) {} }
-        cb(e);
-    });
-};
-if (fs.promises) {
-    var fsp = fs.promises;
-    var _pStat = fsp.stat; fsp.stat = function(p,o) { return _pStat.call(fsp,p,o).catch(function(e) { if(e.code==='ENOENT'){try{var f=fs.openSync(p,'r');var s=fs.fstatSync(f);fs.closeSync(f);return s;}catch(x){}} throw e; }); };
-    var _pLstat = fsp.lstat; fsp.lstat = function(p,o) { return _pLstat.call(fsp,p,o).catch(function(e) { if(e.code==='ENOENT'){try{var f=fs.openSync(p,'r');var s=fs.fstatSync(f);fs.closeSync(f);return s;}catch(x){}} throw e; }); };
-    var _pRealpath = fsp.realpath; fsp.realpath = function(p,o) { return _pRealpath.call(fsp,p,o).catch(function(e) { if(e.code==='ENOENT'){try{var f=fs.openSync(p,'r');fs.closeSync(f);return path.resolve(p);}catch(x){try{fs.readdirSync(p);return path.resolve(p);}catch(x2){}}} throw e; }); };
-    var _pAccess = fsp.access; fsp.access = function(p,m) { return _pAccess.call(fsp,p,m).catch(function(e) { if(e.code==='ENOENT'){try{var f=fs.openSync(p,'r');fs.closeSync(f);return;}catch(x){}} throw e; }); };
-}
-var _origMkdirSync = fs.mkdirSync;
-fs.mkdirSync = function(p, options) {
-    try {
-        return _origMkdirSync.call(fs, p, options);
-    } catch (err) {
-        if (err.code === 'ENOENT') {
-            var cp = require('child_process');
-            var cmd = 'mkdir ';
-            if (options && options.recursive) cmd += '-p ';
-            cmd += '"' + p.replace(/"/g, '\\"') + '"';
-            try {
-                cp.execSync(cmd, { stdio: 'pipe' });
-                return undefined;
-            } catch (e) {
-                if (e.message && e.message.indexOf('File exists') >= 0) {
-                    var errExists = new Error('EEXIST: file already exists, mkdir \'' + p + '\'');
-                    errExists.code = 'EEXIST';
-                    errExists.syscall = 'mkdir';
-                    errExists.path = p;
-                    throw errExists;
-                }
-                throw err;
-            }
-        }
-        throw err;
-    }
-};
-if (fs.promises) {
-    var _origPromisesMkdir = fs.promises.mkdir;
-    fs.promises.mkdir = async function(p, options) {
-        try {
-            return await _origPromisesMkdir(p, options);
-        } catch (err) {
-            if (err.code === 'ENOENT') {
-                return new Promise(function(resolve, reject) {
-                    try {
-                        fs.mkdirSync(p, options);
-                        resolve(undefined);
-                    } catch (e) {
-                        reject(e);
-                    }
-                });
-            }
-            throw err;
-        }
-    };
-}
-var target = process.env._PATCH_TARGET;
-if (target) {
-    process.argv = [process.argv[0], target].concat(
-        process.argv.slice(1).filter(function(a) { return a !== '-'; })
-    );
-    try { process.stdout.write('ENV_CWD: ' + process.cwd() + '\n'); } catch(e) { process.stdout.write('ENV_CWD_ERROR: ' + e.message + '\n'); }
-    try { var os = require('os'); process.stdout.write('ENV_HOME: ' + os.homedir() + '\n'); } catch(e) { process.stdout.write('ENV_HOME_ERROR: ' + e.message + '\n'); }
-    try { var os = require('os'); process.stdout.write('ENV_TMPDIR: ' + os.tmpdir() + '\n'); } catch(e) { process.stdout.write('ENV_TMPDIR_ERROR: ' + e.message + '\n'); }
-    // 主线程预扫描 npm 文件树（主线程的 openSync 能正常工作）
-    var _FM = {};
-    var _PM = {};
-    function _scanFiles(dir, dep) {
-        if (dep > 15) return;
-        try {
-            var ent = fs.readdirSync(dir);
-            for (var i = 0; i < ent.length; i++) {
-                var fp = path.join(dir, ent[i]);
-                try {
-                    var fd = fs.openSync(fp, 'r');
-                    var st = fs.fstatSync(fd);
-                    fs.closeSync(fd);
-                    if (st.isFile()) _FM[fp] = 1;
-                    else if (st.isDirectory()) _scanFiles(fp, dep + 1);
-                } catch(e) {
-                    try { fs.readdirSync(fp); _scanFiles(fp, dep + 1); } catch(e2) {}
-                }
-            }
-        } catch(e) {}
-    }
-    function _scanPkgs(dir) {
-        var nm = path.join(dir, 'node_modules');
-        try {
-            var ent = fs.readdirSync(nm);
-            for (var i = 0; i < ent.length; i++) {
-                var n = ent[i]; if (n[0] === '.') continue;
-                if (n[0] === '@') {
-                    try { var se = fs.readdirSync(path.join(nm, n));
-                        for (var j = 0; j < se.length; j++) { _loadPkg(path.join(nm, n, se[j]), n + '/' + se[j]); _scanPkgs(path.join(nm, n, se[j])); }
-                    } catch(e) {}
-                } else { _loadPkg(path.join(nm, n), n); _scanPkgs(path.join(nm, n)); }
-            }
-        } catch(e) {}
-    }
-    function _loadPkg(pd, pn) {
-        try {
-            var fd = fs.openSync(path.join(pd, 'package.json'), 'r');
-            var buf = Buffer.alloc(65536); var n = fs.readSync(fd, buf); fs.closeSync(fd);
-            var pk = JSON.parse(buf.slice(0, n).toString());
-            if (!_PM[pn]) _PM[pn] = [];
-            _PM[pn].push({ d: pd, e: pk.exports || null, m: pk.main || null, i: pk.imports || null });
-        } catch(e) {}
-    }
-    process.stdout.write('PRESCAN...\n');
-    _scanFiles('/usr/lib/node_modules/npm', 0);
-    _scanPkgs('/usr/lib/node_modules/npm');
-    process.stdout.write('PRESCAN_DONE: ' + Object.keys(_FM).length + 'f ' + Object.keys(_PM).length + 'p\n');
-    var _samples = [
-        '/usr/lib/node_modules/npm/node_modules/chalk/package.json',
-        '/usr/lib/node_modules/npm/node_modules/chalk/source/index.js',
-        '/usr/lib/node_modules/npm/node_modules/chalk/source/vendor/ansi-styles/index.js'
-    ];
-    _samples.forEach(function(s) { process.stdout.write('FM_HAS[' + s + ']: ' + (_FM[s] ? 'YES' : 'NO') + '\n'); });
-    var _fmKeys = Object.keys(_FM);
-    var _chalkKeys = _fmKeys.filter(function(k) { return k.indexOf('chalk') >= 0 && k.indexOf('vendor') >= 0; }).slice(0, 3);
-    process.stdout.write('FM_SAMPLE: ' + JSON.stringify(_chalkKeys) + '\n');
-    // 注册 ESM 加载器（Worker 线程只查地图，不做文件操作）
-    try {
-        var _mod = require('node:module');
-        if (typeof _mod.register === 'function') {
-            var _L = [];
-            _L.push('import { dirname, join, resolve as pathResolve } from "node:path";');
-            _L.push('import { fileURLToPath, pathToFileURL } from "node:url";');
-            _L.push('var _FM,_PM;');
-            _L.push('export function initialize(d){_FM=d.fm;_PM=d.pm;}');
-            _L.push('function fe(p){return !!_FM[p];}');
-            _L.push('function ge(pk,sub){');
-            _L.push('  if(sub){if(pk.e){var m=pk.e["./"+sub];if(m)return typeof m==="string"?m:(m.node||m.import||m.default||sub);}return sub;}');
-            _L.push('  if(pk.e){var e=pk.e["."]; if(!e)e=pk.e; if(typeof e==="string")return e; if(e&&typeof e==="object"){var v=e.node||e.import||e.default; if(v&&typeof v==="object")v=v.node||v.import||v.default; if(typeof v==="string")return v;}}');
-            _L.push('  return pk.m||"index.js";');
-            _L.push('}');
-            _L.push('export async function resolve(spec,ctx,next){');
-            _L.push('  try{return await next(spec,ctx);}');
-            _L.push('  catch(err){');
-            _L.push('    if(err.code!=="ERR_MODULE_NOT_FOUND")throw err;');
-            _L.push('    if(spec.startsWith("node:"))throw err;');
-            _L.push('    if(spec.startsWith("#")){');
-            _L.push('      if(!ctx.parentURL)throw err;');
-            _L.push('      var pf=fileURLToPath(ctx.parentURL);');
-            _L.push('      var pd=dirname(pf);');
-            _L.push('      while(pd.length>1){');
-            _L.push('        var pkgPath=join(pd,"package.json");');
-            _L.push('        if(fe(pkgPath)){');
-            _L.push('          var pkList=[];');
-            _L.push('          for(var pn in _PM){for(var pi of _PM[pn]){if(pi.d===pd)pkList.push(pi);}}');
-            _L.push('          if(pkList.length>0){');
-            _L.push('            var pk=pkList[0];');
-            _L.push('            if(pk.i&&pk.i[spec]){');
-            _L.push('              var tgt=pk.i[spec];');
-            _L.push('              if(typeof tgt==="string"){');
-            _L.push('                var rv=pathResolve(pd,tgt);');
-            _L.push('                if(fe(rv))return{url:pathToFileURL(rv).href,shortCircuit:true};');
-            _L.push('              }else if(tgt&&typeof tgt==="object"){');
-            _L.push('                var v=tgt.node||tgt.import||tgt.default;');
-            _L.push('                if(typeof v==="string"){');
-            _L.push('                  var rv2=pathResolve(pd,v);');
-            _L.push('                  if(fe(rv2))return{url:pathToFileURL(rv2).href,shortCircuit:true};');
-            _L.push('                }');
-            _L.push('              }');
-            _L.push('            }');
-            _L.push('          }');
-            _L.push('          break;');
-            _L.push('        }');
-            _L.push('        var prev=pd;pd=dirname(pd);if(pd===prev)break;');
-            _L.push('      }');
-            _L.push('      throw err;');
-            _L.push('    }');
-            _L.push('    if(spec.startsWith(".")||spec.startsWith("/")){');
-            _L.push('      if(!ctx.parentURL)throw err;');
-            _L.push('      var pd=dirname(fileURLToPath(ctx.parentURL));');
-            _L.push('      var r=pathResolve(pd,spec);');
-            _L.push('      var cs=[r,r+".js",r+".mjs",r+".json",join(r,"index.js"),join(r,"index.mjs")];');
-            _L.push('      for(var c of cs){if(fe(c))return{url:pathToFileURL(c).href,shortCircuit:true};}');
-            _L.push('      throw err;');
-            _L.push('    }');
-            _L.push('    if(spec.startsWith("file:"))throw err;');
-            _L.push('    var pts=spec.split("/");');
-            _L.push('    var pn=spec.startsWith("@")?pts.slice(0,2).join("/"):pts[0];');
-            _L.push('    var sp=spec.startsWith("@")?pts.slice(2).join("/"):pts.slice(1).join("/");');
-            _L.push('    if(!_PM[pn])throw err;');
-            _L.push('    var idir=ctx.parentURL?dirname(fileURLToPath(ctx.parentURL)):"/";');
-            _L.push('    var best=null,bestLen=-1;');
-            _L.push('    for(var pi of _PM[pn]){var nmBase=dirname(pi.d);if(idir.startsWith(dirname(nmBase))){if(nmBase.length>bestLen){bestLen=nmBase.length;best=pi;}}}');
-            _L.push('    if(!best&&_PM[pn].length>0)best=_PM[pn][0];');
-            _L.push('    if(!best)throw err;');
-            _L.push('    var en=ge(best,sp);if(typeof en!=="string")en="index.js";');
-            _L.push('    var rv=pathResolve(best.d,en);');
-            _L.push('    var cs=[rv,rv+".js",rv+".mjs",join(rv,"index.js"),join(rv,"index.mjs")];');
-            _L.push('    for(var c of cs){if(fe(c))return{url:pathToFileURL(c).href,shortCircuit:true};}');
-            _L.push('    throw err;');
-            _L.push('  }');
-            _L.push('}');
-            var _esmCode = _L.join('\n');
-            _mod.register('data:text/javascript,' + encodeURIComponent(_esmCode), { data: { fm: _FM, pm: _PM } });
-            process.stdout.write('ESM_LOADER_OK\n');
-        } else {
-            process.stdout.write('ESM_LOADER_SKIP: register not available\n');
-        }
-    } catch(esmErr) {
-        process.stdout.write('ESM_LOADER_ERROR: ' + esmErr.message + '\n');
-    }
-    process.stdout.write('REQUIRING: ' + target + '\n');
-    require(target);
-    process.stdout.write('REQUIRE_OK\n');
-}
-} catch(e) {
-    process.stdout.write('NPM_PATCH_ERROR: ' + e.message + '\n' + (e.stack || '') + '\n');
-    process.exit(2);
-}
-""".trimStart()
-
-                // 在 host 层写入 npm/npx 包装脚本（heredoc 方式，不经过 execve 参数）
-                val upperLocalBin = File(containerDir, "upper/usr/local/bin")
-                upperLocalBin.mkdirs()
-
-                File(upperLocalBin, "npm").apply {
-                    writeText("#!/bin/sh\nexport _PATCH_TARGET=/usr/lib/node_modules/npm/bin/npm-cli.js\nnode - \"\$@\" << 'ENDPATCH'\n${patchCode}ENDPATCH\n")
-                    setExecutable(true, false)
-                }
-                File(upperLocalBin, "npx").apply {
-                    writeText("#!/bin/sh\nexport _PATCH_TARGET=/usr/lib/node_modules/npm/bin/npx-cli.js\nnode - \"\$@\" << 'ENDPATCH'\n${patchCode}ENDPATCH\n")
-                    setExecutable(true, false)
-                }
-
-                // 创建 node wrapper（放在 /usr/local/bin，避免覆盖系统二进制）
-                File(upperLocalBin, "node").apply {
-                    writeText("""#!/bin/sh
-# PRoot Node.js Wrapper - Auto-load compatibility patches
-if [ "${'$'}1" = "-" ]; then
-    # stdin mode (used by npm/npx wrappers)
-    exec /usr/bin/node "${'$'}@"
-else
-    # Normal mode: inject patch via stdin, then run target script
-    # Save current working directory for Node.js to restore
-    export _NODE_WRAPPER_CWD="${'$'}(pwd)"
-    exec /usr/bin/node - "${'$'}@" << 'NODEPATCH'
-${patchCode}
-// Restore working directory (lost in stdin mode)
-if (process.env._NODE_WRAPPER_CWD) {
-    try {
-        process.chdir(process.env._NODE_WRAPPER_CWD);
-    } catch (e) {
-        console.error('Warning: Failed to restore cwd:', e.message);
-    }
-}
-// Load target script if specified
-if (process.argv.length > 2 && process.argv[2] !== '-') {
-    var targetScript = process.argv[2];
-    var path = require('path');
-    // Normalize path: if not absolute and doesn't start with ./ or ../, prepend ./
-    if (!path.isAbsolute(targetScript) && !targetScript.startsWith('./') && !targetScript.startsWith('../')) {
-        targetScript = './' + targetScript;
-    }
-    // Resolve to absolute path
-    targetScript = path.resolve(targetScript);
-    process.argv = [process.argv[0], targetScript].concat(process.argv.slice(3));
-    require(targetScript);
-}
-NODEPATCH
-fi
-""")
-                    setExecutable(true, false)
-                }
-
-                Log.i(TAG, "Node/NPM path repair completed (heredoc stdin patch)")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to repair node/npm paths", e)
-            }
+            // 旧版本曾通过 JS monkey patch 包装 node/npm 来规避 PRoot 文件系统兼容问题。
+            // 长期方案改为替换 PRoot runtime，因此初始化时仅清理遗留 wrapper，确保后续
+            // node/npm 直接走 Alpine 官方二进制，真实暴露 PRoot 层回归。
+            cleanupLegacyNodeNpmCompatibilityWrappers(File(containerDir, "upper"))
 
             _containerState.value = ContainerStateEnum.Running
             Log.d(TAG, "Container initialization completed successfully!")
@@ -685,12 +224,15 @@ fi
                     return@withContext initialize()
                 }
                 is ContainerStateEnum.Stopped -> {
-                    // 从停止状态恢复
+                    // 从停止状态恢复；升级后先刷新 PRoot runtime，避免继续使用旧二进制。
+                    extractPRootBinary()
                     if (globalContainer == null) {
                         createGlobalContainer()
                     } else {
                         // 确保子目录/运行时脚本存在（兼容升级前已初始化的容器）
-                        ensureContainerRuntimeFiles(File(containerDir, "upper"))
+                        val upperDir = File(containerDir, "upper")
+                        ensureContainerRuntimeFiles(upperDir)
+                        cleanupLegacyNodeNpmCompatibilityWrappers(upperDir)
                     }
                     _containerState.value = ContainerStateEnum.Running
                     return@withContext Result.success(Unit)
@@ -1330,6 +872,103 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 """)
             setExecutable(true, false)
         }
+        File(binDir, "rikkahub-test-node-npm").apply {
+            writeText("""#!/bin/sh
+set -eu
+printf '%s\n' '== RikkaHub PRoot Node/npm regression =='
+printf '%s\n' "kernel=${'$'}(uname -a 2>/dev/null || true)"
+printf '%s\n' "arch=${'$'}(uname -m 2>/dev/null || true)"
+
+rikkahub-fix-apk
+apk add --no-cache nodejs npm
+
+# Remove only obsolete JS monkey-patch wrappers from previous app versions.
+# Non-wrapper user-installed binaries in /usr/local/bin are left untouched.
+for f in /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx; do
+    if [ -f "${'$'}f" ] && grep -qE 'PRoot Node.js Wrapper|PATCH_INIT|PRESCAN_DONE|ESM_LOADER_OK' "${'$'}f" 2>/dev/null; then
+        rm -f "${'$'}f"
+    fi
+done
+hash -r 2>/dev/null || true
+
+printf '%s\n' "node_path=${'$'}(command -v node)"
+printf '%s\n' "npm_path=${'$'}(command -v npm)"
+printf '%s\n' "npx_path=${'$'}(command -v npx)"
+node --version
+npm --version
+
+node <<'NODE'
+const fs = require('node:fs');
+const checks = ['/usr/bin/node', '/usr/lib/node_modules/npm/package.json'];
+for (const p of checks) {
+  const st = fs.statSync(p);
+  const real = fs.realpathSync(p);
+  console.log('main-fs-ok', p, st.isFile(), real);
+}
+NODE
+
+node <<'NODE'
+const { Worker } = require('node:worker_threads');
+new Promise((resolve, reject) => {
+  const worker = new Worker(`
+    const fs = require('node:fs');
+    const { parentPort } = require('node:worker_threads');
+    const p = '/usr/lib/node_modules/npm/package.json';
+    parentPort.postMessage({ exists: fs.existsSync(p), file: fs.statSync(p).isFile(), real: fs.realpathSync(p) });
+  `, { eval: true });
+  worker.on('message', msg => {
+    console.log('worker-fs-ok', JSON.stringify(msg));
+    if (!msg.exists || !msg.file) reject(new Error('worker fs check failed'));
+    else resolve();
+  });
+  worker.on('error', reject);
+  worker.on('exit', code => { if (code !== 0) reject(new Error('worker exit ' + code)); });
+}).catch(err => {
+  console.error(err && err.stack || err);
+  process.exit(1);
+});
+NODE
+
+work="${'$'}{TMPDIR:-/tmp}/rikkahub-npm-regression.${'$'}${'$'}"
+mkdir -p "${'$'}work"
+trap 'rm -rf "${'$'}work"' EXIT
+cd "${'$'}work"
+npm init -y >/dev/null
+npm install --no-audit --no-fund lodash@4.17.21 chalk@5.3.0 cowsay@1.5.0
+node -e "console.log('lodash-ok', require('lodash').VERSION)"
+node --input-type=module -e "import chalk from 'chalk'; console.log(chalk.green('chalk-esm-ok'))"
+npm exec -- cowsay local > cowsay-local.txt
+grep -q local cowsay-local.txt
+npm install -g --no-audit --no-fund cowsay@1.5.0
+cowsay global > cowsay-global.txt
+grep -q global cowsay-global.txt
+npm uninstall -g cowsay >/dev/null
+printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
+""")
+            setExecutable(true, false)
+        }
+    }
+
+
+    private fun cleanupLegacyNodeNpmCompatibilityWrappers(upperDir: File = File(containerDir, "upper")) {
+        runCatching {
+            val binDir = File(upperDir, "usr/local/bin")
+            val legacyMarkers = listOf("PRoot Node.js Wrapper", "PATCH_INIT", "PRESCAN_DONE", "ESM_LOADER_OK")
+            listOf("node", "npm", "npx").forEach { name ->
+                val file = File(binDir, name)
+                if (!file.exists() || !file.isFile) return@forEach
+                val head = runCatching { file.readText().take(8192) }.getOrDefault("")
+                if (legacyMarkers.any { marker -> head.contains(marker) }) {
+                    if (file.delete()) {
+                        Log.i(TAG, "Removed legacy Node/npm compatibility wrapper: ${file.absolutePath}")
+                    } else {
+                        Log.w(TAG, "Failed to remove legacy Node/npm compatibility wrapper: ${file.absolutePath}")
+                    }
+                }
+            }
+        }.onFailure {
+            Log.w(TAG, "Failed to clean legacy Node/npm compatibility wrappers", it)
+        }
     }
 
     private suspend fun createGlobalContainer() = withContext(Dispatchers.IO) {
@@ -1338,6 +977,7 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 
         // 创建/刷新 bind mount 所需的子目录、配置和工具脚本
         ensureContainerRuntimeFiles(upperDir)
+        cleanupLegacyNodeNpmCompatibilityWrappers(upperDir)
 
         globalContainer = ContainerState(
             id = "global",
@@ -1685,35 +1325,83 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 
     private suspend fun extractPRootBinary() = withContext(Dispatchers.IO) {
         val prootBinary = File(prootDir, "proot")
-        if (!prootBinary.exists()) {
-            val arch = getDeviceArchitecture()
-            val assetPath = "proot/proot-$arch"
-            Log.d(TAG, "Extracting PRoot binary for architecture: $arch from $assetPath")
-            
-            try {
-                context.assets.open(assetPath).use { input ->
-                    prootBinary.outputStream().use { output ->
-                        val copied = input.copyTo(output)
-                        Log.d(TAG, "Copied $copied bytes to ${prootBinary.absolutePath}")
-                    }
-                }
-                // 使用 chmod 命令设置可执行权限（Android 10+ 兼容性更好）
-                try {
-                    val process = Runtime.getRuntime().exec("chmod 755 ${prootBinary.absolutePath}")
-                    val exitCode = process.waitFor()
-                    Log.d(TAG, "Set executable permission via chmod, exit code: $exitCode")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to set executable permission via chmod, trying setExecutable", e)
-                    prootBinary.setExecutable(true)
-                }
-                Log.d(TAG, "PRoot binary ready, file exists: ${prootBinary.exists()}, size: ${prootBinary.length()}")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to extract PRoot binary from $assetPath", e)
-                throw RuntimeException("Failed to extract PRoot binary for $arch: ${e.message}", e)
-            }
-        } else {
-            Log.d(TAG, "PRoot binary already exists at ${prootBinary.absolutePath}")
+        val runtimeVersionFile = File(prootDir, PROOT_RUNTIME_VERSION_FILE)
+        val installedVersion = runtimeVersionFile.takeIf { it.exists() }?.readText()?.trim()
+        val needsUpdate = !prootBinary.exists() || installedVersion != PROOT_RUNTIME_VERSION
+
+        if (!needsUpdate) {
+            Log.d(TAG, "PRoot runtime already exists at ${prootBinary.absolutePath}, version=$installedVersion")
+            ensurePRootExecutablePermissions()
+            return@withContext
         }
+
+        Log.i(TAG, "Installing PRoot runtime version=$PROOT_RUNTIME_VERSION (previous=$installedVersion)")
+        prootDir.deleteRecursively()
+        prootDir.mkdirs()
+
+        val arch = getDeviceArchitecture()
+        val assetPath = "proot/proot-$arch"
+        Log.d(TAG, "Extracting PRoot binary for architecture: $arch from $assetPath")
+
+        try {
+            context.assets.open(assetPath).use { input ->
+                prootBinary.outputStream().use { output ->
+                    val copied = input.copyTo(output)
+                    Log.d(TAG, "Copied $copied bytes to ${prootBinary.absolutePath}")
+                }
+            }
+
+            extractOptionalAsset("proot/loader-$arch", File(prootDir, "loader"))
+            extractOptionalAsset("proot/loader32-$arch", File(prootDir, "loader32"))
+            extractOptionalAsset("proot/libtalloc-$arch.so.2", File(prootDir, "libtalloc.so.2"))
+
+            ensurePRootExecutablePermissions()
+            runtimeVersionFile.writeText(PROOT_RUNTIME_VERSION)
+
+            Log.d(
+                TAG,
+                "PRoot runtime ready, proot=${prootBinary.exists()}/${prootBinary.length()}, " +
+                    "loader=${File(prootDir, "loader").exists()}, " +
+                    "loader32=${File(prootDir, "loader32").exists()}, " +
+                    "libtalloc=${File(prootDir, "libtalloc.so.2").exists()}"
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to extract PRoot runtime from $assetPath", e)
+            prootDir.deleteRecursively()
+            throw RuntimeException("Failed to extract PRoot runtime for $arch: ${e.message}", e)
+        }
+    }
+
+    private fun extractOptionalAsset(assetPath: String, target: File): Boolean {
+        return try {
+            context.assets.open(assetPath).use { input ->
+                target.parentFile?.mkdirs()
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+            target.setReadable(true, false)
+            target.setExecutable(true, false)
+            Log.d(TAG, "Extracted optional PRoot asset: $assetPath -> ${target.absolutePath}")
+            true
+        } catch (e: java.io.FileNotFoundException) {
+            Log.d(TAG, "Optional PRoot asset not bundled: $assetPath")
+            false
+        }
+    }
+
+    private fun ensurePRootExecutablePermissions() {
+        listOf("proot", "loader", "loader32").forEach { name ->
+            val file = File(prootDir, name)
+            if (!file.exists()) return@forEach
+            try {
+                val process = Runtime.getRuntime().exec(arrayOf("chmod", "755", file.absolutePath))
+                val exitCode = process.waitFor()
+                Log.d(TAG, "Set executable permission for $name via chmod, exit code: $exitCode")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to chmod $name, trying setExecutable", e)
+                file.setExecutable(true, false)
+            }
+        }
+        File(prootDir, "libtalloc.so.2").takeIf { it.exists() }?.setReadable(true, false)
     }
 
     private suspend fun extractAlpineRootfs() = withContext(Dispatchers.IO) {
@@ -2456,6 +2144,9 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
         processEnv["HOME"] = "/root"
         processEnv["TMPDIR"] = "/tmp"
         processEnv["PROOT_TMP_DIR"] = context.cacheDir.absolutePath
+        File(prootDir, "loader").takeIf { it.exists() }?.let { processEnv["PROOT_LOADER"] = it.absolutePath }
+        File(prootDir, "loader32").takeIf { it.exists() }?.let { processEnv["PROOT_LOADER_32"] = it.absolutePath }
+        processEnv["PROOT_NO_SECCOMP"] = "1"
         processEnv["PREFIX"] = "/usr"
         processEnv["NPM_CONFIG_PREFIX"] = "/usr/local"
         processEnv["npm_config_prefix"] = "/usr/local"
@@ -2467,17 +2158,21 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
         processEnv["NODE_PATH"] = "/usr/local/lib/node_modules:/usr/lib/node_modules"
         processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
-        // 检查 termux-exec 是否可用
-        val nativeLibDir = context.applicationInfo.nativeLibraryDir
-        val termuxExecLib = File(nativeLibDir, "libtermux-exec.so")
-        val hasTermuxExec = termuxExecLib.exists()
-
-        if (hasTermuxExec) {
-            processEnv["LD_PRELOAD"] = termuxExecLib.absolutePath
-        }
-
         // 合并自定义环境变量
         processEnv.putAll(customEnv)
+
+        // 不继承宿主 LD_PRELOAD。termux-exec 会改写 execve 路径，容易干扰 PRoot 自己的
+        // path translation；长期方案依赖修复后的 PRoot runtime，而不是 LD_PRELOAD hook。
+        processEnv.remove("LD_PRELOAD")
+
+        // PRoot 是动态链接的 Termux 构建，libtalloc 随 runtime 一起解压到 prootDir。
+        // 即使调用方覆盖 LD_LIBRARY_PATH，也要把 prootDir 放回最前面，保证 proot 自身可启动。
+        File(prootDir, "libtalloc.so.2").takeIf { it.exists() }?.let {
+            processEnv["LD_LIBRARY_PATH"] = listOfNotNull(
+                prootDir.absolutePath,
+                processEnv["LD_LIBRARY_PATH"]?.takeIf { existing -> existing.isNotBlank() }
+            ).joinToString(":")
+        }
     }
 
     /**

@@ -12,6 +12,10 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+val includeX86_64AbiForTests = providers.gradleProperty("includeX86_64AbiForTests")
+    .map { it.equals("true", ignoreCase = true) }
+    .getOrElse(false)
+
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 36
@@ -30,7 +34,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            abiFilters += listOf("arm64-v8a")
+            abiFilters += if (includeX86_64AbiForTests) listOf("arm64-v8a", "x86_64") else listOf("arm64-v8a")
         }
         externalNativeBuild {
             cmake {

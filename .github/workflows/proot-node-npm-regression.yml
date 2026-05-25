@@ -1,0 +1,110 @@
+name: PRoot Node/npm Regression
+
+on:
+  push:
+    branches:
+      - fix/proot-node-npm-regression
+      - feature/interactive-session
+      - main
+      - master
+    paths:
+      - 'app/src/main/assets/proot/**'
+      - 'app/src/main/assets/rootfs/**'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/**'
+      - 'app/src/androidTest/java/me/rerere/rikkahub/data/container/PRootNodeNpmRegressionTest.kt'
+      - 'app/build.gradle.kts'
+      - '.github/workflows/proot-node-npm-regression.yml'
+  pull_request:
+    paths:
+      - 'app/src/main/assets/proot/**'
+      - 'app/src/main/assets/rootfs/**'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/**'
+      - 'app/src/androidTest/java/me/rerere/rikkahub/data/container/PRootNodeNpmRegressionTest.kt'
+      - 'app/build.gradle.kts'
+      - '.github/workflows/proot-node-npm-regression.yml'
+  workflow_dispatch:
+
+jobs:
+  node-npm-regression:
+    name: Real npm workflow inside Android PRoot
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Node.js for web-ui build
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Create dummy google-services.json
+        run: |
+          cat > app/google-services.json << 'EOFGS'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "dummy-project",
+              "storage_bucket": "dummy-project.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub"
+                  }
+                },
+                "api_key": [{"current_key": "AIzaSyDummyKey000000000000000000000000"}]
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000001",
+                  "android_client_info": {
+                    "package_name": "me.rerere.rikkahub.dev.next"
+                  }
+                },
+                "api_key": [{"current_key": "AIzaSyDummyKey000000000000000000000001"}]
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOFGS
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Run Android PRoot Node/npm regression test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          ram-size: 4096M
+          heap-size: 1024M
+          disk-size: 8192M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: ./gradlew :app:connectedDebugAndroidTest -PincludeX86_64AbiForTests=true -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.container.PRootNodeNpmRegressionTest --stacktrace
+
+      - name: Upload instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proot-node-npm-instrumentation-reports
+          path: |
+            app/build/reports/androidTests/**
+            app/build/outputs/androidTest-results/**
+          retention-days: 7
