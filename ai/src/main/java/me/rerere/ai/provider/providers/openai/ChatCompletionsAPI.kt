@@ -2,8 +2,10 @@ package me.rerere.ai.provider.providers.openai
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -32,6 +34,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
+import me.rerere.ai.provider.providers.trySendStreamChunk
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -210,7 +213,7 @@ class ChatCompletionsAPI(
                             choices = choiceList,
                             usage = usage
                         )
-                        trySend(messageChunk)
+                        trySendStreamChunk(messageChunk, TAG)
                     }
             }
 
@@ -248,7 +251,7 @@ class ChatCompletionsAPI(
             println("[awaitClose] 关闭eventSource ")
             eventSource.cancel()
         }
-    }
+    }.buffer(Channel.UNLIMITED)
 
 
     private fun buildChatCompletionRequest(

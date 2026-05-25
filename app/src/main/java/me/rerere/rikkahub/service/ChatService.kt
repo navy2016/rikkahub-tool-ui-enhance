@@ -30,6 +30,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
@@ -261,6 +263,9 @@ class ChatService(
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
     private val lastStreamingSaveAt = ConcurrentHashMap<Uuid, Long>()
+    private val latestStreamingSnapshots = ConcurrentHashMap<Uuid, Conversation>()
+    private val streamingSnapshotJobs = ConcurrentHashMap<Uuid, Job>()
+    private val streamingSnapshotMutexes = ConcurrentHashMap<Uuid, Mutex>()
 
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
@@ -576,6 +581,7 @@ class ChatService(
     fun cleanup() = runCatching {
         runBlocking {
             sessions.keys.toList().forEach { conversationId ->
+                flushStreamingSnapshot(conversationId)
                 persistInterruptedToolGenerationSnapshot(
                     conversationId = conversationId,
                     error = "Tool execution was interrupted because the app was closed",
@@ -590,6 +596,10 @@ class ChatService(
         sessions.values.forEach { it.cleanup() }
         sessions.clear()
         lastStreamingSaveAt.clear()
+        latestStreamingSnapshots.clear()
+        streamingSnapshotJobs.values.forEach { it.cancel() }
+        streamingSnapshotJobs.clear()
+        streamingSnapshotMutexes.clear()
     }
 
     // ---- Session 管理 ----
@@ -1216,6 +1226,8 @@ class ChatService(
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
 
+            flushStreamingSnapshot(conversationId)
+
             // Preserve the latest streamed assistant message and any unfinished tool
             // details when generation is interrupted by a provider/process failure.
             persistInterruptedToolGenerationSnapshot(
@@ -1229,6 +1241,7 @@ class ChatService(
         }
 
         generationResult.onSuccess {
+            flushStreamingSnapshot(conversationId)
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
             calibrateTokenEstimator(
@@ -1305,21 +1318,50 @@ class ChatService(
         )
     }
 
-    private suspend fun saveStreamingSnapshotIfDue(conversationId: Uuid, conversation: Conversation) {
-        val now = System.currentTimeMillis()
-        // Persist every streamed update. This deliberately avoids the old 1.5s debounce so
-        // a just-created assistant/tool message survives immediate user cancellation or OS
-        // process death.
-        // Do not let regular streaming snapshots mutate a running tool into an interrupted
-        // result. They are also written when a ChatPage ViewModel is disposed during an
-        // in-app conversation switch; marking the tool interrupted here makes the previous
-        // conversation look cancelled even though generation is still alive in ChatService.
-        // Real app background/process-stop paths use ON_STOP/cleanup/failure handlers.
-        persistConversationSnapshot(
-            conversationId,
+    private fun saveStreamingSnapshotIfDue(conversationId: Uuid, conversation: Conversation) {
+        // Keep every latest streamed state available for process-death/user-stop recovery, but
+        // do not block stream collection on a Room write for every token. The provider callback
+        // flow is fed by OkHttp's SSE thread; if the collector is slowed by synchronous DB writes,
+        // stream chunks can be dropped before they are merged into the assistant message.
+        latestStreamingSnapshots[conversationId] =
             conversation.toPreservedGenerationSnapshot(markAssistantFinished = false)
-        )
-        lastStreamingSaveAt[conversationId] = now
+        lastStreamingSaveAt[conversationId] = System.currentTimeMillis()
+        ensureStreamingSnapshotWriter(conversationId)
+    }
+
+    private fun ensureStreamingSnapshotWriter(conversationId: Uuid) {
+        streamingSnapshotJobs.computeIfAbsent(conversationId) {
+            appScope.launch(Dispatchers.IO) {
+                try {
+                    val mutex = streamingSnapshotMutexes.computeIfAbsent(conversationId) { Mutex() }
+                    mutex.withLock {
+                        while (true) {
+                            val snapshot = latestStreamingSnapshots.remove(conversationId) ?: break
+                            persistConversationSnapshot(conversationId, snapshot)
+                        }
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    Log.e(TAG, "Failed to persist streaming snapshot", error)
+                } finally {
+                    streamingSnapshotJobs.remove(conversationId)
+                    if (latestStreamingSnapshots.containsKey(conversationId)) {
+                        ensureStreamingSnapshotWriter(conversationId)
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun flushStreamingSnapshot(conversationId: Uuid) {
+        streamingSnapshotJobs.remove(conversationId)?.join()
+        val snapshot = latestStreamingSnapshots.remove(conversationId) ?: return
+        val mutex = streamingSnapshotMutexes.computeIfAbsent(conversationId) { Mutex() }
+        mutex.withLock {
+            persistConversationSnapshot(conversationId, snapshot)
+        }
+        lastStreamingSaveAt[conversationId] = System.currentTimeMillis()
     }
 
     // ---- 检查无效消息 ----
@@ -3396,6 +3438,7 @@ class ChatService(
         // starting.
         withContext(NonCancellable) {
             job?.join()
+            flushStreamingSnapshot(conversationId)
             persistInterruptedToolGenerationSnapshot(
                 conversationId = conversationId,
                 error = "Tool execution was cancelled by user",

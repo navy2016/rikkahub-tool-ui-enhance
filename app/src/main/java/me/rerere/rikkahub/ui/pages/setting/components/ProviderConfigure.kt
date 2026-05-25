@@ -396,17 +396,6 @@ private fun ColumnScope.ProviderConfigureOpenAI(
         )
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("Send reasoning content to model", modifier = Modifier.weight(1f))
-        Checkbox(
-            checked = provider.sendReasoningContent,
-            onCheckedChange = {
-                onEdit(provider.copy(sendReasoningContent = it))
-            }
-        )
-    }
 }
 
 @Composable
@@ -461,17 +450,6 @@ private fun ColumnScope.ProviderConfigureClaude(
         )
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("Send reasoning content to model", modifier = Modifier.weight(1f))
-        Checkbox(
-            checked = provider.sendReasoningContent,
-            onCheckedChange = {
-                onEdit(provider.copy(sendReasoningContent = it))
-            }
-        )
-    }
 }
 
 @Composable
@@ -556,15 +534,4 @@ private fun ColumnScope.ProviderConfigureGoogle(
         )
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("Send reasoning content to model", modifier = Modifier.weight(1f))
-        Checkbox(
-            checked = provider.sendReasoningContent,
-            onCheckedChange = {
-                onEdit(provider.copy(sendReasoningContent = it))
-            }
-        )
-    }
 }

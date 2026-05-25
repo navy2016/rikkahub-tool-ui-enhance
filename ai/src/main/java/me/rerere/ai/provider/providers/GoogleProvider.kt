@@ -2,8 +2,10 @@ package me.rerere.ai.provider.providers
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -280,7 +282,7 @@ class GoogleProvider(
                         usage = usage
                     )
 
-                    trySend(messageChunk)
+                    trySendStreamChunk(messageChunk, TAG)
                 } catch (e: Exception) {
                     e.printStackTrace()
                     println("[onEvent] 解析错误: $data")
@@ -334,7 +336,7 @@ class GoogleProvider(
             println("[awaitClose] 关闭eventSource")
             eventSource.cancel()
         }
-    }
+    }.buffer(Channel.UNLIMITED)
 
     private fun buildCompletionRequestBody(
         messages: List<UIMessage>,

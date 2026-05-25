@@ -2,8 +2,10 @@ package me.rerere.ai.provider.providers
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -229,7 +231,7 @@ class ClaudeProvider(
                     }
                 }
 
-                trySend(messageChunk)
+                trySendStreamChunk(messageChunk, TAG)
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
@@ -265,7 +267,7 @@ class ClaudeProvider(
             Log.d(TAG, "Closing eventSource")
             eventSource.cancel()
         }
-    }
+    }.buffer(Channel.UNLIMITED)
 
     private fun buildMessageRequest(
         providerSetting: ProviderSetting.Claude,

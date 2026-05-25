@@ -1,8 +1,10 @@
 package me.rerere.ai.provider.providers.openai
 
 import android.util.Log
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
@@ -28,6 +30,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
+import me.rerere.ai.provider.providers.trySendStreamChunk
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -137,7 +140,7 @@ class ResponseAPI(
                 val json = json.parseToJsonElement(data).jsonObject
                 val chunk = parseResponseDelta(json)
                 if (chunk != null) {
-                    trySend(chunk)
+                    trySendStreamChunk(chunk, TAG)
                 }
                 if (type == "response.completed") {
                     close()
@@ -178,7 +181,7 @@ class ResponseAPI(
             println("[awaitClose] 关闭eventSource ")
             eventSource.cancel()
         }
-    }
+    }.buffer(Channel.UNLIMITED)
 
     internal fun buildRequestBody(
         providerSetting: ProviderSetting.OpenAI,
