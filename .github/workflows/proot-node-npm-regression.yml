@@ -89,18 +89,21 @@ jobs:
       - name: Run Android PRoot Node/npm regression test
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 34
           arch: x86_64
-          target: google_apis
-          profile: pixel_6
-          ram-size: 4096M
-          heap-size: 1024M
-          disk-size: 12288M
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -partition-size 8192
+          target: default
+          profile: Nexus 6
+          ram-size: 3072M
+          heap-size: 768M
+          disable-animations: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
             set -euxo pipefail
             ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PincludeX86_64AbiForTests=true --stacktrace
+            adb wait-for-device
             adb devices
+            adb shell getprop sys.boot_completed
             adb shell df -h || true
             adb shell pm trim-caches 999G || true
             adb install -r -d -g -t --no-incremental app/build/outputs/apk/debug/app-debug.apk
