@@ -95,9 +95,17 @@ jobs:
           profile: pixel_6
           ram-size: 4096M
           heap-size: 1024M
-          disk-size: 8192M
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew :app:connectedDebugAndroidTest -PincludeX86_64AbiForTests=true -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.data.container.PRootNodeNpmRegressionTest --stacktrace
+          disk-size: 12288M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -partition-size 8192
+          script: |
+            set -euxo pipefail
+            ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest -PincludeX86_64AbiForTests=true --stacktrace
+            adb devices
+            adb shell df -h || true
+            adb shell pm trim-caches 999G || true
+            adb install -r -d -g -t --no-incremental app/build/outputs/apk/debug/app-debug.apk
+            adb install -r -d -g -t --no-incremental app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w -r               -e class me.rerere.rikkahub.data.container.PRootNodeNpmRegressionTest               me.rerere.rikkahub.dev.next.debug.test/androidx.test.runner.AndroidJUnitRunner
 
       - name: Upload instrumentation reports
         if: always()
