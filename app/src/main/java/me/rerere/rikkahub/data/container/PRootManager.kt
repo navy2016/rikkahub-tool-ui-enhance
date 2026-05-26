@@ -68,7 +68,7 @@ class PRootManager(
         // PRoot runtime 版本控制 - 每次更新/替换 PRoot 二进制或随附 loader/lib 时递增。
         // 当前资产来自 Termux proot 5.1.107.72 + libtalloc 2.4.3，用于修复现代 Node/npm
         // 在 Android PRoot 环境下 stat/realpath/openat/worker-thread 不一致的问题。
-        private const val PROOT_RUNTIME_VERSION = "termux-proot-5.1.107.72-libtalloc-2.4.3-r2-origin-runpath"
+        private const val PROOT_RUNTIME_VERSION = "termux-proot-5.1.107.72-libtalloc-2.4.3-r3-seccomp-auto"
         private const val PROOT_RUNTIME_VERSION_FILE = "proot_runtime_version.txt"
     }
 
@@ -2154,7 +2154,10 @@ printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
         processEnv["PROOT_TMP_DIR"] = context.cacheDir.absolutePath
         File(prootDir, "loader").takeIf { it.exists() }?.let { processEnv["PROOT_LOADER"] = it.absolutePath }
         File(prootDir, "loader32").takeIf { it.exists() }?.let { processEnv["PROOT_LOADER_32"] = it.absolutePath }
-        processEnv["PROOT_NO_SECCOMP"] = "1"
+        // Do not force PROOT_NO_SECCOMP. On Android 15 / Linux 6.6 devices the ptrace-only
+        // fallback path can return ENOSYS for chdir/fchdir, breaking shell cd and apk scripts.
+        // Let PRoot choose its native seccomp/ptrace mode unless callers explicitly override it.
+        processEnv.remove("PROOT_NO_SECCOMP")
         processEnv["PREFIX"] = "/usr"
         processEnv["NPM_CONFIG_PREFIX"] = "/usr/local"
         processEnv["npm_config_prefix"] = "/usr/local"
