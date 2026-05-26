@@ -805,6 +805,13 @@ class PRootManager(
         File(upperDir, "usr/local/lib/node_modules").mkdirs()
         File(upperDir, "usr/lib").mkdirs()
         File(upperDir, "root").mkdirs()
+        File(upperDir, "tmp").apply {
+            mkdirs()
+            setReadable(true, false)
+            setWritable(true, false)
+            setExecutable(true, false)
+        }
+        File(upperDir, "var/cache/apk").mkdirs()
         val etcDir = File(upperDir, "etc").apply { mkdirs() }
         File(etcDir, "apk").mkdirs()
         File(etcDir, "apk/repositories").writeText(
@@ -939,10 +946,11 @@ node -e "console.log('lodash-ok', require('lodash').VERSION)"
 node --input-type=module -e "import chalk from 'chalk'; console.log(chalk.green('chalk-esm-ok'))"
 npm exec -- cowsay local > cowsay-local.txt
 grep -q local cowsay-local.txt
+export npm_config_prefix="${'$'}work/npm-global"
+export PATH="${'$'}work/npm-global/bin:${'$'}PATH"
 npm install -g --no-audit --no-fund cowsay@1.5.0
 cowsay global > cowsay-global.txt
 grep -q global cowsay-global.txt
-npm uninstall -g cowsay >/dev/null
 printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
 """)
             setExecutable(true, false)
@@ -2222,9 +2230,15 @@ printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
             add("-b")
             add("${container.upperDir}/usr/local:/usr/local")
 
-            // 绑定挂载 upper 层到 /root（用户级 pip 配置）
+            // 绑定挂载 upper 层到 /root（用户级 pip/npm 配置）
             add("-b")
             add("${container.upperDir}/root:/root")
+
+            // 绑定 writable tmp/cache；-R rootfs 下 rootfs 自带 /tmp 可能不可写。
+            add("-b")
+            add("${container.upperDir}/tmp:/tmp")
+            add("-b")
+            add("${container.upperDir}/var/cache/apk:/var/cache/apk")
 
             // 额外绑定挂载 usr/lib 以确保库文件可访问
             add("-b")
@@ -2243,6 +2257,12 @@ printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
 
             // 启用符号链接修复
             add("--link2symlink")
+
+            // PRoot 自身需要 host-side LD_LIBRARY_PATH 来加载随包 libtalloc，
+            // 但该变量绝不能泄漏给 Alpine guest，否则 apk/node 等会在错误路径解析动态库。
+            add("env")
+            add("-u")
+            add("LD_LIBRARY_PATH")
 
             // 执行的命令
             addAll(command)
