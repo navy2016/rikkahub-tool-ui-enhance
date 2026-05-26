@@ -68,7 +68,7 @@ class PRootManager(
         // PRoot runtime 版本控制 - 每次更新/替换 PRoot 二进制或随附 loader/lib 时递增。
         // 当前资产来自 Termux proot 5.1.107.72 + libtalloc 2.4.3，用于修复现代 Node/npm
         // 在 Android PRoot 环境下 stat/realpath/openat/worker-thread 不一致的问题。
-        private const val PROOT_RUNTIME_VERSION = "termux-proot-5.1.107.72-libtalloc-2.4.3-r1"
+        private const val PROOT_RUNTIME_VERSION = "termux-proot-5.1.107.72-libtalloc-2.4.3-r2-origin-runpath"
         private const val PROOT_RUNTIME_VERSION_FILE = "proot_runtime_version.txt"
     }
 
@@ -2173,14 +2173,6 @@ printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
         // path translation；长期方案依赖修复后的 PRoot runtime，而不是 LD_PRELOAD hook。
         processEnv.remove("LD_PRELOAD")
 
-        // PRoot 是动态链接的 Termux 构建，libtalloc 随 runtime 一起解压到 prootDir。
-        // 即使调用方覆盖 LD_LIBRARY_PATH，也要把 prootDir 放回最前面，保证 proot 自身可启动。
-        File(prootDir, "libtalloc.so.2").takeIf { it.exists() }?.let {
-            processEnv["LD_LIBRARY_PATH"] = listOfNotNull(
-                prootDir.absolutePath,
-                processEnv["LD_LIBRARY_PATH"]?.takeIf { existing -> existing.isNotBlank() }
-            ).joinToString(":")
-        }
     }
 
     /**
@@ -2258,13 +2250,9 @@ printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
             // 启用符号链接修复
             add("--link2symlink")
 
-            // PRoot 自身需要 host-side LD_LIBRARY_PATH 来加载随包 libtalloc，
-            // 但该变量绝不能泄漏给 Alpine guest，否则 apk/node 等会在错误路径解析动态库。
-            add("env")
-            add("-u")
-            add("LD_LIBRARY_PATH")
-
-            // 执行的命令
+            // 执行的命令。PRoot 资产已将 RUNPATH patch 为 $ORIGIN，
+            // libtalloc 由 Android linker 从 proot 同目录加载，无需 LD_LIBRARY_PATH，
+            // 因此也不会污染 Alpine guest 的 apk/node 动态链接环境。
             addAll(command)
         }
     }
