@@ -1974,13 +1974,14 @@ printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
         command: List<String>,
         env: Map<String, String> = emptyMap(),
         columns: Int = 80,
-        rows: Int = 24
+        rows: Int = 24,
+        ptyMode: PtyMode = PtyMode.COOKED
     ): NativePtyProcess = withContext(Dispatchers.IO) {
         val container = globalContainer ?: throw IllegalStateException("Global container not created")
         val prootCmd = buildProotCommand(sandboxId, command, env, container)
         val processEnv = System.getenv().toMutableMap()
         setupProcessEnvironment(processEnv, env)
-        NativePtyBridge.start(prootCmd, processEnv, columns, rows)
+        NativePtyBridge.start(prootCmd, processEnv, columns, rows, ptyMode)
             ?: throw IllegalStateException("Native PTY backend unavailable: ${NativePtyBridge.unavailableReason ?: "unknown"}")
     }
 

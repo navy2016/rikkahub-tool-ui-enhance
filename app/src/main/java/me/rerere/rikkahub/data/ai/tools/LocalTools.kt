@@ -19,6 +19,7 @@ import me.rerere.rikkahub.data.ai.subagent.SubAgentProgressManager
 import me.rerere.rikkahub.data.ai.subagent.SubAgentResult
 import me.rerere.rikkahub.data.container.ControlInput
 import me.rerere.rikkahub.data.container.NativePtyBridge
+import me.rerere.rikkahub.data.container.PtyMode
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.files.SkillManager
@@ -567,6 +568,15 @@ class LocalTools(
                             put("type", "boolean")
                             put("description", "仅 interactive=true 时有效。优先尝试通过 script 分配轻量 tty，默认 true；如只需要干净 pipe 输出可设为 false")
                         })
+                        put("ptyMode", buildJsonObject {
+                            put("type", "string")
+                            put("enum", buildJsonArray {
+                                add("auto")
+                                add("cooked")
+                                add("raw")
+                            })
+                            put("description", "仅 interactive=true 且 tty=true 时有效。auto 自动识别 Claude Code/vim/TUI 使用 raw；cooked 保持普通 shell canonical/echo；raw 原始字节透传，不转换 \r。默认 auto")
+                        })
                         put("columns", buildJsonObject {
                             put("type", "integer")
                             put("description", "interactive=true 时终端初始列数，默认 80")
@@ -589,6 +599,7 @@ class LocalTools(
                     put("command", JsonPrimitive("ls -la /workspace"))
                     put("interactive", JsonPrimitive(false))
                     put("tty", JsonPrimitive(true))
+                    put("ptyMode", JsonPrimitive("auto"))
                 }
             },
             execute = { args ->
@@ -601,6 +612,7 @@ class LocalTools(
                 val tag = args.jsonObject["tag"]?.jsonPrimitive?.contentOrNull
                 val interactive = args.jsonObject["interactive"]?.jsonPrimitive?.booleanOrNull ?: false
                 val tty = args.jsonObject["tty"]?.jsonPrimitive?.booleanOrNull ?: true
+                val ptyMode = PtyMode.fromString(args.jsonObject["ptyMode"]?.jsonPrimitive?.contentOrNull)
                 val columns = args.jsonObject["columns"]?.jsonPrimitive?.intOrNull ?: 80
                 val rows = args.jsonObject["rows"]?.jsonPrimitive?.intOrNull ?: 24
 
@@ -615,7 +627,8 @@ class LocalTools(
                         tag = tag,
                         preferTty = tty,
                         columns = columns,
-                        rows = rows
+                        rows = rows,
+                        ptyMode = ptyMode
                     )
                 } else {
                     backgroundProcessManager.startBackgroundProcess(
@@ -642,6 +655,7 @@ class LocalTools(
                     put("interactive", JsonPrimitive(result.isInteractive))
                     put("stdinEnabled", JsonPrimitive(result.stdinEnabled))
                     put("ttyEnabled", JsonPrimitive(result.ttyEnabled))
+                    put("ptyMode", JsonPrimitive(result.ptyMode))
 
                     if (result.success) {
                         put("hint", JsonPrimitive(
@@ -866,6 +880,7 @@ class LocalTools(
                     put("terminalColumns", JsonPrimitive(info.terminalColumns))
                     put("terminalRows", JsonPrimitive(info.terminalRows))
                     put("terminalBackend", JsonPrimitive(info.terminalBackend))
+                    put("ptyMode", JsonPrimitive(info.ptyMode))
                     put("processSource", JsonPrimitive(info.processSource))
                     info.exitCode?.let { put("exitCode", it) }
                 })

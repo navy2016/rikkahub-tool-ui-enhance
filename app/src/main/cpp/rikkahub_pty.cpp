@@ -20,6 +20,36 @@ extern "C" char *ptsname(int);
 #define LOG_TAG "RikkahubPty"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
+static void configureCookedPty(struct termios &tio) {
+    tio.c_iflag |= ICRNL | IXON;
+#ifdef IXANY
+    tio.c_iflag |= IXANY;
+#endif
+    tio.c_oflag |= OPOST | ONLCR;
+    tio.c_lflag |= ISIG | ICANON | ECHO;
+#ifdef ECHOE
+    tio.c_lflag |= ECHOE;
+#endif
+#ifdef ECHOK
+    tio.c_lflag |= ECHOK;
+#endif
+}
+
+static void configureRawPty(struct termios &tio) {
+    cfmakeraw(&tio);
+    // Keep terminal-generated signals working for Ctrl+C/Ctrl+Z/Ctrl+\ while
+    // leaving input bytes untouched: no ICRNL/INLCR/IGNCR, no ICANON/ECHO,
+    // no OPOST/ONLCR. This makes Enter arrive as the exact byte written by
+    // the app, which is required by Claude Code and other full-screen TUIs.
+    tio.c_lflag |= ISIG;
+#ifdef IXON
+    tio.c_iflag &= ~IXON;
+#endif
+#ifdef IXANY
+    tio.c_iflag &= ~IXANY;
+#endif
+}
+
 static std::vector<std::string> toStrings(JNIEnv *env, jobjectArray array) {
     std::vector<std::string> out;
     if (!array) return out;
@@ -49,7 +79,7 @@ static std::vector<char *> toArgv(std::vector<std::string> &strings) {
 
 extern "C" JNIEXPORT jlongArray JNICALL
 Java_me_rerere_rikkahub_data_container_NativePtyBridge_nativeStart(
-        JNIEnv *env, jobject, jobjectArray argvArray, jobjectArray envArray, jint columns, jint rows) {
+        JNIEnv *env, jobject, jobjectArray argvArray, jobjectArray envArray, jint columns, jint rows, jint ptyMode) {
     auto argvStrings = toStrings(env, argvArray);
     auto envStrings = toStrings(env, envArray);
     if (argvStrings.empty()) return nullptr;
@@ -91,18 +121,8 @@ Java_me_rerere_rikkahub_data_container_NativePtyBridge_nativeStart(
         ioctl(slaveFd, TIOCSWINSZ, &ws);
         struct termios tio{};
         if (tcgetattr(slaveFd, &tio) == 0) {
-            tio.c_iflag |= ICRNL | IXON;
-#ifdef IXANY
-            tio.c_iflag |= IXANY;
-#endif
-            tio.c_oflag |= OPOST | ONLCR;
-            tio.c_lflag |= ISIG | ICANON | ECHO;
-#ifdef ECHOE
-            tio.c_lflag |= ECHOE;
-#endif
-#ifdef ECHOK
-            tio.c_lflag |= ECHOK;
-#endif
+            if (ptyMode == 1) configureRawPty(tio);
+            else configureCookedPty(tio);
             tcsetattr(slaveFd, TCSANOW, &tio);
         }
         dup2(slaveFd, STDIN_FILENO);

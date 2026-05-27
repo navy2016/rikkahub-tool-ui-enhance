@@ -23,6 +23,7 @@ import kotlinx.serialization.Serializable
  * @property terminalColumns 终端列数
  * @property terminalRows 终端行数
  * @property terminalBackend 终端后端：pipe、script-sigwinch 或 native-pty
+ * @property ptyMode PTY 输入模式：auto、cooked 或 raw
  * @property processSource 进程来源，当前统一为 container_shell_bg
  */
 @Serializable
@@ -45,6 +46,7 @@ data class BackgroundProcessInfo(
     val terminalColumns: Int = 80,
     val terminalRows: Int = 24,
     val terminalBackend: String = "pipe",
+    val ptyMode: String = "auto",
     val processSource: String = "container_shell_bg"
 )
 
@@ -97,6 +99,7 @@ enum class ProcessStatus {
  * @property terminalColumns 终端列数
  * @property terminalRows 终端行数
  * @property terminalBackend 终端后端：pipe、script-sigwinch 或 native-pty
+ * @property ptyMode PTY 输入模式：auto、cooked 或 raw
  */
 @Serializable
 data class ProcessExecutionResult(
@@ -112,7 +115,8 @@ data class ProcessExecutionResult(
     val ttyEnabled: Boolean = false,
     val terminalColumns: Int = 80,
     val terminalRows: Int = 24,
-    val terminalBackend: String = "pipe"
+    val terminalBackend: String = "pipe",
+    val ptyMode: String = "auto"
 )
 
 /**

@@ -28,6 +28,20 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
+internal fun inferPtyMode(command: String, requested: PtyMode = PtyMode.AUTO): PtyMode {
+    if (requested != PtyMode.AUTO) return requested
+    val normalized = command.lowercase()
+    val rawRegexes = listOf(
+        Regex("(^|[\s;&|()])(?:claude|claude-code|codex|opencode|opencode-ai)([\s;&|()]|$)"),
+        Regex("(^|[\s;&|()])(?:vim|nvim|vi|nano|emacs)([\s;&|()]|$)"),
+        Regex("(^|[\s;&|()])(?:tmux|screen|ssh|less|more|top|htop|fzf)([\s;&|()]|$)"),
+        Regex("(^|[\s;&|()])(?:npx|pnpm\s+dlx|bunx|npm\s+exec)\s+[^;&|()]*?(?:claude|claude-code|codex|opencode|opencode-ai)([\s;&|()]|$)")
+    )
+    return if (rawRegexes.any { it.containsMatchIn(normalized) }) PtyMode.RAW else PtyMode.COOKED
+}
+
+internal fun ptyModeWireName(mode: PtyMode): String = mode.name.lowercase()
+
 
 internal data class InteractiveTerminalSnapshot(
     val screen: String,
@@ -1191,6 +1205,7 @@ class BackgroundProcessManager @Inject constructor(
         val process: Process,
         val ttyEnabled: Boolean,
         val nativePtyEnabled: Boolean = false,
+        val ptyMode: PtyMode = PtyMode.COOKED,
         val outputFlow: MutableSharedFlow<ByteArray>,
         val outputBuffer: SessionOutputBuffer,
         var columns: Int = 80,
@@ -1322,7 +1337,8 @@ class BackgroundProcessManager @Inject constructor(
         tag: String? = null,
         preferTty: Boolean = true,
         columns: Int = 80,
-        rows: Int = 24
+        rows: Int = 24,
+        ptyMode: PtyMode = PtyMode.AUTO
     ): ProcessExecutionResult = withContext(Dispatchers.IO) {
         try {
             val aliveInteractiveCount = interactiveSessions.values.count { it.process.isAlive }
@@ -1341,10 +1357,16 @@ class BackgroundProcessManager @Inject constructor(
             val ttyEnabled = nativePtyEnabled || scriptTtyEnabled
             val initialColumns = columns.coerceIn(20, 240)
             val initialRows = rows.coerceIn(6, 80)
+            val effectivePtyMode = if (preferTty) inferPtyMode(command, ptyMode) else PtyMode.COOKED
+            val sttyMode = if (effectivePtyMode == PtyMode.RAW) {
+                "stty raw -echo -ixon isig rows $initialRows cols $initialColumns 2>/dev/null || true; "
+            } else {
+                "stty sane rows $initialRows cols $initialColumns 2>/dev/null || stty rows $initialRows cols $initialColumns 2>/dev/null || true; "
+            }
 
             val envPrefix = "export TERM=xterm-256color LINES=$initialRows COLUMNS=$initialColumns; " +
                 "export FORCE_COLOR=1 COLORTERM=truecolor; " +
-                "stty rows $initialRows cols $initialColumns 2>/dev/null || true; "
+                sttyMode
             var actualNativePtyEnabled = nativePtyEnabled
             var actualScriptTtyEnabled = scriptTtyEnabled
             val process = if (nativePtyEnabled) {
@@ -1353,7 +1375,8 @@ class BackgroundProcessManager @Inject constructor(
                         sandboxId = sandboxId,
                         command = listOf("sh", "-lc", "$envPrefix exec $command"),
                         columns = initialColumns,
-                        rows = initialRows
+                        rows = initialRows,
+                        ptyMode = effectivePtyMode
                     )
                 } catch (e: Exception) {
                     Log.w(TAG, "Native PTY failed, falling back to script/pipe", e)
@@ -1397,6 +1420,7 @@ class BackgroundProcessManager @Inject constructor(
                 process = process,
                 ttyEnabled = actualTtyEnabled,
                 nativePtyEnabled = actualNativePtyEnabled,
+                ptyMode = if (actualTtyEnabled) effectivePtyMode else PtyMode.COOKED,
                 outputFlow = outputFlow,
                 outputBuffer = outputBuffer,
                 tag = tag,
@@ -1457,7 +1481,8 @@ class BackgroundProcessManager @Inject constructor(
                 ttyEnabled = actualTtyEnabled,
                 terminalColumns = initialColumns,
                 terminalRows = initialRows,
-                terminalBackend = if (actualNativePtyEnabled) "native-pty" else if (actualScriptTtyEnabled) "script-sigwinch" else "pipe"
+                terminalBackend = if (actualNativePtyEnabled) "native-pty" else if (actualScriptTtyEnabled) "script-sigwinch" else "pipe",
+                ptyMode = ptyModeWireName(if (actualTtyEnabled) effectivePtyMode else PtyMode.COOKED)
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error starting interactive session", e)
@@ -1510,7 +1535,8 @@ class BackgroundProcessManager @Inject constructor(
 
         try {
             val bytes = if (appendNewline) {
-                (input + "\n").toByteArray(Charsets.UTF_8)
+                val lineEnding = if (record.ttyEnabled && record.ptyMode == PtyMode.RAW) "\r" else "\n"
+                (input + lineEnding).toByteArray(Charsets.UTF_8)
             } else {
                 input.toByteArray(Charsets.UTF_8)
             }
@@ -1537,7 +1563,11 @@ class BackgroundProcessManager @Inject constructor(
             )
 
         try {
-            val bytes = controlInputBytes(control)
+            val bytes = if (control == ControlInput.ENTER && record.ttyEnabled && record.ptyMode == PtyMode.RAW) {
+                byteArrayOf('\r'.code.toByte())
+            } else {
+                controlInputBytes(control)
+            }
             record.process.outputStream.write(bytes)
             record.process.outputStream.flush()
             record.lastActivityAt = System.currentTimeMillis()
@@ -2222,6 +2252,7 @@ class BackgroundProcessManager @Inject constructor(
                 terminalColumns = record.columns,
                 terminalRows = record.rows,
                 terminalBackend = if (record.nativePtyEnabled) "native-pty" else if (record.ttyEnabled) "script-sigwinch" else "pipe",
+                ptyMode = ptyModeWireName(record.ptyMode),
                 processSource = "container_shell_bg"
             )
         }

@@ -1,5 +1,19 @@
 package me.rerere.rikkahub.data.container
 
+enum class PtyMode {
+    AUTO,
+    COOKED,
+    RAW;
+
+    companion object {
+        fun fromString(value: String?): PtyMode = when (value?.lowercase()) {
+            "raw" -> RAW
+            "cooked" -> COOKED
+            else -> AUTO
+        }
+    }
+}
+
 /** JNI-backed PTY bridge. Falls back to script(1)+SIGWINCH when the native library is unavailable. */
 object NativePtyBridge {
     private data class LoadState(
@@ -25,10 +39,10 @@ object NativePtyBridge {
         "script-sigwinch (${unavailableReason ?: "native library not bundled"})"
     }
 
-    fun start(argv: List<String>, env: Map<String, String>, columns: Int, rows: Int): NativePtyProcess? {
+    fun start(argv: List<String>, env: Map<String, String>, columns: Int, rows: Int, ptyMode: PtyMode = PtyMode.COOKED): NativePtyProcess? {
         if (!isAvailable) return null
         val envArray = env.map { (key, value) -> "$key=$value" }.toTypedArray()
-        val result = nativeStart(argv.toTypedArray(), envArray, columns, rows) ?: return null
+        val result = nativeStart(argv.toTypedArray(), envArray, columns, rows, if (ptyMode == PtyMode.RAW) 1 else 0) ?: return null
         if (result.size < 2) return null
         return NativePtyProcess(result[0].toInt(), result[1].toInt())
     }
@@ -53,7 +67,7 @@ object NativePtyBridge {
     fun close(fd: Int) = nativeClose(fd)
     fun isProcessAlive(pid: Int): Boolean = nativeKill(pid, 0) == 0
 
-    private external fun nativeStart(argv: Array<String>, env: Array<String>, columns: Int, rows: Int): LongArray?
+    private external fun nativeStart(argv: Array<String>, env: Array<String>, columns: Int, rows: Int, ptyMode: Int): LongArray?
     private external fun nativeRead(fd: Int, buffer: ByteArray, offset: Int, length: Int): Int
     private external fun nativeWrite(fd: Int, buffer: ByteArray, offset: Int, length: Int): Int
     private external fun nativeDrain(fd: Int, maxBytes: Int): ByteArray?
