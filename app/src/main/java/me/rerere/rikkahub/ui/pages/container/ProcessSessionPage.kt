@@ -829,7 +829,7 @@ private fun isTuiCommand(command: String): Boolean {
         "vim", "nvim", "vi", "nano", "emacs", "tmux", "screen",
         "less", "more", "top", "htop", "fzf"
     ).any { token ->
-        Regex("(^|[\s;&|()])" + Regex.escape(token) + "([\s;&|()]|$)").containsMatchIn(normalized)
+        Regex("""(^|[\s;&|()])""" + Regex.escape(token) + """([\s;&|()]|$)""").containsMatchIn(normalized)
     }
 }
 
