@@ -816,7 +816,7 @@ class LocalTools(
                             put("enum", buildJsonArray {
                                 ControlInput.entries.forEach { add(it.name) }
                             })
-                            put("description", "input 操作时可选的控制输入；与 data 二选一。支持 Ctrl+Space/A-Z、Ctrl+[\\]^_、Alt/Meta+Space/A-Z/0-9/常用标点、Shift+Alt/Alt+Ctrl/Shift+Alt+Ctrl printable modified controls、Tab/BackTab/Alt+Tab、方向键及 Shift/Alt/Ctrl 修饰组合、Home/End/PgUp/PgDn/Ins/Del 及常用修饰组合、Enter/Alt+Enter、Backspace/Ctrl+Backspace/Alt+Backspace、F1-F12 及 Shift/Alt/Ctrl 修饰组合；适合 vim、readline、codex、claude、opencode 等 TUI/CLI。")
+                            put("description", "input 操作时可选的控制输入；与 data 二选一；若 data 非空且 control 同时出现，应优先按 data 发送，以兼容会自动填充 enum 默认值的调用方。支持 Ctrl+Space/A-Z、Ctrl+[\\]^_、Alt/Meta+Space/A-Z/0-9/常用标点、Shift+Alt/Alt+Ctrl/Shift+Alt+Ctrl printable modified controls、Tab/BackTab/Alt+Tab、方向键及 Shift/Alt/Ctrl 修饰组合、Home/End/PgUp/PgDn/Ins/Del 及常用修饰组合、Enter/Alt+Enter、Backspace/Ctrl+Backspace/Alt+Backspace、F1-F12 及 Shift/Alt/Ctrl 修饰组合；适合 vim、readline、codex、claude、opencode 等 TUI/CLI。")
                         })
                     },
                     required = listOf("action")
@@ -1178,7 +1178,22 @@ class LocalTools(
         val appendNewline = args["appendNewline"]?.jsonPrimitive?.booleanOrNull ?: true
         val bracketedPaste = args["bracketedPaste"]?.jsonPrimitive?.booleanOrNull ?: false
 
+        // Tool-call frontends may materialize optional enum fields with their
+        // first value, e.g. control=CTRL_SPACE, even when the caller intended
+        // to send textual data. If control wins in that situation, Claude/Vim
+        // TUIs receive NUL instead of the prompt text. However, genuine control
+        // calls may also include data="" as a harmless default. Therefore:
+        // - non-empty data wins over control
+        // - control wins over empty data
+        // - empty data without control is still valid, e.g. send newline
+        val hasData = data != null
+        val hasNonEmptyData = !data.isNullOrEmpty()
         val result = when {
+            hasNonEmptyData -> {
+                val payload = if (bracketedPaste) "\u001B[200~${data.orEmpty()}\u001B[201~" else data.orEmpty()
+                backgroundProcessManager.sendInput(processId, payload, appendNewline)
+            }
+
             control != null -> {
                 val enumValue = try {
                     ControlInput.valueOf(control)
@@ -1191,8 +1206,8 @@ class LocalTools(
                 backgroundProcessManager.sendControlInput(processId, enumValue)
             }
 
-            data != null -> {
-                val payload = if (bracketedPaste) "\u001B[200~${data}\u001B[201~" else data
+            hasData -> {
+                val payload = if (bracketedPaste) "\u001B[200~${data.orEmpty()}\u001B[201~" else data.orEmpty()
                 backgroundProcessManager.sendInput(processId, payload, appendNewline)
             }
 

@@ -1,12 +1,12 @@
 package me.rerere.rikkahub.ui.pages.container
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -34,10 +35,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -54,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key as ComposeKey
 import androidx.compose.ui.input.key.KeyEvent
@@ -140,7 +140,7 @@ fun ProcessSessionPage(sandboxId: String) {
     ) { padding ->
         if (terminalFullscreen && activeInteractiveProcess != null) {
             TerminalInteractivePanel(
-                processId = activeInteractiveProcess.processId,
+                process = activeInteractiveProcess,
                 bgManager = bgManager,
                 fullscreen = true,
                 onFullscreenChange = { terminalFullscreen = it },
@@ -199,7 +199,7 @@ fun ProcessSessionPage(sandboxId: String) {
 
                     if (!terminalFullscreen && process.isInteractive && activeInteractiveId == process.processId) {
                         TerminalInteractivePanel(
-                            processId = process.processId,
+                            process = process,
                             bgManager = bgManager,
                             fullscreen = false,
                             onFullscreenChange = { terminalFullscreen = it },
@@ -442,10 +442,9 @@ private fun StatusChip(
     }
 }
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun TerminalInteractivePanel(
-    processId: String,
+    process: BackgroundProcessInfo,
     bgManager: BackgroundProcessManager,
     fullscreen: Boolean,
     onFullscreenChange: (Boolean) -> Unit,
@@ -454,6 +453,7 @@ private fun TerminalInteractivePanel(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val outputScroll = rememberScrollState()
+    val processId = process.processId
 
     val terminalEmulator = remember(processId) { TerminalEmulator(initialColumns = 80, initialRows = 24) }
     val terminalBackground = Color(0xFF101010)
@@ -471,7 +471,8 @@ private fun TerminalInteractivePanel(
     var terminalModeSummary by remember { mutableStateOf(terminalEmulator.modeSummary()) }
     var terminalStatus by remember { mutableStateOf("就绪") }
     var autoScroll by remember { mutableStateOf(true) }
-    var rawInputMode by remember { mutableStateOf(false) }
+    var rawInputMode by remember(processId) { mutableStateOf(isTuiCommand(process.command)) }
+    var showExtraKeys by remember { mutableStateOf(true) }
     var terminalColumns by remember { mutableIntStateOf(80) }
     var terminalRows by remember { mutableIntStateOf(24) }
     var terminalCellWidthPx by remember { mutableIntStateOf(7) }
@@ -678,81 +679,55 @@ private fun TerminalInteractivePanel(
         }
     }
 
-    Card(
+    Surface(
         modifier = modifier,
         shape = if (fullscreen) RoundedCornerShape(0.dp) else RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1B1B1B)
-        )
+        color = Color(0xFF101010)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .then(if (fullscreen) Modifier.statusBarsPadding() else Modifier)
-                .padding(if (fullscreen) 12.dp else 10.dp)
                 .imePadding()
                 .navigationBarsPadding()
+                .padding(if (fullscreen) 4.dp else 8.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = buildString {
-                        append("终端 · ${terminalColumns}x${terminalRows}")
-                        if (terminalModeSummary.isNotBlank()) append(" · $terminalModeSummary")
-                        if (terminalStatus.isNotBlank()) append(" · $terminalStatus")
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = terminalMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
+            TerminalStatusBar(
+                title = process.tag ?: process.command.take(28),
+                columns = terminalColumns,
+                rows = terminalRows,
+                ptyMode = process.ptyMode,
+                terminalBackend = process.terminalBackend,
+                modeSummary = terminalModeSummary,
+                status = terminalStatus,
+                rawInputMode = rawInputMode,
+                autoScroll = autoScroll,
+                showExtraKeys = showExtraKeys,
+                fullscreen = fullscreen,
+                terminalMuted = terminalMuted,
+                onRawInputModeChange = {
+                    rawInputMode = it
+                    input = ""
+                },
+                onAutoScrollChange = { autoScroll = it },
+                onShowExtraKeysChange = { showExtraKeys = it },
+                onFullscreenToggle = { onFullscreenChange(!fullscreen) },
+                onCopy = {
+                    context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
+                    terminalStatus = "已复制"
+                },
+                onPaste = { sendPastedText(context.readClipboardText()) },
+                onClear = { clearLocalTerminal() }
+            )
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { onFullscreenChange(!fullscreen) }) {
-                        Text(if (fullscreen) "退出全屏" else "全屏")
-                    }
-                    if (!fullscreen) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "自动滚动",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = terminalMuted
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Switch(
-                            checked = autoScroll,
-                            onCheckedChange = { autoScroll = it }
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "逐字输入",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = terminalMuted
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Switch(
-                            checked = rawInputMode,
-                            onCheckedChange = {
-                                rawInputMode = it
-                                input = ""
-                            }
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(if (fullscreen) 4.dp else 8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .then(if (fullscreen) Modifier.weight(1f) else Modifier.height(300.dp))
-                    .background(terminalBackground, if (fullscreen) RoundedCornerShape(0.dp) else RoundedCornerShape(8.dp))
-                    .padding(if (fullscreen) 12.dp else 10.dp)
+                    .weight(1f)
+                    .background(terminalBackground, RoundedCornerShape(if (fullscreen) 0.dp else 8.dp))
+                    .padding(horizontal = if (fullscreen) 4.dp else 6.dp, vertical = if (fullscreen) 3.dp else 5.dp)
                     .onSizeChanged { size ->
                         terminalCellWidthPx = 7
                         terminalCellHeightPx = 14
@@ -792,169 +767,309 @@ private fun TerminalInteractivePanel(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(top = if (fullscreen) 36.dp else 8.dp)
                         .verticalScroll(outputScroll)
                 ) {
                     Text(
                         text = if (terminalText.text.isEmpty()) AnnotatedString("等待输出...") else terminalText,
                         color = terminalForeground,
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        lineHeight = 14.sp
+                        fontSize = 12.sp,
+                        lineHeight = 15.sp
                     )
-                    Spacer(modifier = Modifier.height(if (fullscreen) 36.dp else 12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
 
-            if (!fullscreen) {
-                Spacer(modifier = Modifier.height(8.dp))
-
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    ControlChip("Ctrl+C") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_C) } }
-                    ControlChip("Ctrl+D") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_D) } }
-                    ControlChip("Ctrl+Z") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_Z) } }
-                    ControlChip("Ctrl+L") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_L) } }
-                    ControlChip("Ctrl+U") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_U) } }
-                    ControlChip("Ctrl+W") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_W) } }
-                    ControlChip("Tab") { scope.launch { bgManager.sendControlInput(processId, ControlInput.TAB) } }
-                    ControlChip("Shift+Tab") { scope.launch { bgManager.sendControlInput(processId, ControlInput.BACK_TAB) } }
-                    ControlChip("Esc") { scope.launch { bgManager.sendControlInput(processId, ControlInput.ESC) } }
-                    ControlChip("Enter") { scope.launch { bgManager.sendControlInput(processId, ControlInput.ENTER) } }
-                    ControlChip("Backspace") { scope.launch { bgManager.sendControlInput(processId, ControlInput.BACKSPACE) } }
-                    ControlChip("Shell↑") { sendKey(Key.UP) }
-                    ControlChip("Shell↓") { sendKey(Key.DOWN) }
-                    ControlChip("Shell←") { sendKey(Key.LEFT) }
-                    ControlChip("Shell→") { sendKey(Key.RIGHT) }
-                    ControlChip("Home") { sendKey(Key.HOME) }
-                    ControlChip("End") { sendKey(Key.END) }
-                    ControlChip("Ctrl+A") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_A) } }
-                    ControlChip("Ctrl+E") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_E) } }
-                    ControlChip("Ctrl+R") { scope.launch { bgManager.sendControlInput(processId, ControlInput.CTRL_R) } }
-                    ControlChip("PgUp") { sendKey(Key.PAGE_UP) }
-                    ControlChip("PgDn") { sendKey(Key.PAGE_DOWN) }
-                    ControlChip("Ins") { sendKey(Key.INSERT) }
-                    ControlChip("Del") { sendKey(Key.DELETE) }
-                    ControlChip("F1") { sendKey(Key.F1) }
-                    ControlChip("F2") { sendKey(Key.F2) }
-                    ControlChip("F3") { sendKey(Key.F3) }
-                    ControlChip("F4") { sendKey(Key.F4) }
-                    ControlChip("本地清屏") { clearLocalTerminal() }
-                    ControlChip("复制输出") {
+            if (showExtraKeys) {
+                Spacer(modifier = Modifier.height(4.dp))
+                TerminalExtraKeysRow(
+                    terminalMuted = terminalMuted,
+                    onControl = { control -> scope.launch { bgManager.sendControlInput(processId, control) } },
+                    onKey = { key -> sendKey(key) },
+                    onCopy = {
                         context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
-                    }
-                    ControlChip("粘贴") {
-                        sendPastedText(context.readClipboardText())
-                    }
-                    ControlChip("PTY自检") {
-                        sendCommand("tty; stty size; echo ${'$'}TERM", rememberHistory = true)
-                    }
-                    ControlChip("安装CLI") {
-                        sendCommand(installCliCommand, rememberHistory = true)
-                    }
-                    ControlChip("↑历史") { applyHistoryUp() }
-                    ControlChip("↓历史") { applyHistoryDown() }
-                }
-
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "提示：默认进入 tmux；安装失败先点/运行 rikkahub-fix-apk；TUI 使用逐字输入 + 方向键/ESC 控制。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = terminalMuted,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                        terminalStatus = "已复制"
+                    },
+                    onPaste = { sendPastedText(context.readClipboardText()) },
+                    onClear = { clearLocalTerminal() },
+                    onSelfTest = { sendCommand("tty; stty size; echo ${'$'}TERM", rememberHistory = true) },
+                    onInstallCli = { sendCommand(installCliCommand, rememberHistory = true) }
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-            OutlinedTextField(
-                value = input,
-                onValueChange = { handleInputChange(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onPreviewKeyEvent { event -> handleHardwareKey(event) },
-                singleLine = true,
-                prefix = {
-                    Text(
-                        text = "$",
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+            TerminalInputBar(
+                input = input,
+                rawInputMode = rawInputMode,
+                terminalForeground = terminalForeground,
+                terminalMuted = terminalMuted,
+                terminalBackground = terminalBackground,
+                onInputChange = { handleInputChange(it) },
+                onHistoryUp = { applyHistoryUp() },
+                onHistoryDown = { applyHistoryDown() },
+                onSubmit = {
+                    if (rawInputMode) {
+                        scope.launch { bgManager.sendControlInput(processId, ControlInput.ENTER) }
+                        input = ""
+                    } else {
+                        submitCommand()
+                    }
                 },
-                label = { Text(if (rawInputMode) "逐字输入（适合 vim/nano/TUI）" else "终端输入") },
-                placeholder = { Text(if (rawInputMode) "输入会立即发送；用 Esc/Ctrl+C/方向键按钮控制" else "例如：rikkahub-tmux 或 npm install -g @anthropic-ai/claude-code") },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(
-                    onSend = { submitCommand() }
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = terminalForeground,
-                    unfocusedTextColor = terminalForeground,
-                    disabledTextColor = terminalMuted,
-                    cursorColor = terminalForeground,
-                    focusedContainerColor = terminalBackground,
-                    unfocusedContainerColor = terminalBackground,
-                    focusedBorderColor = terminalForeground,
-                    unfocusedBorderColor = Color(0xFF455A64),
-                    focusedLabelColor = terminalForeground,
-                    unfocusedLabelColor = terminalMuted,
-                    focusedPlaceholderColor = Color(0xFF78909C),
-                    unfocusedPlaceholderColor = Color(0xFF78909C)
-                )
+                onHardwareKey = { event -> handleHardwareKey(event) }
             )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { applyHistoryUp() }) {
-                        Text("上一条")
-                    }
-                    TextButton(onClick = { applyHistoryDown() }) {
-                        Text("下一条")
-                    }
-                }
-
-                Button(
-                    onClick = {
-                        if (rawInputMode) {
-                            scope.launch { bgManager.sendControlInput(processId, ControlInput.ENTER) }
-                            input = ""
-                        } else {
-                            submitCommand()
-                        }
-                    }
-                ) {
-                    Text(if (rawInputMode) "发送 Enter" else "回车执行")
-                }
-            }
         }
     }
 }
 
+private fun isTuiCommand(command: String): Boolean {
+    val normalized = command.lowercase()
+    return listOf(
+        "claude", "claude-code", "codex", "opencode", "opencode-ai",
+        "vim", "nvim", "vi", "nano", "emacs", "tmux", "screen",
+        "less", "more", "top", "htop", "fzf"
+    ).any { token ->
+        Regex("(^|[\s;&|()])" + Regex.escape(token) + "([\s;&|()]|$)").containsMatchIn(normalized)
+    }
+}
+
 @Composable
-private fun ControlChip(
-    text: String,
+private fun TerminalStatusBar(
+    title: String,
+    columns: Int,
+    rows: Int,
+    ptyMode: String,
+    terminalBackend: String,
+    modeSummary: String,
+    status: String,
+    rawInputMode: Boolean,
+    autoScroll: Boolean,
+    showExtraKeys: Boolean,
+    fullscreen: Boolean,
+    terminalMuted: Color,
+    onRawInputModeChange: (Boolean) -> Unit,
+    onAutoScrollChange: (Boolean) -> Unit,
+    onShowExtraKeysChange: (Boolean) -> Unit,
+    onFullscreenToggle: () -> Unit,
+    onCopy: () -> Unit,
+    onPaste: () -> Unit,
+    onClear: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(36.dp)
+            .background(Color(0xFF151515), RoundedCornerShape(8.dp))
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = buildString {
+                append(title.ifBlank { "terminal" })
+                append(" · ${columns}x${rows}")
+                append(" · ${ptyMode.uppercase()}")
+                if (terminalBackend.isNotBlank()) append(" · $terminalBackend")
+                if (modeSummary.isNotBlank()) append(" · ${modeSummary.replace("BRACKETED-PASTE", "BP")}")
+                if (status.isNotBlank()) append(" · $status")
+            },
+            color = terminalMuted,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(230.dp)
+        )
+        TerminalToggleKey(if (rawInputMode) "RAW" else "LINE", rawInputMode) { onRawInputModeChange(!rawInputMode) }
+        TerminalToggleKey(if (autoScroll) "AUTO" else "LOCK", autoScroll) { onAutoScrollChange(!autoScroll) }
+        TerminalToggleKey("KEYS", showExtraKeys) { onShowExtraKeysChange(!showExtraKeys) }
+        TerminalKey("COPY", onClick = onCopy)
+        TerminalKey("PASTE", onClick = onPaste)
+        TerminalKey("CLR", onClick = onClear)
+        TerminalKey(if (fullscreen) "EXIT" else "FULL", highlight = true, onClick = onFullscreenToggle)
+    }
+}
+
+@Composable
+private fun TerminalExtraKeysRow(
+    terminalMuted: Color,
+    onControl: (ControlInput) -> Unit,
+    onKey: (Key) -> Unit,
+    onCopy: () -> Unit,
+    onPaste: () -> Unit,
+    onClear: () -> Unit,
+    onSelfTest: () -> Unit,
+    onInstallCli: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(42.dp)
+            .background(Color(0xFF171717), RoundedCornerShape(8.dp))
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 6.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text("KEYS", color = terminalMuted, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+        TerminalKey("ESC") { onControl(ControlInput.ESC) }
+        TerminalKey("TAB") { onControl(ControlInput.TAB) }
+        TerminalKey("S-TAB") { onControl(ControlInput.BACK_TAB) }
+        TerminalKey("↑") { onKey(Key.UP) }
+        TerminalKey("↓") { onKey(Key.DOWN) }
+        TerminalKey("←") { onKey(Key.LEFT) }
+        TerminalKey("→") { onKey(Key.RIGHT) }
+        TerminalKey("HOME") { onKey(Key.HOME) }
+        TerminalKey("END") { onKey(Key.END) }
+        TerminalKey("PGUP") { onKey(Key.PAGE_UP) }
+        TerminalKey("PGDN") { onKey(Key.PAGE_DOWN) }
+        TerminalKey("BKSP") { onControl(ControlInput.BACKSPACE) }
+        TerminalKey("DEL") { onKey(Key.DELETE) }
+        TerminalKey("ENTER", highlight = true) { onControl(ControlInput.ENTER) }
+        TerminalKey("C-C") { onControl(ControlInput.CTRL_C) }
+        TerminalKey("C-D") { onControl(ControlInput.CTRL_D) }
+        TerminalKey("C-Z") { onControl(ControlInput.CTRL_Z) }
+        TerminalKey("C-L") { onControl(ControlInput.CTRL_L) }
+        TerminalKey("C-U") { onControl(ControlInput.CTRL_U) }
+        TerminalKey("C-W") { onControl(ControlInput.CTRL_W) }
+        TerminalKey("C-A") { onControl(ControlInput.CTRL_A) }
+        TerminalKey("C-E") { onControl(ControlInput.CTRL_E) }
+        TerminalKey("C-R") { onControl(ControlInput.CTRL_R) }
+        TerminalKey("COPY") { onCopy() }
+        TerminalKey("PASTE") { onPaste() }
+        TerminalKey("CLEAR") { onClear() }
+        TerminalKey("TEST") { onSelfTest() }
+        TerminalKey("CLI") { onInstallCli() }
+    }
+}
+
+@Composable
+private fun TerminalToggleKey(
+    label: String,
+    selected: Boolean,
     onClick: () -> Unit
 ) {
-    FilterChip(
-        selected = false,
-        onClick = onClick,
-        label = {
-            Text(
-                text = text,
-                fontFamily = FontFamily.Monospace
-            )
-        }
-    )
+    TerminalKey(label = label, highlight = selected, onClick = onClick)
 }
+
+@Composable
+private fun TerminalKey(
+    label: String,
+    highlight: Boolean = false,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(6.dp),
+        color = if (highlight) Color(0xFF1B5E20) else Color(0xFF252525),
+        contentColor = Color(0xFFE0E0E0)
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun TerminalInputBar(
+    input: String,
+    rawInputMode: Boolean,
+    terminalForeground: Color,
+    terminalMuted: Color,
+    terminalBackground: Color,
+    onInputChange: (String) -> Unit,
+    onHistoryUp: () -> Unit,
+    onHistoryDown: () -> Unit,
+    onSubmit: () -> Unit,
+    onHardwareKey: (KeyEvent) -> Boolean
+) {
+    val promptColor = if (rawInputMode) Color(0xFFFFB74D) else Color(0xFF64B5F6)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(46.dp)
+            .background(Color(0xFF111111), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = if (rawInputMode) "»" else "$",
+            fontFamily = FontFamily.Monospace,
+            fontSize = 16.sp,
+            color = promptColor,
+            modifier = Modifier.width(16.dp),
+            textAlign = TextAlign.Center
+        )
+
+        BasicTextField(
+            value = input,
+            onValueChange = onInputChange,
+            modifier = Modifier
+                .weight(1f)
+                .height(34.dp)
+                .background(terminalBackground, RoundedCornerShape(6.dp))
+                .padding(horizontal = 8.dp, vertical = 7.dp)
+                .onPreviewKeyEvent { event -> onHardwareKey(event) },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                color = terminalForeground,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp
+            ),
+            cursorBrush = SolidColor(terminalForeground),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { onSubmit() }),
+            decorationBox = { innerTextField ->
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                    if (input.isEmpty()) {
+                        Text(
+                            text = if (rawInputMode) "逐字输入 / 粘贴后点 ↵" else "输入命令…",
+                            color = terminalMuted.copy(alpha = 0.55f),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        )
+
+        TerminalMiniButton("↑", onHistoryUp)
+        TerminalMiniButton("↓", onHistoryDown)
+        TerminalMiniButton("↵", onSubmit, highlight = true)
+    }
+}
+
+@Composable
+private fun TerminalMiniButton(
+    text: String,
+    onClick: () -> Unit,
+    highlight: Boolean = false
+) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(6.dp),
+        color = if (highlight) Color(0xFF1B5E20) else Color(0xFF252525),
+        contentColor = Color(0xFFE0E0E0)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 13.sp,
+            maxLines = 1
+        )
+    }
+}
+
 
 @Composable
 private fun CreateSessionDialog(
