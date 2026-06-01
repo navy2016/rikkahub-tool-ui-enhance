@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -23,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -117,10 +119,11 @@ fun ProcessSessionPage(sandboxId: String) {
     val activeInteractiveProcess = sandboxProcesses.firstOrNull {
         it.processId == activeInteractiveId && it.isInteractive
     }
+    val terminalFullscreenActive = terminalFullscreen && activeInteractiveProcess != null
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (!terminalFullscreenActive) TopAppBar(
                 title = {
                     Column {
                         Text(
@@ -151,16 +154,14 @@ fun ProcessSessionPage(sandboxId: String) {
             )
         }
     ) { padding ->
-        if (terminalFullscreen && activeInteractiveProcess != null) {
+        if (terminalFullscreenActive && activeInteractiveProcess != null) {
             TerminalInteractivePanel(
                 process = activeInteractiveProcess,
                 bgManager = bgManager,
                 fullscreen = true,
                 showStatusBar = showTerminalStatusBar,
                 onFullscreenChange = { terminalFullscreen = it },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
+                modifier = Modifier.fillMaxSize()
             )
         } else if (sandboxProcesses.isEmpty()) {
             EmptyState(
@@ -499,6 +500,9 @@ private fun TerminalInteractivePanel(
     var autoScroll by remember { mutableStateOf(true) }
     var rawInputMode by remember(processId) { mutableStateOf(isTuiCommand(process.command)) }
     var showExtraKeys by remember(fullscreen) { mutableStateOf(!fullscreen) }
+    var selectionMode by remember { mutableStateOf(false) }
+    var ctrlLatch by remember { mutableStateOf(false) }
+    var altLatch by remember { mutableStateOf(false) }
     var terminalColumns by remember { mutableIntStateOf(80) }
     var terminalRows by remember { mutableIntStateOf(24) }
     var terminalCellWidthPx by remember { mutableIntStateOf(7) }
@@ -563,13 +567,19 @@ private fun TerminalInteractivePanel(
         }
     }
 
+    fun clearModifierLatches() {
+        ctrlLatch = false
+        altLatch = false
+    }
+
     fun sendPastedText(text: String) {
         if (text.isEmpty()) return
         sendRaw(terminalEmulator.wrapPaste(text))
     }
 
     fun sendKey(key: Key) {
-        sendRaw(terminalEmulator.sequenceFor(key))
+        sendRaw(terminalEmulator.sequenceFor(key, alt = altLatch, ctrl = ctrlLatch))
+        clearModifierLatches()
     }
 
     fun sequenceForHardwareSpecialKey(event: KeyEvent, shift: Boolean, alt: Boolean, ctrl: Boolean): String? {
@@ -624,11 +634,12 @@ private fun TerminalInteractivePanel(
     fun handleHardwareKey(event: KeyEvent): Boolean {
         if (!rawInputMode || event.type != KeyEventType.KeyDown) return false
         val shift = event.isShiftPressed
-        val alt = event.isAltPressed
-        val ctrl = event.isCtrlPressed
+        val alt = event.isAltPressed || altLatch
+        val ctrl = event.isCtrlPressed || ctrlLatch
         val specialSequence = sequenceForHardwareSpecialKey(event, shift, alt, ctrl)
         if (specialSequence != null) {
             sendRaw(specialSequence)
+            clearModifierLatches()
             return true
         }
 
@@ -642,6 +653,7 @@ private fun TerminalInteractivePanel(
         )
         if (sequence.isEmpty()) return false
         sendRaw(sequence)
+        clearModifierLatches()
         return true
     }
 
@@ -650,16 +662,35 @@ private fun TerminalInteractivePanel(
             input = value
             return
         }
-        if (value.isEmpty()) {
-            input = ""
-            return
+        val previous = input
+        input = value
+        when {
+            value.length > previous.length && value.startsWith(previous) -> {
+                val delta = value.removePrefix(previous)
+                if (delta.isNotEmpty()) {
+                    if (delta.length > 1 || delta.contains('\n') || delta.contains('\r')) sendPastedText(delta) else {
+                        val cp = delta.codePointAt(0)
+                        sendRaw(terminalEmulator.sequenceForCodePoint(cp, alt = altLatch, ctrl = ctrlLatch).ifEmpty { delta })
+                        clearModifierLatches()
+                    }
+                }
+            }
+            previous.length > value.length && previous.startsWith(value) -> {
+                repeat(previous.length - value.length) { sendKey(Key.BACKSPACE) }
+            }
+            value != previous -> {
+                val common = previous.zip(value).takeWhile { it.first == it.second }.size
+                repeat(previous.length - common) { sendKey(Key.BACKSPACE) }
+                val delta = value.drop(common)
+                if (delta.isNotEmpty()) {
+                    if (delta.length > 1 || delta.contains('\n') || delta.contains('\r')) sendPastedText(delta) else {
+                        val cp = delta.codePointAt(0)
+                        sendRaw(terminalEmulator.sequenceForCodePoint(cp, alt = altLatch, ctrl = ctrlLatch).ifEmpty { delta })
+                        clearModifierLatches()
+                    }
+                }
+            }
         }
-        if (value.length > 1 || value.contains('\n') || value.contains('\r')) {
-            sendPastedText(value)
-        } else {
-            sendRaw(value)
-        }
-        input = ""
     }
 
     fun clearLocalTerminal() {
@@ -756,11 +787,7 @@ private fun TerminalInteractivePanel(
                         terminalEmulator.sequenceForFocus(focusState.isFocused)?.let { sequence -> sendRaw(sequence) }
                     }
                     .focusable()
-                    .pointerInteropFilter { event ->
-                        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                            inputFocusRequester.requestFocus()
-                            keyboardController?.show()
-                        }
+                    .then(if (selectionMode) Modifier else Modifier.pointerInteropFilter { event ->
                         val col = (event.x.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
                         val row = (event.y.toInt() / terminalCellHeightPx).coerceIn(0, terminalRows - 1)
                         val eventType = when (event.actionMasked) {
@@ -782,7 +809,7 @@ private fun TerminalInteractivePanel(
                             ?: return@pointerInteropFilter false
                         sendRaw(sequence)
                         true
-                    }
+                    })
             ) {
                 Column(
                     modifier = Modifier
@@ -790,12 +817,19 @@ private fun TerminalInteractivePanel(
                         .horizontalScroll(horizontalScroll)
                         .then(if (terminalEmulator.isAlternateScreen) Modifier else Modifier.verticalScroll(outputScroll))
                 ) {
-                    Text(
-                        text = if (terminalText.text.isEmpty()) AnnotatedString("等待输出...") else terminalText,
-                        style = terminalTextStyle,
-                        softWrap = false,
-                        maxLines = Int.MAX_VALUE
-                    )
+                    val terminalContent: @Composable () -> Unit = {
+                        Text(
+                            text = if (terminalText.text.isEmpty()) AnnotatedString("等待输出...") else terminalText,
+                            style = terminalTextStyle,
+                            softWrap = false,
+                            maxLines = Int.MAX_VALUE
+                        )
+                    }
+                    if (selectionMode) {
+                        SelectionContainer { terminalContent() }
+                    } else {
+                        terminalContent()
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
@@ -804,6 +838,16 @@ private fun TerminalInteractivePanel(
                 Spacer(modifier = Modifier.height(4.dp))
                 TerminalExtraKeysRow(
                     terminalMuted = terminalMuted,
+                    ctrlLatch = ctrlLatch,
+                    altLatch = altLatch,
+                    selectionMode = selectionMode,
+                    onToggleCtrl = { ctrlLatch = !ctrlLatch },
+                    onToggleAlt = { altLatch = !altLatch },
+                    onToggleSelection = { selectionMode = !selectionMode },
+                    onKeyboard = {
+                        inputFocusRequester.requestFocus()
+                        keyboardController?.show()
+                    },
                     onControl = { control -> scope.launch { bgManager.sendControlInput(processId, control) } },
                     onKey = { key -> sendKey(key) },
                     onCopy = {
@@ -877,7 +921,7 @@ private fun TerminalStatusBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(28.dp)
+            .heightIn(min = 30.dp)
             .background(Color(0xFF151515), RoundedCornerShape(6.dp))
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -900,19 +944,26 @@ private fun TerminalStatusBar(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.width(160.dp)
         )
-        TerminalToggleKey(if (rawInputMode) "RAW" else "LINE", rawInputMode) { onRawInputModeChange(!rawInputMode) }
-        TerminalToggleKey(if (autoScroll) "AUTO" else "LOCK", autoScroll) { onAutoScrollChange(!autoScroll) }
-        TerminalToggleKey("KEYS", showExtraKeys) { onShowExtraKeysChange(!showExtraKeys) }
-        TerminalKey("COPY", onClick = onCopy)
-        TerminalKey("PASTE", onClick = onPaste)
-        TerminalKey("CLR", onClick = onClear)
-        TerminalKey(if (fullscreen) "EXIT" else "FULL", highlight = true, onClick = onFullscreenToggle)
+        TerminalStatusKey(if (rawInputMode) "RAW" else "LINE", rawInputMode) { onRawInputModeChange(!rawInputMode) }
+        TerminalStatusKey(if (autoScroll) "AUTO" else "LOCK", autoScroll) { onAutoScrollChange(!autoScroll) }
+        TerminalStatusKey("KEYS", showExtraKeys) { onShowExtraKeysChange(!showExtraKeys) }
+        TerminalStatusKey("COPY", onClick = onCopy)
+        TerminalStatusKey("PASTE", onClick = onPaste)
+        TerminalStatusKey("CLR", onClick = onClear)
+        TerminalStatusKey(if (fullscreen) "EXIT" else "FULL", highlight = true, onClick = onFullscreenToggle)
     }
 }
 
 @Composable
 private fun TerminalExtraKeysRow(
     terminalMuted: Color,
+    ctrlLatch: Boolean,
+    altLatch: Boolean,
+    selectionMode: Boolean,
+    onToggleCtrl: () -> Unit,
+    onToggleAlt: () -> Unit,
+    onToggleSelection: () -> Unit,
+    onKeyboard: () -> Unit,
     onControl: (ControlInput) -> Unit,
     onKey: (Key) -> Unit,
     onCopy: () -> Unit,
@@ -932,6 +983,10 @@ private fun TerminalExtraKeysRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text("KEYS", color = terminalMuted, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+        TerminalKey("CTRL", highlight = ctrlLatch) { onToggleCtrl() }
+        TerminalKey("ALT", highlight = altLatch) { onToggleAlt() }
+        TerminalKey("SEL", highlight = selectionMode) { onToggleSelection() }
+        TerminalKey("KBD") { onKeyboard() }
         TerminalKey("ESC") { onControl(ControlInput.ESC) }
         TerminalKey("TAB") { onControl(ControlInput.TAB) }
         TerminalKey("S-TAB") { onControl(ControlInput.BACK_TAB) }
@@ -960,6 +1015,28 @@ private fun TerminalExtraKeysRow(
         TerminalKey("CLEAR") { onClear() }
         TerminalKey("TEST") { onSelfTest() }
         TerminalKey("CLI") { onInstallCli() }
+    }
+}
+
+@Composable
+private fun TerminalStatusKey(
+    label: String,
+    highlight: Boolean = false,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(5.dp),
+        color = if (highlight) Color(0xFF1B5E20) else Color(0xFF252525),
+        contentColor = Color(0xFFE0E0E0)
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 9.sp,
+            maxLines = 1
+        )
     }
 }
 
@@ -1148,7 +1225,7 @@ private fun LogsDialog(
         text = if (result.error != null) {
             "读取失败：${result.error}"
         } else {
-            result.lines.joinToString("\n")
+            sanitizeTerminalLogText(result.lines.joinToString("\n"))
         }
     }
 
@@ -1179,6 +1256,14 @@ private fun LogsDialog(
             }
         }
     )
+}
+
+private fun sanitizeTerminalLogText(raw: String): String {
+    val terminal = TerminalEmulator(initialColumns = 120, initialRows = 40)
+    terminal.feed(raw)
+    return terminal.plainText(includeScrollback = true)
+        .replace(Regex("\u001B\][^\u0007]*(\u0007|\u001B\\)"), "")
+        .replace(Regex("\u001B\[[0-?]*[ -/]*[@-~]"), "")
 }
 
 private fun formatDuration(durationMs: Long): String {

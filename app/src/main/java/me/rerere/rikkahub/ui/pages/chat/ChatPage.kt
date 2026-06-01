@@ -89,6 +89,7 @@ import kotlin.uuid.Uuid
 @Composable
 fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val vm: ChatVM = koinViewModel(
+        key = "ChatVM-$id",
         parameters = {
             parametersOf(id.toString())
         }

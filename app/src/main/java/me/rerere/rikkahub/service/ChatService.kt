@@ -582,13 +582,10 @@ class ChatService(
         runBlocking {
             sessions.keys.toList().forEach { conversationId ->
                 flushStreamingSnapshot(conversationId)
-                persistInterruptedToolGenerationSnapshot(
+                preserveGenerationSnapshot(
                     conversationId = conversationId,
-                    error = "Tool execution was interrupted because the app was closed",
-                    errorCode = "TOOL_EXECUTION_INTERRUPTED",
-                    reason = "App closed",
-                    markAssistantFinished = true,
-                    updateSessionState = true
+                    markAssistantFinished = false,
+                    force = true
                 )
             }
         }
@@ -1215,26 +1212,35 @@ class ChatService(
             }
         }
 
-        generationResult.onFailure {
-            // 取消 Live Update 通知
+        generationResult.onFailure { error ->
             cancelLiveUpdateNotification(conversationId)
 
-            it.printStackTrace()
-            addError(it, conversationId, title = context.getString(R.string.error_title_generation))
-            Logging.log(TAG, "handleMessageComplete: $it")
-            Logging.log(TAG, it.stackTraceToString())
+            error.printStackTrace()
+            addError(error, conversationId, title = context.getString(R.string.error_title_generation))
+            Logging.log(TAG, "handleMessageComplete: $error")
+            Logging.log(TAG, error.stackTraceToString())
 
             flushStreamingSnapshot(conversationId)
 
-            // Preserve the latest streamed assistant message and any unfinished tool
-            // details when generation is interrupted by a provider/process failure.
-            persistInterruptedToolGenerationSnapshot(
+            if (error is CancellationException) {
+                // Page switches, background transitions, and normal coroutine cancellation must
+                // not mutate pending tool calls into TOOL_EXECUTION_INTERRUPTED. User stop is
+                // handled explicitly by stopGeneration().
+                preserveGenerationSnapshot(
+                    conversationId = conversationId,
+                    markAssistantFinished = false,
+                    force = true
+                )
+                return@onFailure
+            }
+
+            // Preserve latest assistant text, but do not turn provider/network failures into
+            // synthetic tool-call interruption output. Pending tools should remain recoverable
+            // unless the user explicitly cancels or the process actually dies.
+            preserveGenerationSnapshot(
                 conversationId = conversationId,
-                error = "Tool execution was interrupted before completion",
-                errorCode = "TOOL_EXECUTION_INTERRUPTED",
-                reason = "Generation interrupted",
                 markAssistantFinished = true,
-                updateSessionState = true
+                force = false
             )
         }
 
