@@ -119,11 +119,9 @@ fun ProcessSessionPage(sandboxId: String) {
     val activeInteractiveProcess = sandboxProcesses.firstOrNull {
         it.processId == activeInteractiveId && it.isInteractive
     }
-    val terminalFullscreenActive = terminalFullscreen && activeInteractiveProcess != null
-
     Scaffold(
         topBar = {
-            if (!terminalFullscreenActive) TopAppBar(
+            TopAppBar(
                 title = {
                     Column {
                         Text(
@@ -154,14 +152,16 @@ fun ProcessSessionPage(sandboxId: String) {
             )
         }
     ) { padding ->
-        if (terminalFullscreenActive && activeInteractiveProcess != null) {
+        if (terminalFullscreen && activeInteractiveProcess != null) {
             TerminalInteractivePanel(
                 process = activeInteractiveProcess,
                 bgManager = bgManager,
                 fullscreen = true,
                 showStatusBar = showTerminalStatusBar,
                 onFullscreenChange = { terminalFullscreen = it },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
             )
         } else if (sandboxProcesses.isEmpty()) {
             EmptyState(
