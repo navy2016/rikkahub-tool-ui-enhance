@@ -337,14 +337,12 @@ class ChatVM(
                 )
             }
             val currentConversation = conversation.value
-            val uncompressedVisibleCount = chatService.countUncompressedVisibleMessages(currentConversation)
-            val keepRecentMessages = (uncompressedVisibleCount - normalizedCompressCount).coerceAtLeast(0)
-            chatService.compressConversation(
-                _conversationId,
-                currentConversation,
-                additionalPrompt,
-                keepRecentMessages,
-                generateMemoryLedger,
+            chatService.compressConversationByMessageCount(
+                conversationId = _conversationId,
+                conversation = currentConversation,
+                additionalPrompt = additionalPrompt,
+                compressMessageCount = normalizedCompressCount,
+                generateMemoryLedger = generateMemoryLedger,
             ).onFailure {
                 chatService.addError(it, title = context.getString(R.string.error_title_compress_conversation))
             }

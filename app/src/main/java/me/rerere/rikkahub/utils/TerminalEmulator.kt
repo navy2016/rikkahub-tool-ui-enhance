@@ -158,6 +158,7 @@ class TerminalEmulator(
     private var defaultBackground = Color(0xFF101010)
     private var cursorColor = Color(0xFF00E676)
     private var alternateScreen = false
+    val isAlternateScreen: Boolean get() = alternateScreen
     private var lineDrawing = false
     private var scrollTop = 0
     private var scrollBottom = rows - 1

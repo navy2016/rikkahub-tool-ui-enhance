@@ -949,16 +949,14 @@ class ChatService(
                 if (triggerTokens != null && nextSendPromptTokens >= triggerTokens) {
                     runCatching {
                         val compressMessageCount = settings.manualCompressKeepRecentMessages.coerceAtLeast(1)
-                        val keepRecentMessages = (countUncompressedVisibleMessages(conversation) - compressMessageCount)
-                            .coerceAtLeast(0)
-                        compressConversationInternal(
+                        compressConversationByMessageCount(
                             conversationId = conversationId,
                             conversation = conversation,
                             additionalPrompt = "",
-                            keepRecentMessages = keepRecentMessages,
-                            trigger = "auto-threshold",
+                            compressMessageCount = compressMessageCount,
                             generateMemoryLedger = true,
-                        )
+                            trigger = "auto-threshold",
+                        ).getOrThrow()
                     }.onFailure { error ->
                         addError(
                             error,
@@ -1537,6 +1535,53 @@ class ChatService(
 
     // ---- 压缩与记忆索引 ----
 
+    private fun Conversation.findCompressEndIndexForUncompressedVisibleCount(
+        compressVisibleMessageCount: Int
+    ): Int? {
+        val startIndex = (compressionState.lastCompressedMessageIndex + 1).coerceAtLeast(0)
+        if (startIndex > currentMessages.lastIndex) return null
+        var remaining = compressVisibleMessageCount.coerceAtLeast(1)
+        for (index in startIndex..currentMessages.lastIndex) {
+            if (!currentMessages[index].countsTowardKeepRecent()) continue
+            remaining--
+            if (remaining == 0) return index
+        }
+        return currentMessages
+            .mapIndexedNotNull { index, message ->
+                if (index >= startIndex && message.countsTowardKeepRecent()) index else null
+            }
+            .lastOrNull()
+    }
+
+    suspend fun compressConversationByMessageCount(
+        conversationId: Uuid,
+        conversation: Conversation,
+        additionalPrompt: String,
+        compressMessageCount: Int,
+        generateMemoryLedger: Boolean = true,
+        trigger: String = "manual",
+    ): Result<Unit> {
+        updateCompressionWorkerJob(conversationId, currentCoroutineContext()[Job])
+        return runCatching<Unit> {
+            val compressEndIndex = conversation.findCompressEndIndexForUncompressedVisibleCount(compressMessageCount)
+                ?: throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
+            compressConversationInternal(
+                conversationId = conversationId,
+                conversation = conversation,
+                additionalPrompt = additionalPrompt,
+                keepRecentMessages = countUncompressedVisibleMessages(conversation)
+                    .minus(compressMessageCount.coerceAtLeast(1))
+                    .coerceAtLeast(0),
+                trigger = trigger,
+                generateMemoryLedger = generateMemoryLedger,
+                compressEndIndexOverride = compressEndIndex,
+            )
+            Unit
+        }.also {
+            updateCompressionWorkerJob(conversationId, null)
+        }
+    }
+
     suspend fun compressConversation(
         conversationId: Uuid,
         conversation: Conversation,
@@ -1781,12 +1826,15 @@ class ChatService(
         if (startIndex > conversation.currentMessages.lastIndex) {
             throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
         }
-        val keepStartIndex = conversation.currentMessages.findKeepStartIndexForVisibleMessages(normalizedKeepRecent)
-            ?: conversation.currentMessages.size
+        val uncompressedMessages = conversation.currentMessages.drop(startIndex)
+        val keepStartRelativeIndex = uncompressedMessages.findKeepStartIndexForVisibleMessages(normalizedKeepRecent)
+            ?: uncompressedMessages.size
+        val keepStartIndex = startIndex + keepStartRelativeIndex
         val requestedCompressEndIndex = compressEndIndexOverride ?: (keepStartIndex - 1)
-        // Manual/auto compression must run as long as at least one uncompressed message exists.
-        // If the keep-recent boundary would make the selected range empty, compress one message
-        // from the uncompressed frontier instead of surfacing "No new messages...".
+        // Manual/auto compression applies keepRecentMessages only to the currently
+        // uncompressed tail. Applying it to the full currentMessages list made the
+        // custom "messages to compress" setting drift after previous compression
+        // events and often collapsed to compressing only the frontier message.
         val compressEndIndex = requestedCompressEndIndex
             .coerceAtLeast(startIndex)
             .coerceAtMost(conversation.currentMessages.lastIndex)
