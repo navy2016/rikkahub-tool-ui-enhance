@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -84,6 +85,7 @@ import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.findModelById
@@ -266,6 +268,7 @@ class ChatService(
     private val latestStreamingSnapshots = ConcurrentHashMap<Uuid, Conversation>()
     private val streamingSnapshotJobs = ConcurrentHashMap<Uuid, Job>()
     private val streamingSnapshotMutexes = ConcurrentHashMap<Uuid, Mutex>()
+    private val foregroundGenerationIds = ConcurrentHashMap.newKeySet<Uuid>()
 
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
@@ -597,6 +600,8 @@ class ChatService(
         streamingSnapshotJobs.values.forEach { it.cancel() }
         streamingSnapshotJobs.clear()
         streamingSnapshotMutexes.clear()
+        foregroundGenerationIds.clear()
+        runCatching { RikkaHubForegroundService.stopService(context) }
     }
 
     // ---- Session 管理 ----
@@ -747,7 +752,7 @@ class ChatService(
 
                 // 开始补全
                 if (answer) {
-                    handleMessageComplete(conversationId)
+                    handleMessageComplete(conversationId, autoResendUserMessage = true)
                 }
 
                 _generationDoneFlow.emit(conversationId)
@@ -887,15 +892,89 @@ class ChatService(
         session.setJob(job)
     }
 
+    private fun startGenerationForegroundGuard(conversationId: Uuid) {
+        val wasEmpty = foregroundGenerationIds.isEmpty()
+        foregroundGenerationIds.add(conversationId)
+        if (wasEmpty) {
+            runCatching { RikkaHubForegroundService.startService(context) }
+                .onFailure { Log.w(TAG, "Failed to start generation foreground service", it) }
+        }
+    }
+
+    private fun stopGenerationForegroundGuard(conversationId: Uuid) {
+        foregroundGenerationIds.remove(conversationId)
+        if (foregroundGenerationIds.isEmpty()) {
+            runCatching { RikkaHubForegroundService.stopService(context) }
+                .onFailure { Log.w(TAG, "Failed to stop generation foreground service", it) }
+        }
+    }
+
+    private fun Throwable.isRecoverableStreamAbort(): Boolean {
+        if (this is CancellationException) return false
+        val text = buildString {
+            append(this@isRecoverableStreamAbort::class.java.name)
+            append(' ')
+            append(message.orEmpty())
+            append('\n')
+            append(stackTraceToString())
+        }
+        return this is java.net.SocketException ||
+            this is java.net.SocketTimeoutException ||
+            this is java.io.EOFException ||
+            text.contains("Software caused connection abort", ignoreCase = true) ||
+            text.contains("connection abort", ignoreCase = true) ||
+            text.contains("connection reset", ignoreCase = true) ||
+            text.contains("stream was reset", ignoreCase = true) ||
+            text.contains("unexpected end of stream", ignoreCase = true) ||
+            text.contains("Http2Reader.nextFrame", ignoreCase = true)
+    }
+
+    private fun Settings.autoResendFailureMatchers(): List<String> =
+        autoResendUserMessageFailureMatchers
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toList()
+
+    private fun Throwable.matchesAutoResendFailure(settings: Settings): Boolean {
+        val matchers = settings.autoResendFailureMatchers()
+        if (matchers.isEmpty()) return false
+        val text = buildString {
+            append(message.orEmpty())
+            append('\n')
+            append(this@matchesAutoResendFailure::class.java.name)
+            append('\n')
+            append(stackTraceToString())
+        }
+        return matchers.any { matcher -> text.contains(matcher, ignoreCase = true) }
+    }
+
+    private fun Conversation.hasToolActivityFromNode(startIndex: Int): Boolean {
+        if (startIndex < 0) return true
+        return messageNodes.drop(startIndex).any { node ->
+            node.messages.any { message ->
+                message.role == MessageRole.TOOL || message.getTools().isNotEmpty()
+            }
+        }
+    }
+
     // ---- 处理消息补全 ----
 
     private suspend fun handleMessageComplete(
         conversationId: Uuid,
-        messageRange: ClosedRange<Int>? = null
+        messageRange: ClosedRange<Int>? = null,
+        autoResendUserMessage: Boolean = false,
+        autoResendAttempt: Int = 0
     ) {
         val settings = settingsStore.settingsFlow.first()
         val model = settings.getCurrentChatModel() ?: return
         var promptCharsForCalibration = 0
+        val retryBaseNodeCount = if (messageRange == null && autoResendUserMessage) {
+            getConversationFlow(conversationId).value.messageNodes.size
+        } else {
+            -1
+        }
+        startGenerationForegroundGuard(conversationId)
 
         val generationResult = runCatching {
             var conversation = getConversationFlow(conversationId).value
@@ -1213,10 +1292,10 @@ class ChatService(
         }
 
         generationResult.onFailure { error ->
+            stopGenerationForegroundGuard(conversationId)
             cancelLiveUpdateNotification(conversationId)
 
             error.printStackTrace()
-            addError(error, conversationId, title = context.getString(R.string.error_title_generation))
             Logging.log(TAG, "handleMessageComplete: $error")
             Logging.log(TAG, error.stackTraceToString())
 
@@ -1234,6 +1313,68 @@ class ChatService(
                 return@onFailure
             }
 
+            val latestConversation = getConversationFlow(conversationId).value
+            val canAutoResendUserMessage = autoResendUserMessage &&
+                messageRange == null &&
+                settings.autoResendUserMessageMaxAttempts > 0 &&
+                autoResendAttempt < settings.autoResendUserMessageMaxAttempts &&
+                error.matchesAutoResendFailure(settings) &&
+                !latestConversation.hasToolActivityFromNode(retryBaseNodeCount)
+            if (canAutoResendUserMessage) {
+                preserveGenerationSnapshot(
+                    conversationId = conversationId,
+                    markAssistantFinished = false,
+                    force = true
+                )
+                val retryConversation = getConversationFlow(conversationId).value.let { current ->
+                    if (retryBaseNodeCount in 1..current.messageNodes.size) {
+                        current.copy(
+                            messageNodes = current.messageNodes.take(retryBaseNodeCount),
+                            updateAt = Instant.now()
+                        )
+                    } else {
+                        current
+                    }
+                }
+                updateConversation(conversationId, retryConversation)
+                persistConversationSnapshot(conversationId, retryConversation)
+                val waitSeconds = settings.autoResendUserMessageIntervalSeconds.coerceAtLeast(1)
+                Logging.log(
+                    TAG,
+                    "auto resend user message: attempt ${autoResendAttempt + 1}/${settings.autoResendUserMessageMaxAttempts}, wait=${waitSeconds}s, error=${error.message}"
+                )
+                delay(waitSeconds * 1000L)
+                handleMessageComplete(
+                    conversationId = conversationId,
+                    messageRange = null,
+                    autoResendUserMessage = true,
+                    autoResendAttempt = autoResendAttempt + 1
+                )
+                return@onFailure
+            }
+
+            if (error.isRecoverableStreamAbort()) {
+                // Android/Doze/NAT/proxy may abort a long SSE/HTTP2 socket while the app is in the
+                // background. Keep the partial assistant/tool state recoverable instead of marking
+                // the message as finished or converting pending tools into interruption output.
+                preserveGenerationSnapshot(
+                    conversationId = conversationId,
+                    markAssistantFinished = false,
+                    force = true
+                )
+                addError(
+                    IllegalStateException(
+                        "Network stream was interrupted while the app was backgrounded; partial output was preserved. You can continue or retry generation.",
+                        error
+                    ),
+                    conversationId,
+                    title = context.getString(R.string.error_title_generation)
+                )
+                return@onFailure
+            }
+
+            addError(error, conversationId, title = context.getString(R.string.error_title_generation))
+
             // Preserve latest assistant text, but do not turn provider/network failures into
             // synthetic tool-call interruption output. Pending tools should remain recoverable
             // unless the user explicitly cancels or the process actually dies.
@@ -1245,6 +1386,7 @@ class ChatService(
         }
 
         generationResult.onSuccess {
+            stopGenerationForegroundGuard(conversationId)
             flushStreamingSnapshot(conversationId)
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)

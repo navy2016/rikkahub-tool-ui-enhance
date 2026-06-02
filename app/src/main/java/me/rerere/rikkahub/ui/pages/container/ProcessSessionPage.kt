@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,6 +52,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -71,6 +74,7 @@ import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -97,6 +101,7 @@ import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.compose.koinInject
 import android.view.MotionEvent
+import kotlin.math.roundToInt
 import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -501,12 +506,17 @@ private fun TerminalInteractivePanel(
     var rawInputMode by remember(processId) { mutableStateOf(isTuiCommand(process.command)) }
     var showExtraKeys by remember(fullscreen) { mutableStateOf(!fullscreen) }
     var selectionMode by remember { mutableStateOf(false) }
+    var terminalPanMode by remember(processId) { mutableStateOf(rawInputMode) }
     var ctrlLatch by remember { mutableStateOf(false) }
     var altLatch by remember { mutableStateOf(false) }
     var terminalColumns by remember { mutableIntStateOf(80) }
     var terminalRows by remember { mutableIntStateOf(24) }
+    var pendingTerminalRows by remember { mutableIntStateOf(24) }
     var terminalCellWidthPx by remember { mutableIntStateOf(7) }
     var terminalCellHeightPx by remember { mutableIntStateOf(14) }
+    val density = LocalDensity.current
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
+    val terminalBottomRevealPadding = if (showExtraKeys) 104.dp else 56.dp
 
     LaunchedEffect(processId) {
         terminalEmulator.reset()
@@ -699,6 +709,24 @@ private fun TerminalInteractivePanel(
         terminalModeSummary = terminalEmulator.modeSummary()
     }
 
+    LaunchedEffect(rawInputMode) {
+        if (rawInputMode) {
+            showExtraKeys = false
+            terminalPanMode = true
+        } else {
+            terminalPanMode = false
+        }
+    }
+
+    LaunchedEffect(pendingTerminalRows, imeVisible) {
+        // Avoid resizing PTY on every IME animation frame. TUI apps redraw aggressively on SIGWINCH;
+        // debounce while the keyboard is visible, then apply one stable row update.
+        if (imeVisible) kotlinx.coroutines.delay(300)
+        if (pendingTerminalRows != terminalRows) {
+            terminalRows = pendingTerminalRows
+        }
+    }
+
     LaunchedEffect(processId, terminalColumns, terminalRows) {
         terminalEmulator.resize(terminalColumns, terminalRows)
         terminalText = terminalEmulator.render()
@@ -719,8 +747,22 @@ private fun TerminalInteractivePanel(
             }
             terminalText = terminalEmulator.render()
             terminalModeSummary = terminalEmulator.modeSummary()
-            if (autoScroll) {
-                outputScroll.scrollTo(outputScroll.maxValue)
+            if (!terminalEmulator.isAlternateScreen) {
+                withFrameNanos { }
+                val shouldScroll = shouldAutoScrollTerminalOutput(
+                    terminal = terminalEmulator,
+                    viewportRows = terminalRows,
+                    scrollMaxValue = outputScroll.maxValue,
+                    cellHeightPx = terminalCellHeightPx
+                )
+                if (autoScroll && shouldScroll) {
+                    outputScroll.scrollTo(outputScroll.maxValue)
+                } else if (!shouldScroll && outputScroll.value != 0) {
+                    // A terminal screen always renders its full row grid, so a short output can
+                    // still have a non-zero Compose scroll range because of blank rows. Keep short
+                    // sessions pinned to the top instead of hiding the first meaningful lines.
+                    outputScroll.scrollTo(0)
+                }
             }
         }
     }
@@ -749,6 +791,7 @@ private fun TerminalInteractivePanel(
                     rawInputMode = rawInputMode,
                     autoScroll = autoScroll,
                     showExtraKeys = showExtraKeys,
+                    terminalPanMode = terminalPanMode,
                     fullscreen = fullscreen,
                     terminalMuted = terminalMuted,
                     onRawInputModeChange = {
@@ -757,6 +800,7 @@ private fun TerminalInteractivePanel(
                     },
                     onAutoScrollChange = { autoScroll = it },
                     onShowExtraKeysChange = { showExtraKeys = it },
+                    onTerminalPanModeChange = { terminalPanMode = it },
                     onFullscreenToggle = { onFullscreenChange(!fullscreen) },
                     onCopy = {
                         context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
@@ -776,18 +820,22 @@ private fun TerminalInteractivePanel(
                     .padding(horizontal = if (fullscreen) 4.dp else 6.dp, vertical = if (fullscreen) 3.dp else 5.dp)
                     .onSizeChanged { size ->
                         val measuredCell = textMeasurer.measure("W", style = terminalTextStyle)
+                        val measuredLineHeight = with(density) { terminalTextStyle.lineHeight.toPx() }
+                            .roundToInt()
+                            .coerceAtLeast(measuredCell.size.height)
+                            .coerceAtLeast(1)
                         terminalCellWidthPx = measuredCell.size.width.coerceAtLeast(1)
-                        terminalCellHeightPx = measuredCell.size.height.coerceAtLeast(1)
+                        terminalCellHeightPx = measuredLineHeight
                         val cols = (size.width / terminalCellWidthPx).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
                         val rows = (size.height / terminalCellHeightPx).coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
                         if (cols != terminalColumns) terminalColumns = cols
-                        if (rows != terminalRows) terminalRows = rows
+                        if (rows != pendingTerminalRows) pendingTerminalRows = rows
                     }
                     .onFocusChanged { focusState ->
                         terminalEmulator.sequenceForFocus(focusState.isFocused)?.let { sequence -> sendRaw(sequence) }
                     }
                     .focusable()
-                    .then(if (selectionMode) Modifier else Modifier.pointerInteropFilter { event ->
+                    .then(if (selectionMode || terminalPanMode) Modifier else Modifier.pointerInteropFilter { event ->
                         val col = (event.x.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
                         val row = (event.y.toInt() / terminalCellHeightPx).coerceIn(0, terminalRows - 1)
                         val eventType = when (event.actionMasked) {
@@ -815,7 +863,10 @@ private fun TerminalInteractivePanel(
                     modifier = Modifier
                         .fillMaxSize()
                         .horizontalScroll(horizontalScroll)
-                        .then(if (terminalEmulator.isAlternateScreen) Modifier else Modifier.verticalScroll(outputScroll))
+                        // Keep a tiny manual viewport pan available even for alternate-screen TUI
+                        // apps (vim/nano/claude). The bottom spacer below creates scroll range so
+                        // users can reveal lines otherwise hidden by KEYS/input/IME controls.
+                        .verticalScroll(outputScroll)
                 ) {
                     val terminalContent: @Composable () -> Unit = {
                         Text(
@@ -830,7 +881,11 @@ private fun TerminalInteractivePanel(
                     } else {
                         terminalContent()
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(
+                        modifier = Modifier.height(
+                            if (terminalEmulator.isAlternateScreen) terminalBottomRevealPadding else 8.dp
+                        )
+                    )
                 }
             }
 
@@ -885,6 +940,31 @@ private fun TerminalInteractivePanel(
     }
 }
 
+private fun shouldAutoScrollTerminalOutput(
+    terminal: TerminalEmulator,
+    viewportRows: Int,
+    scrollMaxValue: Int,
+    cellHeightPx: Int
+): Boolean {
+    if (scrollMaxValue <= cellHeightPx * 2) return false
+    val lines = terminal.plainText(includeScrollback = true).lines()
+    val nonBlankRows = lines.mapIndexedNotNull { index, line ->
+        if (line.isNotBlank()) index else null
+    }
+    val first = nonBlankRows.firstOrNull() ?: return false
+    val last = nonBlankRows.lastOrNull() ?: return false
+    val meaningfulHeight = last - first + 1
+    val meaningfulRows = nonBlankRows.size
+    val safeViewportRows = (viewportRows - 1).coerceAtLeast(TerminalEmulator.MIN_ROWS)
+
+    // Do not autoscroll for a few prompts/lines followed by terminal blank rows. Scroll only when
+    // real content is taller than the visible terminal or when the last non-blank row is close to
+    // the bottom of a long rendered buffer/scrollback.
+    return meaningfulHeight > safeViewportRows ||
+        meaningfulRows > safeViewportRows ||
+        last >= safeViewportRows + 1
+}
+
 private fun isTuiCommand(command: String): Boolean {
     val normalized = command.lowercase()
     return listOf(
@@ -908,11 +988,13 @@ private fun TerminalStatusBar(
     rawInputMode: Boolean,
     autoScroll: Boolean,
     showExtraKeys: Boolean,
+    terminalPanMode: Boolean,
     fullscreen: Boolean,
     terminalMuted: Color,
     onRawInputModeChange: (Boolean) -> Unit,
     onAutoScrollChange: (Boolean) -> Unit,
     onShowExtraKeysChange: (Boolean) -> Unit,
+    onTerminalPanModeChange: (Boolean) -> Unit,
     onFullscreenToggle: () -> Unit,
     onCopy: () -> Unit,
     onPaste: () -> Unit,
@@ -947,6 +1029,7 @@ private fun TerminalStatusBar(
         TerminalStatusKey(if (rawInputMode) "RAW" else "LINE", rawInputMode) { onRawInputModeChange(!rawInputMode) }
         TerminalStatusKey(if (autoScroll) "AUTO" else "LOCK", autoScroll) { onAutoScrollChange(!autoScroll) }
         TerminalStatusKey("KEYS", showExtraKeys) { onShowExtraKeysChange(!showExtraKeys) }
+        TerminalStatusKey("PAN", terminalPanMode) { onTerminalPanModeChange(!terminalPanMode) }
         TerminalStatusKey("COPY", onClick = onCopy)
         TerminalStatusKey("PASTE", onClick = onPaste)
         TerminalStatusKey("CLR", onClick = onClear)
