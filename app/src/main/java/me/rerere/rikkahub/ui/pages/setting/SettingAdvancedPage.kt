@@ -16,6 +16,7 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -54,6 +55,9 @@ private const val DEFAULT_CONTAINER_PIP_LIST_TIMEOUT_SECONDS = 30
 private const val DEFAULT_SUBAGENT_TIMEOUT_SECONDS = 0
 private const val DEFAULT_MAX_GENERATION_STEPS = 256
 private const val DEFAULT_MAX_SUBAGENT_STEPS = 50
+private const val DEFAULT_AUTO_RESEND_INTERVAL_SECONDS = 10
+private const val DEFAULT_AUTO_RESEND_MAX_ATTEMPTS = 0
+private const val DEFAULT_TOOL_CALL_DELAY_SECONDS = 0
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,6 +118,135 @@ fun SettingAdvancedPage() {
                                     onSave = { value ->
                                         scope.launch {
                                             settingsStore.update { s -> s.copy(containerCustomHosts = value) }
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                    CardGroup(
+                        title = { Text("消息失败自动重发") },
+                    ) {
+                        item(
+                            headlineContent = {
+                                SaveOnBlurNumberField(
+                                    label = "重发次数",
+                                    description = "默认 0（关闭）。仅用户发送消息后的助手生成失败会触发；如果失败发生在助手调用工具之后，不会自动重发，避免重复执行工具。",
+                                    value = settings.autoResendUserMessageMaxAttempts,
+                                    suffix = "次",
+                                    minValue = 0,
+                                    defaultValue = DEFAULT_AUTO_RESEND_MAX_ATTEMPTS,
+                                    onSave = { value ->
+                                        scope.launch {
+                                            settingsStore.update { s -> s.copy(autoResendUserMessageMaxAttempts = value) }
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                        item(
+                            headlineContent = {
+                                SaveOnBlurNumberField(
+                                    label = "重发间隔",
+                                    description = "默认 10 秒。每次匹配到失败通知内容后，等待此时间再重新生成本次用户消息。",
+                                    value = settings.autoResendUserMessageIntervalSeconds,
+                                    suffix = "s",
+                                    minValue = 1,
+                                    defaultValue = DEFAULT_AUTO_RESEND_INTERVAL_SECONDS,
+                                    onSave = { value ->
+                                        scope.launch {
+                                            settingsStore.update { s -> s.copy(autoResendUserMessageIntervalSeconds = value) }
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                        item(
+                            headlineContent = {
+                                SaveOnBlurTextField(
+                                    label = "触发重发的失败通知内容",
+                                    description = "每行一个匹配片段，大小写不敏感。只有生成失败的错误内容包含其中任一片段时才自动重发。留空则不会触发。示例：rate limit、timeout、Software caused connection abort。",
+                                    value = settings.autoResendUserMessageFailureMatchers,
+                                    placeholder = "rate limit\ntimeout\nSoftware caused connection abort\nupstream error",
+                                    minLines = 4,
+                                    maxLines = 8,
+                                    onSave = { value ->
+                                        scope.launch {
+                                            settingsStore.update { s -> s.copy(autoResendUserMessageFailureMatchers = value) }
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                        item(
+                            headlineContent = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text("工具后失败自动继续", style = MaterialTheme.typography.bodyLarge)
+                                        Text(
+                                            text = "助手已开始调用工具后生成失败时，不重发原消息；保留现有助手/工具结果，并自动追加一条继续消息。",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                    }
+                                    Switch(
+                                        checked = settings.autoContinueAfterToolFailureEnabled,
+                                        onCheckedChange = { enabled ->
+                                            scope.launch {
+                                                settingsStore.update { s -> s.copy(autoContinueAfterToolFailureEnabled = enabled) }
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        )
+                        item(
+                            headlineContent = {
+                                SaveOnBlurTextField(
+                                    label = "工具后失败继续消息",
+                                    description = "默认“继续”。仅在“工具后失败自动继续”开启且错误内容命中上方匹配片段时使用；会跳过下一次工作流自动继续，避免重复发送。",
+                                    value = settings.autoContinueAfterToolFailureMessage,
+                                    placeholder = "继续",
+                                    minLines = 1,
+                                    maxLines = 3,
+                                    onSave = { value ->
+                                        scope.launch {
+                                            settingsStore.update { s -> s.copy(autoContinueAfterToolFailureMessage = value.ifBlank { "继续" }) }
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                    CardGroup(
+                        title = { Text("工具调用节流") },
+                    ) {
+                        item(
+                            headlineContent = {
+                                SaveOnBlurNumberField(
+                                    label = "每次工具调用前延迟",
+                                    description = "默认 0 秒（关闭）。助手连续调用工具时，在每个工具真正执行前等待指定秒数，用于缓解远程服务并发/频率限制。",
+                                    value = settings.toolCallDelaySeconds,
+                                    suffix = "s",
+                                    minValue = 0,
+                                    defaultValue = DEFAULT_TOOL_CALL_DELAY_SECONDS,
+                                    onSave = { value ->
+                                        scope.launch {
+                                            settingsStore.update { s -> s.copy(toolCallDelaySeconds = value) }
                                         }
                                     }
                                 )
@@ -343,6 +476,8 @@ private fun SaveOnBlurTextField(
     description: String,
     value: String,
     placeholder: String,
+    minLines: Int = 4,
+    maxLines: Int = 10,
     onSave: (String) -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
@@ -374,8 +509,8 @@ private fun SaveOnBlurTextField(
         OutlinedTextField(
             value = textValue,
             onValueChange = { textValue = it },
-            minLines = 4,
-            maxLines = 10,
+            minLines = minLines,
+            maxLines = maxLines,
             placeholder = { Text(placeholder) },
             keyboardOptions = KeyboardOptions(
                 imeAction = ImeAction.Default

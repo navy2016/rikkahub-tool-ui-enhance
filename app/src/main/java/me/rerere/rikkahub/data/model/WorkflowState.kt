@@ -39,6 +39,7 @@ data class MemoryChunk(
  * @param autoContinueMaxCount 自动继续的最大次数，达到后停止自动继续 (1-50)
  * @param autoContinueDelayMs 触发后到真正发送"继续"的延迟时间（毫秒）
  * @param autoContinueCount 当前已执行的自动继续次数（用于追踪限制）
+ * @param suppressNextAutoContinue 跳过下一次工作流自动继续；用于服务端失败后自动补发继续，避免重复发送
  * @param todos TODO 列表
  * @param compactMemory 已废弃
  * @param keepRecentMessages 已废弃
@@ -50,6 +51,7 @@ data class WorkflowState(
     val autoContinueMaxCount: Int = 10,
     val autoContinueDelayMs: Long = 1000L,
     val autoContinueCount: Int = 0,
+    val suppressNextAutoContinue: Boolean = false,
     val todos: List<TodoItem> = emptyList(),
     @Deprecated("已不再使用，保留字段用于向后兼容")
     val compactMemory: MemoryChunk? = null,

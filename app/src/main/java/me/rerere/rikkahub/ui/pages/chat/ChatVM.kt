@@ -583,6 +583,13 @@ class ChatVM(
         }
     }
 
+    fun updateWorkflowState(workflowState: me.rerere.rikkahub.data.model.WorkflowState?) {
+        viewModelScope.launch {
+            val currentConversation = conversation.value
+            chatService.saveConversation(_conversationId, currentConversation.copy(workflowState = workflowState))
+        }
+    }
+
     fun updateWorkflowPhase(phase: me.rerere.rikkahub.data.model.WorkflowPhase?) {
         viewModelScope.launch {
             val currentConversation = conversation.value

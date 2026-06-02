@@ -226,8 +226,11 @@ val dataSourceModule = module {
             .build()
         OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.MINUTES)
+            // Streaming/SSE generations can stay idle while the provider is thinking or while the
+            // app is backgrounded. Keep reads unbounded and rely on HTTP/2 pings for liveness.
+            .readTimeout(0, TimeUnit.MILLISECONDS)
             .writeTimeout(120, TimeUnit.SECONDS)
+            .pingInterval(20, TimeUnit.SECONDS)
             .followSslRedirects(true)
             .followRedirects(true)
             .retryOnConnectionFailure(true)

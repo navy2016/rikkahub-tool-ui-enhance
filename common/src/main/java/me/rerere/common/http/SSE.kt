@@ -73,9 +73,10 @@ fun OkHttpClient.sseFlow(request: Request): Flow<SseEvent> {
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                // 连接发生错误时触发
+                // 连接发生错误时触发。不要用 throwable 关闭 channel：Failure 已经作为事件发出，
+                // 若再 channel.close(t)，上层 collector 会直接以异常结束，无法按网络软中断处理。
                 trySend(SseEvent.Failure(t, response))
-                channel.close(t) // 以异常关闭 Flow 通道
+                channel.close()
             }
         }
 

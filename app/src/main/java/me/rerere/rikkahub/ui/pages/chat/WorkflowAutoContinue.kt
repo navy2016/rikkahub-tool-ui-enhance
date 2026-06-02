@@ -43,6 +43,10 @@ fun WorkflowAutoContinue(
             // 检查 autoContinue 是否开启
             val workflowState = currentConversation.workflowState
             if (workflowState?.autoContinue != true) return@collect
+            if (workflowState.suppressNextAutoContinue) {
+                vm.updateWorkflowState(workflowState.copy(suppressNextAutoContinue = false))
+                return@collect
+            }
 
             // 等待正在运行的任务结束
             while (currentLoadingJob?.isActive == true) {
@@ -57,13 +61,11 @@ fun WorkflowAutoContinue(
             val lastMessage = currentConversation.currentMessages.lastOrNull()
             if (lastMessage == null || lastMessage.role != MessageRole.ASSISTANT) return@collect
 
-            // 检查是否有 pending tool
-            val hasPendingTool = currentConversation.currentMessages.any { message ->
-                message.parts.any { part ->
-                    part is UIMessagePart.Tool && part.isPending
-                }
+            // 检查是否有未完成 tool；pending 只是其中一种，Approved/Auto 但尚未执行也必须阻止自动继续
+            val hasUnfinishedTool = currentConversation.currentMessages.any { message ->
+                message.getTools().any { tool -> !tool.isExecuted }
             }
-            if (hasPendingTool) return@collect
+            if (hasUnfinishedTool) return@collect
 
             // 【关键修复】重新获取最新的 conversation 状态
             val latestWorkflowState = vm.conversation.value.workflowState

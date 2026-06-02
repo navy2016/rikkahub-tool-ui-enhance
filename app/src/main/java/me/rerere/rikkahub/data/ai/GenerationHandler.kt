@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -281,6 +282,11 @@ class GenerationHandler(
                                 toolDef.defaultParameters()
                             } else {
                                 json.parseToJsonElement(parsedArgs)
+                            }
+                            val delaySeconds = settings.toolCallDelaySeconds.coerceAtLeast(0)
+                            if (delaySeconds > 0) {
+                                Log.i(TAG, "generateText: delaying tool ${toolDef.name} for ${delaySeconds}s")
+                                delay(delaySeconds * 1000L)
                             }
                             Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
                             val result = toolDef.execute(args)
