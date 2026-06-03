@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -24,6 +25,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.container.ContainerStateEnum
 import me.rerere.rikkahub.data.container.PRootManager
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.utils.writeClipboardText
 
 /**
  * 容器管理弹窗（底部展开）
@@ -44,6 +46,7 @@ fun ContainerManagerSheet(
 ) {
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val settings = LocalSettings.current
 
     // 监听容器状态
@@ -211,6 +214,7 @@ fun ContainerManagerSheet(
                         runningUtility = runningUtility,
                         utilityOutput = utilityOutput,
                         onRunUtility = { script, timeout -> runUtility(script, timeout) },
+                        onCopyOutput = { context.writeClipboardText(utilityOutput) },
                         onClearOutput = { utilityOutput = "" }
                     )
                 }
@@ -348,6 +352,8 @@ private data class ContainerUtilityAction(
 
 private val ContainerUtilityActions = listOf(
     ContainerUtilityAction("rikkahub-fix-apk", "修复 apk/网络", "刷新 DNS、apk 源和包索引", 60),
+    ContainerUtilityAction("rikkahub-install-cli", "安装 CLI/TUI", "Claude Code / Codex / OpenCode 与常用终端工具", 360),
+    ContainerUtilityAction("rikkahub-node-help", "Node/npm 说明", "npm、native addon、watch、dev server 指南", 30),
     ContainerUtilityAction("rikkahub-install-node-build-tools", "安装 native 构建工具", "python3/make/g++/headers，用于 node-gyp", 240),
     ContainerUtilityAction("rikkahub-enable-polling", "启用文件监听兼容", "为 Vite/Webpack/TS 写入 polling 环境变量", 30),
     ContainerUtilityAction("rikkahub-disable-polling", "关闭文件监听兼容", "移除 polling profile", 30),
@@ -357,6 +363,7 @@ private val ContainerUtilityActions = listOf(
     ContainerUtilityAction("rikkahub-test-service", "测试长期服务", "启动临时 HTTP 服务并本地访问", 60),
     ContainerUtilityAction("rikkahub-service-help", "长期服务说明", "npm/vite/uvicorn/http.server 运行模板", 30),
     ContainerUtilityAction("rikkahub-install-browser-tools", "安装浏览器工具", "可选 Chromium/headless 依赖，体积较大", 360),
+    ContainerUtilityAction("rikkahub-browser-help", "浏览器自动化说明", "本地 Chromium 与远程 Browserless 建议", 30),
     ContainerUtilityAction("rikkahub-test-browser", "测试浏览器", "headless Chromium smoke test", 120),
     ContainerUtilityAction("rikkahub-doctor", "一键诊断", "汇总 apk/node/build/native/watch/service/browser 状态", 360),
 )
@@ -366,6 +373,7 @@ private fun UtilitySection(
     runningUtility: String?,
     utilityOutput: String,
     onRunUtility: (String, Int) -> Unit,
+    onCopyOutput: () -> Unit,
     onClearOutput: () -> Unit,
 ) {
     Column {
@@ -404,11 +412,14 @@ private fun UtilitySection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("输出", style = MaterialTheme.typography.labelMedium)
-                        TextButton(onClick = onClearOutput) { Text("清空") }
+                        Row {
+                            TextButton(onClick = onCopyOutput) { Text("复制") }
+                            TextButton(onClick = onClearOutput) { Text("清空") }
+                        }
                     }
                     Text(
                         text = utilityOutput.takeLast(6000),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

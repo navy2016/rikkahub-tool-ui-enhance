@@ -1369,6 +1369,7 @@ private fun CreateSessionDialog(
         "opencode",
         "rikkahub-fix-apk",
         "rikkahub-install-cli",
+        "rikkahub-node-help",
         "rikkahub-install-node-build-tools",
         "rikkahub-enable-polling",
         "rikkahub-disable-polling",
@@ -1380,6 +1381,7 @@ private fun CreateSessionDialog(
         "rikkahub-run-service 3000 npm run dev",
         "rikkahub-run-service 18080 python3 -m http.server 18080 --bind 127.0.0.1",
         "rikkahub-install-browser-tools",
+        "rikkahub-browser-help",
         "rikkahub-test-browser",
         "rikkahub-doctor",
         "tty; stty size; echo ${'$'}TERM"

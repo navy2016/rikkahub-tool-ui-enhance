@@ -648,6 +648,7 @@ class PRootManager(
         val allowedScripts = setOf(
             "rikkahub-fix-apk",
             "rikkahub-install-cli",
+            "rikkahub-node-help",
             "rikkahub-install-node-build-tools",
             "rikkahub-enable-polling",
             "rikkahub-disable-polling",
@@ -658,6 +659,7 @@ class PRootManager(
             "rikkahub-service-help",
             "rikkahub-run-service",
             "rikkahub-install-browser-tools",
+            "rikkahub-browser-help",
             "rikkahub-test-browser",
             "rikkahub-doctor",
         )
@@ -945,6 +947,39 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 """)
             setExecutable(true, false)
         }
+        File(binDir, "rikkahub-node-help").apply {
+            writeText("""#!/bin/sh
+cat <<'EOF'
+== RikkaHub Node/npm helper ==
+
+Common setup:
+  rikkahub-fix-apk
+  apk add --no-cache nodejs npm
+
+CLI/TUI setup:
+  rikkahub-install-cli
+
+Native addon / node-gyp setup:
+  rikkahub-install-node-build-tools
+  rikkahub-test-node-native
+
+File watch compatibility for Vite/Webpack/Nodemon/TypeScript:
+  rikkahub-enable-polling
+  # restart shell/session
+  rikkahub-test-watch
+
+Regression tests:
+  rikkahub-test-node-npm
+  rikkahub-doctor
+
+Notes:
+  - Pure JS npm packages and CLI packages are the best-supported path.
+  - Native addon packages depend on musl/Alpine/Android PRoot compatibility.
+  - For dev servers, prefer HOST=127.0.0.1 and use rikkahub-run-service.
+EOF
+""")
+            setExecutable(true, false)
+        }
         File(binDir, "rikkahub-install-node-build-tools").apply {
             writeText("""#!/bin/sh
 set -eu
@@ -1114,6 +1149,39 @@ printf '%s\n' "Starting service on http://${'$'}HOST:${'$'}PORT"
 printf '%s\n' "Command: ${'$'}*"
 printf '%s\n' "Tip: use Ctrl+C to stop; use rikkahub-enable-polling for Vite/Webpack/Nodemon watch issues."
 exec "${'$'}@"
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-browser-help").apply {
+            writeText("""#!/bin/sh
+cat <<'EOF'
+== RikkaHub browser automation helper ==
+
+Local Chromium is optional and heavy:
+  rikkahub-install-browser-tools
+  rikkahub-test-browser
+
+Puppeteer example:
+  export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+  node your-script.js
+
+Recommended launch args for local Chromium:
+  --no-sandbox
+  --disable-setuid-sandbox
+  --disable-dev-shm-usage
+  --disable-gpu
+  --no-zygote
+
+Playwright notes:
+  export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+  Use system Chromium when possible.
+
+Most reliable option:
+  Use a remote Browserless/Chrome endpoint and set BROWSER_WS_ENDPOINT.
+
+Local browser automation may fail on Android/PRoot due to sandbox, shm,
+fonts, seccomp, namespace, or musl/glibc differences.
+EOF
 """)
             setExecutable(true, false)
         }
