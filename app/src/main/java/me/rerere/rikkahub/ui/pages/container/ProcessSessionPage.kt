@@ -1377,6 +1377,8 @@ private fun CreateSessionDialog(
         "rikkahub-test-node-native",
         "rikkahub-test-watch",
         "rikkahub-test-service",
+        "rikkahub-test-port 3000",
+        "rikkahub-service-env 3000",
         "rikkahub-service-help",
         "rikkahub-run-service 3000 npm run dev",
         "rikkahub-run-service 18080 python3 -m http.server 18080 --bind 127.0.0.1",

@@ -361,6 +361,7 @@ private val ContainerUtilityActions = listOf(
     ContainerUtilityAction("rikkahub-test-node-native", "测试 native addon", "编译最小 N-API addon，验证 node-gyp", 360),
     ContainerUtilityAction("rikkahub-test-watch", "测试文件监听", "检测 fs.watch 是否可用", 60),
     ContainerUtilityAction("rikkahub-test-service", "测试长期服务", "启动临时 HTTP 服务并本地访问", 60),
+    ContainerUtilityAction("rikkahub-service-env", "服务环境变量", "输出 HOST/PORT/watch polling 环境模板", 30),
     ContainerUtilityAction("rikkahub-service-help", "长期服务说明", "npm/vite/uvicorn/http.server 运行模板", 30),
     ContainerUtilityAction("rikkahub-install-browser-tools", "安装浏览器工具", "可选 Chromium/headless 依赖，体积较大", 360),
     ContainerUtilityAction("rikkahub-browser-help", "浏览器自动化说明", "本地 Chromium 与远程 Browserless 建议", 30),

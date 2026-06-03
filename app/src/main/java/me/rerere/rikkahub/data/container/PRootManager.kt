@@ -656,6 +656,8 @@ class PRootManager(
             "rikkahub-test-node-native",
             "rikkahub-test-watch",
             "rikkahub-test-service",
+            "rikkahub-test-port",
+            "rikkahub-service-env",
             "rikkahub-service-help",
             "rikkahub-run-service",
             "rikkahub-install-browser-tools",
@@ -844,6 +846,7 @@ class PRootManager(
                     "export NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=10000\n" +
                     "export NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=60000\n" +
                     "export npm_config_python=/usr/bin/python3\n" +
+                    "export npm_config_nodedir=/usr\n" +
                     "export NO_UPDATE_NOTIFIER=1\n" +
                     "export PIP_DISABLE_PIP_VERSION_CHECK=1\n"
             )
@@ -886,7 +889,8 @@ class PRootManager(
                 "fetch-retries=3\n" +
                 "fetch-retry-mintimeout=10000\n" +
                 "fetch-retry-maxtimeout=60000\n" +
-                "python=/usr/bin/python3\n"
+                "python=/usr/bin/python3\n" +
+                "nodedir=/usr\n"
         )
         writeContainerUtilityScripts(upperDir)
     }
@@ -943,6 +947,7 @@ npm config set fetch-retries 3
 npm config set fetch-retry-mintimeout 10000
 npm config set fetch-retry-maxtimeout 60000
 npm config set python /usr/bin/python3 || true
+npm config set nodedir /usr || true
 npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 """)
             setExecutable(true, false)
@@ -987,6 +992,7 @@ rikkahub-fix-apk || true
 apk add --no-cache python3 py3-pip make g++ gcc pkgconf libc-dev linux-headers libstdc++ openssl-dev zlib-dev sqlite-dev
 apk add --no-cache nodejs-dev 2>/dev/null || true
 npm config set python /usr/bin/python3 2>/dev/null || true
+npm config set nodedir /usr 2>/dev/null || true
 npm config set progress false 2>/dev/null || true
 printf '%s\n' 'RIKKAHUB_NODE_BUILD_TOOLS_OK'
 """)
@@ -1023,6 +1029,8 @@ set -eu
 printf '%s\n' '== RikkaHub Node native addon smoke test =='
 rikkahub-install-node-build-tools
 command -v node >/dev/null 2>&1 || apk add --no-cache nodejs npm
+export npm_config_nodedir=/usr
+export npm_config_python=/usr/bin/python3
 work="${'$'}{TMPDIR:-/tmp}/rikkahub-native-addon.${'$'}${'$'}"
 mkdir -p "${'$'}work"
 trap 'rm -rf "${'$'}work"' EXIT
@@ -1102,6 +1110,47 @@ printf '%s\n' 'RIKKAHUB_SERVICE_TEST_OK'
 """)
             setExecutable(true, false)
         }
+        File(binDir, "rikkahub-test-port").apply {
+            writeText("""#!/bin/sh
+set -eu
+port="${'$'}{1:-}"
+case "${'$'}port" in
+  *[!0-9]*|'') echo 'Usage: rikkahub-test-port <port>' >&2; exit 64 ;;
+esac
+host="${'$'}{2:-127.0.0.1}"
+node - "${'$'}host" "${'$'}port" <<'NODE'
+const net = require('node:net');
+const host = process.argv[2];
+const port = Number(process.argv[3]);
+const socket = net.createConnection({ host, port, timeout: 3000 });
+socket.on('connect', () => { console.log(`RIKKAHUB_PORT_OPEN ${host}:${port}`); socket.destroy(); });
+socket.on('timeout', () => { console.error(`RIKKAHUB_PORT_TIMEOUT ${host}:${port}`); socket.destroy(); process.exit(2); });
+socket.on('error', err => { console.error(`RIKKAHUB_PORT_CLOSED ${host}:${port} ${err.code || err.message}`); process.exit(1); });
+NODE
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-service-env").apply {
+            writeText("""#!/bin/sh
+set -eu
+port="${'$'}{1:-3000}"
+case "${'$'}port" in
+  *[!0-9]*|'') echo 'Usage: rikkahub-service-env [port]' >&2; exit 64 ;;
+esac
+cat <<EOF
+export HOST=127.0.0.1
+export PORT=${'$'}port
+export CHOKIDAR_USEPOLLING=${'$'}{CHOKIDAR_USEPOLLING:-1}
+export CHOKIDAR_INTERVAL=${'$'}{CHOKIDAR_INTERVAL:-1000}
+export WATCHPACK_POLLING=${'$'}{WATCHPACK_POLLING:-true}
+export WATCHPACK_POLLING_INTERVAL=${'$'}{WATCHPACK_POLLING_INTERVAL:-1000}
+export VITE_USE_POLLING=${'$'}{VITE_USE_POLLING:-true}
+EOF
+printf '%s\n' "Run: eval \$(rikkahub-service-env ${'$'}port)"
+printf '%s\n' "Then start your dev server, or use: rikkahub-run-service ${'$'}port <command...>"
+""")
+            setExecutable(true, false)
+        }
         File(binDir, "rikkahub-service-help").apply {
             writeText("""#!/bin/sh
 cat <<'EOF'
@@ -1111,12 +1160,17 @@ Recommended pattern:
   rikkahub-run-service <port> <command...>
 
 Examples:
+  rikkahub-service-env 3000
   rikkahub-run-service 3000 npm run dev
   rikkahub-run-service 5173 npm run dev -- --host 127.0.0.1
   rikkahub-run-service 18080 python3 -m http.server 18080 --bind 127.0.0.1
   rikkahub-run-service 8000 uvicorn app:app --host 127.0.0.1 --port 8000
 
-What it does:
+Useful checks:
+  rikkahub-test-service
+  rikkahub-test-port 3000
+
+What rikkahub-run-service does:
   - Sets HOST=127.0.0.1 unless already set
   - Sets PORT=<port>
   - Prints the local URL before exec
@@ -1225,6 +1279,7 @@ printf '%s\n' '== node/npm =='
 node --version 2>/dev/null || echo 'node missing'
 npm --version 2>/dev/null || echo 'npm missing'
 npx --version 2>/dev/null || echo 'npx missing'
+npm config get nodedir 2>/dev/null | sed 's/^/npm_nodedir=/' || true
 printf '%s\n' '== build tools =='
 python3 --version 2>/dev/null || echo 'python3 missing'
 make --version 2>/dev/null | head -1 || echo 'make missing'
