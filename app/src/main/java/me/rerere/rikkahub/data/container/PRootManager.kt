@@ -655,6 +655,8 @@ class PRootManager(
             "rikkahub-test-node-native",
             "rikkahub-test-watch",
             "rikkahub-test-service",
+            "rikkahub-service-help",
+            "rikkahub-run-service",
             "rikkahub-install-browser-tools",
             "rikkahub-test-browser",
             "rikkahub-doctor",
@@ -1062,6 +1064,56 @@ else
 fi
 [ "${'$'}out" = ok ] || { echo "unexpected response: ${'$'}out" >&2; exit 2; }
 printf '%s\n' 'RIKKAHUB_SERVICE_TEST_OK'
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-service-help").apply {
+            writeText("""#!/bin/sh
+cat <<'EOF'
+== RikkaHub long-running service helper ==
+
+Recommended pattern:
+  rikkahub-run-service <port> <command...>
+
+Examples:
+  rikkahub-run-service 3000 npm run dev
+  rikkahub-run-service 5173 npm run dev -- --host 127.0.0.1
+  rikkahub-run-service 18080 python3 -m http.server 18080 --bind 127.0.0.1
+  rikkahub-run-service 8000 uvicorn app:app --host 127.0.0.1 --port 8000
+
+What it does:
+  - Sets HOST=127.0.0.1 unless already set
+  - Sets PORT=<port>
+  - Prints the local URL before exec
+  - Keeps the process attached to the interactive terminal for logs/control
+
+For file-watch based dev servers, run first:
+  rikkahub-enable-polling
+  # restart the shell/session
+
+For background persistence, keep the interactive session/process alive in RikkaHub.
+EOF
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-run-service").apply {
+            writeText("""#!/bin/sh
+set -eu
+if [ "${'$'}#" -lt 2 ]; then
+  rikkahub-service-help
+  exit 64
+fi
+port="${'$'}1"
+shift
+case "${'$'}port" in
+  *[!0-9]*|'') echo "Invalid port: ${'$'}port" >&2; exit 65 ;;
+esac
+export HOST="${'$'}{HOST:-127.0.0.1}"
+export PORT="${'$'}port"
+printf '%s\n' "Starting service on http://${'$'}HOST:${'$'}PORT"
+printf '%s\n' "Command: ${'$'}*"
+printf '%s\n' "Tip: use Ctrl+C to stop; use rikkahub-enable-polling for Vite/Webpack/Nodemon watch issues."
+exec "${'$'}@"
 """)
             setExecutable(true, false)
         }
