@@ -1373,8 +1373,10 @@ private fun CreateSessionDialog(
         "rikkahub-enable-polling",
         "rikkahub-disable-polling",
         "rikkahub-test-node-npm",
+        "rikkahub-test-node-native",
         "rikkahub-test-watch",
         "rikkahub-test-service",
+        "rikkahub-install-browser-tools",
         "rikkahub-test-browser",
         "rikkahub-doctor",
         "tty; stty size; echo ${'$'}TERM"

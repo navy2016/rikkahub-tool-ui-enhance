@@ -652,6 +652,7 @@ class PRootManager(
             "rikkahub-enable-polling",
             "rikkahub-disable-polling",
             "rikkahub-test-node-npm",
+            "rikkahub-test-node-native",
             "rikkahub-test-watch",
             "rikkahub-test-service",
             "rikkahub-install-browser-tools",
@@ -947,6 +948,7 @@ npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
 set -eu
 rikkahub-fix-apk || true
 apk add --no-cache python3 py3-pip make g++ gcc pkgconf libc-dev linux-headers libstdc++ openssl-dev zlib-dev sqlite-dev
+apk add --no-cache nodejs-dev 2>/dev/null || true
 npm config set python /usr/bin/python3 2>/dev/null || true
 npm config set progress false 2>/dev/null || true
 printf '%s\n' 'RIKKAHUB_NODE_BUILD_TOOLS_OK'
@@ -975,6 +977,43 @@ printf '%s\n' 'Polling watch mode enabled. Restart the shell/session to apply.'
 set -eu
 rm -f /etc/profile.d/rikkahub-polling.sh
 printf '%s\n' 'Polling watch mode disabled. Restart the shell/session to apply.'
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-test-node-native").apply {
+            writeText("""#!/bin/sh
+set -eu
+printf '%s\n' '== RikkaHub Node native addon smoke test =='
+rikkahub-install-node-build-tools
+command -v node >/dev/null 2>&1 || apk add --no-cache nodejs npm
+work="${'$'}{TMPDIR:-/tmp}/rikkahub-native-addon.${'$'}${'$'}"
+mkdir -p "${'$'}work"
+trap 'rm -rf "${'$'}work"' EXIT
+cd "${'$'}work"
+cat > package.json <<'EOF'
+{"name":"rikkahub-native-addon-test","version":"1.0.0","private":true,"gypfile":true,"scripts":{"install":"node-gyp rebuild"},"devDependencies":{"node-gyp":"^10.2.0"}}
+EOF
+cat > binding.gyp <<'EOF'
+{"targets":[{"target_name":"hello","sources":["hello.c"]}]}
+EOF
+cat > hello.c <<'EOF'
+#include <node_api.h>
+
+static napi_value Hello(napi_env env, napi_callback_info info) {
+  napi_value result;
+  napi_create_string_utf8(env, "native-ok", NAPI_AUTO_LENGTH, &result);
+  return result;
+}
+
+NAPI_MODULE_INIT() {
+  napi_value fn;
+  napi_create_function(env, "hello", NAPI_AUTO_LENGTH, Hello, NULL, &fn);
+  napi_set_named_property(env, exports, "hello", fn);
+  return exports;
+}
+EOF
+npm install --no-audit --no-fund
+node -e "const addon=require('./build/Release/hello.node'); if(addon.hello()!=='native-ok') process.exit(2); console.log('RIKKAHUB_NODE_NATIVE_ADDON_OK')"
 """)
             setExecutable(true, false)
         }
@@ -1070,6 +1109,8 @@ printf '%s\n' '== build tools =='
 python3 --version 2>/dev/null || echo 'python3 missing'
 make --version 2>/dev/null | head -1 || echo 'make missing'
 g++ --version 2>/dev/null | head -1 || echo 'g++ missing'
+printf '%s\n' '== native addon =='
+rikkahub-test-node-native || echo 'native addon smoke failed; check node-gyp/musl package compatibility'
 printf '%s\n' '== watch =='
 rikkahub-test-watch || echo 'watch native failed; run rikkahub-enable-polling'
 printf '%s\n' '== service =='

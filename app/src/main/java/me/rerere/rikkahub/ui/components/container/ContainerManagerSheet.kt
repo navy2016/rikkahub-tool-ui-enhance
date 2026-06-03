@@ -352,9 +352,12 @@ private val ContainerUtilityActions = listOf(
     ContainerUtilityAction("rikkahub-enable-polling", "启用文件监听兼容", "为 Vite/Webpack/TS 写入 polling 环境变量", 30),
     ContainerUtilityAction("rikkahub-disable-polling", "关闭文件监听兼容", "移除 polling profile", 30),
     ContainerUtilityAction("rikkahub-test-node-npm", "测试 Node/npm", "npm install/exec/global/worker 回归", 240),
+    ContainerUtilityAction("rikkahub-test-node-native", "测试 native addon", "编译最小 N-API addon，验证 node-gyp", 360),
     ContainerUtilityAction("rikkahub-test-watch", "测试文件监听", "检测 fs.watch 是否可用", 60),
     ContainerUtilityAction("rikkahub-test-service", "测试长期服务", "启动临时 HTTP 服务并本地访问", 60),
-    ContainerUtilityAction("rikkahub-doctor", "一键诊断", "汇总 apk/node/build/watch/service/browser 状态", 240),
+    ContainerUtilityAction("rikkahub-install-browser-tools", "安装浏览器工具", "可选 Chromium/headless 依赖，体积较大", 360),
+    ContainerUtilityAction("rikkahub-test-browser", "测试浏览器", "headless Chromium smoke test", 120),
+    ContainerUtilityAction("rikkahub-doctor", "一键诊断", "汇总 apk/node/build/native/watch/service/browser 状态", 360),
 )
 
 @Composable
