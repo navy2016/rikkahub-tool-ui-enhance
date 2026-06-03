@@ -639,6 +639,48 @@ class PRootManager(
     }
 
     /**
+     * Run a built-in container maintenance/diagnostic utility script.
+     */
+    suspend fun runUtilityScript(
+        scriptName: String,
+        timeoutSeconds: Int = 120,
+    ): ExecutionResult = withContext(Dispatchers.IO) {
+        val allowedScripts = setOf(
+            "rikkahub-fix-apk",
+            "rikkahub-install-cli",
+            "rikkahub-install-node-build-tools",
+            "rikkahub-enable-polling",
+            "rikkahub-disable-polling",
+            "rikkahub-test-node-npm",
+            "rikkahub-test-watch",
+            "rikkahub-test-service",
+            "rikkahub-install-browser-tools",
+            "rikkahub-test-browser",
+            "rikkahub-doctor",
+        )
+        if (scriptName !in allowedScripts) {
+            return@withContext ExecutionResult(
+                exitCode = -2,
+                stdout = "",
+                stderr = "Unsupported utility script: $scriptName",
+            )
+        }
+        if (_containerState.value != ContainerStateEnum.Running) {
+            return@withContext ExecutionResult(
+                exitCode = -3,
+                stdout = "",
+                stderr = "Container is not running",
+            )
+        }
+        execInContainer(
+            sandboxId = "system",
+            command = listOf("sh", "-lc", scriptName),
+            env = getToolEnvironment(),
+            timeoutMs = timeoutSeconds.coerceAtLeast(5) * 1000L,
+        )
+    }
+
+    /**
      * 获取已安装的包列表（用于统计展示）
      */
     suspend fun getInstalledPackages(timeoutSeconds: Int = 30): List<String> = withContext(Dispatchers.IO) {

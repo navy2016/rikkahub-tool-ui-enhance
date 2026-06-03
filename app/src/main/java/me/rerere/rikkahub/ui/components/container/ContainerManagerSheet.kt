@@ -52,6 +52,37 @@ fun ContainerManagerSheet(
     // 统计信息（仅 Running/Stopped 状态显示）
     var installedPackages by remember { mutableStateOf<List<String>>(emptyList()) }
     var containerSize by remember { mutableStateOf(0L) }
+    var runningUtility by remember { mutableStateOf<String?>(null) }
+    var utilityOutput by remember { mutableStateOf("") }
+
+    fun runUtility(script: String, timeoutSeconds: Int = 120) {
+        if (runningUtility != null) return
+        scope.launch {
+            runningUtility = script
+            utilityOutput = "Running $script ..."
+            val result = runCatching { prootManager.runUtilityScript(script, timeoutSeconds) }
+            utilityOutput = result.fold(
+                onSuccess = { execution ->
+                    buildString {
+                        appendLine("$script exit=${execution.exitCode}")
+                        if (execution.stdout.isNotBlank()) {
+                            appendLine()
+                            appendLine(execution.stdout.trimEnd())
+                        }
+                        if (execution.stderr.isNotBlank()) {
+                            appendLine()
+                            appendLine("[stderr]")
+                            appendLine(execution.stderr.trimEnd())
+                        }
+                    }.trimEnd()
+                },
+                onFailure = { error ->
+                    "${script} failed: ${error.message ?: error::class.java.simpleName}"
+                }
+            )
+            runningUtility = null
+        }
+    }
 
     // 销毁确认弹窗
     var showDestroyConfirm by remember { mutableStateOf(false) }
@@ -171,6 +202,16 @@ fun ContainerManagerSheet(
                     StatsSection(
                         packages = installedPackages,
                         size = containerSize
+                    )
+                }
+
+                if (containerState is ContainerStateEnum.Running) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    UtilitySection(
+                        runningUtility = runningUtility,
+                        utilityOutput = utilityOutput,
+                        onRunUtility = { script, timeout -> runUtility(script, timeout) },
+                        onClearOutput = { utilityOutput = "" }
                     )
                 }
 
@@ -295,6 +336,120 @@ private fun StatusDisplay(state: ContainerStateEnum) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+private data class ContainerUtilityAction(
+    val script: String,
+    val label: String,
+    val description: String,
+    val timeoutSeconds: Int = 120,
+)
+
+private val ContainerUtilityActions = listOf(
+    ContainerUtilityAction("rikkahub-fix-apk", "修复 apk/网络", "刷新 DNS、apk 源和包索引", 60),
+    ContainerUtilityAction("rikkahub-install-node-build-tools", "安装 native 构建工具", "python3/make/g++/headers，用于 node-gyp", 240),
+    ContainerUtilityAction("rikkahub-enable-polling", "启用文件监听兼容", "为 Vite/Webpack/TS 写入 polling 环境变量", 30),
+    ContainerUtilityAction("rikkahub-disable-polling", "关闭文件监听兼容", "移除 polling profile", 30),
+    ContainerUtilityAction("rikkahub-test-node-npm", "测试 Node/npm", "npm install/exec/global/worker 回归", 240),
+    ContainerUtilityAction("rikkahub-test-watch", "测试文件监听", "检测 fs.watch 是否可用", 60),
+    ContainerUtilityAction("rikkahub-test-service", "测试长期服务", "启动临时 HTTP 服务并本地访问", 60),
+    ContainerUtilityAction("rikkahub-doctor", "一键诊断", "汇总 apk/node/build/watch/service/browser 状态", 240),
+)
+
+@Composable
+private fun UtilitySection(
+    runningUtility: String?,
+    utilityOutput: String,
+    onRunUtility: (String, Int) -> Unit,
+    onClearOutput: () -> Unit,
+) {
+    Column {
+        Text(
+            text = "容器诊断与修复",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 220.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(ContainerUtilityActions) { action ->
+                UtilityActionRow(
+                    action = action,
+                    running = runningUtility == action.script,
+                    enabled = runningUtility == null,
+                    onClick = { onRunUtility(action.script, action.timeoutSeconds) }
+                )
+            }
+        }
+        if (utilityOutput.isNotBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("输出", style = MaterialTheme.typography.labelMedium)
+                        TextButton(onClick = onClearOutput) { Text("清空") }
+                    }
+                    Text(
+                        text = utilityOutput.takeLast(6000),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UtilityActionRow(
+    action: ContainerUtilityAction,
+    running: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (running) 0.8f else 0.35f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(action.label, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    action.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (running) {
+                CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+            } else {
+                Text("运行", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            }
+        }
     }
 }
 
