@@ -791,6 +791,12 @@ class PRootManager(
                     "export NPM_CONFIG_CACHE=/tmp/npm-cache\n" +
                     "export NPM_CONFIG_AUDIT=false\n" +
                     "export NPM_CONFIG_FUND=false\n" +
+                    "export NPM_CONFIG_UPDATE_NOTIFIER=false\n" +
+                    "export NPM_CONFIG_PROGRESS=false\n" +
+                    "export NPM_CONFIG_FETCH_RETRIES=3\n" +
+                    "export NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=10000\n" +
+                    "export NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=60000\n" +
+                    "export npm_config_python=/usr/bin/python3\n" +
                     "export NO_UPDATE_NOTIFIER=1\n" +
                     "export PIP_DISABLE_PIP_VERSION_CHECK=1\n"
             )
@@ -824,7 +830,16 @@ class PRootManager(
                 "options timeout:2 attempts:2\n"
         )
         File(upperDir, "root/.npmrc").writeText(
-            "prefix=/usr/local\ncache=/tmp/npm-cache\naudit=false\nfund=false\nupdate-notifier=false\n"
+            "prefix=/usr/local\n" +
+                "cache=/tmp/npm-cache\n" +
+                "audit=false\n" +
+                "fund=false\n" +
+                "update-notifier=false\n" +
+                "progress=false\n" +
+                "fetch-retries=3\n" +
+                "fetch-retry-mintimeout=10000\n" +
+                "fetch-retry-maxtimeout=60000\n" +
+                "python=/usr/bin/python3\n"
         )
         writeContainerUtilityScripts(upperDir)
     }
@@ -869,13 +884,157 @@ exec sh -l
 set -u
 rikkahub-fix-apk || exit ${'$'}?
 apk add --no-cache bash ca-certificates curl git openssh-client vim nano util-linux nodejs npm tmux || exit ${'$'}?
+rikkahub-install-node-build-tools || true
 command -v update-ca-certificates >/dev/null 2>&1 && update-ca-certificates || true
 npm config set prefix /usr/local
 npm config set cache /tmp/npm-cache
 npm config set audit false
 npm config set fund false
 npm config set update-notifier false
+npm config set progress false
+npm config set fetch-retries 3
+npm config set fetch-retry-mintimeout 10000
+npm config set fetch-retry-maxtimeout 60000
+npm config set python /usr/bin/python3 || true
 npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-install-node-build-tools").apply {
+            writeText("""#!/bin/sh
+set -eu
+rikkahub-fix-apk || true
+apk add --no-cache python3 py3-pip make g++ gcc pkgconf libc-dev linux-headers libstdc++ openssl-dev zlib-dev sqlite-dev
+npm config set python /usr/bin/python3 2>/dev/null || true
+npm config set progress false 2>/dev/null || true
+printf '%s\n' 'RIKKAHUB_NODE_BUILD_TOOLS_OK'
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-enable-polling").apply {
+            writeText("""#!/bin/sh
+set -eu
+mkdir -p /etc/profile.d
+cat > /etc/profile.d/rikkahub-polling.sh <<'EOF'
+export CHOKIDAR_USEPOLLING=1
+export CHOKIDAR_INTERVAL=1000
+export WATCHPACK_POLLING=true
+export WATCHPACK_POLLING_INTERVAL=1000
+export VITE_USE_POLLING=true
+export TSC_WATCHFILE=DynamicPriorityPolling
+export TSC_WATCHDIRECTORY=DynamicPriorityPolling
+EOF
+printf '%s\n' 'Polling watch mode enabled. Restart the shell/session to apply.'
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-disable-polling").apply {
+            writeText("""#!/bin/sh
+set -eu
+rm -f /etc/profile.d/rikkahub-polling.sh
+printf '%s\n' 'Polling watch mode disabled. Restart the shell/session to apply.'
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-test-watch").apply {
+            writeText("""#!/bin/sh
+set -eu
+command -v node >/dev/null 2>&1 || { echo 'node not found; run apk add nodejs npm' >&2; exit 10; }
+node <<'NODE'
+const fs = require('node:fs');
+const file = '/tmp/rikkahub-watch-test-' + process.pid + '.txt';
+fs.writeFileSync(file, 'a');
+let done = false;
+const watcher = fs.watch(file, () => {
+  if (done) return;
+  done = true;
+  watcher.close();
+  fs.unlinkSync(file);
+  console.log('RIKKAHUB_WATCH_NATIVE_OK');
+  process.exit(0);
+});
+setTimeout(() => fs.writeFileSync(file, 'b'), 500);
+setTimeout(() => {
+  if (!done) {
+    try { watcher.close(); fs.unlinkSync(file); } catch (_) {}
+    console.error('fs.watch did not fire. Run rikkahub-enable-polling and restart the session.');
+    process.exit(2);
+  }
+}, 3000);
+NODE
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-test-service").apply {
+            writeText("""#!/bin/sh
+set -eu
+command -v node >/dev/null 2>&1 || { echo 'node not found; run apk add nodejs npm' >&2; exit 10; }
+port="${'$'}{1:-18081}"
+node -e "require('http').createServer((q,r)=>r.end('ok')).listen(Number(process.argv[1]),'127.0.0.1')" "${'$'}port" &
+pid="${'$'}!"
+trap 'kill "${'$'}pid" 2>/dev/null || true' EXIT
+sleep 1
+if command -v curl >/dev/null 2>&1; then
+  out="${'$'}(curl -fsS "http://127.0.0.1:${'$'}port")"
+else
+  out="${'$'}(wget -qO- "http://127.0.0.1:${'$'}port")"
+fi
+[ "${'$'}out" = ok ] || { echo "unexpected response: ${'$'}out" >&2; exit 2; }
+printf '%s\n' 'RIKKAHUB_SERVICE_TEST_OK'
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-install-browser-tools").apply {
+            writeText("""#!/bin/sh
+set -eu
+rikkahub-fix-apk || true
+apk add --no-cache chromium nss freetype harfbuzz ttf-freefont font-noto font-noto-cjk ca-certificates
+cat > /etc/profile.d/rikkahub-browser.sh <<'EOF'
+export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+EOF
+printf '%s\n' 'Browser tools installed. Use --no-sandbox --disable-dev-shm-usage --disable-gpu for local Chromium.'
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-test-browser").apply {
+            writeText("""#!/bin/sh
+set -eu
+bin="${'$'}{PUPPETEER_EXECUTABLE_PATH:-}"
+[ -n "${'$'}bin" ] || bin="${'$'}(command -v chromium-browser || command -v chromium || true)"
+[ -n "${'$'}bin" ] || { echo 'Chromium not installed. Run rikkahub-install-browser-tools.' >&2; exit 10; }
+"${'$'}bin" --version || true
+out="${'$'}("${'$'}bin" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --dump-dom 'data:text/html,<html><body><h1>rikkahub-browser-ok</h1></body></html>' 2>/tmp/rikkahub-browser.err || true)"
+printf '%s\n' "${'$'}out" | grep -q rikkahub-browser-ok || { cat /tmp/rikkahub-browser.err >&2; exit 2; }
+printf '%s\n' 'RIKKAHUB_BROWSER_TEST_OK'
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-doctor").apply {
+            writeText("""#!/bin/sh
+set +e
+printf '%s\n' '== RikkaHub Container Doctor =='
+printf 'kernel='; uname -a 2>/dev/null
+printf 'arch='; uname -m 2>/dev/null
+printf 'alpine='; cat /etc/alpine-release 2>/dev/null || true
+printf 'PATH=%s\n' "${'$'}PATH"
+printf '%s\n' '== apk =='
+rikkahub-fix-apk
+printf '%s\n' '== node/npm =='
+node --version 2>/dev/null || echo 'node missing'
+npm --version 2>/dev/null || echo 'npm missing'
+npx --version 2>/dev/null || echo 'npx missing'
+printf '%s\n' '== build tools =='
+python3 --version 2>/dev/null || echo 'python3 missing'
+make --version 2>/dev/null | head -1 || echo 'make missing'
+g++ --version 2>/dev/null | head -1 || echo 'g++ missing'
+printf '%s\n' '== watch =='
+rikkahub-test-watch || echo 'watch native failed; run rikkahub-enable-polling'
+printf '%s\n' '== service =='
+rikkahub-test-service || echo 'service test failed'
+printf '%s\n' '== browser =='
+rikkahub-test-browser || echo 'browser local automation unavailable; optional: rikkahub-install-browser-tools or remote browser endpoint'
+printf '%s\n' 'RIKKAHUB_DOCTOR_DONE'
 """)
             setExecutable(true, false)
         }

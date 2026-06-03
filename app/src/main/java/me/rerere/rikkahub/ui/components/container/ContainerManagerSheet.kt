@@ -211,7 +211,7 @@ fun ContainerManagerSheet(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "• 网络异常时可在终端运行 rikkahub-fix-apk 后重试安装\n• CLI/TUI 推荐使用交互终端；依赖会保留在容器 upper 层",
+                            text = "• 网络异常：rikkahub-fix-apk\n• 安装 CLI/TUI：rikkahub-install-cli\n• native addon 编译：rikkahub-install-node-build-tools\n• 文件监听异常：rikkahub-enable-polling 后重启会话\n• 一键诊断：rikkahub-doctor",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

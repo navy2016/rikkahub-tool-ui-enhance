@@ -497,8 +497,8 @@ private fun TerminalInteractivePanel(
     val installCliCommand = remember {
         "rikkahub-install-cli || (printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf; " +
             "printf 'https://dl-cdn.alpinelinux.org/alpine/v3.19/main\nhttps://dl-cdn.alpinelinux.org/alpine/v3.19/community\n' > /etc/apk/repositories; " +
-            "apk update && apk add --no-cache vim nano util-linux nodejs npm bash ca-certificates curl git openssh-client tmux && " +
-            "npm config set prefix /usr/local && npm config set cache /tmp/npm-cache && " +
+            "apk update && apk add --no-cache vim nano util-linux nodejs npm bash ca-certificates curl git openssh-client tmux python3 py3-pip make g++ gcc pkgconf libc-dev linux-headers libstdc++ openssl-dev zlib-dev sqlite-dev && " +
+            "npm config set prefix /usr/local && npm config set cache /tmp/npm-cache && npm config set python /usr/bin/python3 && " +
             "npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai)"
     }
     var input by remember { mutableStateOf("") }
@@ -1369,6 +1369,14 @@ private fun CreateSessionDialog(
         "opencode",
         "rikkahub-fix-apk",
         "rikkahub-install-cli",
+        "rikkahub-install-node-build-tools",
+        "rikkahub-enable-polling",
+        "rikkahub-disable-polling",
+        "rikkahub-test-node-npm",
+        "rikkahub-test-watch",
+        "rikkahub-test-service",
+        "rikkahub-test-browser",
+        "rikkahub-doctor",
         "tty; stty size; echo ${'$'}TERM"
     )
 
@@ -1399,7 +1407,7 @@ private fun CreateSessionDialog(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "CLI/TUI 建议 TTY 模式。安装：apk add vim nano util-linux nodejs npm；npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai",
+                    text = "CLI/TUI 建议 TTY 模式。安装 CLI 运行 rikkahub-install-cli；native addon 运行 rikkahub-install-node-build-tools；文件监听异常运行 rikkahub-enable-polling；诊断运行 rikkahub-doctor",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
