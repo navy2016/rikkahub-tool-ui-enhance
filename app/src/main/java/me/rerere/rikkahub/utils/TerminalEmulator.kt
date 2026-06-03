@@ -630,11 +630,35 @@ class TerminalEmulator(
         val copy = screen.map { line -> Array(columns) { i -> line[i].copy() } }
         if (drawCursor && cursorVisible && cursorRow in 0 until rows && cursorCol in 0 until columns) {
             val cell = copy[cursorRow][cursorCol]
-            cell.style = cell.style.copy(inverse = !cell.style.inverse)
-            if (cell.text == " " || cell.continuation) {
-                cell.text = cursorGlyph()
-                cell.width = 1
-                cell.continuation = false
+            when (cursorShape) {
+                CursorShape.UNDERLINE, CursorShape.STEADY_UNDERLINE,
+                CursorShape.BAR, CursorShape.STEADY_BAR -> {
+                    cell.text = cursorGlyph()
+                    cell.width = 1
+                    cell.continuation = false
+                    cell.style = cell.style.copy(fg = cursorColor, inverse = false)
+                }
+                else -> {
+                    if (cell.continuation) {
+                        cell.text = " "
+                        cell.width = 1
+                        cell.continuation = false
+                    }
+                    val originalFg = cell.style.fg
+                    val originalBg = cell.style.bg ?: Color(0xFF101010)
+                    cell.style = cell.style.copy(
+                        fg = originalBg,
+                        bg = cursorColor,
+                        inverse = false,
+                        concealed = false
+                    )
+                    if (cell.text == " ") {
+                        cell.text = " "
+                    }
+                    if (cell.style.fg == cursorColor) {
+                        cell.style = cell.style.copy(fg = originalFg)
+                    }
+                }
             }
         }
         return copy

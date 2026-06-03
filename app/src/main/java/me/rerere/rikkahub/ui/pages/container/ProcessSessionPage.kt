@@ -485,11 +485,12 @@ private fun TerminalInteractivePanel(
     val terminalBackground = Color(0xFF101010)
     val terminalForeground = Color(0xFF00E676)
     val terminalMuted = Color(0xFFB0BEC5)
+    var terminalFontSizeSp by remember(processId) { mutableStateOf(12f) }
     val terminalTextStyle = TextStyle(
         color = terminalForeground,
         fontFamily = FontFamily.Monospace,
-        fontSize = 12.sp,
-        lineHeight = 15.sp
+        fontSize = terminalFontSizeSp.sp,
+        lineHeight = (terminalFontSizeSp * 1.25f).sp
     )
     val installCliCommand = remember {
         "rikkahub-install-cli || (printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf; " +
@@ -792,6 +793,7 @@ private fun TerminalInteractivePanel(
                     autoScroll = autoScroll,
                     showExtraKeys = showExtraKeys,
                     terminalPanMode = terminalPanMode,
+                    terminalFontSizeSp = terminalFontSizeSp,
                     fullscreen = fullscreen,
                     terminalMuted = terminalMuted,
                     onRawInputModeChange = {
@@ -801,6 +803,7 @@ private fun TerminalInteractivePanel(
                     onAutoScrollChange = { autoScroll = it },
                     onShowExtraKeysChange = { showExtraKeys = it },
                     onTerminalPanModeChange = { terminalPanMode = it },
+                    onTerminalFontSizeChange = { terminalFontSizeSp = it.coerceIn(9f, 22f) },
                     onFullscreenToggle = { onFullscreenChange(!fullscreen) },
                     onCopy = {
                         context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
@@ -989,12 +992,14 @@ private fun TerminalStatusBar(
     autoScroll: Boolean,
     showExtraKeys: Boolean,
     terminalPanMode: Boolean,
+    terminalFontSizeSp: Float,
     fullscreen: Boolean,
     terminalMuted: Color,
     onRawInputModeChange: (Boolean) -> Unit,
     onAutoScrollChange: (Boolean) -> Unit,
     onShowExtraKeysChange: (Boolean) -> Unit,
     onTerminalPanModeChange: (Boolean) -> Unit,
+    onTerminalFontSizeChange: (Float) -> Unit,
     onFullscreenToggle: () -> Unit,
     onCopy: () -> Unit,
     onPaste: () -> Unit,
@@ -1030,6 +1035,8 @@ private fun TerminalStatusBar(
         TerminalStatusKey(if (autoScroll) "AUTO" else "LOCK", autoScroll) { onAutoScrollChange(!autoScroll) }
         TerminalStatusKey("KEYS", showExtraKeys) { onShowExtraKeysChange(!showExtraKeys) }
         TerminalStatusKey("PAN", terminalPanMode) { onTerminalPanModeChange(!terminalPanMode) }
+        TerminalStatusKey("A-", onClick = { onTerminalFontSizeChange(terminalFontSizeSp - 1f) })
+        TerminalStatusKey("A+", onClick = { onTerminalFontSizeChange(terminalFontSizeSp + 1f) })
         TerminalStatusKey("COPY", onClick = onCopy)
         TerminalStatusKey("PASTE", onClick = onPaste)
         TerminalStatusKey("CLR", onClick = onClear)

@@ -919,7 +919,7 @@ class ChatService(
         }
     }
 
-    private fun Throwable.isRecoverableStreamAbort(): Boolean {
+    private fun Throwable.isRecoverableStreamAbort(appInForeground: Boolean): Boolean {
         if (this is CancellationException) return false
         val text = buildString {
             append(this@isRecoverableStreamAbort::class.java.name)
@@ -928,15 +928,16 @@ class ChatService(
             append('\n')
             append(stackTraceToString())
         }
-        return this is java.net.SocketException ||
-            this is java.net.SocketTimeoutException ||
-            this is java.io.EOFException ||
+        val explicitStreamAbort = this is java.io.EOFException ||
             text.contains("Software caused connection abort", ignoreCase = true) ||
             text.contains("connection abort", ignoreCase = true) ||
             text.contains("connection reset", ignoreCase = true) ||
             text.contains("stream was reset", ignoreCase = true) ||
             text.contains("unexpected end of stream", ignoreCase = true) ||
             text.contains("Http2Reader.nextFrame", ignoreCase = true)
+        val backgroundSocketAbort = !appInForeground &&
+            (this is java.net.SocketException || this is java.net.SocketTimeoutException)
+        return explicitStreamAbort || backgroundSocketAbort
     }
 
     private fun Settings.autoResendFailureMatchers(): List<String> =
@@ -1431,7 +1432,7 @@ class ChatService(
                 return@onFailure
             }
 
-            if (error.isRecoverableStreamAbort()) {
+            if (error.isRecoverableStreamAbort(appInForeground = isForeground.value)) {
                 // Android/Doze/NAT/proxy may abort a long SSE/HTTP2 socket while the app is in the
                 // background. Keep the partial assistant/tool state recoverable instead of marking
                 // the message as finished or converting pending tools into interruption output.
