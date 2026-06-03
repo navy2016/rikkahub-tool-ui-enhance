@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.container
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,6 +72,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -508,6 +510,7 @@ private fun TerminalInteractivePanel(
     var showExtraKeys by remember(fullscreen) { mutableStateOf(!fullscreen) }
     var selectionMode by remember { mutableStateOf(false) }
     var terminalPanMode by remember(processId) { mutableStateOf(rawInputMode) }
+    var showFullInputBar by remember(processId) { mutableStateOf(!rawInputMode) }
     var ctrlLatch by remember { mutableStateOf(false) }
     var altLatch by remember { mutableStateOf(false) }
     var terminalColumns by remember { mutableIntStateOf(80) }
@@ -517,7 +520,8 @@ private fun TerminalInteractivePanel(
     var terminalCellHeightPx by remember { mutableIntStateOf(14) }
     val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
-    val terminalBottomRevealPadding = if (showExtraKeys) 104.dp else 56.dp
+    val terminalInputBarHeight = if (rawInputMode && !showFullInputBar) 34.dp else 46.dp
+    val terminalBottomRevealPadding = (if (showExtraKeys) 54.dp else 8.dp) + terminalInputBarHeight
 
     LaunchedEffect(processId) {
         terminalEmulator.reset()
@@ -714,8 +718,16 @@ private fun TerminalInteractivePanel(
         if (rawInputMode) {
             showExtraKeys = false
             terminalPanMode = true
+            showFullInputBar = false
         } else {
             terminalPanMode = false
+            showFullInputBar = true
+        }
+    }
+
+    LaunchedEffect(terminalPanMode) {
+        if (!terminalPanMode && outputScroll.value != 0) {
+            outputScroll.scrollTo(0)
         }
     }
 
@@ -793,6 +805,7 @@ private fun TerminalInteractivePanel(
                     autoScroll = autoScroll,
                     showExtraKeys = showExtraKeys,
                     terminalPanMode = terminalPanMode,
+                    showFullInputBar = showFullInputBar,
                     terminalFontSizeSp = terminalFontSizeSp,
                     fullscreen = fullscreen,
                     terminalMuted = terminalMuted,
@@ -802,7 +815,11 @@ private fun TerminalInteractivePanel(
                     },
                     onAutoScrollChange = { autoScroll = it },
                     onShowExtraKeysChange = { showExtraKeys = it },
-                    onTerminalPanModeChange = { terminalPanMode = it },
+                    onTerminalPanModeChange = {
+                        terminalPanMode = it
+                        if (!it) selectionMode = false
+                    },
+                    onShowFullInputBarChange = { showFullInputBar = it },
                     onTerminalFontSizeChange = { terminalFontSizeSp = it.coerceIn(9f, 22f) },
                     onFullscreenToggle = { onFullscreenChange(!fullscreen) },
                     onCopy = {
@@ -838,6 +855,16 @@ private fun TerminalInteractivePanel(
                         terminalEmulator.sequenceForFocus(focusState.isFocused)?.let { sequence -> sendRaw(sequence) }
                     }
                     .focusable()
+                    .pointerInput(terminalPanMode, selectionMode) {
+                        if (terminalPanMode && !selectionMode) {
+                            detectTapGestures(
+                                onTap = {
+                                    inputFocusRequester.requestFocus()
+                                    keyboardController?.show()
+                                }
+                            )
+                        }
+                    }
                     .then(if (selectionMode || terminalPanMode) Modifier else Modifier.pointerInteropFilter { event ->
                         val col = (event.x.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
                         val row = (event.y.toInt() / terminalCellHeightPx).coerceIn(0, terminalRows - 1)
@@ -901,7 +928,10 @@ private fun TerminalInteractivePanel(
                     selectionMode = selectionMode,
                     onToggleCtrl = { ctrlLatch = !ctrlLatch },
                     onToggleAlt = { altLatch = !altLatch },
-                    onToggleSelection = { selectionMode = !selectionMode },
+                    onToggleSelection = {
+                        selectionMode = !selectionMode
+                        if (!selectionMode) terminalPanMode = true
+                    },
                     onKeyboard = {
                         inputFocusRequester.requestFocus()
                         keyboardController?.show()
@@ -921,24 +951,45 @@ private fun TerminalInteractivePanel(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            TerminalInputBar(
-                input = input,
-                rawInputMode = rawInputMode,
-                terminalForeground = terminalForeground,
-                terminalMuted = terminalMuted,
-                terminalBackground = terminalBackground,
-                onInputChange = { handleInputChange(it) },
-                focusRequester = inputFocusRequester,
-                onSubmit = {
-                    if (rawInputMode) {
-                        scope.launch { bgManager.sendControlInput(processId, ControlInput.ENTER) }
-                        input = ""
-                    } else {
-                        submitCommand()
-                    }
-                },
-                onHardwareKey = { event -> handleHardwareKey(event) }
-            )
+            val submitInput = {
+                if (rawInputMode) {
+                    scope.launch { bgManager.sendControlInput(processId, ControlInput.ENTER) }
+                    input = ""
+                } else {
+                    submitCommand()
+                }
+            }
+            if (rawInputMode && !showFullInputBar) {
+                TerminalCompactInputBar(
+                    input = input,
+                    terminalForeground = terminalForeground,
+                    terminalMuted = terminalMuted,
+                    terminalBackground = terminalBackground,
+                    focusRequester = inputFocusRequester,
+                    onInputChange = { handleInputChange(it) },
+                    onSubmit = submitInput,
+                    onHardwareKey = { event -> handleHardwareKey(event) },
+                    onKeyboard = {
+                        inputFocusRequester.requestFocus()
+                        keyboardController?.show()
+                    },
+                    onPaste = { sendPastedText(context.readClipboardText()) },
+                    onEscape = { scope.launch { bgManager.sendControlInput(processId, ControlInput.ESC) } },
+                    onExpand = { showFullInputBar = true }
+                )
+            } else {
+                TerminalInputBar(
+                    input = input,
+                    rawInputMode = rawInputMode,
+                    terminalForeground = terminalForeground,
+                    terminalMuted = terminalMuted,
+                    terminalBackground = terminalBackground,
+                    onInputChange = { handleInputChange(it) },
+                    focusRequester = inputFocusRequester,
+                    onSubmit = submitInput,
+                    onHardwareKey = { event -> handleHardwareKey(event) }
+                )
+            }
         }
     }
 }
@@ -992,6 +1043,7 @@ private fun TerminalStatusBar(
     autoScroll: Boolean,
     showExtraKeys: Boolean,
     terminalPanMode: Boolean,
+    showFullInputBar: Boolean,
     terminalFontSizeSp: Float,
     fullscreen: Boolean,
     terminalMuted: Color,
@@ -999,6 +1051,7 @@ private fun TerminalStatusBar(
     onAutoScrollChange: (Boolean) -> Unit,
     onShowExtraKeysChange: (Boolean) -> Unit,
     onTerminalPanModeChange: (Boolean) -> Unit,
+    onShowFullInputBarChange: (Boolean) -> Unit,
     onTerminalFontSizeChange: (Float) -> Unit,
     onFullscreenToggle: () -> Unit,
     onCopy: () -> Unit,
@@ -1034,7 +1087,8 @@ private fun TerminalStatusBar(
         TerminalStatusKey(if (rawInputMode) "RAW" else "LINE", rawInputMode) { onRawInputModeChange(!rawInputMode) }
         TerminalStatusKey(if (autoScroll) "AUTO" else "LOCK", autoScroll) { onAutoScrollChange(!autoScroll) }
         TerminalStatusKey("KEYS", showExtraKeys) { onShowExtraKeysChange(!showExtraKeys) }
-        TerminalStatusKey("PAN", terminalPanMode) { onTerminalPanModeChange(!terminalPanMode) }
+        TerminalStatusKey(if (terminalPanMode) "TOUCH" else "MOUSE", !terminalPanMode) { onTerminalPanModeChange(!terminalPanMode) }
+        TerminalStatusKey(if (showFullInputBar) "INPUT" else "MINI", showFullInputBar) { onShowFullInputBarChange(!showFullInputBar) }
         TerminalStatusKey("A-", onClick = { onTerminalFontSizeChange(terminalFontSizeSp - 1f) })
         TerminalStatusKey("A+", onClick = { onTerminalFontSizeChange(terminalFontSizeSp + 1f) })
         TerminalStatusKey("COPY", onClick = onCopy)
@@ -1158,6 +1212,73 @@ private fun TerminalKey(
             fontSize = 11.sp,
             maxLines = 1
         )
+    }
+}
+
+@Composable
+private fun TerminalCompactInputBar(
+    input: String,
+    terminalForeground: Color,
+    terminalMuted: Color,
+    terminalBackground: Color,
+    focusRequester: FocusRequester,
+    onInputChange: (String) -> Unit,
+    onSubmit: () -> Unit,
+    onHardwareKey: (KeyEvent) -> Boolean,
+    onKeyboard: () -> Unit,
+    onPaste: () -> Unit,
+    onEscape: () -> Unit,
+    onExpand: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(34.dp)
+            .background(Color(0xFF111111), RoundedCornerShape(8.dp))
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        TerminalKey("KBD") { onKeyboard() }
+        BasicTextField(
+            value = input,
+            onValueChange = onInputChange,
+            modifier = Modifier
+                .weight(1f)
+                .height(26.dp)
+                .focusRequester(focusRequester)
+                .background(terminalBackground, RoundedCornerShape(6.dp))
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .onPreviewKeyEvent { event -> onHardwareKey(event) },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall.copy(
+                color = terminalForeground,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp
+            ),
+            cursorBrush = SolidColor(terminalForeground),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { onSubmit() }),
+            decorationBox = { innerTextField ->
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                    if (input.isEmpty()) {
+                        Text(
+                            text = "IME bridge…",
+                            color = terminalMuted.copy(alpha = 0.55f),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        )
+        TerminalKey("↵", highlight = true) { onSubmit() }
+        TerminalKey("ESC") { onEscape() }
+        TerminalKey("PST") { onPaste() }
+        TerminalKey("FULL") { onExpand() }
     }
 }
 
