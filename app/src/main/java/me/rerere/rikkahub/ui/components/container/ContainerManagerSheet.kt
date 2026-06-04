@@ -352,6 +352,9 @@ private data class ContainerUtilityAction(
 
 private val ContainerUtilityActions = listOf(
     ContainerUtilityAction("rikkahub-fix-apk", "修复 apk/网络", "刷新 DNS、apk 源和包索引", 60),
+    ContainerUtilityAction("rikkahub-test-network", "测试网络", "DNS/Alpine/npm/GitHub 连通性", 60),
+    ContainerUtilityAction("rikkahub-clean-caches", "清理缓存", "清理 npm/pip/apk/tmp 缓存", 60),
+    ContainerUtilityAction("rikkahub-npm-env", "npm 环境变量", "输出稳定 npm/node-gyp 环境模板", 30),
     ContainerUtilityAction("rikkahub-install-cli", "安装 CLI/TUI", "Claude Code / Codex / OpenCode 与常用终端工具", 360),
     ContainerUtilityAction("rikkahub-node-help", "Node/npm 说明", "npm、native addon、watch、dev server 指南", 30),
     ContainerUtilityAction("rikkahub-install-node-build-tools", "安装 native 构建工具", "python3/make/g++/headers，用于 node-gyp", 240),

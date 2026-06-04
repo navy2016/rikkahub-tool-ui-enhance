@@ -647,6 +647,9 @@ class PRootManager(
     ): ExecutionResult = withContext(Dispatchers.IO) {
         val allowedScripts = setOf(
             "rikkahub-fix-apk",
+            "rikkahub-test-network",
+            "rikkahub-clean-caches",
+            "rikkahub-npm-env",
             "rikkahub-install-cli",
             "rikkahub-node-help",
             "rikkahub-install-node-build-tools",
@@ -895,6 +898,10 @@ class PRootManager(
         writeContainerUtilityScripts(upperDir)
     }
 
+    private fun containerShellScript(body: String): String {
+        return "#!" + "/" + "bin/sh\n" + body.trimIndent() + "\n"
+    }
+
     private fun writeContainerUtilityScripts(upperDir: File) {
         val binDir = File(upperDir, "usr/local/bin").apply { mkdirs() }
         File(binDir, "rikkahub-fix-apk").apply {
@@ -907,6 +914,82 @@ chmod 1777 /tmp /tmp/npm-cache /tmp/pip-cache 2>/dev/null || true
 command -v apk >/dev/null 2>&1 || { echo 'apk not found in PATH' >&2; exit 13; }
 apk update || apk update --no-cache
 """)
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-test-network").apply {
+            writeText(containerShellScript("""
+                set +e
+                printf '%s\n' '== RikkaHub network test =='
+                printf '%s\n' '-- DNS --'
+                for host in dl-cdn.alpinelinux.org registry.npmjs.org github.com api.github.com; do
+                  if command -v getent >/tmp/rikkahub-which.${'$'}${'$'} 2>&1; then
+                    getent hosts "${'$'}host" >/tmp/rikkahub-net.${'$'}${'$'} 2>&1
+                    code="${'$'}?"
+                    printf '%s %s ' "${'$'}host" "${'$'}code"
+                    head -1 /tmp/rikkahub-net.${'$'}${'$'}
+                  else
+                    ping -c 1 -W 2 "${'$'}host" >/tmp/rikkahub-ping.${'$'}${'$'} 2>&1
+                    printf '%s ping=%s\n' "${'$'}host" "${'$'}?"
+                  fi
+                done
+                rm -f /tmp/rikkahub-net.${'$'}${'$'} /tmp/rikkahub-which.${'$'}${'$'} /tmp/rikkahub-ping.${'$'}${'$'}
+                printf '%s\n' '-- HTTPS --'
+                if command -v curl >/tmp/rikkahub-which.${'$'}${'$'} 2>&1; then
+                  for url in https://dl-cdn.alpinelinux.org/alpine/v3.19/main/ https://registry.npmjs.org/ https://github.com/; do
+                    code="${'$'}(curl -L --connect-timeout 8 --max-time 20 -o /tmp/rikkahub-net-body.${'$'}${'$'} -s -w '%{http_code}' "${'$'}url")"
+                    printf '%s -> HTTP %s\n' "${'$'}url" "${'$'}code"
+                  done
+                  rm -f /tmp/rikkahub-net-body.${'$'}${'$'}
+                elif command -v wget >/tmp/rikkahub-which.${'$'}${'$'} 2>&1; then
+                  for url in https://registry.npmjs.org/ https://github.com/; do
+                    wget -q --spider "${'$'}url"
+                    printf '%s -> exit %s\n' "${'$'}url" "${'$'}?"
+                  done
+                else
+                  echo 'curl/wget missing; run apk add curl or rikkahub-install-cli'
+                fi
+                rm -f /tmp/rikkahub-which.${'$'}${'$'}
+                printf '%s\n' 'RIKKAHUB_NETWORK_TEST_DONE'
+            """))
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-clean-caches").apply {
+            writeText(containerShellScript("""
+                set -u
+                printf '%s\n' '== RikkaHub clean caches =='
+                for p in /tmp/npm-cache /tmp/pip-cache /root/.npm/_cacache /root/.cache/pip /var/cache/apk; do
+                  if [ -e "${'$'}p" ]; then
+                    size="${'$'}(du -sh "${'$'}p" 2>/tmp/rikkahub-du.err | awk '{print ${'$'}1}')"
+                    find "${'$'}p" -mindepth 1 -maxdepth 1 -exec rm -r -- {} + 2>/tmp/rikkahub-rm.err || true
+                    printf 'cleaned %s (was %s)\n' "${'$'}p" "${'$'}size"
+                  fi
+                  mkdir -p "${'$'}p" 2>/tmp/rikkahub-mkdir.err || true
+                done
+                chmod 1777 /tmp /tmp/npm-cache /tmp/pip-cache 2>/tmp/rikkahub-chmod.err || true
+                npm cache verify 2>/tmp/rikkahub-npm-cache.err || true
+                rm -f /tmp/rikkahub-du.err /tmp/rikkahub-rm.err /tmp/rikkahub-mkdir.err /tmp/rikkahub-chmod.err /tmp/rikkahub-npm-cache.err
+                printf '%s\n' 'RIKKAHUB_CLEAN_CACHES_OK'
+            """))
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-npm-env").apply {
+            writeText(containerShellScript("""
+                cat <<'EOF'
+                export NPM_CONFIG_PREFIX=/usr/local
+                export npm_config_prefix=/usr/local
+                export NPM_CONFIG_CACHE=/tmp/npm-cache
+                export NPM_CONFIG_AUDIT=false
+                export NPM_CONFIG_FUND=false
+                export NPM_CONFIG_UPDATE_NOTIFIER=false
+                export NPM_CONFIG_PROGRESS=false
+                export NPM_CONFIG_FETCH_RETRIES=3
+                export NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=10000
+                export NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=60000
+                export npm_config_python=/usr/bin/python3
+                export npm_config_nodedir=/usr
+                EOF
+                printf '%s\n' 'Run: eval ${'$'}(rikkahub-npm-env)'
+            """))
             setExecutable(true, false)
         }
         File(binDir, "rikkahub-tmux").apply {
@@ -1123,9 +1206,9 @@ const net = require('node:net');
 const host = process.argv[2];
 const port = Number(process.argv[3]);
 const socket = net.createConnection({ host, port, timeout: 3000 });
-socket.on('connect', () => { console.log(`RIKKAHUB_PORT_OPEN ${host}:${port}`); socket.destroy(); });
-socket.on('timeout', () => { console.error(`RIKKAHUB_PORT_TIMEOUT ${host}:${port}`); socket.destroy(); process.exit(2); });
-socket.on('error', err => { console.error(`RIKKAHUB_PORT_CLOSED ${host}:${port} ${err.code || err.message}`); process.exit(1); });
+socket.on('connect', () => { console.log('RIKKAHUB_PORT_OPEN ' + host + ':' + port); socket.destroy(); });
+socket.on('timeout', () => { console.error('RIKKAHUB_PORT_TIMEOUT ' + host + ':' + port); socket.destroy(); process.exit(2); });
+socket.on('error', err => { console.error('RIKKAHUB_PORT_CLOSED ' + host + ':' + port + ' ' + (err.code || err.message)); process.exit(1); });
 NODE
 """)
             setExecutable(true, false)
@@ -1275,6 +1358,8 @@ printf 'alpine='; cat /etc/alpine-release 2>/dev/null || true
 printf 'PATH=%s\n' "${'$'}PATH"
 printf '%s\n' '== apk =='
 rikkahub-fix-apk
+printf '%s\n' '== network =='
+rikkahub-test-network
 printf '%s\n' '== node/npm =='
 node --version 2>/dev/null || echo 'node missing'
 npm --version 2>/dev/null || echo 'npm missing'
