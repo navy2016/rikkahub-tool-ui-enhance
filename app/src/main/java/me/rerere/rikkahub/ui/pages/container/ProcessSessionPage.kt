@@ -93,6 +93,8 @@ import me.rerere.rikkahub.data.container.BackgroundProcessInfo
 import me.rerere.rikkahub.data.container.BackgroundProcessManager
 import me.rerere.rikkahub.data.container.ControlInput
 import me.rerere.rikkahub.data.container.ProcessStatus
+import me.rerere.rikkahub.data.container.PRootManager
+import me.rerere.rikkahub.ui.components.container.ContainerManagerSheet
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.utils.TerminalEmulator
 import me.rerere.rikkahub.utils.TerminalEmulator.Key
@@ -482,6 +484,8 @@ private fun TerminalInteractivePanel(
     val keyboardController = LocalSoftwareKeyboardController.current
     val textMeasurer = rememberTextMeasurer()
     val processId = process.processId
+    val prootManager: PRootManager = koinInject()
+    var showContainerManager by remember { mutableStateOf(false) }
 
     val terminalEmulator = remember(processId) { TerminalEmulator(initialColumns = 80, initialRows = 24) }
     val terminalBackground = Color(0xFF101010)
@@ -827,7 +831,8 @@ private fun TerminalInteractivePanel(
                         terminalStatus = "已复制"
                     },
                     onPaste = { sendPastedText(context.readClipboardText()) },
-                    onClear = { clearLocalTerminal() }
+                    onClear = { clearLocalTerminal() },
+                    onContainerManager = { showContainerManager = true }
                 )
                 Spacer(modifier = Modifier.height(2.dp))
             }
@@ -992,6 +997,14 @@ private fun TerminalInteractivePanel(
             }
         }
     }
+
+    if (showContainerManager) {
+        ContainerManagerSheet(
+            visible = showContainerManager,
+            onDismiss = { showContainerManager = false },
+            prootManager = prootManager,
+        )
+    }
 }
 
 private fun shouldAutoScrollTerminalOutput(
@@ -1056,7 +1069,8 @@ private fun TerminalStatusBar(
     onFullscreenToggle: () -> Unit,
     onCopy: () -> Unit,
     onPaste: () -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    onContainerManager: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -1094,6 +1108,7 @@ private fun TerminalStatusBar(
         TerminalStatusKey("COPY", onClick = onCopy)
         TerminalStatusKey("PASTE", onClick = onPaste)
         TerminalStatusKey("CLR", onClick = onClear)
+        TerminalStatusKey("CTN", onClick = onContainerManager)
         TerminalStatusKey(if (fullscreen) "EXIT" else "FULL", highlight = true, onClick = onFullscreenToggle)
     }
 }

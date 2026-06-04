@@ -33,12 +33,15 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.composables.icons.lucide.Box
 import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Sparkles
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.container.PRootManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.ui.components.container.ContainerManagerSheet
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -65,8 +68,10 @@ fun SettingAdvancedPage() {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val navController = LocalNavController.current
     val settingsStore: SettingsStore = koinInject()
+    val prootManager: PRootManager = koinInject()
     val settings = LocalSettings.current
     val scope = rememberCoroutineScope()
+    var showContainerManager by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -108,6 +113,12 @@ fun SettingAdvancedPage() {
                     CardGroup(
                         title = { Text("容器网络") },
                     ) {
+                        item(
+                            onClick = { showContainerManager = true },
+                            leadingContent = { Icon(Lucide.Box, null) },
+                            headlineContent = { Text("容器运行时管理") },
+                            supportingContent = { Text("初始化、启动/停止、诊断修复、Node/npm 与长期服务辅助") },
+                        )
                         item(
                             headlineContent = {
                                 SaveOnBlurTextField(
@@ -374,6 +385,14 @@ fun SettingAdvancedPage() {
                 }
             }
         }
+    }
+
+    if (showContainerManager) {
+        ContainerManagerSheet(
+            visible = showContainerManager,
+            onDismiss = { showContainerManager = false },
+            prootManager = prootManager,
+        )
     }
 }
 
