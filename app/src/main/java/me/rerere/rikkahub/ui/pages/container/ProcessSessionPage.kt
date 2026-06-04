@@ -499,11 +499,10 @@ private fun TerminalInteractivePanel(
         lineHeight = (terminalFontSizeSp * 1.25f).sp
     )
     val installCliCommand = remember {
-        "rikkahub-install-cli || (printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf; " +
+        "rikkahub-install-terminal-tools || (printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf; " +
             "printf 'https://dl-cdn.alpinelinux.org/alpine/v3.19/main\nhttps://dl-cdn.alpinelinux.org/alpine/v3.19/community\n' > /etc/apk/repositories; " +
-            "apk update && apk add --no-cache vim nano util-linux nodejs npm bash ca-certificates curl git openssh-client tmux python3 py3-pip make g++ gcc pkgconf libc-dev linux-headers libstdc++ openssl-dev zlib-dev sqlite-dev && " +
-            "npm config set prefix /usr/local && npm config set cache /tmp/npm-cache && npm config set python /usr/bin/python3 && " +
-            "npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai)"
+            "apk update && apk add --no-cache vim nano util-linux nodejs npm bash ca-certificates curl git openssh-client tmux && " +
+            "npm config set prefix /usr/local && npm config set cache /tmp/npm-cache && npm config set python /usr/bin/python3)"
     }
     var input by remember { mutableStateOf("") }
     var terminalText by remember { mutableStateOf(terminalEmulator.render()) }
@@ -1386,6 +1385,8 @@ private fun CreateSessionDialog(
         "rikkahub-test-network",
         "rikkahub-clean-caches",
         "rikkahub-npm-env",
+        "rikkahub-install-terminal-tools",
+        "rikkahub-install-ai-cli",
         "rikkahub-install-cli",
         "rikkahub-node-help",
         "rikkahub-install-node-build-tools",
@@ -1434,7 +1435,7 @@ private fun CreateSessionDialog(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "CLI/TUI 建议 TTY 模式。安装 CLI 运行 rikkahub-install-cli；native addon 运行 rikkahub-install-node-build-tools；文件监听异常运行 rikkahub-enable-polling；诊断运行 rikkahub-doctor",
+                    text = "CLI/TUI 建议 TTY 模式。基础工具运行 rikkahub-install-terminal-tools；AI CLI 较重，按需运行 rikkahub-install-ai-cli；native addon 运行 rikkahub-install-node-build-tools；文件监听异常运行 rikkahub-enable-polling；诊断运行 rikkahub-doctor",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

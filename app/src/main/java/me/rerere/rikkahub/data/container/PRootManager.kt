@@ -650,6 +650,8 @@ class PRootManager(
             "rikkahub-test-network",
             "rikkahub-clean-caches",
             "rikkahub-npm-env",
+            "rikkahub-install-terminal-tools",
+            "rikkahub-install-ai-cli",
             "rikkahub-install-cli",
             "rikkahub-node-help",
             "rikkahub-install-node-build-tools",
@@ -1013,12 +1015,11 @@ exec sh -l
 """)
             setExecutable(true, false)
         }
-        File(binDir, "rikkahub-install-cli").apply {
+        File(binDir, "rikkahub-install-terminal-tools").apply {
             writeText("""#!/bin/sh
 set -u
 rikkahub-fix-apk || exit ${'$'}?
 apk add --no-cache bash ca-certificates curl git openssh-client vim nano util-linux nodejs npm tmux || exit ${'$'}?
-rikkahub-install-node-build-tools || true
 command -v update-ca-certificates >/dev/null 2>&1 && update-ca-certificates || true
 npm config set prefix /usr/local
 npm config set cache /tmp/npm-cache
@@ -1031,7 +1032,26 @@ npm config set fetch-retry-mintimeout 10000
 npm config set fetch-retry-maxtimeout 60000
 npm config set python /usr/bin/python3 || true
 npm config set nodedir /usr || true
+printf '%s\n' 'RIKKAHUB_TERMINAL_TOOLS_OK'
+printf '%s\n' 'Heavy AI CLIs are split out. Run rikkahub-install-ai-cli when needed.'
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-install-ai-cli").apply {
+            writeText("""#!/bin/sh
+set -u
+rikkahub-install-terminal-tools || exit ${'$'}?
 npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai
+printf '%s\n' 'RIKKAHUB_AI_CLI_OK'
+""")
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-install-cli").apply {
+            writeText("""#!/bin/sh
+set -u
+printf '%s\n' 'rikkahub-install-cli now installs lightweight terminal tools only.'
+printf '%s\n' 'Run rikkahub-install-ai-cli separately for Claude Code / Codex / OpenCode.'
+exec rikkahub-install-terminal-tools
 """)
             setExecutable(true, false)
         }
@@ -1044,8 +1064,11 @@ Common setup:
   rikkahub-fix-apk
   apk add --no-cache nodejs npm
 
-CLI/TUI setup:
-  rikkahub-install-cli
+Light terminal tools setup:
+  rikkahub-install-terminal-tools
+
+Heavy AI CLI setup:
+  rikkahub-install-ai-cli
 
 Native addon / node-gyp setup:
   rikkahub-install-node-build-tools

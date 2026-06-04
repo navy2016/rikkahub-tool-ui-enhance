@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import com.composables.icons.lucide.Lucide
@@ -113,6 +115,8 @@ fun ContainerManagerSheet(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 // 标题栏
@@ -263,7 +267,7 @@ fun ContainerManagerSheet(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }
@@ -355,7 +359,8 @@ private val ContainerUtilityActions = listOf(
     ContainerUtilityAction("rikkahub-test-network", "测试网络", "DNS/Alpine/npm/GitHub 连通性", 60),
     ContainerUtilityAction("rikkahub-clean-caches", "清理缓存", "清理 npm/pip/apk/tmp 缓存", 60),
     ContainerUtilityAction("rikkahub-npm-env", "npm 环境变量", "输出稳定 npm/node-gyp 环境模板", 30),
-    ContainerUtilityAction("rikkahub-install-cli", "安装 CLI/TUI", "Claude Code / Codex / OpenCode 与常用终端工具", 360),
+    ContainerUtilityAction("rikkahub-install-terminal-tools", "安装终端基础工具", "bash/git/vim/nano/tmux/node/npm 等轻量常用工具", 180),
+    ContainerUtilityAction("rikkahub-install-ai-cli", "安装 AI CLI（重）", "Claude Code / Codex / OpenCode，下载较重，按需安装", 600),
     ContainerUtilityAction("rikkahub-node-help", "Node/npm 说明", "npm、native addon、watch、dev server 指南", 30),
     ContainerUtilityAction("rikkahub-install-node-build-tools", "安装 native 构建工具", "python3/make/g++/headers，用于 node-gyp", 240),
     ContainerUtilityAction("rikkahub-enable-polling", "启用文件监听兼容", "为 Vite/Webpack/TS 写入 polling 环境变量", 30),
