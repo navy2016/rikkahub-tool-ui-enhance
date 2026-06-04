@@ -1,7 +1,9 @@
 package me.rerere.rikkahub.ui.pages.container
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -651,6 +653,11 @@ private fun TerminalInteractivePanel(
 
     fun handleHardwareKey(event: KeyEvent): Boolean {
         if (!rawInputMode || event.type != KeyEventType.KeyDown) return false
+        if (input.isNotEmpty() && (event.key == ComposeKey.Backspace || event.key == ComposeKey.Delete)) {
+            // Let BasicTextField delete local IME/input-buffer text. When the bridge buffer is
+            // empty, Backspace/Delete below is sent to the TUI as a real terminal key.
+            return false
+        }
         val shift = event.isShiftPressed
         val alt = event.isAltPressed || altLatch
         val ctrl = event.isCtrlPressed || ctrlLatch
@@ -691,14 +698,16 @@ private fun TerminalInteractivePanel(
                         sendRaw(terminalEmulator.sequenceForCodePoint(cp, alt = altLatch, ctrl = ctrlLatch).ifEmpty { delta })
                         clearModifierLatches()
                     }
+                    input = ""
                 }
             }
             previous.length > value.length && previous.startsWith(value) -> {
-                repeat(previous.length - value.length) { sendKey(Key.BACKSPACE) }
+                // Deleting local raw input buffer text should not automatically send terminal
+                // Backspace. Hardware Backspace is sent only when the local buffer is empty.
+                input = value
             }
             value != previous -> {
                 val common = previous.zip(value).takeWhile { it.first == it.second }.size
-                repeat(previous.length - common) { sendKey(Key.BACKSPACE) }
                 val delta = value.drop(common)
                 if (delta.isNotEmpty()) {
                     if (delta.length > 1 || delta.contains('\n') || delta.contains('\r')) sendPastedText(delta) else {
@@ -706,6 +715,7 @@ private fun TerminalInteractivePanel(
                         sendRaw(terminalEmulator.sequenceForCodePoint(cp, alt = altLatch, ctrl = ctrlLatch).ifEmpty { delta })
                         clearModifierLatches()
                     }
+                    input = ""
                 }
             }
         }
@@ -1366,47 +1376,63 @@ private fun TerminalInputBar(
 }
 
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CreateSessionDialog(
     onDismiss: () -> Unit,
     onCreate: (String) -> Unit
 ) {
     var command by remember { mutableStateOf("rikkahub-tmux") }
-    val quickCommands = listOf(
-        "rikkahub-tmux",
-        "tmux",
-        "bash",
-        "vim",
-        "nano",
-        "claude",
-        "codex",
-        "opencode",
-        "rikkahub-fix-apk",
-        "rikkahub-test-network",
-        "rikkahub-clean-caches",
-        "rikkahub-npm-env",
-        "rikkahub-install-terminal-tools",
-        "rikkahub-install-ai-cli",
-        "rikkahub-install-cli",
-        "rikkahub-node-help",
-        "rikkahub-install-node-build-tools",
-        "rikkahub-enable-polling",
-        "rikkahub-disable-polling",
-        "rikkahub-test-node-npm",
-        "rikkahub-test-node-native",
-        "rikkahub-test-watch",
-        "rikkahub-test-service",
-        "rikkahub-test-port 3000",
-        "rikkahub-service-env 3000",
-        "rikkahub-service-help",
-        "rikkahub-run-service 3000 npm run dev",
-        "rikkahub-run-service 18080 python3 -m http.server 18080 --bind 127.0.0.1",
-        "rikkahub-install-browser-tools",
-        "rikkahub-browser-help",
-        "rikkahub-test-browser",
-        "rikkahub-doctor",
-        "tty; stty size; echo ${'$'}TERM"
-    )
+    val defaultQuickCommands = remember {
+        listOf(
+            "rikkahub-tmux",
+            "tmux",
+            "bash",
+            "vim",
+            "nano",
+            "claude",
+            "codex",
+            "opencode",
+            "rikkahub-fix-apk",
+            "rikkahub-test-network",
+            "rikkahub-clean-caches",
+            "rikkahub-npm-env",
+            "rikkahub-install-terminal-tools",
+            "rikkahub-install-ai-cli",
+            "rikkahub-install-cli",
+            "rikkahub-node-help",
+            "rikkahub-install-node-build-tools",
+            "rikkahub-enable-polling",
+            "rikkahub-disable-polling",
+            "rikkahub-test-node-npm",
+            "rikkahub-test-node-native",
+            "rikkahub-test-watch",
+            "rikkahub-test-service",
+            "rikkahub-test-port 3000",
+            "rikkahub-service-env 3000",
+            "rikkahub-service-help",
+            "rikkahub-run-service 3000 npm run dev",
+            "rikkahub-run-service 18080 python3 -m http.server 18080 --bind 127.0.0.1",
+            "rikkahub-install-browser-tools",
+            "rikkahub-browser-help",
+            "rikkahub-test-browser",
+            "rikkahub-doctor",
+            "tty; stty size; echo ${'$'}TERM"
+        )
+    }
+    val quickCommands = remember { mutableStateListOf<String>().apply { addAll(defaultQuickCommands) } }
+    var editingQuickCommandIndex by remember { mutableIntStateOf(-2) }
+    var editingQuickCommandText by remember { mutableStateOf("") }
+
+    fun startEditQuickCommand(index: Int) {
+        editingQuickCommandIndex = index
+        editingQuickCommandText = quickCommands.getOrNull(index).orEmpty()
+    }
+
+    fun startAddQuickCommand() {
+        editingQuickCommandIndex = -1
+        editingQuickCommandText = command
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1425,13 +1451,25 @@ private fun CreateSessionDialog(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    quickCommands.forEach { item ->
+                    quickCommands.forEachIndexed { index, item ->
                         FilterChip(
                             selected = command == item,
                             onClick = { command = item },
+                            modifier = Modifier.combinedClickable(
+                                onClick = { command = item },
+                                onLongClick = { startEditQuickCommand(index) }
+                            ),
                             label = { Text(item, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                         )
                     }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { startAddQuickCommand() }) { Text("新增快捷命令") }
+                    TextButton(onClick = {
+                        quickCommands.clear()
+                        quickCommands.addAll(defaultQuickCommands)
+                    }) { Text("恢复默认排序") }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
@@ -1452,6 +1490,76 @@ private fun CreateSessionDialog(
             }
         }
     )
+
+    if (editingQuickCommandIndex != -2) {
+        AlertDialog(
+            onDismissRequest = { editingQuickCommandIndex = -2 },
+            title = { Text(if (editingQuickCommandIndex >= 0) "编辑快捷命令" else "新增快捷命令") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = editingQuickCommandText,
+                        onValueChange = { editingQuickCommandText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("命令") },
+                        singleLine = false,
+                        minLines = 1,
+                        maxLines = 3
+                    )
+                    if (editingQuickCommandIndex >= 0) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(
+                                enabled = editingQuickCommandIndex > 0,
+                                onClick = {
+                                    val index = editingQuickCommandIndex
+                                    if (index > 0) {
+                                        val item = quickCommands.removeAt(index)
+                                        quickCommands.add(index - 1, item)
+                                        editingQuickCommandIndex = index - 1
+                                    }
+                                }
+                            ) { Text("上移") }
+                            TextButton(
+                                enabled = editingQuickCommandIndex in 0 until quickCommands.lastIndex,
+                                onClick = {
+                                    val index = editingQuickCommandIndex
+                                    if (index in 0 until quickCommands.lastIndex) {
+                                        val item = quickCommands.removeAt(index)
+                                        quickCommands.add(index + 1, item)
+                                        editingQuickCommandIndex = index + 1
+                                    }
+                                }
+                            ) { Text("下移") }
+                            TextButton(
+                                onClick = {
+                                    quickCommands.removeAt(editingQuickCommandIndex)
+                                    editingQuickCommandIndex = -2
+                                }
+                            ) { Text("删除") }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val value = editingQuickCommandText.trim()
+                    if (value.isNotEmpty()) {
+                        if (editingQuickCommandIndex >= 0) {
+                            quickCommands[editingQuickCommandIndex] = value
+                            command = value
+                        } else {
+                            quickCommands.add(value)
+                            command = value
+                        }
+                    }
+                    editingQuickCommandIndex = -2
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingQuickCommandIndex = -2 }) { Text("取消") }
+            }
+        )
+    }
 }
 
 @Composable

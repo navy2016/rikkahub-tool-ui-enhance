@@ -148,7 +148,7 @@ fun ContainerManagerSheet(
                 // 大状态区域
                 StatusDisplay(containerState)
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(80.dp))
 
                 // 操作区
                 when (containerState) {
@@ -754,8 +754,12 @@ private fun StatsSection(packages: List<String>, size: Long) {
 @Composable
 private fun StatItem(label: String, value: String) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 32.dp)
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
