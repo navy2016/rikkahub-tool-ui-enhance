@@ -70,6 +70,12 @@ class PRootManager(
         // 在 Android PRoot 环境下 stat/realpath/openat/worker-thread 不一致的问题。
         private const val PROOT_RUNTIME_VERSION = "termux-proot-5.1.107.72-libtalloc-2.4.3-r3-seccomp-auto"
         private const val PROOT_RUNTIME_VERSION_FILE = "proot_runtime_version.txt"
+
+        // Bundled CLI runtime assets. Cargo/Rust stay in CI; device runtime only unpacks Bun + prebuilt OMP.
+        private const val BUN_BUNDLE_VERSION = "bun-alpine-aarch64-musl-r1"
+        private const val BUN_BUNDLE_VERSION_FILE = "bun_bundle_version.txt"
+        private const val OMP_BUNDLE_VERSION = "oh-my-pi-alpine-aarch64-musl-r1"
+        private const val OMP_BUNDLE_VERSION_FILE = "omp_bundle_version.txt"
     }
 
     // 目录
@@ -659,6 +665,8 @@ class PRootManager(
             "rikkahub-disable-polling",
             "rikkahub-test-node-npm",
             "rikkahub-test-node-native",
+            "rikkahub-omp-help",
+            "rikkahub-test-omp",
             "rikkahub-test-watch",
             "rikkahub-test-service",
             "rikkahub-test-port",
@@ -793,6 +801,17 @@ class PRootManager(
             Log.d(TAG, "[ToolEnv] Python configured: PYTHON_HOME=$pythonHome, pip available")
         }
 
+        // Bundled Bun / oh-my-pi runtime
+        val bunExists = File(upperLocalDir, "bun/bin/bun").exists()
+        Log.d(TAG, "[ToolEnv] Bun exists: $bunExists")
+        if (bunExists) {
+            toolPaths.add("/usr/local/bun/bin")
+            env["BUN_INSTALL"] = "/usr/local/bun"
+        }
+        if (File(upperLocalDir, "omp").exists()) {
+            env["OMP_HOME"] = "/usr/local/omp"
+        }
+
         // Node.js 模块路径（确保 npm 可用）
         val nodePath = listOf("/usr/local/lib/node_modules", "/usr/lib/node_modules")
         env["NODE_PATH"] = nodePath.joinToString(":")
@@ -884,6 +903,9 @@ class PRootManager(
                 "nameserver 8.8.8.8\n" +
                 "options timeout:2 attempts:2\n"
         )
+        installBundledBunIfAvailable(upperDir)
+        installBundledOmpIfAvailable(upperDir)
+
         File(upperDir, "root/.npmrc").writeText(
             "prefix=/usr/local\n" +
                 "cache=/tmp/npm-cache\n" +
@@ -1053,6 +1075,49 @@ printf '%s\n' 'rikkahub-install-cli now installs lightweight terminal tools only
 printf '%s\n' 'Run rikkahub-install-ai-cli separately for Claude Code / Codex / OpenCode.'
 exec rikkahub-install-terminal-tools
 """)
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-omp-help").apply {
+            writeText(containerShellScript("""
+                cat <<'EOF'
+                == RikkaHub bundled oh-my-pi helper ==
+
+                oh-my-pi is exposed as: omp
+
+                Common checks:
+                  command -v bun
+                  command -v omp
+                  omp --version
+                  omp --help
+                  rikkahub-test-omp
+
+                Interactive TUI:
+                  start a background interactive process with tty=true, for example command: omp
+
+                Runtime layout:
+                  /usr/local/bun/bin/bun
+                  /usr/local/omp
+                  /usr/local/bin/omp
+
+                Cargo/Rust are not bundled on-device. Native components must be prebuilt by CI for Alpine/musl/aarch64.
+                EOF
+            """))
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-test-omp").apply {
+            writeText(containerShellScript("""
+                set -eu
+                printf '%s\n' '== RikkaHub bundled oh-my-pi smoke test =='
+                printf 'arch='; uname -m 2>/dev/null || true
+                printf 'alpine='; cat /etc/alpine-release 2>/dev/null || true
+                printf 'bun='; command -v bun || { echo 'bun missing; bundled Bun asset was not installed' >&2; exit 10; }
+                bun --version
+                printf 'omp='; command -v omp || { echo 'omp missing; bundled OMP asset was not installed' >&2; exit 11; }
+                omp --version
+                omp --help >/tmp/rikkahub-omp-help.txt
+                head -40 /tmp/rikkahub-omp-help.txt
+                printf '%s\n' 'RIKKAHUB_OMP_OK'
+            """))
             setExecutable(true, false)
         }
         File(binDir, "rikkahub-node-help").apply {
@@ -1481,6 +1546,102 @@ printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
             setExecutable(true, false)
         }
     }
+
+    private fun installBundledBunIfAvailable(upperDir: File) {
+        val arch = getDeviceArchitecture()
+        val assetPath = when (arch) {
+            "aarch64" -> "bun/bun-alpine-aarch64-musl.tar.gz"
+            "x86_64" -> "bun/bun-alpine-x86_64-musl.tar.gz"
+            else -> return
+        }
+        installBundledTarAssetIfNeeded(
+            upperDir = upperDir,
+            assetPath = assetPath,
+            targetDir = File(upperDir, "usr/local"),
+            installDir = File(upperDir, "usr/local/bun"),
+            versionFileName = BUN_BUNDLE_VERSION_FILE,
+            version = BUN_BUNDLE_VERSION,
+            label = "Bun"
+        )
+        val bun = File(upperDir, "usr/local/bun/bin/bun")
+        if (bun.exists()) bun.setExecutable(true, false)
+        val wrapper = File(upperDir, "usr/local/bin/bun")
+        if (bun.exists() && (!wrapper.exists() || wrapper.readTextOrEmpty().contains("RikkaHub bundled Bun"))) {
+            wrapper.writeText("""#!/bin/sh
+# RikkaHub bundled Bun wrapper
+exec /usr/local/bun/bin/bun "${'$'}@"
+""")
+            wrapper.setExecutable(true, false)
+        }
+    }
+
+    private fun installBundledOmpIfAvailable(upperDir: File) {
+        val arch = getDeviceArchitecture()
+        val assetPath = when (arch) {
+            "aarch64" -> "omp/omp-alpine-aarch64-musl.tar.gz"
+            "x86_64" -> "omp/omp-alpine-x86_64-musl.tar.gz"
+            else -> return
+        }
+        installBundledTarAssetIfNeeded(
+            upperDir = upperDir,
+            assetPath = assetPath,
+            targetDir = File(upperDir, "usr/local"),
+            installDir = File(upperDir, "usr/local/omp"),
+            versionFileName = OMP_BUNDLE_VERSION_FILE,
+            version = OMP_BUNDLE_VERSION,
+            label = "oh-my-pi"
+        )
+        val ompHome = File(upperDir, "usr/local/omp")
+        val ompEntrypoint = File(ompHome, "omp")
+        if (ompEntrypoint.exists()) ompEntrypoint.setExecutable(true, false)
+        val wrapper = File(upperDir, "usr/local/bin/omp")
+        if (ompHome.exists() && (!wrapper.exists() || wrapper.readTextOrEmpty().contains("RikkaHub bundled oh-my-pi"))) {
+            wrapper.writeText("""#!/bin/sh
+# RikkaHub bundled oh-my-pi wrapper
+set -eu
+export BUN_INSTALL="${'$'}{BUN_INSTALL:-/usr/local/bun}"
+export OMP_HOME="${'$'}{OMP_HOME:-/usr/local/omp}"
+export PATH="/usr/local/bun/bin:/usr/local/bin:/usr/bin:/bin:${'$'}PATH"
+if [ -f /usr/local/omp/omp ]; then
+  exec sh /usr/local/omp/omp "${'$'}@"
+fi
+exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
+""")
+            wrapper.setExecutable(true, false)
+        }
+    }
+
+    private fun installBundledTarAssetIfNeeded(
+        upperDir: File,
+        assetPath: String,
+        targetDir: File,
+        installDir: File,
+        versionFileName: String,
+        version: String,
+        label: String,
+    ) {
+        val shareDir = File(upperDir, "usr/local/share/rikkahub").apply { mkdirs() }
+        val versionFile = File(shareDir, versionFileName)
+        val installedVersion = versionFile.takeIf { it.exists() }?.readTextOrEmpty()?.trim()
+        if (installedVersion == version && installDir.exists()) return
+
+        val exists = runCatching { context.assets.open(assetPath).close(); true }.getOrDefault(false)
+        if (!exists) {
+            Log.d(TAG, "Bundled $label asset not present: $assetPath")
+            return
+        }
+
+        Log.i(TAG, "Installing bundled $label from $assetPath version=$version previous=$installedVersion")
+        installDir.deleteRecursively()
+        targetDir.mkdirs()
+        context.assets.open(assetPath).use { input ->
+            extractTarGz(input, targetDir)
+        }
+        versionFile.writeText(version)
+        Log.i(TAG, "Bundled $label installed to ${installDir.absolutePath}")
+    }
+
+    private fun File.readTextOrEmpty(): String = runCatching { readText() }.getOrDefault("")
 
 
     private fun cleanupLegacyNodeNpmCompatibilityWrappers(upperDir: File = File(containerDir, "upper")) {
@@ -2693,7 +2854,9 @@ printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
         processEnv["NO_UPDATE_NOTIFIER"] = "1"
         processEnv["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
         processEnv["NODE_PATH"] = "/usr/local/lib/node_modules:/usr/lib/node_modules"
-        processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        processEnv["BUN_INSTALL"] = "/usr/local/bun"
+        processEnv["OMP_HOME"] = "/usr/local/omp"
+        processEnv["PATH"] = "/usr/local/bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
         // 合并自定义环境变量
         processEnv.putAll(customEnv)

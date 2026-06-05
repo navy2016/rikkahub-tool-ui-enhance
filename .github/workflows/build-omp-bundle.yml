@@ -1,0 +1,73 @@
+name: Build bundled oh-my-pi runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      omp_ref:
+        description: oh-my-pi git ref to package
+        required: true
+        default: main
+      commit_assets:
+        description: Commit generated assets back to this branch
+        required: true
+        type: boolean
+        default: false
+  push:
+    branches:
+      - feature/bundled-oh-my-pi
+    paths:
+      - '.github/workflows/build-omp-bundle.yml'
+      - 'scripts/build-omp-bundle.sh'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/PRootManager.kt'
+      - 'docs/oh-my-pi-bundled.md'
+
+permissions:
+  contents: write
+
+env:
+  OMP_REF: ${{ github.event.inputs.omp_ref || 'main' }}
+
+jobs:
+  build-aarch64-musl:
+    name: Build Alpine aarch64/musl OMP bundle
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout RikkaHub
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build bundle in Alpine arm64
+        run: |
+          chmod +x scripts/build-omp-bundle.sh
+          docker run --rm \
+            -e OMP_REF="${OMP_REF}" \
+            -v "$PWD:/work" \
+            -w /work \
+            alpine:3.19 \
+            sh scripts/build-omp-bundle.sh
+
+      - name: Show bundle sizes
+        run: |
+          ls -lh app/src/main/assets/bun/*.tar.gz app/src/main/assets/omp/*.tar.gz
+          du -h app/src/main/assets/bun/*.tar.gz app/src/main/assets/omp/*.tar.gz
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundled-oh-my-pi-alpine-aarch64-musl
+          path: |
+            app/src/main/assets/bun/bun-alpine-aarch64-musl.tar.gz
+            app/src/main/assets/omp/omp-alpine-aarch64-musl.tar.gz
+          retention-days: 14
+
+      - name: Commit assets to branch
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.commit_assets }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/src/main/assets/bun/bun-alpine-aarch64-musl.tar.gz app/src/main/assets/omp/omp-alpine-aarch64-musl.tar.gz
+          git commit -m "Bundle oh-my-pi Alpine aarch64 runtime" || exit 0
+          git push origin HEAD:${GITHUB_REF_NAME}
