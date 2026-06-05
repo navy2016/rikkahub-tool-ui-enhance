@@ -37,6 +37,7 @@ jobs:
       - name: Checkout RikkaHub
         uses: actions/checkout@v4
         with:
+          lfs: true
           fetch-depth: 0
 
       - name: Build bundle in Alpine arm64
@@ -68,6 +69,10 @@ jobs:
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add app/src/main/assets/bun/bun-alpine-aarch64-musl.tar.gz app/src/main/assets/omp/omp-alpine-aarch64-musl.tar.gz
+          git lfs install
+          git lfs track 'app/src/main/assets/bun/*.tar.gz'
+          git lfs track 'app/src/main/assets/omp/*.tar.gz'
+          git add .gitattributes app/src/main/assets/bun/bun-alpine-aarch64-musl.tar.gz app/src/main/assets/omp/omp-alpine-aarch64-musl.tar.gz
           git commit -m "Bundle oh-my-pi Alpine aarch64 runtime" || exit 0
+          git lfs status
           git push origin HEAD:${GITHUB_REF_NAME}
