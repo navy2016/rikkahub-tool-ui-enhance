@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
@@ -148,7 +149,7 @@ fun ContainerManagerSheet(
                 // 大状态区域
                 StatusDisplay(containerState)
 
-                Spacer(modifier = Modifier.height(80.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // 操作区
                 when (containerState) {
@@ -260,14 +261,14 @@ fun ContainerManagerSheet(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "• 网络异常：rikkahub-fix-apk\n• 安装 CLI/TUI：rikkahub-install-cli\n• native addon 编译：rikkahub-install-node-build-tools\n• 文件监听异常：rikkahub-enable-polling 后重启会话\n• 一键诊断：rikkahub-doctor",
+                            text = "• 网络异常：rikkahub-fix-apk\n• 轻量终端工具：rikkahub-install-terminal-tools\n• AI CLI（重）：rikkahub-install-ai-cli\n• native addon 编译：rikkahub-install-node-build-tools\n• 文件监听异常：rikkahub-enable-polling 后重启会话\n• 一键诊断：rikkahub-doctor",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(96.dp))
             }
         }
     }
@@ -756,20 +757,27 @@ private fun StatItem(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 32.dp)
-            .padding(vertical = 4.dp),
+            .heightIn(min = 40.dp)
+            .padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
+            modifier = Modifier.weight(0.42f),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Text(
             text = value,
+            modifier = Modifier.weight(0.58f),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.End
         )
     }
 }

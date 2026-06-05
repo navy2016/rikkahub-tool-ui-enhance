@@ -162,6 +162,9 @@ class SettingsStore(
         val AUTO_CONTINUE_AFTER_TOOL_FAILURE_ENABLED = booleanPreferencesKey("auto_continue_after_tool_failure_enabled")
         val AUTO_CONTINUE_AFTER_TOOL_FAILURE_MESSAGE = stringPreferencesKey("auto_continue_after_tool_failure_message")
         val TOOL_CALL_DELAY_SECONDS = intPreferencesKey("tool_call_delay_seconds")
+        val TERMINAL_QUICK_COMMANDS = stringPreferencesKey("terminal_quick_commands")
+        val TERMINAL_STATUS_BAR_ITEMS = stringPreferencesKey("terminal_status_bar_items")
+        val TERMINAL_EXTRA_KEY_ITEMS = stringPreferencesKey("terminal_extra_key_items")
 
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
@@ -285,6 +288,9 @@ class SettingsStore(
                 autoContinueAfterToolFailureEnabled = preferences[AUTO_CONTINUE_AFTER_TOOL_FAILURE_ENABLED] != false,
                 autoContinueAfterToolFailureMessage = preferences[AUTO_CONTINUE_AFTER_TOOL_FAILURE_MESSAGE] ?: "继续",
                 toolCallDelaySeconds = preferences[TOOL_CALL_DELAY_SECONDS] ?: 0,
+                terminalQuickCommands = preferences[TERMINAL_QUICK_COMMANDS] ?: "",
+                terminalStatusBarItems = preferences[TERMINAL_STATUS_BAR_ITEMS] ?: "",
+                terminalExtraKeyItems = preferences[TERMINAL_EXTRA_KEY_ITEMS] ?: "",
                 backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: BackupReminderConfig(),
@@ -551,6 +557,9 @@ class SettingsStore(
             val failureContinueMessage = settings.autoContinueAfterToolFailureMessage.trim().ifBlank { "继续" }
             preferences[AUTO_CONTINUE_AFTER_TOOL_FAILURE_MESSAGE] = failureContinueMessage
             preferences[TOOL_CALL_DELAY_SECONDS] = settings.toolCallDelaySeconds.coerceAtLeast(0)
+            if (settings.terminalQuickCommands.isBlank()) preferences.remove(TERMINAL_QUICK_COMMANDS) else preferences[TERMINAL_QUICK_COMMANDS] = settings.terminalQuickCommands
+            if (settings.terminalStatusBarItems.isBlank()) preferences.remove(TERMINAL_STATUS_BAR_ITEMS) else preferences[TERMINAL_STATUS_BAR_ITEMS] = settings.terminalStatusBarItems
+            if (settings.terminalExtraKeyItems.isBlank()) preferences.remove(TERMINAL_EXTRA_KEY_ITEMS) else preferences[TERMINAL_EXTRA_KEY_ITEMS] = settings.terminalExtraKeyItems
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
@@ -704,6 +713,9 @@ data class Settings(
     val autoContinueAfterToolFailureEnabled: Boolean = true,
     val autoContinueAfterToolFailureMessage: String = "继续",
     val toolCallDelaySeconds: Int = 0,
+    val terminalQuickCommands: String = "",
+    val terminalStatusBarItems: String = "",
+    val terminalExtraKeyItems: String = "",
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
