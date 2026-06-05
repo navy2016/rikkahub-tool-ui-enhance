@@ -1549,14 +1549,14 @@ printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
 
     private fun installBundledBunIfAvailable(upperDir: File) {
         val arch = getDeviceArchitecture()
-        val assetPath = when (arch) {
-            "aarch64" -> "bun/bun-alpine-aarch64-musl.tar.gz"
-            "x86_64" -> "bun/bun-alpine-x86_64-musl.tar.gz"
+        val assetPaths = when (arch) {
+            "aarch64" -> listOf("bun/bun-alpine-aarch64-musl.tar.gz", "bun/bun-alpine-aarch64-musl.tar")
+            "x86_64" -> listOf("bun/bun-alpine-x86_64-musl.tar.gz", "bun/bun-alpine-x86_64-musl.tar")
             else -> return
         }
         installBundledTarAssetIfNeeded(
             upperDir = upperDir,
-            assetPath = assetPath,
+            assetPaths = assetPaths,
             targetDir = File(upperDir, "usr/local"),
             installDir = File(upperDir, "usr/local/bun"),
             versionFileName = BUN_BUNDLE_VERSION_FILE,
@@ -1577,14 +1577,14 @@ exec /usr/local/bun/bin/bun "${'$'}@"
 
     private fun installBundledOmpIfAvailable(upperDir: File) {
         val arch = getDeviceArchitecture()
-        val assetPath = when (arch) {
-            "aarch64" -> "omp/omp-alpine-aarch64-musl.tar.gz"
-            "x86_64" -> "omp/omp-alpine-x86_64-musl.tar.gz"
+        val assetPaths = when (arch) {
+            "aarch64" -> listOf("omp/omp-alpine-aarch64-musl.tar.gz", "omp/omp-alpine-aarch64-musl.tar")
+            "x86_64" -> listOf("omp/omp-alpine-x86_64-musl.tar.gz", "omp/omp-alpine-x86_64-musl.tar")
             else -> return
         }
         installBundledTarAssetIfNeeded(
             upperDir = upperDir,
-            assetPath = assetPath,
+            assetPaths = assetPaths,
             targetDir = File(upperDir, "usr/local"),
             installDir = File(upperDir, "usr/local/omp"),
             versionFileName = OMP_BUNDLE_VERSION_FILE,
@@ -1613,7 +1613,7 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
 
     private fun installBundledTarAssetIfNeeded(
         upperDir: File,
-        assetPath: String,
+        assetPaths: List<String>,
         targetDir: File,
         installDir: File,
         versionFileName: String,
@@ -1625,9 +1625,11 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
         val installedVersion = versionFile.takeIf { it.exists() }?.readTextOrEmpty()?.trim()
         if (installedVersion == version && installDir.exists()) return
 
-        val exists = runCatching { context.assets.open(assetPath).close(); true }.getOrDefault(false)
-        if (!exists) {
-            Log.d(TAG, "Bundled $label asset not present: $assetPath")
+        val assetPath = assetPaths.firstOrNull { candidate ->
+            runCatching { context.assets.open(candidate).close(); true }.getOrDefault(false)
+        }
+        if (assetPath == null) {
+            Log.d(TAG, "Bundled $label asset not present; checked: ${assetPaths.joinToString()}")
             return
         }
 
