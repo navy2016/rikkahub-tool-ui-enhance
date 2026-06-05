@@ -2232,9 +2232,80 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
      */
     private fun extractTar(input: java.io.InputStream, targetDir: File) {
         val buffer = ByteArray(8192)
+        var pendingLongName: String? = null
+        var pendingPaxPath: String? = null
+
+        fun readStringField(bytes: ByteArray): String =
+            String(bytes, Charsets.UTF_8).trimEnd('\u0000', ' ')
+
+        fun parseOctal(bytes: ByteArray): Long {
+            val text = readStringField(bytes).trim()
+            return if (text.isEmpty()) 0L else text.toLong(8)
+        }
+
+        fun readPayload(size: Long): ByteArray {
+            val out = java.io.ByteArrayOutputStream(size.coerceAtMost(1024 * 1024).toInt())
+            var remaining = size
+            while (remaining > 0) {
+                val toRead = minOf(buffer.size.toLong(), remaining).toInt()
+                val read = input.read(buffer, 0, toRead)
+                if (read == -1) break
+                out.write(buffer, 0, read)
+                remaining -= read
+            }
+            return out.toByteArray()
+        }
+
+        fun skipPayload(size: Long) {
+            var remaining = size
+            while (remaining > 0) {
+                val toRead = minOf(buffer.size.toLong(), remaining).toInt()
+                val read = input.read(buffer, 0, toRead)
+                if (read == -1) break
+                remaining -= read
+            }
+        }
+
+        fun skipPadding(size: Long) {
+            var remainingPadding = ((512 - (size % 512)) % 512).toInt()
+            while (remainingPadding > 0) {
+                val skipped = input.skip(remainingPadding.toLong())
+                if (skipped > 0) {
+                    remainingPadding -= skipped.toInt()
+                } else {
+                    if (input.read() == -1) break
+                    remainingPadding--
+                }
+            }
+        }
+
+        fun parsePaxPath(payload: ByteArray): String? {
+            val text = String(payload, Charsets.UTF_8)
+            var index = 0
+            while (index < text.length) {
+                val space = text.indexOf(' ', index)
+                if (space <= index) break
+                val length = text.substring(index, space).toIntOrNull() ?: break
+                val end = (index + length).coerceAtMost(text.length)
+                val record = text.substring(space + 1, end).trimEnd('\n')
+                val equals = record.indexOf('=')
+                if (equals > 0 && record.substring(0, equals) == "path") {
+                    return record.substring(equals + 1).trimEnd('\u0000')
+                }
+                index += length
+            }
+            return null
+        }
+
+        fun normalizeTarPath(name: String): String? {
+            val normalized = name.trimEnd('\u0000').replace('\\', '/')
+            if (normalized.isBlank() || normalized.startsWith('/')) return null
+            val parts = normalized.split('/').filter { it.isNotEmpty() }
+            if (parts.any { it == "." || it == ".." }) return null
+            return parts.joinToString("/")
+        }
 
         while (true) {
-            // 读取 tar 头部（512 字节）
             val header = ByteArray(512)
             var bytesRead = 0
             while (bytesRead < 512) {
@@ -2243,71 +2314,81 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
                 bytesRead += read
             }
 
-            if (bytesRead < 512) break // 文件结束
+            if (bytesRead < 512) break
+            if (header.all { it == 0.toByte() }) break
 
-            // 检查是否为空块（tar 结尾）
-            if (header.all { it == 0.toByte() }) {
-                // 检查下一个块是否也是空的
-                val nextHeader = ByteArray(512)
-                var nextBytesRead = 0
-                while (nextBytesRead < 512) {
-                    val read = input.read(nextHeader, nextBytesRead, 512 - nextBytesRead)
-                    if (read == -1) break
-                    nextBytesRead += read
-                }
-                if (nextHeader.all { it == 0.toByte() }) break
-            }
-
-            // 解析文件名（前 100 字节）
-            val nameBytes = header.copyOfRange(0, 100)
-            val name = String(nameBytes, Charsets.UTF_8).trimEnd('\u0000')
-            if (name.isEmpty()) continue
-
-            // 解析文件大小（第 124-135 字节，八进制）
-            val sizeBytes = header.copyOfRange(124, 136)
-            val sizeStr = String(sizeBytes, Charsets.UTF_8).trimEnd('\u0000', ' ')
-            val fileSize = if (sizeStr.isEmpty()) 0 else sizeStr.toLong(8)
-
-            // 解析文件类型（第 156 字节）
+            val nameField = readStringField(header.copyOfRange(0, 100))
+            val prefixField = readStringField(header.copyOfRange(345, 500))
+            val headerName = if (prefixField.isNotEmpty()) "$prefixField/$nameField" else nameField
+            val fileSize = parseOctal(header.copyOfRange(124, 136))
             val typeFlag = header[156].toInt()
 
-            val file = File(targetDir, name)
-
             when (typeFlag) {
-                '5'.code -> {
-                    // 目录
+                'L'.code -> {
+                    pendingLongName = String(readPayload(fileSize), Charsets.UTF_8).trimEnd('\u0000', '\n')
+                    skipPadding(fileSize)
+                    continue
+                }
+                'x'.code, 'g'.code -> {
+                    val paxPath = parsePaxPath(readPayload(fileSize))
+                    if (typeFlag == 'x'.code && paxPath != null) pendingPaxPath = paxPath
+                    skipPadding(fileSize)
+                    continue
+                }
+            }
+
+            val rawName = pendingPaxPath ?: pendingLongName ?: headerName
+            val rawNameLooksDirectory = rawName.endsWith("/")
+            pendingPaxPath = null
+            pendingLongName = null
+            val name = normalizeTarPath(rawName)
+            if (name == null) {
+                skipPayload(fileSize)
+                skipPadding(fileSize)
+                continue
+            }
+
+            val file = File(targetDir, name)
+            val isDirectory = typeFlag == '5'.code || rawNameLooksDirectory
+
+            when {
+                isDirectory -> {
                     file.mkdirs()
+                    skipPayload(fileSize)
                 }
-                '0'.code, 0 -> {
-                    // 普通文件
-                    file.parentFile?.mkdirs()
-                    file.outputStream().use { output ->
-                        var remaining = fileSize
-                        while (remaining > 0) {
-                            val toRead = minOf(buffer.size.toLong(), remaining).toInt()
-                            val read = input.read(buffer, 0, toRead)
-                            if (read == -1) break
-                            output.write(buffer, 0, read)
-                            remaining -= read
+                typeFlag == '0'.code || typeFlag == 0 -> {
+                    if (file.exists() && file.isDirectory) {
+                        Log.w(TAG, "Skipping tar file entry that resolves to existing directory: $name")
+                        skipPayload(fileSize)
+                    } else {
+                        if (file.parentFile?.exists() == true && file.parentFile?.isFile == true) {
+                            file.parentFile?.delete()
                         }
-                    }
-                    // 设置可执行权限（如果 mode 中有执行位）
-                    val modeBytes = header.copyOfRange(100, 108)
-                    val mode = String(modeBytes, Charsets.UTF_8).trimEnd('\u0000', ' ')
-                    if (mode.isNotEmpty()) {
-                        val modeInt = mode.toInt(8)
-                        if ((modeInt and 0b001001001) != 0) {
-                            file.setExecutable(true)
-                        }
-                    }
-                }
-                '2'.code -> {
-                    // 符号链接 - 读取链接目标并创建真正的符号链接
-                    // 符号链接目标在 tar 头部的 157-256 字节（linkname 字段）
-                    val linkNameBytes = header.copyOfRange(157, 257)
-                    val linkName = String(linkNameBytes, Charsets.UTF_8).trimEnd('\u0000')
-                    if (linkName.isNotEmpty()) {
                         file.parentFile?.mkdirs()
+                        file.outputStream().use { output ->
+                            var remaining = fileSize
+                            while (remaining > 0) {
+                                val toRead = minOf(buffer.size.toLong(), remaining).toInt()
+                                val read = input.read(buffer, 0, toRead)
+                                if (read == -1) break
+                                output.write(buffer, 0, read)
+                                remaining -= read
+                            }
+                        }
+                        val mode = readStringField(header.copyOfRange(100, 108))
+                        if (mode.isNotEmpty()) {
+                            val modeInt = mode.toInt(8)
+                            if ((modeInt and 0b001001001) != 0) {
+                                file.setExecutable(true)
+                            }
+                        }
+                    }
+                }
+                typeFlag == '2'.code -> {
+                    val linkName = readStringField(header.copyOfRange(157, 257))
+                    file.parentFile?.mkdirs()
+                    if (file.exists()) file.delete()
+                    if (linkName.isNotEmpty()) {
                         try {
                             android.system.Os.symlink(linkName, file.absolutePath)
                             Log.d(TAG, "Created symlink: ${file.absolutePath} -> $linkName")
@@ -2316,31 +2397,16 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
                             file.createNewFile()
                         }
                     } else {
-                        // 如果链接名为空，创建空文件占位
-                        file.parentFile?.mkdirs()
                         file.createNewFile()
                     }
+                    skipPayload(fileSize)
                 }
                 else -> {
-                    // 其他类型，跳过内容
-                    var remaining = fileSize
-                    while (remaining > 0) {
-                        val toSkip = minOf(buffer.size.toLong(), remaining).toInt()
-                        val skipped = input.read(buffer, 0, toSkip)
-                        if (skipped == -1) break
-                        remaining -= skipped
-                    }
+                    skipPayload(fileSize)
                 }
             }
 
-            // 跳过填充到 512 字节边界的字节
-            val padding = (512 - (fileSize % 512)) % 512
-            var remainingPadding = padding
-            while (remainingPadding > 0) {
-                val skipped = input.skip(remainingPadding.toLong())
-                if (skipped == 0L) break
-                remainingPadding -= skipped.toInt()
-            }
+            skipPadding(fileSize)
         }
     }
 
