@@ -620,7 +620,8 @@ private fun TerminalInteractivePanel(
     var editingTerminalItems by remember { mutableStateOf<String?>(null) }
     val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
-    val terminalInputBarHeight = if (rawInputMode && !showFullInputBar) 34.dp else 46.dp
+    val inputBarVisible = !rawInputMode || showFullInputBar
+    val terminalInputBarHeight = if (inputBarVisible) 46.dp else 0.dp
     val terminalBottomRevealPadding = (if (showExtraKeys) 54.dp else 8.dp) + terminalInputBarHeight
 
     LaunchedEffect(processId) {
@@ -695,6 +696,10 @@ private fun TerminalInteractivePanel(
     fun sendKey(key: Key) {
         sendRaw(terminalEmulator.sequenceFor(key, alt = altLatch, ctrl = ctrlLatch))
         clearModifierLatches()
+    }
+
+    fun sendPlainBackspace() {
+        sendRaw(terminalEmulator.sequenceFor(Key.BACKSPACE))
     }
 
     fun sequenceForHardwareSpecialKey(event: KeyEvent, shift: Boolean, alt: Boolean, ctrl: Boolean): String? {
@@ -797,12 +802,11 @@ private fun TerminalInteractivePanel(
                 }
             }
             previous.length > value.length && previous.startsWith(value) -> {
-                // Deleting local raw input buffer text should not automatically send terminal
-                // Backspace. Hardware Backspace is sent only when the local buffer is empty.
-                input = value
+                repeat(previous.length - value.length) { sendPlainBackspace() }
             }
             value != previous -> {
                 val common = previous.zip(value).takeWhile { it.first == it.second }.size
+                repeat(previous.length - common) { sendPlainBackspace() }
                 val delta = value.drop(common)
                 if (delta.isNotEmpty()) {
                     if (delta.length > 1 || delta.contains('\n') || delta.contains('\r')) sendPastedText(delta) else {
@@ -1061,8 +1065,6 @@ private fun TerminalInteractivePanel(
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
             val submitInput = {
                 if (rawInputMode) {
                     scope.launch { bgManager.sendControlInput(processId, ControlInput.ENTER) }
@@ -1072,24 +1074,15 @@ private fun TerminalInteractivePanel(
                 }
             }
             if (rawInputMode && !showFullInputBar) {
-                TerminalCompactInputBar(
+                TerminalHiddenInputBridge(
                     input = input,
-                    terminalForeground = terminalForeground,
-                    terminalMuted = terminalMuted,
-                    terminalBackground = terminalBackground,
                     focusRequester = inputFocusRequester,
                     onInputChange = { handleInputChange(it) },
                     onSubmit = submitInput,
-                    onHardwareKey = { event -> handleHardwareKey(event) },
-                    onKeyboard = {
-                        inputFocusRequester.requestFocus()
-                        keyboardController?.show()
-                    },
-                    onPaste = { sendPastedText(context.readClipboardText()) },
-                    onEscape = { scope.launch { bgManager.sendControlInput(processId, ControlInput.ESC) } },
-                    onExpand = { showFullInputBar = true }
+                    onHardwareKey = { event -> handleHardwareKey(event) }
                 )
             } else {
+                Spacer(modifier = Modifier.height(4.dp))
                 TerminalInputBar(
                     input = input,
                     rawInputMode = rawInputMode,
@@ -1240,7 +1233,7 @@ private fun TerminalStatusBar(
                 "AUTO" -> TerminalStatusKey(if (autoScroll) "AUTO" else "LOCK", autoScroll, onLongClick = onEditItems) { onAutoScrollChange(!autoScroll) }
                 "KEYS" -> TerminalStatusKey("KEYS", showExtraKeys, onLongClick = onEditItems) { onShowExtraKeysChange(!showExtraKeys) }
                 "TOUCH" -> TerminalStatusKey(if (terminalPanMode) "TOUCH" else "MOUSE", !terminalPanMode, onLongClick = onEditItems) { onTerminalPanModeChange(!terminalPanMode) }
-                "INPUT" -> TerminalStatusKey(if (showFullInputBar) "INPUT" else "MINI", showFullInputBar, onLongClick = onEditItems) { onShowFullInputBarChange(!showFullInputBar) }
+                "INPUT" -> TerminalStatusKey(if (showFullInputBar) "INPUT" else "HIDE", showFullInputBar, onLongClick = onEditItems) { onShowFullInputBarChange(!showFullInputBar) }
                 "A-" -> TerminalStatusKey("A-", onLongClick = onEditItems, onClick = { onTerminalFontSizeChange(terminalFontSizeSp - 1f) })
                 "A+" -> TerminalStatusKey("A+", onLongClick = onEditItems, onClick = { onTerminalFontSizeChange(terminalFontSizeSp + 1f) })
                 "COPY" -> TerminalStatusKey("COPY", onLongClick = onEditItems, onClick = onCopy)
@@ -1388,69 +1381,35 @@ private fun TerminalKey(
 }
 
 @Composable
-private fun TerminalCompactInputBar(
+private fun TerminalHiddenInputBridge(
     input: String,
-    terminalForeground: Color,
-    terminalMuted: Color,
-    terminalBackground: Color,
     focusRequester: FocusRequester,
     onInputChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onHardwareKey: (KeyEvent) -> Boolean,
-    onKeyboard: () -> Unit,
-    onPaste: () -> Unit,
-    onEscape: () -> Unit,
-    onExpand: () -> Unit,
 ) {
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(34.dp)
-            .background(Color(0xFF111111), RoundedCornerShape(8.dp))
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
+            .height(1.dp)
     ) {
-        TerminalKey("KBD") { onKeyboard() }
         BasicTextField(
             value = input,
             onValueChange = onInputChange,
             modifier = Modifier
-                .weight(1f)
-                .height(26.dp)
+                .size(1.dp)
                 .focusRequester(focusRequester)
-                .background(terminalBackground, RoundedCornerShape(6.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp)
                 .onPreviewKeyEvent { event -> onHardwareKey(event) },
             singleLine = true,
-            textStyle = MaterialTheme.typography.bodySmall.copy(
-                color = terminalForeground,
+            textStyle = TextStyle(
+                color = Color.Transparent,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 12.sp
+                fontSize = 1.sp
             ),
-            cursorBrush = SolidColor(terminalForeground),
+            cursorBrush = SolidColor(Color.Transparent),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { onSubmit() }),
-            decorationBox = { innerTextField ->
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                    if (input.isEmpty()) {
-                        Text(
-                            text = "IME bridge…",
-                            color = terminalMuted.copy(alpha = 0.55f),
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    innerTextField()
-                }
-            }
         )
-        TerminalKey("↵", highlight = true) { onSubmit() }
-        TerminalKey("ESC") { onEscape() }
-        TerminalKey("PST") { onPaste() }
-        TerminalKey("FULL") { onExpand() }
     }
 }
 
@@ -1617,13 +1576,15 @@ private fun CreateSessionDialog(
     onDismiss: () -> Unit,
     onCreate: (String) -> Unit
 ) {
-    var command by remember { mutableStateOf("rikkahub-tmux") }
     val scope = rememberCoroutineScope()
     val defaultQuickCommands = remember { defaultTerminalQuickCommands() }
     val quickCommands = remember(quickCommandsConfig) {
         mutableStateListOf<TerminalQuickCommandConfig>().apply {
             addAll(decodeTerminalConfig(quickCommandsConfig, defaultQuickCommands))
         }
+    }
+    var command by remember(quickCommandsConfig) {
+        mutableStateOf(quickCommands.firstOrNull()?.command ?: "rikkahub-tmux")
     }
     var editingQuickCommandIndex by remember { mutableIntStateOf(-2) }
     var editingQuickCommandName by remember { mutableStateOf("") }
@@ -1692,6 +1653,7 @@ private fun CreateSessionDialog(
                     TextButton(onClick = {
                         quickCommands.clear()
                         quickCommands.addAll(defaultQuickCommands)
+                        command = quickCommands.firstOrNull()?.command ?: command
                         persistQuickCommands()
                     }) { Text("恢复默认排序") }
                 }
