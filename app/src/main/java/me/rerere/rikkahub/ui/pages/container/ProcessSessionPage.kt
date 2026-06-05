@@ -117,6 +117,7 @@ import kotlin.math.roundToInt
 import java.util.concurrent.TimeUnit
 
 private val TerminalConfigJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+private const val TERMINAL_RAW_INPUT_SENTINEL = "\u200B"
 
 @Serializable
 private data class TerminalQuickCommandConfig(
@@ -1393,9 +1394,10 @@ private fun TerminalHiddenInputBridge(
             .fillMaxWidth()
             .height(1.dp)
     ) {
+        val fieldValue = if (input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input
         BasicTextField(
-            value = input,
-            onValueChange = onInputChange,
+            value = fieldValue,
+            onValueChange = { value -> onInputChange(value.replace(TERMINAL_RAW_INPUT_SENTINEL, "")) },
             modifier = Modifier
                 .size(1.dp)
                 .focusRequester(focusRequester)
@@ -1444,9 +1446,12 @@ private fun TerminalInputBar(
             textAlign = TextAlign.Center
         )
 
+        val fieldValue = if (rawInputMode && input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input
         BasicTextField(
-            value = input,
-            onValueChange = onInputChange,
+            value = fieldValue,
+            onValueChange = { value ->
+                onInputChange(if (rawInputMode) value.replace(TERMINAL_RAW_INPUT_SENTINEL, "") else value)
+            },
             modifier = Modifier
                 .weight(1f)
                 .height(34.dp)

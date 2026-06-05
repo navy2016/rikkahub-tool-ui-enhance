@@ -268,7 +268,7 @@ fun ContainerManagerSheet(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(96.dp))
+                Spacer(modifier = Modifier.height(22.dp))
             }
         }
     }
@@ -394,7 +394,7 @@ private fun UtilitySection(
         )
         Spacer(modifier = Modifier.height(10.dp))
         LazyColumn(
-            modifier = Modifier.heightIn(max = 220.dp),
+            modifier = Modifier.heightIn(max = 240.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(ContainerUtilityActions) { action ->
@@ -457,6 +457,7 @@ private fun UtilityActionRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 58.dp)
                 .padding(horizontal = 12.dp, vertical = 9.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -757,8 +758,8 @@ private fun StatItem(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 40.dp)
-            .padding(vertical = 6.dp),
+            .heightIn(min = 24.dp)
+            .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
