@@ -3013,7 +3013,26 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
             // 执行的命令。PRoot 资产已将 RUNPATH patch 为 $ORIGIN，
             // libtalloc 由 Android linker 从 proot 同目录加载，无需 LD_LIBRARY_PATH，
             // 因此也不会污染 Alpine guest 的 apk/node 动态链接环境。
-            addAll(command)
+            //
+            // PRoot on Android can fail before entering the guest when the argv[0]
+            // executable is a bare name such as "sh". Use absolute guest entrypoints,
+            // or /usr/bin/env as the absolute resolver for other PATH-based commands.
+            addAll(normalizeGuestEntrypoint(command))
+        }
+    }
+
+    private fun normalizeGuestEntrypoint(command: List<String>): List<String> {
+        if (command.isEmpty()) return listOf("/bin/sh")
+
+        val executable = command.first()
+        if (executable.startsWith("/") || executable.contains("/")) {
+            return command
+        }
+
+        return when (executable) {
+            "sh" -> listOf("/bin/sh") + command.drop(1)
+            "ash" -> listOf("/bin/ash") + command.drop(1)
+            else -> listOf("/usr/bin/env") + command
         }
     }
 
