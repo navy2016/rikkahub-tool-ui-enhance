@@ -72,9 +72,9 @@ class PRootManager(
         private const val PROOT_RUNTIME_VERSION_FILE = "proot_runtime_version.txt"
 
         // Bundled CLI runtime assets. Cargo/Rust stay in CI; device runtime only unpacks Bun + prebuilt OMP.
-        private const val BUN_BUNDLE_VERSION = "bun-alpine-aarch64-musl-r1"
+        private const val BUN_BUNDLE_VERSION = "bun-alpine-aarch64-musl-r2"
         private const val BUN_BUNDLE_VERSION_FILE = "bun_bundle_version.txt"
-        private const val OMP_BUNDLE_VERSION = "oh-my-pi-alpine-aarch64-musl-r1"
+        private const val OMP_BUNDLE_VERSION = "oh-my-pi-alpine-aarch64-musl-r2"
         private const val OMP_BUNDLE_VERSION_FILE = "omp_bundle_version.txt"
     }
 
@@ -1584,6 +1584,7 @@ printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
         if (bun.exists() && (!wrapper.exists() || wrapper.readTextOrEmpty().contains("RikkaHub bundled Bun"))) {
             wrapper.writeText("""#!/bin/sh
 # RikkaHub bundled Bun wrapper
+export LD_LIBRARY_PATH="/usr/local/bun/lib:/usr/local/lib:${'$'}{LD_LIBRARY_PATH:-}"
 exec /usr/local/bun/bin/bun "${'$'}@"
 """)
             wrapper.setExecutable(true, false)
@@ -1617,6 +1618,7 @@ set -eu
 export BUN_INSTALL="${'$'}{BUN_INSTALL:-/usr/local/bun}"
 export OMP_HOME="${'$'}{OMP_HOME:-/usr/local/omp}"
 export PATH="/usr/local/bun/bin:/usr/local/bin:/usr/bin:/bin:${'$'}PATH"
+export LD_LIBRARY_PATH="/usr/local/bun/lib:/usr/local/lib:${'$'}{LD_LIBRARY_PATH:-}"
 if [ -f /usr/local/omp/omp ]; then
   exec sh /usr/local/omp/omp "${'$'}@"
 fi

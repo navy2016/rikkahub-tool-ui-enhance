@@ -41,22 +41,30 @@ bun install --frozen-lockfile
 bun run build || bun --cwd=packages/coding-agent run build || true
 
 bundle="$work/bundle"
-mkdir -p "$bundle/omp" "$bundle/bun/bin"
+mkdir -p "$bundle/omp" "$bundle/bun/bin" "$bundle/bun/lib"
 cp -a package.json bun.lock packages node_modules "$bundle/omp/"
 cp "$(command -v bun)" "$bundle/bun/bin/bun"
+# The official Bun Alpine binary dynamically links libstdc++ and libgcc_s.
+# RikkaHub's minirootfs intentionally stays minimal, so bundle the exact musl
+# runtime libraries beside Bun instead of requiring apk/network access on-device.
+for lib in /usr/lib/libstdc++.so.6 /usr/lib/libgcc_s.so.1; do
+  cp -L "$lib" "$bundle/bun/lib/"
+done
 
 cat > "$bundle/omp/omp" <<'EOS'
 set -eu
 export BUN_INSTALL="${BUN_INSTALL:-/usr/local/bun}"
 export OMP_HOME="${OMP_HOME:-/usr/local/omp}"
-export PATH="/usr/local/bun/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-exec bun "$OMP_HOME/packages/coding-agent/src/cli.ts" "$@"
+export PATH="$BUN_INSTALL/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export LD_LIBRARY_PATH="$BUN_INSTALL/lib:/usr/local/lib:${LD_LIBRARY_PATH:-}"
+exec "$BUN_INSTALL/bin/bun" "$OMP_HOME/packages/coding-agent/src/cli.ts" "$@"
 EOS
 chmod +x "$bundle/omp/omp" "$bundle/bun/bin/bun"
 
 export BUN_INSTALL="$bundle/bun"
 export OMP_HOME="$bundle/omp"
 export PATH="$bundle/bun/bin:$PATH"
+export LD_LIBRARY_PATH="$bundle/bun/lib:${LD_LIBRARY_PATH:-}"
 "$bundle/bun/bin/bun" --version
 sh "$bundle/omp/omp" --version
 sh "$bundle/omp/omp" --help >/work/.omp-build/omp-help.txt
