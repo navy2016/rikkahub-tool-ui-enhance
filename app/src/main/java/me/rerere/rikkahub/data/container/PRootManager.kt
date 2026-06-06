@@ -62,7 +62,7 @@ class PRootManager(
         private const val DEFAULT_MAX_MEMORY_MB = 6144  // 6GB for compilation tasks
 
         // Rootfs 版本控制 - 每次更新 alpine rootfs 时递增此版本号
-        private const val ROOTFS_VERSION = 2
+        private const val ROOTFS_VERSION = 3
         private const val ROOTFS_VERSION_FILE = "rootfs_version.txt"
 
         // PRoot runtime 版本控制 - 每次更新/替换 PRoot 二进制或随附 loader/lib 时递增。
@@ -130,10 +130,7 @@ class PRootManager(
      */
     fun checkInitializationStatus(): Boolean {
         val prootBinary = File(prootDir, "proot")
-        val rootfsValid = rootfsDir.exists()
-                && rootfsDir.listFiles()?.isNotEmpty() == true
-                && File(rootfsDir, "bin/sh").exists()
-                && File(rootfsDir, "bin/sh").length() > 0
+        val rootfsValid = isRootfsUsable()
 
         if (prootBinary.exists() && rootfsDir.exists()) {
             val shFile = File(rootfsDir, "bin/sh")
@@ -152,6 +149,24 @@ class PRootManager(
         return runCatching {
             prootBinary.exists() && versionFile.exists() &&
                 versionFile.readText().trim() == PROOT_RUNTIME_VERSION
+        }.getOrDefault(false)
+    }
+
+    private fun isRootfsUsable(): Boolean {
+        val shFile = File(rootfsDir, "bin/sh")
+        if (!rootfsDir.exists() || rootfsDir.listFiles()?.isNotEmpty() != true) {
+            return false
+        }
+        val shPath = shFile.absolutePath
+        val shEntryExists = runCatching {
+            android.system.Os.lstat(shPath)
+            true
+        }.getOrDefault(false)
+        if (!shEntryExists) return false
+        if (shFile.length() > 0) return true
+        return runCatching {
+            val target = android.system.Os.readlink(shPath)
+            target.isNotBlank()
         }.getOrDefault(false)
     }
 
@@ -2174,6 +2189,11 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
             return true
         }
 
+        if (!isRootfsUsable()) {
+            Log.d(TAG, "Rootfs is missing /bin/sh or its shell target, needs update")
+            return true
+        }
+
         return try {
             val localVersion = versionFile.readText().trim().toIntOrNull() ?: 0
             val needsUpdate = localVersion < ROOTFS_VERSION
@@ -2300,8 +2320,8 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
         fun normalizeTarPath(name: String): String? {
             val normalized = name.trimEnd('\u0000').replace('\\', '/')
             if (normalized.isBlank() || normalized.startsWith('/')) return null
-            val parts = normalized.split('/').filter { it.isNotEmpty() }
-            if (parts.any { it == "." || it == ".." }) return null
+            val parts = normalized.split('/').filter { it.isNotEmpty() && it != "." }
+            if (parts.any { it == ".." }) return null
             return parts.joinToString("/")
         }
 
