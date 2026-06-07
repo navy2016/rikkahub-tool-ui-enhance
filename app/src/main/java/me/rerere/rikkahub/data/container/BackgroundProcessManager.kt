@@ -32,10 +32,10 @@ internal fun inferPtyMode(command: String, requested: PtyMode = PtyMode.AUTO): P
     if (requested != PtyMode.AUTO) return requested
     val normalized = command.lowercase()
     val rawRegexes = listOf(
-        Regex("""(^|[\s;&|()])(?:claude|claude-code|codex|opencode|opencode-ai)([\s;&|()]|$)"""),
+        Regex("""(^|[\s;&|()])(?:claude|claude-code|codex|opencode|opencode-ai|omp|oh-my-pi)([\s;&|()]|$)"""),
         Regex("""(^|[\s;&|()])(?:vim|nvim|vi|nano|emacs)([\s;&|()]|$)"""),
         Regex("""(^|[\s;&|()])(?:tmux|screen|ssh|less|more|top|htop|fzf)([\s;&|()]|$)"""),
-        Regex("""(^|[\s;&|()])(?:npx|pnpm\s+dlx|bunx|npm\s+exec)\s+[^;&|()]*?(?:claude|claude-code|codex|opencode|opencode-ai)([\s;&|()]|$)""")
+        Regex("""(^|[\s;&|()])(?:npx|pnpm\s+dlx|bunx|npm\s+exec)\s+[^;&|()]*?(?:claude|claude-code|codex|opencode|opencode-ai|omp|oh-my-pi)([\s;&|()]|$)""")
     )
     return if (rawRegexes.any { it.containsMatchIn(normalized) }) PtyMode.RAW else PtyMode.COOKED
 }
@@ -1535,7 +1535,7 @@ class BackgroundProcessManager @Inject constructor(
 
         try {
             val bytes = if (appendNewline) {
-                val lineEnding = if (record.ttyEnabled && record.ptyMode == PtyMode.RAW) "\r" else "\n"
+                val lineEnding = if (record.ttyEnabled) "\r" else "\n"
                 (input + lineEnding).toByteArray(Charsets.UTF_8)
             } else {
                 input.toByteArray(Charsets.UTF_8)
@@ -1563,7 +1563,7 @@ class BackgroundProcessManager @Inject constructor(
             )
 
         try {
-            val bytes = if (control == ControlInput.ENTER && record.ttyEnabled && record.ptyMode == PtyMode.RAW) {
+            val bytes = if (control == ControlInput.ENTER && record.ttyEnabled) {
                 byteArrayOf('\r'.code.toByte())
             } else {
                 controlInputBytes(control)

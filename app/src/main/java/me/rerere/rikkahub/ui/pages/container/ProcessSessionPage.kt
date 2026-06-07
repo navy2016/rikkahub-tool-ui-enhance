@@ -81,10 +81,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -104,6 +106,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.components.container.ContainerManagerSheet
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.TerminalEmulator
 import me.rerere.rikkahub.utils.TerminalEmulator.Key
 import me.rerere.rikkahub.utils.TerminalEmulator.MouseButton
@@ -585,9 +588,14 @@ private fun TerminalInteractivePanel(
     var terminalFontSizeSp by remember(processId) { mutableStateOf(12f) }
     val terminalTextStyle = TextStyle(
         color = terminalForeground,
-        fontFamily = FontFamily.Monospace,
+        fontFamily = JetbrainsMono,
         fontSize = terminalFontSizeSp.sp,
-        lineHeight = (terminalFontSizeSp * 1.25f).sp
+        lineHeight = terminalFontSizeSp.sp,
+        platformStyle = PlatformTextStyle(includeFontPadding = false),
+        lineHeightStyle = LineHeightStyle(
+            alignment = LineHeightStyle.Alignment.Center,
+            trim = LineHeightStyle.Trim.Both
+        )
     )
     val installCliCommand = remember {
         "rikkahub-install-terminal-tools || (printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf; " +
@@ -1068,7 +1076,7 @@ private fun TerminalInteractivePanel(
 
             val submitInput = {
                 if (rawInputMode) {
-                    scope.launch { bgManager.sendControlInput(processId, ControlInput.ENTER) }
+                    sendRaw(terminalEmulator.sequenceFor(Key.ENTER))
                     input = ""
                 } else {
                     submitCommand()
@@ -1160,7 +1168,7 @@ private fun shouldAutoScrollTerminalOutput(
 private fun isTuiCommand(command: String): Boolean {
     val normalized = command.lowercase()
     return listOf(
-        "claude", "claude-code", "codex", "opencode", "opencode-ai",
+        "claude", "claude-code", "codex", "opencode", "opencode-ai", "omp", "oh-my-pi",
         "vim", "nvim", "vi", "nano", "emacs", "tmux", "screen",
         "less", "more", "top", "htop", "fzf"
     ).any { token ->

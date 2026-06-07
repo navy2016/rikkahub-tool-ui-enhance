@@ -576,7 +576,7 @@ class LocalTools(
                                 add("cooked")
                                 add("raw")
                             })
-                            put("description", "仅 interactive=true 且 tty=true 时有效。auto 自动识别 Claude Code/vim/TUI 使用 raw；cooked 保持普通 shell canonical/echo；raw 原始字节透传，不转换 \r。默认 auto")
+                            put("description", "仅 interactive=true 且 tty=true 时有效。auto 自动识别 Claude Code/omp/oh-my-pi/vim/TUI 使用 raw；cooked 保持普通 shell canonical/echo；raw 原始字节透传，不转换 \r。默认 auto")
                         })
                         put("columns", buildJsonObject {
                             put("type", "integer")
@@ -794,7 +794,7 @@ class LocalTools(
                         })
                         put("appendNewline", buildJsonObject {
                             put("type", "boolean")
-                            put("description", "input 操作时是否自动追加换行，默认 true")
+                            put("description", "input 操作时是否自动追加换行，默认 true。对 omp/oh-my-pi、claude、codex、opencode 等 TUI，推荐先发送 data 且 appendNewline=false，再单独发送 control=ENTER")
                         })
                         put("bracketedPaste", buildJsonObject {
                             put("type", "boolean")
