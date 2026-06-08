@@ -50,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +93,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -121,6 +124,9 @@ import java.util.concurrent.TimeUnit
 
 private val TerminalConfigJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 private const val TERMINAL_RAW_INPUT_SENTINEL = "\u200B"
+private val TERMINAL_FORCED_COLUMN_PRESETS = listOf(80, 100, 120, 160, 200)
+private const val TERMINAL_RENDER_FRAME_MS = 33L
+private const val TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS = 100L
 
 @Serializable
 private data class TerminalQuickCommandConfig(
@@ -170,11 +176,11 @@ private fun defaultTerminalQuickCommands() = listOf(
     TerminalQuickCommandConfig("tty", "tty; stty size; echo ${'$'}TERM"),
 )
 
-private fun defaultTerminalStatusItems() = listOf("RAW", "AUTO", "KEYS", "TOUCH", "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL").map { TerminalItemConfig(it) }
+private fun defaultTerminalStatusItems() = listOf("RAW", "AUTO", "COLS", "KEYS", "TOUCH", "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL").map { TerminalItemConfig(it) }
 private fun defaultTerminalExtraKeyItems() = listOf("CTRL", "ALT", "SEL", "KBD", "ESC", "TAB", "S-TAB", "UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "BKSP", "DEL", "ENTER", "C-C", "C-D", "C-Z", "C-L", "C-U", "C-W", "C-A", "C-E", "C-R", "COPY", "PASTE", "CLEAR", "TEST", "CLI").map { TerminalItemConfig(it) }
 
 private val TerminalStatusPresets = listOf(
-    TerminalActionPreset("RAW", "RAW/LINE"), TerminalActionPreset("AUTO", "AUTO/LOCK"), TerminalActionPreset("KEYS", "KEYS"),
+    TerminalActionPreset("RAW", "RAW/LINE"), TerminalActionPreset("AUTO", "AUTO/LOCK"), TerminalActionPreset("COLS", "FIT/80C/120C"), TerminalActionPreset("KEYS", "KEYS"),
     TerminalActionPreset("TOUCH", "TOUCH/MOUSE"), TerminalActionPreset("INPUT", "INPUT/MINI"), TerminalActionPreset("A-", "A-"),
     TerminalActionPreset("A+", "A+"), TerminalActionPreset("COPY", "COPY"), TerminalActionPreset("PASTE", "PASTE"),
     TerminalActionPreset("CLR", "CLR"), TerminalActionPreset("CTN", "CTN"), TerminalActionPreset("FULL", "FULL/EXIT"),
@@ -195,6 +201,12 @@ private inline fun <reified T> decodeTerminalConfig(raw: String, fallback: List<
 
 private fun encodeTerminalQuickCommands(items: List<TerminalQuickCommandConfig>) = TerminalConfigJson.encodeToString(items)
 private fun encodeTerminalItems(items: List<TerminalItemConfig>) = TerminalConfigJson.encodeToString(items)
+
+private fun ensureTerminalStatusItems(items: List<TerminalItemConfig>): List<TerminalItemConfig> {
+    if (items.any { it.id == "COLS" }) return items
+    val insertAfterAuto = items.indexOfFirst { it.id == "AUTO" }.takeIf { it >= 0 }?.plus(1) ?: items.size
+    return items.toMutableList().apply { add(insertAfterAuto, TerminalItemConfig("COLS")) }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -337,8 +349,8 @@ fun ProcessSessionPage(sandboxId: String) {
                         sandboxId = sandboxId,
                         command = command,
                         preferTty = true,
-                        columns = 120,
-                        rows = 40
+                        columns = defaultTerminalColumnsForCommand(command),
+                        rows = defaultTerminalRowsForCommand(command)
                     )
                     if (result.success) {
                         activeInteractiveId = result.processId
@@ -618,10 +630,12 @@ private fun TerminalInteractivePanel(
     var terminalColumns by remember { mutableIntStateOf(80) }
     var terminalRows by remember { mutableIntStateOf(24) }
     var pendingTerminalRows by remember { mutableIntStateOf(24) }
+    var measuredTerminalColumns by remember(processId) { mutableIntStateOf(80) }
+    var forcedTerminalColumns by remember(processId) { mutableStateOf<Int?>(if (isTuiCommand(process.command)) 120 else null) }
     var terminalCellWidthPx by remember { mutableIntStateOf(7) }
     var terminalCellHeightPx by remember { mutableIntStateOf(14) }
     val terminalStatusItems = remember(settings.terminalStatusBarItems) {
-        decodeTerminalConfig(settings.terminalStatusBarItems, defaultTerminalStatusItems())
+        ensureTerminalStatusItems(decodeTerminalConfig(settings.terminalStatusBarItems, defaultTerminalStatusItems()))
     }
     val terminalExtraKeyItems = remember(settings.terminalExtraKeyItems) {
         decodeTerminalConfig(settings.terminalExtraKeyItems, defaultTerminalExtraKeyItems())
@@ -632,13 +646,59 @@ private fun TerminalInteractivePanel(
     val inputBarVisible = !rawInputMode || showFullInputBar
     val terminalInputBarHeight = if (inputBarVisible) 46.dp else 0.dp
     val terminalBottomRevealPadding = (if (showExtraKeys) 54.dp else 8.dp) + terminalInputBarHeight
+    var renderJob by remember(processId) { mutableStateOf<Job?>(null) }
+    var lastRenderAt by remember(processId) { mutableLongStateOf(0L) }
+
+    fun cycleForcedTerminalColumns() {
+        val currentIndex = forcedTerminalColumns?.let { TERMINAL_FORCED_COLUMN_PRESETS.indexOf(it) } ?: -1
+        forcedTerminalColumns = if (currentIndex < 0) {
+            TERMINAL_FORCED_COLUMN_PRESETS.first()
+        } else {
+            TERMINAL_FORCED_COLUMN_PRESETS.getOrNull(currentIndex + 1)
+        }
+    }
+
+    fun renderTerminalFrame() {
+        terminalText = terminalEmulator.render()
+        terminalModeSummary = terminalEmulator.modeSummary()
+        lastRenderAt = System.currentTimeMillis()
+    }
+
+    fun scheduleTerminalRender() {
+        if (renderJob?.isActive == true) return
+        renderJob = scope.launch {
+            val elapsed = System.currentTimeMillis() - lastRenderAt
+            if (elapsed in 0 until TERMINAL_RENDER_FRAME_MS) {
+                delay(TERMINAL_RENDER_FRAME_MS - elapsed)
+            }
+            var syncWaited = 0L
+            while (terminalEmulator.isSynchronizedOutput() && syncWaited < TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS) {
+                delay(16L)
+                syncWaited += 16L
+            }
+            renderTerminalFrame()
+            if (!terminalEmulator.isAlternateScreen) {
+                withFrameNanos { }
+                val shouldScroll = shouldAutoScrollTerminalOutput(
+                    terminal = terminalEmulator,
+                    viewportRows = terminalRows,
+                    scrollMaxValue = outputScroll.maxValue,
+                    cellHeightPx = terminalCellHeightPx
+                )
+                if (autoScroll && shouldScroll) {
+                    outputScroll.scrollTo(outputScroll.maxValue)
+                } else if (!shouldScroll && outputScroll.value != 0) {
+                    outputScroll.scrollTo(0)
+                }
+            }
+        }
+    }
 
     LaunchedEffect(processId) {
         terminalEmulator.reset()
         bgManager.readInteractiveBuffer(processId)?.let { existing ->
             terminalEmulator.feed(existing)
-            terminalText = terminalEmulator.render()
-            terminalModeSummary = terminalEmulator.modeSummary()
+            renderTerminalFrame()
         }
     }
 
@@ -830,8 +890,7 @@ private fun TerminalInteractivePanel(
 
     fun clearLocalTerminal() {
         terminalEmulator.reset()
-        terminalText = terminalEmulator.render()
-        terminalModeSummary = terminalEmulator.modeSummary()
+        renderTerminalFrame()
     }
 
     LaunchedEffect(rawInputMode) {
@@ -860,10 +919,14 @@ private fun TerminalInteractivePanel(
         }
     }
 
+    LaunchedEffect(forcedTerminalColumns, measuredTerminalColumns) {
+        val cols = (forcedTerminalColumns ?: measuredTerminalColumns).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
+        if (cols != terminalColumns) terminalColumns = cols
+    }
+
     LaunchedEffect(processId, terminalColumns, terminalRows) {
         terminalEmulator.resize(terminalColumns, terminalRows)
-        terminalText = terminalEmulator.render()
-        terminalModeSummary = terminalEmulator.modeSummary()
+        renderTerminalFrame()
         kotlinx.coroutines.delay(180)
         bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)
     }
@@ -878,25 +941,7 @@ private fun TerminalInteractivePanel(
                 context.writeClipboardText(clipboardText)
                 terminalStatus = "OSC52 已复制到剪贴板"
             }
-            terminalText = terminalEmulator.render()
-            terminalModeSummary = terminalEmulator.modeSummary()
-            if (!terminalEmulator.isAlternateScreen) {
-                withFrameNanos { }
-                val shouldScroll = shouldAutoScrollTerminalOutput(
-                    terminal = terminalEmulator,
-                    viewportRows = terminalRows,
-                    scrollMaxValue = outputScroll.maxValue,
-                    cellHeightPx = terminalCellHeightPx
-                )
-                if (autoScroll && shouldScroll) {
-                    outputScroll.scrollTo(outputScroll.maxValue)
-                } else if (!shouldScroll && outputScroll.value != 0) {
-                    // A terminal screen always renders its full row grid, so a short output can
-                    // still have a non-zero Compose scroll range because of blank rows. Keep short
-                    // sessions pinned to the top instead of hiding the first meaningful lines.
-                    outputScroll.scrollTo(0)
-                }
-            }
+            scheduleTerminalRender()
         }
     }
 
@@ -927,6 +972,7 @@ private fun TerminalInteractivePanel(
                     terminalPanMode = terminalPanMode,
                     showFullInputBar = showFullInputBar,
                     terminalFontSizeSp = terminalFontSizeSp,
+                    forcedTerminalColumns = forcedTerminalColumns,
                     fullscreen = fullscreen,
                     terminalMuted = terminalMuted,
                     items = terminalStatusItems,
@@ -943,6 +989,7 @@ private fun TerminalInteractivePanel(
                     },
                     onShowFullInputBarChange = { showFullInputBar = it },
                     onTerminalFontSizeChange = { terminalFontSizeSp = it.coerceIn(9f, 22f) },
+                    onCycleForcedTerminalColumns = { cycleForcedTerminalColumns() },
                     onFullscreenToggle = { onFullscreenChange(!fullscreen) },
                     onCopy = {
                         context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
@@ -969,7 +1016,9 @@ private fun TerminalInteractivePanel(
                             .coerceAtLeast(1)
                         terminalCellWidthPx = measuredCell.size.width.coerceAtLeast(1)
                         terminalCellHeightPx = measuredLineHeight
-                        val cols = (size.width / terminalCellWidthPx).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
+                        val measuredCols = (size.width / terminalCellWidthPx).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
+                        measuredTerminalColumns = measuredCols
+                        val cols = (forcedTerminalColumns ?: measuredCols).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
                         val rows = (size.height / terminalCellHeightPx).coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
                         if (cols != terminalColumns) terminalColumns = cols
                         if (rows != pendingTerminalRows) pendingTerminalRows = rows
@@ -1165,6 +1214,10 @@ private fun shouldAutoScrollTerminalOutput(
         last >= safeViewportRows + 1
 }
 
+private fun defaultTerminalColumnsForCommand(command: String): Int = if (isTuiCommand(command)) 120 else 80
+
+private fun defaultTerminalRowsForCommand(command: String): Int = if (isTuiCommand(command)) 40 else 24
+
 private fun isTuiCommand(command: String): Boolean {
     val normalized = command.lowercase()
     return listOf(
@@ -1192,6 +1245,7 @@ private fun TerminalStatusBar(
     terminalPanMode: Boolean,
     showFullInputBar: Boolean,
     terminalFontSizeSp: Float,
+    forcedTerminalColumns: Int?,
     fullscreen: Boolean,
     terminalMuted: Color,
     items: List<TerminalItemConfig>,
@@ -1202,6 +1256,7 @@ private fun TerminalStatusBar(
     onTerminalPanModeChange: (Boolean) -> Unit,
     onShowFullInputBarChange: (Boolean) -> Unit,
     onTerminalFontSizeChange: (Float) -> Unit,
+    onCycleForcedTerminalColumns: () -> Unit,
     onFullscreenToggle: () -> Unit,
     onCopy: () -> Unit,
     onPaste: () -> Unit,
@@ -1240,6 +1295,7 @@ private fun TerminalStatusBar(
             when (item.id) {
                 "RAW" -> TerminalStatusKey(if (rawInputMode) "RAW" else "LINE", rawInputMode, onLongClick = onEditItems) { onRawInputModeChange(!rawInputMode) }
                 "AUTO" -> TerminalStatusKey(if (autoScroll) "AUTO" else "LOCK", autoScroll, onLongClick = onEditItems) { onAutoScrollChange(!autoScroll) }
+                "COLS" -> TerminalStatusKey(forcedTerminalColumns?.let { "${it}C" } ?: "FIT", forcedTerminalColumns != null, onLongClick = onEditItems) { onCycleForcedTerminalColumns() }
                 "KEYS" -> TerminalStatusKey("KEYS", showExtraKeys, onLongClick = onEditItems) { onShowExtraKeysChange(!showExtraKeys) }
                 "TOUCH" -> TerminalStatusKey(if (terminalPanMode) "TOUCH" else "MOUSE", !terminalPanMode, onLongClick = onEditItems) { onTerminalPanModeChange(!terminalPanMode) }
                 "INPUT" -> TerminalStatusKey(if (showFullInputBar) "INPUT" else "HIDE", showFullInputBar, onLongClick = onEditItems) { onShowFullInputBarChange(!showFullInputBar) }

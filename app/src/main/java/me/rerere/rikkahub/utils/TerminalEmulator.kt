@@ -571,6 +571,9 @@ class TerminalEmulator(
     }
 
     @Synchronized
+    fun isSynchronizedOutput(): Boolean = synchronizedOutput
+
+    @Synchronized
     fun modeSummary(): String = buildList {
         if (alternateScreen) add("ALT")
         if (reverseVideo) add("REVERSE-VIDEO")
