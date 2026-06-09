@@ -95,6 +95,8 @@ jobs:
             -w /work \
             alpine:3.19 \
             sh -se <<'DOCKER_SCRIPT'
+          set -eu
+
           apk add --no-cache --virtual .rikkahub-browser-deps \
             chromium \
             nss freetype harfbuzz fontconfig expat \
@@ -110,13 +112,13 @@ jobs:
           cp -a /usr/lib/chromium "$DEST/chromium"
 
           # Headless/browser-tool use does not require bundled GLES/Vulkan.
-          # If a future chromium build requires these, remove this pruning.
+          # If a future Chromium build requires these, remove this pruning.
           rm -f "$DEST/chromium/libGLESv2.so" \
                 "$DEST/chromium/libEGL.so" \
                 "$DEST/chromium/libvulkan.so.1"
 
           # Copy Chromium runtime dependencies from /usr/lib.
-          # Check multiple Chromium executables/libs, not just the main chromium binary,
+          # Check multiple Chromium executables/libs, not just the main Chromium binary,
           # because crashpad/sandbox/helper binaries can have additional dependencies.
           find /usr/lib/chromium -type f \( -perm -0100 -o -name "*.so" -o -name "*.so.*" \) \
             -exec ldd {} + 2>/dev/null \
@@ -131,40 +133,51 @@ jobs:
                 cp -L "$so" "$DEST/lib/$(basename "$so")"
               done
 
-          # Minimal fonts/fontconfig copied from the Alpine chromium environment.
+          # Minimal fonts/fontconfig copied from the Alpine Chromium environment.
           # The font packages pulled by chromium are enough for smoke/headless usage.
           [ -d /usr/share/fonts ] && cp -a /usr/share/fonts/. "$DEST/share/fonts/" || true
           [ -d /etc/fonts ] && cp -a /etc/fonts/. "$DEST/etc/fonts/" || true
 
-          # Generate our own launcher. Do not reuse Alpine chromium-launcher.sh because
-          # it points to /usr/lib/chromium, while the bundled location is /usr/local/omp/browser.
-          cat > "$DEST/bin/chromium-browser" <<'EOS'
-          #!/bin/sh
-          set -eu
+          # Generate our own launcher without nested heredoc, because nested heredoc
+          # is fragile inside YAML block scalars.
+          {
+            printf '%s\n' '#!/bin/sh'
+            printf '%s\n' 'set -eu'
+            printf '%s\n' ''
+            printf '%s\n' 'BROWSER_HOME="${BROWSER_HOME:-/usr/local/omp/browser}"'
+            printf '%s\n' 'CHROMIUM_HOME="${CHROMIUM_HOME:-$BROWSER_HOME/chromium}"'
+            printf '%s\n' ''
+            printf '%s\n' 'export LD_LIBRARY_PATH="$BROWSER_HOME/lib:$CHROMIUM_HOME:${LD_LIBRARY_PATH:-}"'
+            printf '%s\n' 'export FONTCONFIG_PATH="${FONTCONFIG_PATH:-$BROWSER_HOME/etc/fonts}"'
+            printf '%s\n' 'export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$BROWSER_HOME/share:/usr/local/share:/usr/share}"'
+            printf '%s\n' ''
+            printf '%s\n' 'exec "$CHROMIUM_HOME/chromium" \'
+            printf '%s\n' '  --no-sandbox \'
+            printf '%s\n' '  --disable-setuid-sandbox \'
+            printf '%s\n' '  --disable-dev-shm-usage \'
+            printf '%s\n' '  --disable-gpu \'
+            printf '%s\n' '  --no-zygote \'
+            printf '%s\n' '  "$@"'
+          } > "$DEST/bin/chromium-browser"
 
-          BROWSER_HOME="${BROWSER_HOME:-/usr/local/omp/browser}"
-          CHROMIUM_HOME="${CHROMIUM_HOME:-$BROWSER_HOME/chromium}"
+          chmod 755 "$DEST/bin/chromium-browser"
 
-          export LD_LIBRARY_PATH="$BROWSER_HOME/lib:$CHROMIUM_HOME:${LD_LIBRARY_PATH:-}"
-          export FONTCONFIG_PATH="${FONTCONFIG_PATH:-$BROWSER_HOME/etc/fonts}"
-          export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$BROWSER_HOME/share:/usr/local/share:/usr/share}"
+          echo "== bundled browser launcher =="
+          ls -la "$DEST/bin"
+          sed -n '1,80p' "$DEST/bin/chromium-browser"
 
-          exec "$CHROMIUM_HOME/chromium" \
-            --no-sandbox \
-            --disable-setuid-sandbox \
-            --disable-dev-shm-usage \
-            --disable-gpu \
-            --no-zygote \
-            "$@"
-          EOS
-          chmod +x "$DEST/bin/chromium-browser"
+          test -x "$DEST/bin/chromium-browser" || {
+            echo "bundled chromium launcher was not created as executable" >&2
+            exit 1
+          }
 
           echo "== bundled browser payload =="
           du -sh "$DEST" "$DEST"/* 2>/dev/null || true
           echo "browser lib count: $(ls "$DEST/lib" | wc -l)"
 
-          # Smoke check inside the builder. Override BROWSER_HOME because here the
-          # payload still lives under /work/.omp-browser-repack, not /usr/local/omp.
+          # Smoke check inside the builder.
+          # Override BROWSER_HOME because here the payload still lives under
+          # /work/.omp-browser-repack, not /usr/local/omp.
           BROWSER_HOME="$DEST" "$DEST/bin/chromium-browser" --version || true
           DOCKER_SCRIPT
 
@@ -183,7 +196,7 @@ jobs:
           wrapper = Path(".omp-browser-repack/omp/omp")
           original = wrapper.read_text()
 
-          marker = '# --- RikkaHub bundled browser env (added by build-omp-bundle.yml) ---'
+          marker = "# --- RikkaHub bundled browser env (added by build-omp-bundle.yml) ---"
           if marker in original:
               print("browser env already present; leaving wrapper unchanged")
               raise SystemExit(0)
@@ -238,7 +251,7 @@ jobs:
           chmod +x "$WRAPPER"
 
           echo "== updated omp wrapper head =="
-          sed -n '1,100p' "$WRAPPER"
+          sed -n '1,120p' "$WRAPPER"
 
       - name: Repack omp tar with bundled browser
         run: |
@@ -248,7 +261,20 @@ jobs:
           OMP_TAR=app/src/main/assets/omp/omp-alpine-aarch64-musl.tar.gz
 
           test -f "$STAGE/omp/omp" || { echo "missing omp wrapper" >&2; exit 1; }
-          test -x "$STAGE/omp/browser/bin/chromium-browser" || { echo "missing bundled chromium launcher" >&2; exit 1; }
+
+          if [ ! -e "$STAGE/omp/browser/bin/chromium-browser" ]; then
+            echo "missing bundled chromium launcher file" >&2
+            echo "debug: browser tree:" >&2
+            find "$STAGE/omp/browser" -maxdepth 3 \( -type f -o -type l \) 2>/dev/null | sort | head -80 >&2 || true
+            exit 1
+          fi
+
+          if [ ! -x "$STAGE/omp/browser/bin/chromium-browser" ]; then
+            echo "bundled chromium launcher exists but is not executable" >&2
+            ls -la "$STAGE/omp/browser/bin" >&2 || true
+            exit 1
+          fi
+
           test -x "$STAGE/omp/browser/chromium/chromium" || { echo "missing chromium binary" >&2; exit 1; }
           grep -q "RHK_BROWSER_BIN" "$STAGE/omp/omp" || { echo "wrapper missing browser env" >&2; exit 1; }
 
