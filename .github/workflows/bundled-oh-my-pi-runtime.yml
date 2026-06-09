@@ -81,6 +81,7 @@ jobs:
 
           OMP_TAR=app/src/main/assets/omp/omp-alpine-aarch64-musl.tar.gz
           STAGE=.omp-browser-repack
+          BROWSER_SCRIPT="$STAGE/bundle-browser.sh"
 
           test -f "$OMP_TAR" || { echo "OMP tar not found: $OMP_TAR" >&2; exit 1; }
 
@@ -90,13 +91,10 @@ jobs:
           tar -xzf "$OMP_TAR" -C "$STAGE"
           test -f "$STAGE/omp/omp" || { echo "omp wrapper missing after unpack" >&2; exit 1; }
 
-          docker run --rm \
-            -v "$PWD:/work" \
-            -w /work \
-            alpine:3.19 \
-            sh -se <<'DOCKER_SCRIPT'
+          cat > "$BROWSER_SCRIPT" <<'BROWSER_SCRIPT_EOF'
           set -eu
 
+          echo "== installing Alpine chromium deps =="
           apk add --no-cache --virtual .rikkahub-browser-deps \
             chromium \
             nss freetype harfbuzz fontconfig expat \
@@ -105,10 +103,14 @@ jobs:
             alsa-lib at-spi2-core cups-libs
 
           DEST=/work/.omp-browser-repack/omp/browser
+          echo "== preparing browser payload at $DEST =="
           rm -rf "$DEST"
           mkdir -p "$DEST/bin" "$DEST/lib" "$DEST/share/fonts" "$DEST/etc/fonts"
 
-          # Copy Alpine/musl/aarch64 Chromium payload.
+          echo "== copying chromium payload =="
+          test -d /usr/lib/chromium || { echo "/usr/lib/chromium missing" >&2; exit 1; }
+          test -x /usr/lib/chromium/chromium || { echo "/usr/lib/chromium/chromium missing or not executable" >&2; exit 1; }
+
           cp -a /usr/lib/chromium "$DEST/chromium"
 
           # Headless/browser-tool use does not require bundled GLES/Vulkan.
@@ -117,9 +119,7 @@ jobs:
                 "$DEST/chromium/libEGL.so" \
                 "$DEST/chromium/libvulkan.so.1"
 
-          # Copy Chromium runtime dependencies from /usr/lib.
-          # Check multiple Chromium executables/libs, not just the main Chromium binary,
-          # because crashpad/sandbox/helper binaries can have additional dependencies.
+          echo "== copying chromium runtime libraries =="
           find /usr/lib/chromium -type f \( -perm -0100 -o -name "*.so" -o -name "*.so.*" \) \
             -exec ldd {} + 2>/dev/null \
             | awk '/=>/{print $3}' \
@@ -133,13 +133,11 @@ jobs:
                 cp -L "$so" "$DEST/lib/$(basename "$so")"
               done
 
-          # Minimal fonts/fontconfig copied from the Alpine Chromium environment.
-          # The font packages pulled by chromium are enough for smoke/headless usage.
+          echo "== copying fonts/fontconfig =="
           [ -d /usr/share/fonts ] && cp -a /usr/share/fonts/. "$DEST/share/fonts/" || true
           [ -d /etc/fonts ] && cp -a /etc/fonts/. "$DEST/etc/fonts/" || true
 
-          # Generate our own launcher without nested heredoc, because nested heredoc
-          # is fragile inside YAML block scalars.
+          echo "== generating bundled chromium launcher =="
           {
             printf '%s\n' '#!/bin/sh'
             printf '%s\n' 'set -eu'
@@ -162,24 +160,59 @@ jobs:
 
           chmod 755 "$DEST/bin/chromium-browser"
 
+          echo "== verifying bundled browser files =="
+          test -x "$DEST/bin/chromium-browser" || { echo "launcher not executable: $DEST/bin/chromium-browser" >&2; exit 1; }
+          test -x "$DEST/chromium/chromium" || { echo "chromium not executable: $DEST/chromium/chromium" >&2; exit 1; }
+
           echo "== bundled browser launcher =="
           ls -la "$DEST/bin"
           sed -n '1,80p' "$DEST/bin/chromium-browser"
-
-          test -x "$DEST/bin/chromium-browser" || {
-            echo "bundled chromium launcher was not created as executable" >&2
-            exit 1
-          }
 
           echo "== bundled browser payload =="
           du -sh "$DEST" "$DEST"/* 2>/dev/null || true
           echo "browser lib count: $(ls "$DEST/lib" | wc -l)"
 
-          # Smoke check inside the builder.
-          # Override BROWSER_HOME because here the payload still lives under
-          # /work/.omp-browser-repack, not /usr/local/omp.
+          echo "== browser tree sample =="
+          find "$DEST" -maxdepth 3 \( -type f -o -type l \) | sort | head -80
+
+          # Smoke check inside builder.
+          # Override BROWSER_HOME because here payload lives under /work/.omp-browser-repack,
+          # not /usr/local/omp.
           BROWSER_HOME="$DEST" "$DEST/bin/chromium-browser" --version || true
-          DOCKER_SCRIPT
+          BROWSER_SCRIPT_EOF
+
+          echo "== generated browser bundling script =="
+          sed -n '1,220p' "$BROWSER_SCRIPT"
+
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work \
+            alpine:3.19 \
+            sh "/work/$BROWSER_SCRIPT"
+
+          echo "== verifying browser payload on host after docker =="
+          if [ ! -e "$STAGE/omp/browser/bin/chromium-browser" ]; then
+            echo "browser launcher missing after docker step" >&2
+            echo "debug: stage tree:" >&2
+            find "$STAGE" -maxdepth 5 \( -type f -o -type l \) 2>/dev/null | sort | head -120 >&2 || true
+            exit 1
+          fi
+
+          if [ ! -x "$STAGE/omp/browser/bin/chromium-browser" ]; then
+            echo "browser launcher exists but is not executable after docker step" >&2
+            ls -la "$STAGE/omp/browser/bin" >&2 || true
+            exit 1
+          fi
+
+          test -x "$STAGE/omp/browser/chromium/chromium" || {
+            echo "chromium binary missing or not executable after docker step" >&2
+            ls -la "$STAGE/omp/browser/chromium" >&2 || true
+            exit 1
+          }
+
+          echo "== host browser payload verified =="
+          ls -la "$STAGE/omp/browser/bin"
+          du -sh "$STAGE/omp/browser"
 
       - name: Rewrite omp wrapper to force bundled chromium and skip Puppeteer download
         run: |
