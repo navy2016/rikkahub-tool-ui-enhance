@@ -121,6 +121,7 @@ import org.koin.compose.koinInject
 import android.view.MotionEvent
 import kotlin.math.roundToInt
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 private val TerminalConfigJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 private const val TERMINAL_RAW_INPUT_SENTINEL = "\u200B"
@@ -646,6 +647,7 @@ private fun TerminalInteractivePanel(
     val inputBarVisible = !rawInputMode || showFullInputBar
     val terminalInputBarHeight = if (inputBarVisible) 46.dp else 0.dp
     val terminalBottomRevealPadding = (if (showExtraKeys) 54.dp else 8.dp) + terminalInputBarHeight
+    val renderPending = remember(processId) { AtomicBoolean(false) }
     var renderJob by remember(processId) { mutableStateOf<Job?>(null) }
     var lastRenderAt by remember(processId) { mutableLongStateOf(0L) }
 
@@ -665,30 +667,35 @@ private fun TerminalInteractivePanel(
     }
 
     fun scheduleTerminalRender() {
+        renderPending.set(true)
         if (renderJob?.isActive == true) return
         renderJob = scope.launch {
-            val elapsed = System.currentTimeMillis() - lastRenderAt
-            if (elapsed in 0 until TERMINAL_RENDER_FRAME_MS) {
-                delay(TERMINAL_RENDER_FRAME_MS - elapsed)
-            }
-            var syncWaited = 0L
-            while (terminalEmulator.isSynchronizedOutput() && syncWaited < TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS) {
-                delay(16L)
-                syncWaited += 16L
-            }
-            renderTerminalFrame()
-            if (!terminalEmulator.isAlternateScreen) {
-                withFrameNanos { }
-                val shouldScroll = shouldAutoScrollTerminalOutput(
-                    terminal = terminalEmulator,
-                    viewportRows = terminalRows,
-                    scrollMaxValue = outputScroll.maxValue,
-                    cellHeightPx = terminalCellHeightPx
-                )
-                if (autoScroll && shouldScroll) {
-                    outputScroll.scrollTo(outputScroll.maxValue)
-                } else if (!shouldScroll && outputScroll.value != 0) {
-                    outputScroll.scrollTo(0)
+            while (renderPending.getAndSet(false)) {
+                val elapsed = System.currentTimeMillis() - lastRenderAt
+                if (elapsed in 0 until TERMINAL_RENDER_FRAME_MS) {
+                    delay(TERMINAL_RENDER_FRAME_MS - elapsed)
+                }
+                var syncWaited = 0L
+                while (terminalEmulator.isSynchronizedOutput() && syncWaited < TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS) {
+                    delay(16L)
+                    syncWaited += 16L
+                }
+                renderTerminalFrame()
+                if (!terminalEmulator.isAlternateScreen) {
+                    withFrameNanos { }
+                    runCatching {
+                        val shouldScroll = shouldAutoScrollTerminalOutput(
+                            terminal = terminalEmulator,
+                            viewportRows = terminalRows,
+                            scrollMaxValue = outputScroll.maxValue,
+                            cellHeightPx = terminalCellHeightPx
+                        )
+                        if (autoScroll && shouldScroll) {
+                            outputScroll.scrollTo(outputScroll.maxValue)
+                        } else if (!shouldScroll && outputScroll.value != 0) {
+                            outputScroll.scrollTo(0)
+                        }
+                    }
                 }
             }
         }
