@@ -278,10 +278,16 @@ jobs:
             cat /tmp/chromium-smoke.err >&2 || true
             exit 1
           }
+
+          echo "== normalizing browser payload permissions =="
+          chmod -R a+rX "$DEST"
+          chmod 755 "$DEST/bin/chromium-browser" || true
+          chmod 755 "$DEST/chromium/chromium" || true
+          find "$DEST/chromium" -type f -perm -0100 -exec chmod 755 {} \; 2>/dev/null || true
           BROWSER_SCRIPT_EOF
 
           echo "== generated browser bundling script =="
-          sed -n '1,280p' "$BROWSER_SCRIPT"
+          sed -n '1,300p' "$BROWSER_SCRIPT"
 
           docker run --rm \
             -v "$PWD:/work" \
@@ -311,7 +317,7 @@ jobs:
 
           echo "== host browser payload verified =="
           ls -la "$STAGE/omp/browser/bin"
-          du -sh "$STAGE/omp/browser"
+          du -sh "$STAGE/omp/browser" 2>/dev/null || true
 
       - name: Rewrite omp wrapper to force bundled chromium and skip Puppeteer download
         run: |
@@ -414,7 +420,7 @@ jobs:
 
           echo "== final bundles =="
           ls -lh app/src/main/assets/bun/*.tar.gz app/src/main/assets/omp/*.tar.gz
-          du -sh "$STAGE/omp" "$STAGE/omp/browser"
+          du -sh "$STAGE/omp" "$STAGE/omp/browser" 2>/dev/null || true
 
       - name: Show bundle sizes
         run: |
