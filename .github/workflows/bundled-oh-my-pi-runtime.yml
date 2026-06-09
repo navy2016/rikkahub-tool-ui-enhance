@@ -42,6 +42,7 @@ jobs:
 
       - name: Build bun + omp base bundle in Alpine arm64
         run: |
+          set -euo pipefail
           chmod +x scripts/build-omp-bundle.sh
           docker run --rm \
             -e OMP_REF="${OMP_REF}" \
@@ -93,78 +94,79 @@ jobs:
             -v "$PWD:/work" \
             -w /work \
             alpine:3.19 \
-            sh -c '
-              set -eu
+            sh -se <<'DOCKER_SCRIPT'
+          apk add --no-cache --virtual .rikkahub-browser-deps \
+            chromium \
+            nss freetype harfbuzz fontconfig expat \
+            dbus-libs libdrm cairo pango \
+            libxcomposite libxdamage libxrandr libxkbcommon gcompat \
+            alsa-lib at-spi2-core cups-libs
 
-              apk add --no-cache --virtual .rikkahub-browser-deps \
-                chromium \
-                nss freetype harfbuzz fontconfig expat \
-                dbus-libs libdrm cairo pango \
-                libxcomposite libxdamage libxrandr libxkbcommon gcompat \
-                alsa-lib at-spi2-core cups-libs
+          DEST=/work/.omp-browser-repack/omp/browser
+          rm -rf "$DEST"
+          mkdir -p "$DEST/bin" "$DEST/lib" "$DEST/share/fonts" "$DEST/etc/fonts"
 
-              DEST=/work/.omp-browser-repack/omp/browser
-              rm -rf "$DEST"
-              mkdir -p "$DEST/bin" "$DEST/lib" "$DEST/share/fonts" "$DEST/etc/fonts"
+          # Copy Alpine/musl/aarch64 Chromium payload.
+          cp -a /usr/lib/chromium "$DEST/chromium"
 
-              # Copy Alpine/musl/aarch64 Chromium payload.
-              cp -a /usr/lib/chromium "$DEST/chromium"
+          # Headless/browser-tool use does not require bundled GLES/Vulkan.
+          # If a future chromium build requires these, remove this pruning.
+          rm -f "$DEST/chromium/libGLESv2.so" \
+                "$DEST/chromium/libEGL.so" \
+                "$DEST/chromium/libvulkan.so.1"
 
-              # Headless/browser-tool use does not require bundled GLES/Vulkan.
-              # If a future chromium build requires these, remove this pruning.
-              rm -f "$DEST/chromium/libGLESv2.so" \
-                    "$DEST/chromium/libEGL.so" \
-                    "$DEST/chromium/libvulkan.so.1"
+          # Copy Chromium runtime dependencies from /usr/lib.
+          # Check multiple Chromium executables/libs, not just the main chromium binary,
+          # because crashpad/sandbox/helper binaries can have additional dependencies.
+          find /usr/lib/chromium -type f \( -perm -0100 -o -name "*.so" -o -name "*.so.*" \) \
+            -exec ldd {} + 2>/dev/null \
+            | awk '/=>/{print $3}' \
+            | sort -u \
+            | while read -r so; do
+                case "$so" in
+                  /lib/ld-musl*|/lib/libc.musl*|/lib/libz.so*|/lib/ld-linux*)
+                    continue ;;
+                esac
+                [ -f "$so" ] || continue
+                cp -L "$so" "$DEST/lib/$(basename "$so")"
+              done
 
-              # Copy Chromium runtime dependencies from /usr/lib.
-              # Check multiple Chromium executables/libs, not just the main chromium binary,
-              # because crashpad/sandbox/helper binaries can have additional dependencies.
-              find /usr/lib/chromium -type f \( -perm -0100 -o -name "*.so" -o -name "*.so.*" \) \
-                -exec ldd {} + 2>/dev/null \
-                | awk "/=>/{print \$3}" \
-                | sort -u \
-                | while read -r so; do
-                    case "$so" in
-                      /lib/ld-musl*|/lib/libc.musl*|/lib/libz.so*|/lib/ld-linux*)
-                        continue ;;
-                    esac
-                    [ -f "$so" ] || continue
-                    cp -L "$so" "$DEST/lib/$(basename "$so")"
-                  done
+          # Minimal fonts/fontconfig copied from the Alpine chromium environment.
+          # The font packages pulled by chromium are enough for smoke/headless usage.
+          [ -d /usr/share/fonts ] && cp -a /usr/share/fonts/. "$DEST/share/fonts/" || true
+          [ -d /etc/fonts ] && cp -a /etc/fonts/. "$DEST/etc/fonts/" || true
 
-              # Minimal fonts/fontconfig copied from the Alpine chromium environment.
-              # The font packages pulled by chromium are enough for smoke/headless usage.
-              [ -d /usr/share/fonts ] && cp -a /usr/share/fonts/. "$DEST/share/fonts/" || true
-              [ -d /etc/fonts ] && cp -a /etc/fonts/. "$DEST/etc/fonts/" || true
+          # Generate our own launcher. Do not reuse Alpine chromium-launcher.sh because
+          # it points to /usr/lib/chromium, while the bundled location is /usr/local/omp/browser.
+          cat > "$DEST/bin/chromium-browser" <<'EOS'
+          #!/bin/sh
+          set -eu
 
-              # Generate our own launcher. Do not reuse Alpine chromium-launcher.sh because
-              # it points to /usr/lib/chromium, while the bundled location is /usr/local/omp/browser.
-              cat > "$DEST/bin/chromium-browser" <<'"'"'EOS'"'"'
-#!/bin/sh
-set -eu
+          BROWSER_HOME="${BROWSER_HOME:-/usr/local/omp/browser}"
+          CHROMIUM_HOME="${CHROMIUM_HOME:-$BROWSER_HOME/chromium}"
 
-BROWSER_HOME="${BROWSER_HOME:-/usr/local/omp/browser}"
-CHROMIUM_HOME="${CHROMIUM_HOME:-$BROWSER_HOME/chromium}"
+          export LD_LIBRARY_PATH="$BROWSER_HOME/lib:$CHROMIUM_HOME:${LD_LIBRARY_PATH:-}"
+          export FONTCONFIG_PATH="${FONTCONFIG_PATH:-$BROWSER_HOME/etc/fonts}"
+          export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$BROWSER_HOME/share:/usr/local/share:/usr/share}"
 
-export LD_LIBRARY_PATH="$BROWSER_HOME/lib:$CHROMIUM_HOME:${LD_LIBRARY_PATH:-}"
-export FONTCONFIG_PATH="${FONTCONFIG_PATH:-$BROWSER_HOME/etc/fonts}"
-export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$BROWSER_HOME/share:/usr/local/share:/usr/share}"
+          exec "$CHROMIUM_HOME/chromium" \
+            --no-sandbox \
+            --disable-setuid-sandbox \
+            --disable-dev-shm-usage \
+            --disable-gpu \
+            --no-zygote \
+            "$@"
+          EOS
+          chmod +x "$DEST/bin/chromium-browser"
 
-exec "$CHROMIUM_HOME/chromium" \
-  --no-sandbox \
-  --disable-setuid-sandbox \
-  --disable-dev-shm-usage \
-  --disable-gpu \
-  --no-zygote \
-  "$@"
-EOS
-              chmod +x "$DEST/bin/chromium-browser"
+          echo "== bundled browser payload =="
+          du -sh "$DEST" "$DEST"/* 2>/dev/null || true
+          echo "browser lib count: $(ls "$DEST/lib" | wc -l)"
 
-              echo "== bundled browser payload =="
-              du -sh "$DEST" "$DEST"/* 2>/dev/null || true
-              echo "browser lib count: $(ls "$DEST/lib" | wc -l)"
-              "$DEST/bin/chromium-browser" --version || true
-            '
+          # Smoke check inside the builder. Override BROWSER_HOME because here the
+          # payload still lives under /work/.omp-browser-repack, not /usr/local/omp.
+          BROWSER_HOME="$DEST" "$DEST/bin/chromium-browser" --version || true
+          DOCKER_SCRIPT
 
       - name: Rewrite omp wrapper to force bundled chromium and skip Puppeteer download
         run: |
@@ -175,52 +177,68 @@ EOS
 
           cp "$WRAPPER" "$WRAPPER.bak"
 
-          awk '
-            /^set -eu$/ {
-              print
-              print ""
-              print "# --- RikkaHub bundled browser env (added by build-omp-bundle.yml) ---"
-              print "RHK_BROWSER_HOME=\"/usr/local/omp/browser\""
-              print "RHK_BROWSER_LIB=\"${RHK_BROWSER_HOME}/lib\""
-              print "RHK_BROWSER_CHROMIUM=\"${RHK_BROWSER_HOME}/chromium\""
-              print "RHK_BROWSER_BIN=\"${RHK_BROWSER_HOME}/bin/chromium-browser\""
-              print "case \":${LD_LIBRARY_PATH:-}:\" in"
-              print "  *\":${RHK_BROWSER_LIB}:\"*) ;;"
-              print "  *) export LD_LIBRARY_PATH=\"${RHK_BROWSER_LIB}:${RHK_BROWSER_CHROMIUM}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\" ;;"
-              print "esac"
-              print "case \":${PATH:-}:\" in"
-              print "  *\":${RHK_BROWSER_HOME}/bin:\"*) ;;"
-              print "  *) export PATH=\"${RHK_BROWSER_HOME}/bin:${PATH}\" ;;"
-              print "esac"
-              print "export FONTCONFIG_PATH=\"${FONTCONFIG_PATH:-${RHK_BROWSER_HOME}/etc/fonts}\""
-              print "export XDG_DATA_DIRS=\"${XDG_DATA_DIRS:-${RHK_BROWSER_HOME}/share:/usr/local/share:/usr/share}\""
-              print "export PUPPETEER_SKIP_DOWNLOAD=true"
-              print "export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true"
-              print "export PUPPETEER_EXECUTABLE_PATH=\"${PUPPETEER_EXECUTABLE_PATH:-${RHK_BROWSER_BIN}}\""
-              print "export CHROME_BIN=\"${CHROME_BIN:-${RHK_BROWSER_BIN}}\""
-              print "export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1"
-              print ""
-              print "# Clean stale wrong-arch browser caches from previous app versions."
-              print "_rhk_home=\"${HOME:-/root}\""
-              print "for _rhk_p in \\"
-              print "  \"${_rhk_home}/.cache/puppeteer/chrome\" \\"
-              print "  \"${_rhk_home}/.cache/puppeteer/chrome-headless-shell\" \\"
-              print "  \"${_rhk_home}/.omp/puppeteer/chrome\" \\"
-              print "  \"${_rhk_home}/.omp/puppeteer/chrome-headless-shell\""
-              print "do"
-              print "  [ -d \"${_rhk_p}\" ] && rm -rf \"${_rhk_p}\" 2>/dev/null || true"
-              print "done"
-              print "unset _rhk_home _rhk_p"
-              print "# --- end RikkaHub bundled browser env ---"
-              next
-            }
-            { print }
-          ' "$WRAPPER.bak" > "$WRAPPER"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          wrapper = Path(".omp-browser-repack/omp/omp")
+          original = wrapper.read_text()
+
+          marker = '# --- RikkaHub bundled browser env (added by build-omp-bundle.yml) ---'
+          if marker in original:
+              print("browser env already present; leaving wrapper unchanged")
+              raise SystemExit(0)
+
+          injection = r'''
+          # --- RikkaHub bundled browser env (added by build-omp-bundle.yml) ---
+          RHK_BROWSER_HOME="/usr/local/omp/browser"
+          RHK_BROWSER_LIB="${RHK_BROWSER_HOME}/lib"
+          RHK_BROWSER_CHROMIUM="${RHK_BROWSER_HOME}/chromium"
+          RHK_BROWSER_BIN="${RHK_BROWSER_HOME}/bin/chromium-browser"
+
+          case ":${LD_LIBRARY_PATH:-}:" in
+            *":${RHK_BROWSER_LIB}:"*) ;;
+            *) export LD_LIBRARY_PATH="${RHK_BROWSER_LIB}:${RHK_BROWSER_CHROMIUM}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ;;
+          esac
+
+          case ":${PATH:-}:" in
+            *":${RHK_BROWSER_HOME}/bin:"*) ;;
+            *) export PATH="${RHK_BROWSER_HOME}/bin:${PATH}" ;;
+          esac
+
+          export FONTCONFIG_PATH="${FONTCONFIG_PATH:-${RHK_BROWSER_HOME}/etc/fonts}"
+          export XDG_DATA_DIRS="${XDG_DATA_DIRS:-${RHK_BROWSER_HOME}/share:/usr/local/share:/usr/share}"
+          export PUPPETEER_SKIP_DOWNLOAD=true
+          export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+          export PUPPETEER_EXECUTABLE_PATH="${PUPPETEER_EXECUTABLE_PATH:-${RHK_BROWSER_BIN}}"
+          export CHROME_BIN="${CHROME_BIN:-${RHK_BROWSER_BIN}}"
+          export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+          # Clean stale wrong-arch browser caches from previous app versions.
+          _rhk_home="${HOME:-/root}"
+          for _rhk_p in \
+            "${_rhk_home}/.cache/puppeteer/chrome" \
+            "${_rhk_home}/.cache/puppeteer/chrome-headless-shell" \
+            "${_rhk_home}/.omp/puppeteer/chrome" \
+            "${_rhk_home}/.omp/puppeteer/chrome-headless-shell"
+          do
+            [ -d "${_rhk_p}" ] && rm -rf "${_rhk_p}" 2>/dev/null || true
+          done
+          unset _rhk_home _rhk_p
+          # --- end RikkaHub bundled browser env ---
+          '''
+
+          needle = "set -eu\n"
+          if needle not in original:
+              raise SystemExit("set -eu not found in omp wrapper")
+
+          updated = original.replace(needle, needle + injection.lstrip() + "\n", 1)
+          wrapper.write_text(updated)
+          PY
 
           chmod +x "$WRAPPER"
 
           echo "== updated omp wrapper head =="
-          sed -n '1,90p' "$WRAPPER"
+          sed -n '1,100p' "$WRAPPER"
 
       - name: Repack omp tar with bundled browser
         run: |
