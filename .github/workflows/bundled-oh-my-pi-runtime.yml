@@ -52,29 +52,108 @@ jobs:
             sh scripts/build-omp-bundle.sh
 
       # ----------------------------------------------------------------------
+      # Bun fix:
+      #
+      # On-device /usr/local/bun/bin/bun can be executed directly because
+      # /usr/local/bun/bin is before /usr/local/bin in PATH. If direct Bun is used,
+      # the /usr/local/bin/bun wrapper cannot inject LD_LIBRARY_PATH, so Bun may fail
+      # to find libstdc++/libgcc_s/libatomic.
+      #
+      # Fix:
+      #   - unpack bun-alpine-aarch64-musl.tar.gz
+      #   - ensure required runtime libraries are present in bun/lib
+      #   - set Bun ELF rpath to $ORIGIN/../lib
+      #   - repack the tar with the same artifact name
+      # ----------------------------------------------------------------------
+      - name: Patch bundled Bun rpath and repack
+        run: |
+          set -euo pipefail
+
+          BUN_TAR=app/src/main/assets/bun/bun-alpine-aarch64-musl.tar.gz
+          BUN_STAGE=.bun-rpath-repack
+          BUN_SCRIPT="$BUN_STAGE/patch-bun.sh"
+
+          test -f "$BUN_TAR" || { echo "Bun tar not found: $BUN_TAR" >&2; exit 1; }
+
+          rm -rf "$BUN_STAGE"
+          mkdir -p "$BUN_STAGE"
+          tar -xzf "$BUN_TAR" -C "$BUN_STAGE"
+
+          test -x "$BUN_STAGE/bun/bin/bun" || { echo "bun binary missing after unpack" >&2; exit 1; }
+          mkdir -p "$BUN_STAGE/bun/lib"
+
+          cat > "$BUN_SCRIPT" <<'BUN_PATCH_EOF'
+          set -eu
+
+          apk add --no-cache patchelf libstdc++ libgcc libatomic
+
+          BUN=/work/.bun-rpath-repack/bun/bin/bun
+          LIBDIR=/work/.bun-rpath-repack/bun/lib
+
+          mkdir -p "$LIBDIR"
+
+          # Bundle Bun runtime libs. Keep stable SONAME filenames.
+          for lib in \
+            /usr/lib/libstdc++.so.6 \
+            /usr/lib/libgcc_s.so.1 \
+            /usr/lib/libatomic.so.1
+          do
+            [ -e "$lib" ] && cp -aL "$lib" "$LIBDIR/" || true
+          done
+
+          # Make raw /usr/local/bun/bin/bun work even when /usr/local/bin/bun wrapper
+          # is bypassed by PATH ordering.
+          patchelf --set-rpath '$ORIGIN/../lib' "$BUN"
+
+          echo "== bun rpath =="
+          patchelf --print-rpath "$BUN" || true
+
+          echo "== bun ldd =="
+          ldd "$BUN" || true
+          BUN_PATCH_EOF
+
+          echo "== generated Bun patch script =="
+          sed -n '1,180p' "$BUN_SCRIPT"
+
+          docker run --rm \
+            -v "$PWD:/work" \
+            -w /work \
+            alpine:3.19 \
+            sh "/work/$BUN_SCRIPT"
+
+          tar -czf "$BUN_TAR" -C "$BUN_STAGE" bun
+
+          echo "== repacked bun =="
+          ls -lh "$BUN_TAR"
+          du -sh "$BUN_STAGE/bun"
+
+      # ----------------------------------------------------------------------
       # Browser support for Android PRoot Alpine sandbox:
       #
       # Puppeteer may download the wrong Chrome binary, for example x86_64 glibc
       # Chrome inside an aarch64/musl Alpine container. That fails with errors like:
       #   - /lib64/ld-linux-x86-64.so.2 missing
       #   - __vsnprintf_chk missing
-      #   - g_settings_* missing
-      #   - snd_pcm_* missing
+      #
+      # After switching to Alpine Chromium, on-device testing showed another issue:
+      # incomplete library bundling caused hundreds of missing symbols:
+      #   - WebP*, XML_*, FT_*, Fc*
+      #   - g_*, dbus_*
+      #   - icu_74*, hb_*
+      #   - snd_*, cups*
       #
       # Fix:
-      #   1. Keep the public artifact names unchanged.
+      #   1. Keep public artifact names unchanged.
       #   2. Unpack omp-alpine-aarch64-musl.tar.gz.
       #   3. Bundle Alpine 3.19 chromium, built for aarch64/musl, into omp/browser.
-      #   4. Bundle chromium runtime .so dependencies from Alpine.
-      #   5. Generate our own launcher at /usr/local/omp/browser/bin/chromium-browser.
-      #   6. Rewrite omp/omp wrapper so Puppeteer uses the bundled chromium and does
-      #      not download browser binaries at runtime.
-      #   7. Repack the original omp tar.
+      #   4. Bundle broad Alpine runtime .so set from /usr/lib and /lib, preserving symlinks.
+      #   5. Patch Chromium/helper ELF rpath.
+      #   6. Generate /usr/local/omp/browser/bin/chromium-browser launcher.
+      #   7. Rewrite omp/omp wrapper so Puppeteer uses bundled chromium and skips downloads.
+      #   8. Repack the original omp tar.
       #
-      # This changes only this workflow file. build-omp-bundle.sh and Kotlin code
-      # remain unchanged.
+      # This changes only this workflow file. build-omp-bundle.sh and Kotlin code remain unchanged.
       # ----------------------------------------------------------------------
-
       - name: Unpack omp tar and bundle Alpine musl/aarch64 chromium
         run: |
           set -euo pipefail
@@ -94,13 +173,13 @@ jobs:
           cat > "$BROWSER_SCRIPT" <<'BROWSER_SCRIPT_EOF'
           set -eu
 
-          echo "== installing Alpine chromium deps =="
-          apk add --no-cache --virtual .rikkahub-browser-deps \
+          echo "== installing Alpine chromium and tools =="
+          # Keep explicit package list small and safe. chromium pulls its runtime deps.
+          apk add --no-cache \
             chromium \
-            nss freetype harfbuzz fontconfig expat \
-            dbus-libs libdrm cairo pango \
-            libxcomposite libxdamage libxrandr libxkbcommon gcompat \
-            alsa-lib at-spi2-core cups-libs
+            patchelf \
+            libstdc++ libgcc libatomic gcompat \
+            font-noto font-noto-cjk ttf-freefont fontconfig
 
           DEST=/work/.omp-browser-repack/omp/browser
           echo "== preparing browser payload at $DEST =="
@@ -113,29 +192,41 @@ jobs:
 
           cp -a /usr/lib/chromium "$DEST/chromium"
 
-          # Headless/browser-tool use does not require bundled GLES/Vulkan.
+          # Headless/browser-tool use does not require bundled GLES/Vulkan in most cases.
           # If a future Chromium build requires these, remove this pruning.
           rm -f "$DEST/chromium/libGLESv2.so" \
                 "$DEST/chromium/libEGL.so" \
                 "$DEST/chromium/libvulkan.so.1"
 
-          echo "== copying chromium runtime libraries =="
-          find /usr/lib/chromium -type f \( -perm -0100 -o -name "*.so" -o -name "*.so.*" \) \
-            -exec ldd {} + 2>/dev/null \
-            | awk '/=>/{print $3}' \
-            | sort -u \
-            | while read -r so; do
-                case "$so" in
-                  /lib/ld-musl*|/lib/libc.musl*|/lib/libz.so*|/lib/ld-linux*)
-                    continue ;;
-                esac
-                [ -f "$so" ] || continue
-                cp -L "$so" "$DEST/lib/$(basename "$so")"
-              done
+          echo "== copying full Alpine runtime libraries =="
+          # Previous ldd-only + cp -L approach missed many libraries and broke SONAME
+          # symlink relationships. Copy a broad Alpine runtime .so set and preserve symlinks.
+          #
+          # This is larger, but fixes unresolved symbols such as:
+          # WebP*, XML_*, FT_*, Fc*, g_*, dbus_*, icu_74*, hb_*, snd_*, cups*, etc.
+          find /usr/lib /lib \
+            -maxdepth 1 \
+            \( -type f -o -type l \) \
+            \( -name "*.so" -o -name "*.so.*" -o -name "ld-musl-*.so.1" \) \
+            -exec cp -aP {} "$DEST/lib/" \;
+
+          # Ensure common musl loader/libc aliases exist in the private lib dir too.
+          for f in /lib/ld-musl-*.so.1 /lib/libc.musl-*.so.1; do
+            [ -e "$f" ] && cp -aP "$f" "$DEST/lib/" || true
+          done
 
           echo "== copying fonts/fontconfig =="
           [ -d /usr/share/fonts ] && cp -a /usr/share/fonts/. "$DEST/share/fonts/" || true
           [ -d /etc/fonts ] && cp -a /etc/fonts/. "$DEST/etc/fonts/" || true
+
+          echo "== patching chromium rpath =="
+          # Make Chromium and helper binaries prefer bundled browser/lib without relying
+          # solely on inherited LD_LIBRARY_PATH.
+          find "$DEST/chromium" -type f -perm -0100 | while read -r exe; do
+            if file "$exe" 2>/dev/null | grep -q "ELF"; then
+              patchelf --set-rpath '$ORIGIN:$ORIGIN/../lib:/usr/local/omp/browser/lib:/usr/local/omp/browser/chromium' "$exe" 2>/dev/null || true
+            fi
+          done
 
           echo "== generating bundled chromium launcher =="
           {
@@ -145,16 +236,18 @@ jobs:
             printf '%s\n' 'BROWSER_HOME="${BROWSER_HOME:-/usr/local/omp/browser}"'
             printf '%s\n' 'CHROMIUM_HOME="${CHROMIUM_HOME:-$BROWSER_HOME/chromium}"'
             printf '%s\n' ''
-            printf '%s\n' 'export LD_LIBRARY_PATH="$BROWSER_HOME/lib:$CHROMIUM_HOME:${LD_LIBRARY_PATH:-}"'
+            printf '%s\n' 'export LD_LIBRARY_PATH="$BROWSER_HOME/lib:$CHROMIUM_HOME:/usr/local/bun/lib:/usr/local/lib:${LD_LIBRARY_PATH:-}"'
             printf '%s\n' 'export FONTCONFIG_PATH="${FONTCONFIG_PATH:-$BROWSER_HOME/etc/fonts}"'
             printf '%s\n' 'export XDG_DATA_DIRS="${XDG_DATA_DIRS:-$BROWSER_HOME/share:/usr/local/share:/usr/share}"'
             printf '%s\n' ''
             printf '%s\n' 'exec "$CHROMIUM_HOME/chromium" \'
+            printf '%s\n' '  --headless=new \'
             printf '%s\n' '  --no-sandbox \'
             printf '%s\n' '  --disable-setuid-sandbox \'
             printf '%s\n' '  --disable-dev-shm-usage \'
             printf '%s\n' '  --disable-gpu \'
             printf '%s\n' '  --no-zygote \'
+            printf '%s\n' '  --disable-software-rasterizer \'
             printf '%s\n' '  "$@"'
           } > "$DEST/bin/chromium-browser"
 
@@ -168,21 +261,27 @@ jobs:
           ls -la "$DEST/bin"
           sed -n '1,80p' "$DEST/bin/chromium-browser"
 
+          echo "== bundled browser libs sample =="
+          ls -la "$DEST/lib" | head -120
+
           echo "== bundled browser payload =="
           du -sh "$DEST" "$DEST"/* 2>/dev/null || true
-          echo "browser lib count: $(ls "$DEST/lib" | wc -l)"
+          echo "browser lib count: $(find "$DEST/lib" -maxdepth 1 \( -type f -o -type l \) | wc -l)"
 
-          echo "== browser tree sample =="
-          find "$DEST" -maxdepth 3 \( -type f -o -type l \) | sort | head -80
+          echo "== ldd bundled chromium in builder =="
+          BROWSER_HOME="$DEST" LD_LIBRARY_PATH="$DEST/lib:$DEST/chromium" ldd "$DEST/chromium/chromium" || true
 
-          # Smoke check inside builder.
-          # Override BROWSER_HOME because here payload lives under /work/.omp-browser-repack,
-          # not /usr/local/omp.
+          echo "== smoke check bundled chromium in builder =="
           BROWSER_HOME="$DEST" "$DEST/bin/chromium-browser" --version || true
+          BROWSER_HOME="$DEST" "$DEST/bin/chromium-browser" --dump-dom 'data:text/html,<html><body>rikkahub-browser-ok</body></html>' 2>/tmp/chromium-smoke.err | head -20 || {
+            echo "chromium smoke stderr:" >&2
+            cat /tmp/chromium-smoke.err >&2 || true
+            exit 1
+          }
           BROWSER_SCRIPT_EOF
 
           echo "== generated browser bundling script =="
-          sed -n '1,220p' "$BROWSER_SCRIPT"
+          sed -n '1,280p' "$BROWSER_SCRIPT"
 
           docker run --rm \
             -v "$PWD:/work" \
@@ -243,7 +342,7 @@ jobs:
 
           case ":${LD_LIBRARY_PATH:-}:" in
             *":${RHK_BROWSER_LIB}:"*) ;;
-            *) export LD_LIBRARY_PATH="${RHK_BROWSER_LIB}:${RHK_BROWSER_CHROMIUM}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ;;
+            *) export LD_LIBRARY_PATH="${RHK_BROWSER_LIB}:${RHK_BROWSER_CHROMIUM}:/usr/local/bun/lib:/usr/local/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ;;
           esac
 
           case ":${PATH:-}:" in
@@ -284,7 +383,7 @@ jobs:
           chmod +x "$WRAPPER"
 
           echo "== updated omp wrapper head =="
-          sed -n '1,120p' "$WRAPPER"
+          sed -n '1,130p' "$WRAPPER"
 
       - name: Repack omp tar with bundled browser
         run: |
