@@ -256,6 +256,12 @@ class PRootManager(
                         cleanupLegacyNodeNpmCompatibilityWrappers(upperDir)
                     }
                     _containerState.value = ContainerStateEnum.Running
+                    val probe = execInContainer(sandboxId = "global", command = listOf("sh", "-c", "printf ok"), timeoutMs = 15_000L, env = getToolEnvironment())
+                    if (probe.exitCode != 0 || probe.stdout.trim() != "ok") {
+                        val message = "Container probe failed: exit=${probe.exitCode}, stderr=${probe.stderr.take(300)}"
+                        _containerState.value = ContainerStateEnum.Error(message)
+                        return@withContext Result.failure(IllegalStateException(message))
+                    }
                     return@withContext Result.success(Unit)
                 }
                 is ContainerStateEnum.Error -> {
@@ -2461,6 +2467,10 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
      */
     suspend fun restoreState(): Boolean = withContext(Dispatchers.IO) {
         try {
+            when (_containerState.value) {
+                is ContainerStateEnum.Running, is ContainerStateEnum.Initializing -> return@withContext true
+                else -> Unit
+            }
             // 检查 rootfs 是否已初始化
             if (!checkInitializationStatus()) {
                 Log.d(TAG, "[RestoreState] Rootfs not initialized, cannot restore state")
@@ -2515,6 +2525,27 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
      *
      * @param enableContainerRuntime 用户是否启用了容器运行时功能
      */
+    private fun autoStartContainerIfNeeded(reason: String) {
+        if (!currentEnableContainerRuntime) return
+        when (_containerState.value) {
+            is ContainerStateEnum.Stopped -> {
+                Log.d(TAG, "[AutoManage] Auto-starting container from Stopped state ($reason)")
+                GlobalScope.launch(Dispatchers.IO) {
+                    val result = start()
+                    Log.d(TAG, "[AutoManage] Auto-start result: $result")
+                }
+            }
+            is ContainerStateEnum.NotInitialized -> {
+                Log.d(TAG, "[AutoManage] Container not initialized, auto-initializing ($reason)")
+                GlobalScope.launch(Dispatchers.IO) {
+                    val result = initialize()
+                    Log.d(TAG, "[AutoManage] Auto-initialize result: $result")
+                }
+            }
+            else -> Log.d(TAG, "[AutoManage] Container state: ${_containerState.value}, no action needed ($reason)")
+        }
+    }
+
     fun enableAutoManagement(enableContainerRuntime: Boolean) {
         // 更新当前设置
         currentEnableContainerRuntime = enableContainerRuntime
@@ -2523,6 +2554,9 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
         // 如果已经添加过 observer，不再重复添加
         if (autoManagementEnabled) {
             Log.d(TAG, "[AutoManage] Auto management already enabled, just updating setting to $enableContainerRuntime")
+            if (enableContainerRuntime && ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                autoStartContainerIfNeeded("settings-updated")
+            }
             return
         }
 
@@ -2539,28 +2573,7 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
                         // 应用进入前台
                         Log.d(TAG, "[AutoManage] App came to foreground, checking if should auto-init...")
                         Log.d(TAG, "[AutoManage] currentEnableContainerRuntime=$currentEnableContainerRuntime, state=${_containerState.value}")
-                        if (currentEnableContainerRuntime) {
-                            when (_containerState.value) {
-                                is ContainerStateEnum.Stopped -> {
-                                    Log.d(TAG, "[AutoManage] Auto-starting container from Stopped state")
-                                    GlobalScope.launch(Dispatchers.IO) {
-                                        val result = start()
-                                        Log.d(TAG, "[AutoManage] Auto-start result: $result")
-                                    }
-                                }
-                                is ContainerStateEnum.NotInitialized -> {
-                                    Log.d(TAG, "[AutoManage] Container not initialized, auto-initializing...")
-                                    GlobalScope.launch(Dispatchers.IO) {
-                                        Log.d(TAG, "[AutoManage] Calling initialize()...")
-                                        val result = initialize()
-                                        Log.d(TAG, "[AutoManage] Auto-initialize result: $result")
-                                    }
-                                }
-                                else -> {
-                                    Log.d(TAG, "Container state: ${_containerState.value}, no action needed")
-                                }
-                            }
-                        }
+                        autoStartContainerIfNeeded("lifecycle-start")
                     }
                     Lifecycle.Event.ON_STOP -> {
                         // 应用进入后台
@@ -2578,6 +2591,9 @@ exec bun /usr/local/omp/packages/coding-agent/src/cli.ts "${'$'}@"
         }
         lifecycle.addObserver(observer)
         autoManagementObserver = observer
+        if (enableContainerRuntime && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            autoStartContainerIfNeeded("initial-enable")
+        }
     }
 
     // ==================== Background Process Management ====================
