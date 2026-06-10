@@ -385,7 +385,7 @@ class GenerationHandler(
                 is UIMessagePart.Audio -> part.url.length + 96
                 is UIMessagePart.Video -> part.url.length + 96
                 is UIMessagePart.Tool -> {
-                    part.toolName.length + part.toolCallId.length + part.arguments.length +
+                    part.toolName.length + part.toolCallId.length + part.input.length +
                         part.output.sumOf { outputPart ->
                             when (outputPart) {
                                 is UIMessagePart.Text -> outputPart.text.length
