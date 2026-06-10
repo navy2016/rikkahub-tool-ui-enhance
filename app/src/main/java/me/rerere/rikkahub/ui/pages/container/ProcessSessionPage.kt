@@ -87,6 +87,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -1045,8 +1046,13 @@ private fun TerminalInteractivePanel(
                         }
                     }
                     .then(if (selectionMode || terminalPanMode) Modifier else Modifier.pointerInteropFilter { event ->
-                        val col = (event.x.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
-                        val row = (event.y.toInt() / terminalCellHeightPx).coerceIn(0, terminalRows - 1)
+                        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                            inputFocusRequester.requestFocus()
+                        }
+                        val absoluteX = event.x + horizontalScroll.value
+                        val absoluteY = event.y + if (terminalEmulator.isAlternateScreen) 0 else outputScroll.value
+                        val col = (absoluteX.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
+                        val row = (absoluteY.toInt() / terminalCellHeightPx).coerceIn(0, terminalRows - 1)
                         val eventType = when (event.actionMasked) {
                             MotionEvent.ACTION_DOWN -> MouseEventType.PRESS
                             MotionEvent.ACTION_UP -> MouseEventType.RELEASE
@@ -1465,10 +1471,19 @@ private fun TerminalHiddenInputBridge(
             .fillMaxWidth()
             .height(1.dp)
     ) {
-        val fieldValue = if (input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input
+        var fieldValue by remember { mutableStateOf(TextFieldValue(if (input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input)) }
+        LaunchedEffect(input) {
+            if (fieldValue.composition == null) {
+                val target = if (input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input
+                if (fieldValue.text != target) fieldValue = TextFieldValue(target)
+            }
+        }
         BasicTextField(
             value = fieldValue,
-            onValueChange = { value -> onInputChange(value.replace(TERMINAL_RAW_INPUT_SENTINEL, "")) },
+            onValueChange = { value ->
+                fieldValue = value
+                if (value.composition == null) onInputChange(value.text.replace(TERMINAL_RAW_INPUT_SENTINEL, ""))
+            },
             modifier = Modifier
                 .size(1.dp)
                 .focusRequester(focusRequester)
@@ -1517,11 +1532,20 @@ private fun TerminalInputBar(
             textAlign = TextAlign.Center
         )
 
-        val fieldValue = if (rawInputMode && input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input
+        var fieldValue by remember(rawInputMode) { mutableStateOf(TextFieldValue(if (rawInputMode && input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input)) }
+        LaunchedEffect(input, rawInputMode) {
+            if (fieldValue.composition == null) {
+                val target = if (rawInputMode && input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input
+                if (fieldValue.text != target) fieldValue = TextFieldValue(target)
+            }
+        }
         BasicTextField(
             value = fieldValue,
             onValueChange = { value ->
-                onInputChange(if (rawInputMode) value.replace(TERMINAL_RAW_INPUT_SENTINEL, "") else value)
+                fieldValue = value
+                if (value.composition == null) {
+                    onInputChange(if (rawInputMode) value.text.replace(TERMINAL_RAW_INPUT_SENTINEL, "") else value.text)
+                }
             },
             modifier = Modifier
                 .weight(1f)
