@@ -591,6 +591,24 @@ private fun ModelSettingsForm(
                             }
                         )
 
+                        var contextSizeText by remember(model.id) { mutableStateOf(model.contextSize?.toString() ?: "") }
+                        OutlinedTextField(
+                            value = contextSizeText,
+                            onValueChange = { raw ->
+                                val normalized = raw.filter { it.isDigit() }.take(9)
+                                contextSizeText = normalized
+                                onModelChange(model.copy(contextSize = normalized.toIntOrNull()?.takeIf { it > 0 }))
+                            },
+                            label = { Text("上下文窗口 / Context size") },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("留空表示未知，例如 8192 / 32768 / 128000 / 200000") },
+                            supportingText = {
+                                Text("用于压缩触发和工具调用安全闸门；与压缩对话历史中的 contextSize 设置同步。")
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+
                         ModelTypeSelector(
                             selectedType = model.type,
                             onTypeSelected = {
