@@ -1,5 +1,16 @@
 package me.rerere.rikkahub.ui.pages.developer
 
+import android.content.Intent
+import androidx.core.content.FileProvider
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
+import me.rerere.rikkahub.utils.writeClipboardText
+import java.io.File
+import kotlin.time.Clock
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.FileScript
 import androidx.compose.foundation.layout.Arrangement
@@ -73,20 +84,56 @@ fun DeveloperPage(vm: DeveloperVM = koinViewModel()) {
 @Composable
 fun LoggingPaging(vm: DeveloperVM) {
     val logs by vm.logs.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val exportedText = logs.joinToString("\n\n---\n\n") { it.toExportText() }
+
+    fun exportLogs() {
+        val file = File(context.cacheDir, "ai_logs_${Clock.System.now().toString().replace(':', '_')}.txt")
+        file.writeText(exportedText.ifBlank { "No AI logs" })
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_TEXT, exportedText.ifBlank { "No AI logs" })
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "导出 AI 日志"))
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        item(key = "actions") {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(onClick = { context.writeClipboardText(exportedText) }, enabled = logs.isNotEmpty()) {
+                    Text("复制全部")
+                }
+                Button(onClick = { exportLogs() }, enabled = logs.isNotEmpty()) {
+                    Text("导出全部")
+                }
+            }
+        }
         items(logs) { log ->
             when (log) {
                 is AILogging.Generation -> {
+                    val text = log.toExportText()
                     Card {
                         Column(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-
+                            Text("Generation · ${log.providerSetting.name} · ${log.params.model.modelId}")
+                            Text("stream=${log.stream}, messages=${log.messages.size}, final=${log.finalMessageCount ?: "-"}, estimatedTokens=${log.estimatedPromptTokens ?: "-"}, contextLimit=${log.contextLimit ?: "-"}, tools=${log.toolsEnabled ?: false}, safety=${log.contextSafetyStatus ?: "-"}")
+                            Row {
+                                TextButton(onClick = { context.writeClipboardText(text) }) { Text("复制") }
+                            }
                         }
                     }
                 }
@@ -94,3 +141,22 @@ fun LoggingPaging(vm: DeveloperVM) {
         }
     }
 }
+
+private fun AILogging.toExportText(): String = when (this) {
+    is AILogging.Generation -> buildString {
+        appendLine("type: generation")
+        appendLine("provider: ${providerSetting.name}")
+        appendLine("model: ${params.model.modelId}")
+        appendLine("stream: $stream")
+        appendLine("messages: ${messages.size}")
+        appendLine("finalMessageCount: ${finalMessageCount ?: ""}")
+        appendLine("estimatedPromptTokens: ${estimatedPromptTokens ?: ""}")
+        appendLine("contextLimit: ${contextLimit ?: ""}")
+        appendLine("toolsEnabled: ${toolsEnabled ?: false}")
+        appendLine("contextSafetyStatus: ${contextSafetyStatus ?: ""}")
+        appendLine("maxTokens: ${params.maxTokens ?: ""}")
+        appendLine("temperature: ${params.temperature ?: ""}")
+        appendLine("topP: ${params.topP ?: ""}")
+    }
+}
+
