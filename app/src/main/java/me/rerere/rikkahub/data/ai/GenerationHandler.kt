@@ -49,6 +49,12 @@ import java.util.Locale
 import kotlin.time.Clock
 
 private const val TAG = "GenerationHandler"
+private const val UNKNOWN_TOOL_CONTEXT_LIMIT_TOKENS = 200_000
+private const val TOOL_CONTEXT_SOFT_LIMIT_RATIO = 0.9
+private const val DEFAULT_RESERVED_OUTPUT_TOKENS = 4096
+
+class ContextSafetyException(message: String) : IllegalStateException(message)
+
 
 @Serializable
 sealed interface GenerationChunk {
@@ -361,6 +367,95 @@ class GenerationHandler(
 
     }.flowOn(Dispatchers.IO)
 
+    private data class ContextSafetyStats(
+        val finalMessageCount: Int,
+        val estimatedPromptTokens: Int,
+        val contextLimit: Int?,
+        val toolsEnabled: Boolean,
+        val status: String,
+    )
+
+    private fun estimateMessageChars(message: UIMessage): Int {
+        return message.role.name.length + message.parts.sumOf { part ->
+            when (part) {
+                is UIMessagePart.Text -> part.text.length
+                is UIMessagePart.Reasoning -> part.reasoning.length
+                is UIMessagePart.Image -> part.url.length + 96
+                is UIMessagePart.Document -> part.url.length + part.fileName.length + 96
+                is UIMessagePart.Audio -> part.url.length + 96
+                is UIMessagePart.Video -> part.url.length + 96
+                is UIMessagePart.Tool -> {
+                    part.toolName.length + part.toolCallId.length + part.arguments.length +
+                        part.output.sumOf { outputPart ->
+                            when (outputPart) {
+                                is UIMessagePart.Text -> outputPart.text.length
+                                else -> outputPart.toString().length
+                            }
+                        } + 128
+                }
+                else -> part.toString().length
+            }
+        } + 16
+    }
+
+    private fun estimateToolChars(tool: Tool): Int {
+        return tool.name.length + tool.description.length +
+            runCatching { tool.parameters().toString() }.getOrDefault("").length +
+            256
+    }
+
+    private fun estimatePromptTokens(
+        internalMessages: List<UIMessage>,
+        tools: List<Tool>,
+        charsPerToken: Float,
+    ): Int {
+        val safeCharsPerToken = charsPerToken.coerceIn(2.0f, 8.0f).toDouble()
+        val messageChars = internalMessages.sumOf { estimateMessageChars(it) }
+        val toolChars = tools.sumOf { estimateToolChars(it) }
+        return ((messageChars + toolChars) / safeCharsPerToken).toInt().coerceAtLeast(1)
+    }
+
+    private fun checkContextSafety(
+        internalMessages: List<UIMessage>,
+        tools: List<Tool>,
+        model: Model,
+        assistant: Assistant,
+        settings: Settings,
+    ): ContextSafetyStats {
+        val toolsEnabled = tools.isNotEmpty()
+        val estimatedPromptTokens = estimatePromptTokens(
+            internalMessages = internalMessages,
+            tools = tools,
+            charsPerToken = settings.tokenEstimatorCharsPerToken,
+        )
+        val contextLimit = model.contextSize ?: if (toolsEnabled) UNKNOWN_TOOL_CONTEXT_LIMIT_TOKENS else null
+        val reservedOutputTokens = assistant.maxTokens ?: DEFAULT_RESERVED_OUTPUT_TOKENS
+        val softLimit = contextLimit?.let { (it * TOOL_CONTEXT_SOFT_LIMIT_RATIO).toInt() }
+        val exceedsSoftLimit = softLimit != null && estimatedPromptTokens >= softLimit
+        val exceedsHardLimit = contextLimit != null && estimatedPromptTokens + reservedOutputTokens >= contextLimit
+        val status = when {
+            toolsEnabled && exceedsHardLimit -> "blocked_tool_context_over_hard_limit"
+            toolsEnabled && exceedsSoftLimit -> "blocked_tool_context_over_soft_limit"
+            else -> "ok"
+        }
+        if (status != "ok") {
+            val limitText = contextLimit?.toString() ?: "unknown"
+            val softText = softLimit?.toString() ?: "unknown"
+            throw ContextSafetyException(
+                "当前请求预计占用约 ${estimatedPromptTokens} tokens，模型上下文限制为 ${limitText} tokens，工具安全阈值为 ${softText} tokens。" +
+                    "由于本次启用了工具调用，已阻止生成，避免 GPT 兼容中转站静默裁剪上下文后在缺失背景时修改文件。" +
+                    "请先压缩对话历史，或在提供商模型设置中填写正确的上下文窗口。"
+            )
+        }
+        return ContextSafetyStats(
+            finalMessageCount = internalMessages.size,
+            estimatedPromptTokens = estimatedPromptTokens,
+            contextLimit = contextLimit,
+            toolsEnabled = toolsEnabled,
+            status = status,
+        )
+    }
+
     private suspend fun generateInternal(
         assistant: Assistant,
         settings: Settings,
@@ -423,6 +518,14 @@ class GenerationHandler(
             settings = settings
         )
 
+        val contextSafetyStats = checkContextSafety(
+            internalMessages = internalMessages,
+            tools = tools,
+            model = model,
+            assistant = assistant,
+            settings = settings,
+        )
+
         var messages: List<UIMessage> = messages
         val params = TextGenerationParams(
             model = model,
@@ -446,7 +549,12 @@ class GenerationHandler(
                     params = params,
                     messages = messages,
                     providerSetting = provider,
-                    stream = true
+                    stream = true,
+                    finalMessageCount = contextSafetyStats.finalMessageCount,
+                    estimatedPromptTokens = contextSafetyStats.estimatedPromptTokens,
+                    contextLimit = contextSafetyStats.contextLimit,
+                    toolsEnabled = contextSafetyStats.toolsEnabled,
+                    contextSafetyStatus = contextSafetyStats.status,
                 )
             )
             providerImpl.streamText(
@@ -472,7 +580,12 @@ class GenerationHandler(
                     params = params,
                     messages = messages,
                     providerSetting = provider,
-                    stream = false
+                    stream = false,
+                    finalMessageCount = contextSafetyStats.finalMessageCount,
+                    estimatedPromptTokens = contextSafetyStats.estimatedPromptTokens,
+                    contextLimit = contextSafetyStats.contextLimit,
+                    toolsEnabled = contextSafetyStats.toolsEnabled,
+                    contextSafetyStatus = contextSafetyStats.status,
                 )
             )
             val chunk = providerImpl.generateText(

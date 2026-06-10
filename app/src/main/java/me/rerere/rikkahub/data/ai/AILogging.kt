@@ -12,6 +12,11 @@ sealed class AILogging {
         val messages: List<UIMessage>,
         val providerSetting: ProviderSetting,
         val stream: Boolean,
+        val finalMessageCount: Int? = null,
+        val estimatedPromptTokens: Int? = null,
+        val contextLimit: Int? = null,
+        val toolsEnabled: Boolean? = null,
+        val contextSafetyStatus: String? = null,
     ) : AILogging()
 }
 
