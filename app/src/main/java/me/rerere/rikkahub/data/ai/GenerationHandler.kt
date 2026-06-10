@@ -438,21 +438,42 @@ class GenerationHandler(
             toolsEnabled && exceedsSoftLimit -> "blocked_tool_context_over_soft_limit"
             else -> "ok"
         }
-        if (status != "ok") {
-            val limitText = contextLimit?.toString() ?: "unknown"
-            val softText = softLimit?.toString() ?: "unknown"
-            throw ContextSafetyException(
-                "当前请求预计占用约 ${estimatedPromptTokens} tokens，模型上下文限制为 ${limitText} tokens，工具安全阈值为 ${softText} tokens。" +
-                    "由于本次启用了工具调用，已阻止生成，避免 GPT 兼容中转站静默裁剪上下文后在缺失背景时修改文件。" +
-                    "请先压缩对话历史，或在提供商模型设置中填写正确的上下文窗口。"
-            )
-        }
         return ContextSafetyStats(
             finalMessageCount = internalMessages.size,
             estimatedPromptTokens = estimatedPromptTokens,
             contextLimit = contextLimit,
             toolsEnabled = toolsEnabled,
             status = status,
+        )
+    }
+
+    private fun contextSafetyErrorMessage(stats: ContextSafetyStats): String {
+        val limitText = stats.contextLimit?.toString() ?: "unknown"
+        val softText = stats.contextLimit?.let { (it * TOOL_CONTEXT_SOFT_LIMIT_RATIO).toInt().toString() } ?: "unknown"
+        return "当前请求预计占用约 ${stats.estimatedPromptTokens} tokens，模型上下文限制为 ${limitText} tokens，工具安全阈值为 ${softText} tokens。" +
+            "由于本次启用了工具调用，已阻止生成，避免 GPT 兼容中转站静默裁剪上下文后在缺失背景时修改文件。" +
+            "请先压缩对话历史，或在提供商模型设置中填写正确的上下文窗口。"
+    }
+
+    private fun addGenerationLog(
+        params: TextGenerationParams,
+        messages: List<UIMessage>,
+        provider: ProviderSetting,
+        stream: Boolean,
+        stats: ContextSafetyStats,
+    ) {
+        aiLoggingManager.addLog(
+            AILogging.Generation(
+                params = params,
+                messages = messages,
+                providerSetting = provider,
+                stream = stream,
+                finalMessageCount = stats.finalMessageCount,
+                estimatedPromptTokens = stats.estimatedPromptTokens,
+                contextLimit = stats.contextLimit,
+                toolsEnabled = stats.toolsEnabled,
+                contextSafetyStatus = stats.status,
+            )
         )
     }
 
@@ -543,20 +564,12 @@ class GenerationHandler(
                 addAll(model.customBodies)
             }
         )
+        if (contextSafetyStats.status != "ok") {
+            addGenerationLog(params, messages, provider, stream, contextSafetyStats)
+            throw ContextSafetyException(contextSafetyErrorMessage(contextSafetyStats))
+        }
         if (stream) {
-            aiLoggingManager.addLog(
-                AILogging.Generation(
-                    params = params,
-                    messages = messages,
-                    providerSetting = provider,
-                    stream = true,
-                    finalMessageCount = contextSafetyStats.finalMessageCount,
-                    estimatedPromptTokens = contextSafetyStats.estimatedPromptTokens,
-                    contextLimit = contextSafetyStats.contextLimit,
-                    toolsEnabled = contextSafetyStats.toolsEnabled,
-                    contextSafetyStatus = contextSafetyStats.status,
-                )
-            )
+            addGenerationLog(params, messages, provider, true, contextSafetyStats)
             providerImpl.streamText(
                 providerSetting = provider,
                 messages = internalMessages,
@@ -575,19 +588,7 @@ class GenerationHandler(
                 onUpdateMessages(messages)
             }
         } else {
-            aiLoggingManager.addLog(
-                AILogging.Generation(
-                    params = params,
-                    messages = messages,
-                    providerSetting = provider,
-                    stream = false,
-                    finalMessageCount = contextSafetyStats.finalMessageCount,
-                    estimatedPromptTokens = contextSafetyStats.estimatedPromptTokens,
-                    contextLimit = contextSafetyStats.contextLimit,
-                    toolsEnabled = contextSafetyStats.toolsEnabled,
-                    contextSafetyStatus = contextSafetyStats.status,
-                )
-            )
+            addGenerationLog(params, messages, provider, false, contextSafetyStats)
             val chunk = providerImpl.generateText(
                 providerSetting = provider,
                 messages = internalMessages,
