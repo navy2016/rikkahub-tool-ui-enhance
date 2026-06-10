@@ -1004,6 +1004,41 @@ class ChatService(
         )
     }
 
+    private data class GenerationMessageSelection(
+        val messages: List<UIMessage>,
+        val writeBackStartIndex: Int,
+    )
+
+    private fun selectMessagesForGenerationAfterCompression(conversation: Conversation): GenerationMessageSelection {
+        val currentMessages = conversation.currentMessages
+        if (currentMessages.isEmpty()) {
+            throw IllegalStateException("Conversation has no messages to generate from")
+        }
+        val compressedUntil = conversation.compressionState.lastCompressedMessageIndex
+            .coerceAtLeast(-1)
+            .coerceAtMost(currentMessages.lastIndex)
+        val hasSummary = conversation.compressionState.hasSummary && compressedUntil >= 0
+        if (!hasSummary) {
+            return GenerationMessageSelection(currentMessages, 0)
+        }
+        val tailStart = (compressedUntil + 1).coerceIn(0, currentMessages.size)
+        val tail = currentMessages.drop(tailStart)
+        if (tail.isNotEmpty()) {
+            return GenerationMessageSelection(tail, tailStart)
+        }
+
+        val fallbackStart = currentMessages.indexOfLast { message ->
+            message.role == MessageRole.USER && message.countsTowardKeepRecent()
+        }.takeIf { it >= 0 } ?: currentMessages.indexOfLast { it.countsTowardKeepRecent() }
+        if (fallbackStart < 0) {
+            throw IllegalStateException("Compressed conversation has no active message tail. Please undo/regenerate compression or send a new message.")
+        }
+        return GenerationMessageSelection(
+            messages = currentMessages.drop(fallbackStart),
+            writeBackStartIndex = fallbackStart,
+        )
+    }
+
     // ---- 处理消息补全 ----
 
     private suspend fun handleMessageComplete(
@@ -1101,21 +1136,9 @@ class ChatService(
                 dialogueSummaryTextForGeneration = ""
                 legacyRollingSummaryJsonForGeneration = ""
             } else {
-                val compressedUntil = conversation.compressionState.lastCompressedMessageIndex
-                    .coerceAtMost(conversation.currentMessages.lastIndex)
-                val hasRollingSummary = conversation.compressionState.hasSummary && compressedUntil >= 0
-                messagesForGeneration = if (hasRollingSummary) {
-                    conversation.currentMessages.drop(compressedUntil + 1).ifEmpty {
-                        conversation.currentMessages.takeLast(1)
-                    }
-                } else {
-                    conversation.currentMessages
-                }
-                generationWriteBackStartIndex = if (hasRollingSummary) {
-                    (conversation.currentMessages.lastIndex - messagesForGeneration.lastIndex).coerceAtLeast(0)
-                } else {
-                    0
-                }
+                val selection = selectMessagesForGenerationAfterCompression(conversation)
+                messagesForGeneration = selection.messages
+                generationWriteBackStartIndex = selection.writeBackStartIndex
                 dialogueSummaryTextForGeneration = conversation.compressionState.dialogueSummaryText
                 legacyRollingSummaryJsonForGeneration = conversation.compressionState.rollingSummaryJson
             }
@@ -3209,8 +3232,16 @@ class ChatService(
         val normalizedCompressedIndex = conversation.compressionState.lastCompressedMessageIndex
             .coerceAtLeast(-1)
             .coerceAtMost(maxIndex)
-        val normalizedEvents = conversation.compressionEvents.map { event ->
-            event.copy(boundaryIndex = event.boundaryIndex.coerceIn(0, conversation.messageNodes.size))
+        val normalizedEvents = conversation.compressionEvents.mapNotNull { event ->
+            if (maxIndex < 0) return@mapNotNull null
+            val start = event.compressStartIndex.coerceIn(0, maxIndex)
+            val end = event.compressEndIndex.coerceIn(start, maxIndex)
+            event.copy(
+                boundaryIndex = event.boundaryIndex.coerceIn(0, conversation.messageNodes.size),
+                compressStartIndex = start,
+                compressEndIndex = end,
+                keepRecentMessages = event.keepRecentMessages.coerceAtLeast(0),
+            )
         }
         return conversation.copy(
             compressionState = conversation.compressionState.copy(
