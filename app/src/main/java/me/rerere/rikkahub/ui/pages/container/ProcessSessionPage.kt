@@ -914,8 +914,9 @@ private fun TerminalInteractivePanel(
     }
 
     LaunchedEffect(terminalPanMode) {
-        if (!terminalPanMode && outputScroll.value != 0) {
-            outputScroll.scrollTo(0)
+        if (!terminalPanMode) {
+            if (outputScroll.value != 0) outputScroll.scrollTo(0)
+            if (horizontalScroll.value != 0) horizontalScroll.scrollTo(0)
         }
     }
 
@@ -1047,9 +1048,6 @@ private fun TerminalInteractivePanel(
                         }
                     }
                     .then(if (selectionMode || terminalPanMode) Modifier else Modifier.pointerInteropFilter { event ->
-                        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                            inputFocusRequester.requestFocus()
-                        }
                         val absoluteX = event.x + horizontalScroll.value
                         val absoluteY = event.y + if (terminalEmulator.isAlternateScreen) 0 else outputScroll.value
                         val col = (absoluteX.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
@@ -1078,11 +1076,11 @@ private fun TerminalInteractivePanel(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .horizontalScroll(horizontalScroll)
-                        // Keep a tiny manual viewport pan available even for alternate-screen TUI
-                        // apps (vim/nano/claude). The bottom spacer below creates scroll range so
-                        // users can reveal lines otherwise hidden by KEYS/input/IME controls.
-                        .verticalScroll(outputScroll)
+                        .horizontalScroll(horizontalScroll, enabled = terminalPanMode || selectionMode)
+                        // Keep a tiny manual viewport pan available in TOUCH/selection modes. In
+                        // MOUSE mode, do not let Compose scroll gestures compete with xterm mouse
+                        // events intended for the TUI.
+                        .verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)
                 ) {
                     val terminalContent: @Composable () -> Unit = {
                         Text(
