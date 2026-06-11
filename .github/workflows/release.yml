@@ -12,8 +12,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: true
+          lfs: false
           fetch-depth: 0
+
+      - name: Restore bundled bun/omp assets from artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUNDLED_RUNTIME_ARTIFACT_ID: 7524840443
+        run: |
+          set -eux
+          mkdir -p app/src/main/assets/bun app/src/main/assets/omp /tmp/rikkahub-bundled-runtime
+          curl -L             -H "Authorization: Bearer ${GH_TOKEN}"             -H "Accept: application/vnd.github+json"             -o /tmp/rikkahub-bundled-runtime/bundled-runtime.zip             "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${BUNDLED_RUNTIME_ARTIFACT_ID}/zip"
+          unzip -o /tmp/rikkahub-bundled-runtime/bundled-runtime.zip -d /tmp/rikkahub-bundled-runtime/extracted
+          find /tmp/rikkahub-bundled-runtime/extracted -type f -maxdepth 6 -print
+          cp /tmp/rikkahub-bundled-runtime/extracted/bun-alpine-aarch64-musl.tar.gz app/src/main/assets/bun/bun-alpine-aarch64-musl.tar.gz
+          cp /tmp/rikkahub-bundled-runtime/extracted/omp-alpine-aarch64-musl.tar.gz app/src/main/assets/omp/omp-alpine-aarch64-musl.tar.gz
+          test ! -f app/src/main/assets/bun/bun-alpine-aarch64-musl.tar.gz || ! grep -q 'version https://git-lfs.github.com/spec/v1' app/src/main/assets/bun/bun-alpine-aarch64-musl.tar.gz
+          test ! -f app/src/main/assets/omp/omp-alpine-aarch64-musl.tar.gz || ! grep -q 'version https://git-lfs.github.com/spec/v1' app/src/main/assets/omp/omp-alpine-aarch64-musl.tar.gz
+          ls -lh app/src/main/assets/bun/bun-alpine-aarch64-musl.tar.gz app/src/main/assets/omp/omp-alpine-aarch64-musl.tar.gz
 
       - name: Set up JDK
         uses: actions/setup-java@v4
