@@ -88,6 +88,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TextRange
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -1471,18 +1472,17 @@ private fun TerminalHiddenInputBridge(
             .fillMaxWidth()
             .height(1.dp)
     ) {
-        var fieldValue by remember { mutableStateOf(TextFieldValue(if (input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input)) }
+        var fieldValue by remember { mutableStateOf(TextFieldValue(input, selection = TextRange(input.length))) }
         LaunchedEffect(input) {
-            if (fieldValue.composition == null) {
-                val target = if (input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input
-                if (fieldValue.text != target) fieldValue = TextFieldValue(target)
+            if (fieldValue.composition == null && fieldValue.text != input) {
+                fieldValue = TextFieldValue(input, selection = TextRange(input.length))
             }
         }
         BasicTextField(
             value = fieldValue,
             onValueChange = { value ->
                 fieldValue = value
-                if (value.composition == null) onInputChange(value.text.replace(TERMINAL_RAW_INPUT_SENTINEL, ""))
+                if (value.composition == null) onInputChange(value.text)
             },
             modifier = Modifier
                 .size(1.dp)
@@ -1532,11 +1532,10 @@ private fun TerminalInputBar(
             textAlign = TextAlign.Center
         )
 
-        var fieldValue by remember(rawInputMode) { mutableStateOf(TextFieldValue(if (rawInputMode && input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input)) }
+        var fieldValue by remember(rawInputMode) { mutableStateOf(TextFieldValue(input, selection = TextRange(input.length))) }
         LaunchedEffect(input, rawInputMode) {
-            if (fieldValue.composition == null) {
-                val target = if (rawInputMode && input.isEmpty()) TERMINAL_RAW_INPUT_SENTINEL else input
-                if (fieldValue.text != target) fieldValue = TextFieldValue(target)
+            if (fieldValue.composition == null && fieldValue.text != input) {
+                fieldValue = TextFieldValue(input, selection = TextRange(input.length))
             }
         }
         BasicTextField(
@@ -1544,7 +1543,7 @@ private fun TerminalInputBar(
             onValueChange = { value ->
                 fieldValue = value
                 if (value.composition == null) {
-                    onInputChange(if (rawInputMode) value.text.replace(TERMINAL_RAW_INPUT_SENTINEL, "") else value.text)
+                    onInputChange(value.text)
                 }
             },
             modifier = Modifier
