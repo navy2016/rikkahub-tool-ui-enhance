@@ -126,7 +126,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 private val TerminalConfigJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-private const val TERMINAL_RAW_INPUT_SENTINEL = "\u200B"
 private val TERMINAL_FORCED_COLUMN_PRESETS = listOf(80, 100, 120, 160, 200)
 private const val TERMINAL_RENDER_FRAME_MS = 33L
 private const val TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS = 100L
