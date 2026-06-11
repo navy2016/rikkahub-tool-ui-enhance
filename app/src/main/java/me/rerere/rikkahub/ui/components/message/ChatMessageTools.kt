@@ -378,9 +378,12 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     val images = tool.output.filterIsInstance<UIMessagePart.Image>()
     val documents = tool.output.filterIsInstance<UIMessagePart.Document>()
 
-    // Detect if tool output contains errors (TOOL_EXECUTION_FAILED)
+    // Detect if tool output contains errors/interruption markers.
     val hasToolError = tool.isExecuted && tool.output.filterIsInstance<UIMessagePart.Text>().any { textPart ->
-        textPart.text.contains("TOOL_EXECUTION_FAILED") || textPart.text.contains("TOOL_EXECUTION_CANCELLED")
+        textPart.text.contains("TOOL_EXECUTION_FAILED") ||
+            textPart.text.contains("TOOL_EXECUTION_CANCELLED") ||
+            textPart.text.contains("TOOL_EXECUTION_INTERRUPTED") ||
+            textPart.text.contains("NETWORK_STREAM_INTERRUPTED")
     }
 
     val title = when (tool.toolName) {
