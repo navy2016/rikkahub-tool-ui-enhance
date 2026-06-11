@@ -37,7 +37,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.EmbeddingGenerationParams
@@ -3791,7 +3795,12 @@ class ChatService(
     ): Conversation {
         val interruptionOutput = listOf(
             UIMessagePart.Text(
-                """{"error":"$error","error_code":"$errorCode"}"""
+                JsonInstant.encodeToString(
+                    buildJsonObject {
+                        put("error", JsonPrimitive(error))
+                        put("error_code", JsonPrimitive(errorCode))
+                    }
+                )
             )
         )
         val conversationWithInterruptedTools = copy(
