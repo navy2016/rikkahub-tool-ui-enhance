@@ -1457,12 +1457,16 @@ class ChatService(
 
             if (error.isRecoverableStreamAbort(appInForeground = isForeground.value)) {
                 // Android/Doze/NAT/proxy may abort a long SSE/HTTP2 socket while the app is in the
-                // background. Keep the partial assistant/tool state recoverable instead of marking
-                // the message as finished or converting pending tools into interruption output.
-                preserveGenerationSnapshot(
+                // background. Preserve partial assistant text, but close any unfinished tool calls
+                // with an explicit interrupted result so the UI and future context do not treat
+                // them as still-running/pending tools.
+                preserveInterruptedToolGenerationSnapshot(
                     conversationId = conversationId,
+                    error = "Network stream was interrupted while the app was backgrounded; partial output was preserved.",
+                    errorCode = "NETWORK_STREAM_INTERRUPTED",
+                    reason = "Network stream interrupted while app was backgrounded",
                     markAssistantFinished = false,
-                    force = true
+                    updateSessionState = false,
                 )
                 addError(
                     IllegalStateException(
