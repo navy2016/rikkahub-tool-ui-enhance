@@ -1464,7 +1464,7 @@ class ChatService(
                 // background. Preserve partial assistant text, but close any unfinished tool calls
                 // with an explicit interrupted result so the UI and future context do not treat
                 // them as still-running/pending tools.
-                preserveInterruptedToolGenerationSnapshot(
+                persistInterruptedToolGenerationSnapshot(
                     conversationId = conversationId,
                     error = "Network stream was interrupted while the app was backgrounded; partial output was preserved.",
                     errorCode = "NETWORK_STREAM_INTERRUPTED",
