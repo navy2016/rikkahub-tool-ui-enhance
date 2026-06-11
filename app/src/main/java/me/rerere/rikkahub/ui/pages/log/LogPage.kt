@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.ui.pages.log
 
+import android.content.Intent
+import androidx.core.content.FileProvider
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.foundation.clickable
@@ -12,6 +14,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import me.rerere.rikkahub.data.ai.AILogging
+import me.rerere.rikkahub.data.ai.AILoggingManager
+import me.rerere.rikkahub.utils.writeClipboardText
+import org.koin.compose.koinInject
+import java.io.File
+import kotlin.time.Clock
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,9 +58,31 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun LogPage() {
+fun LogPage(aiLoggingManager: AILoggingManager = koinInject()) {
     var logs by remember { mutableStateOf(Logging.getRecentLogs()) }
+    val aiLogs by aiLoggingManager.getLogs().collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val exportText = remember(logs, aiLogs) {
+        buildString {
+            appendLine("# AI Generation Logs")
+            aiLogs.forEach { appendLine(it.toExportText()); appendLine("---") }
+            appendLine("# HTTP Request Logs")
+            logs.forEach { appendLine(it.toExportText()); appendLine("---") }
+        }
+    }
+    fun exportAllLogs() {
+        val file = File(context.cacheDir, "request_logs_${Clock.System.now().toString().replace(':', '_')}.txt")
+        file.writeText(exportText)
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_TEXT, exportText)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "导出请求日志"))
+    }
 
     Scaffold(
         topBar = {
@@ -59,6 +93,7 @@ fun LogPage() {
                     IconButton(
                         onClick = {
                             Logging.clear()
+                            aiLoggingManager.clearLogs()
                             logs = Logging.getRecentLogs()
                         }
                     ) {
@@ -74,6 +109,9 @@ fun LogPage() {
     ) { contentPadding ->
         UnifiedLogList(
             logs = logs,
+            aiLogs = aiLogs,
+            onCopyAll = { context.writeClipboardText(exportText) },
+            onExportAll = { exportAllLogs() },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(contentPadding)
@@ -82,7 +120,13 @@ fun LogPage() {
 }
 
 @Composable
-private fun UnifiedLogList(logs: List<LogEntry>, modifier: Modifier = Modifier) {
+private fun UnifiedLogList(
+    logs: List<LogEntry>,
+    aiLogs: List<AILogging>,
+    onCopyAll: () -> Unit,
+    onExportAll: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     var selectedLog by remember { mutableStateOf<LogEntry.RequestLog?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -93,6 +137,15 @@ private fun UnifiedLogList(logs: List<LogEntry>, modifier: Modifier = Modifier) 
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(16.dp)
     ) {
+        item(key = "log_actions") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onCopyAll, enabled = logs.isNotEmpty() || aiLogs.isNotEmpty()) { Text("复制全部") }
+                Button(onClick = onExportAll, enabled = logs.isNotEmpty() || aiLogs.isNotEmpty()) { Text("导出全部") }
+            }
+        }
+        items(aiLogs, key = { "ai_${it.hashCode()}" }, contentType = { "AILog" }) { log ->
+            AILogCard(log = log)
+        }
         items(sortedLogs, key = { it.id }, contentType = { it.javaClass.simpleName }) { log ->
             when (log) {
                 is LogEntry.RequestLog -> RequestLogCard(
@@ -114,6 +167,48 @@ private fun UnifiedLogList(logs: List<LogEntry>, modifier: Modifier = Modifier) 
             sheetState = sheetState
         ) {
             RequestLogDetail(log)
+        }
+    }
+}
+
+
+@Composable
+private fun AILogCard(log: AILogging) {
+    val context = LocalContext.current
+    when (log) {
+        is AILogging.Generation -> {
+            val text = log.toExportText()
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CustomColors.cardColorsOnSurfaceContainer,
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "AI Generation · ${log.providerSetting.name}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "model=${log.params.model.modelId}, stream=${log.stream}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = JetbrainsMono,
+                    )
+                    Text(
+                        text = "messages=${log.messages.size}, final=${log.finalMessageCount ?: "-"}, estimatedTokens=${log.estimatedPromptTokens ?: "-"}, contextLimit=${log.contextLimit ?: "-"}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        text = "tools=${log.toolsEnabled ?: false}, safety=${log.contextSafetyStatus ?: "-"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (log.contextSafetyStatus?.startsWith("blocked") == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    TextButton(onClick = { context.writeClipboardText(text) }) { Text("复制") }
+                }
+            }
         }
     }
 }
@@ -364,5 +459,39 @@ private fun TextLogCard(log: LogEntry.TextLog) {
                 fontFamily = JetbrainsMono
             )
         }
+    }
+}
+
+private fun AILogging.toExportText(): String = when (this) {
+    is AILogging.Generation -> buildString {
+        appendLine("type: ai_generation")
+        appendLine("provider: ${providerSetting.name}")
+        appendLine("model: ${params.model.modelId}")
+        appendLine("stream: $stream")
+        appendLine("messages: ${messages.size}")
+        appendLine("finalMessageCount: ${finalMessageCount ?: ""}")
+        appendLine("estimatedPromptTokens: ${estimatedPromptTokens ?: ""}")
+        appendLine("contextLimit: ${contextLimit ?: ""}")
+        appendLine("toolsEnabled: ${toolsEnabled ?: false}")
+        appendLine("contextSafetyStatus: ${contextSafetyStatus ?: ""}")
+    }
+}
+
+private fun LogEntry.toExportText(): String = when (this) {
+    is LogEntry.RequestLog -> buildString {
+        appendLine("type: http_request")
+        appendLine("time: ${timestamp}")
+        appendLine("method: $method")
+        appendLine("url: $url")
+        appendLine("status: ${responseCode ?: ""}")
+        appendLine("durationMs: ${durationMs ?: ""}")
+        appendLine("error: ${error ?: ""}")
+        requestBody?.let { appendLine("requestBody: $it") }
+    }
+    is LogEntry.TextLog -> buildString {
+        appendLine("type: text")
+        appendLine("time: ${timestamp}")
+        appendLine("tag: $tag")
+        appendLine("message: $message")
     }
 }
