@@ -1064,8 +1064,8 @@ class BackgroundProcessManager @Inject constructor(
         fun append(bytes: ByteArray) {
             data.write(bytes)
             totalWritten += bytes.size
-            val current = data.toByteArray()
-            if (current.size > maxBytes) {
+            if (data.size() > maxBytes) {
+                val current = data.toByteArray()
                 val drop = current.size - maxBytes
                 val trimmed = current.copyOfRange(drop, current.size)
                 data.reset()

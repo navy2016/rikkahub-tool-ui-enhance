@@ -86,6 +86,21 @@ class TerminalEmulator(
         KP_0, KP_1, KP_2, KP_3, KP_4, KP_5, KP_6, KP_7, KP_8, KP_9,
         KP_DECIMAL, KP_ADD, KP_SUBTRACT, KP_MULTIPLY, KP_DIVIDE, KP_ENTER
     }
+    data class RenderedRow(val text: AnnotatedString)
+
+    data class ContentBounds(
+        val firstNonBlankRow: Int?,
+        val lastNonBlankRow: Int?,
+        val nonBlankRowCount: Int
+    ) {
+        val isEmpty: Boolean get() = nonBlankRowCount == 0
+        val height: Int get() = if (firstNonBlankRow != null && lastNonBlankRow != null) {
+            lastNonBlankRow - firstNonBlankRow + 1
+        } else {
+            0
+        }
+    }
+
 
     private enum class ParserState { NORMAL, ESC, CSI, OSC, DCS, STRING_IGNORE, ESC_CHARSET_G0, ESC_CHARSET_G1 }
 
@@ -589,19 +604,45 @@ class TerminalEmulator(
 
     @Synchronized
     fun render(includeScrollback: Boolean = true): AnnotatedString = buildAnnotatedString {
-        val active = screenWithCursor()
-        val lines = if (includeScrollback && !alternateScreen) scrollback.toList() + active else active
-        lines.forEachIndexed { index, line ->
-            appendStyledLine(line)
-            if (index != lines.lastIndex) append('\n')
-        }
+        appendRenderedRows(includeScrollback = includeScrollback, drawCursor = true)
     }
 
     @Synchronized
-    fun plainText(includeScrollback: Boolean = true): String {
-        val active = screenWithCursor(drawCursor = false)
-        val lines = if (includeScrollback && !alternateScreen) scrollback.toList() + active else active
-        return lines.joinToString("\n") { line -> line.joinToString("") { if (it.continuation) "" else it.text }.trimEnd() }
+    fun renderRows(includeScrollback: Boolean = true): List<RenderedRow> {
+        val result = ArrayList<RenderedRow>(rows + if (includeScrollback && !alternateScreen) scrollback.size else 0)
+        if (includeScrollback && !alternateScreen) {
+            scrollback.forEach { line ->
+                result.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, drawCursor = false) }))
+            }
+        }
+        screen.forEachIndexed { row, line ->
+            result.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }))
+        }
+        return result
+    }
+
+    @Synchronized
+    fun contentBounds(includeScrollback: Boolean = true): ContentBounds {
+        var row = 0
+        var first: Int? = null
+        var last: Int? = null
+        var count = 0
+        fun visit(line: Array<Cell>) {
+            if (line.isNotBlankLine()) {
+                if (first == null) first = row
+                last = row
+                count++
+            }
+            row++
+        }
+        if (includeScrollback && !alternateScreen) scrollback.forEach { visit(it) }
+        screen.forEach { visit(it) }
+        return ContentBounds(first, last, count)
+    }
+
+    @Synchronized
+    fun plainText(includeScrollback: Boolean = true): String = buildString {
+        appendPlainRows(includeScrollback)
     }
 
     private fun resetDecoder() {
@@ -629,57 +670,88 @@ class TerminalEmulator(
         repeat(rows) { add(blankLine()) }
     }
 
-    private fun screenWithCursor(drawCursor: Boolean = true): List<Array<Cell>> {
-        val copy = screen.map { line -> Array(columns) { i -> line[i].copy() } }
-        if (drawCursor && cursorVisible && cursorRow in 0 until rows && cursorCol in 0 until columns) {
-            val cell = copy[cursorRow][cursorCol]
-            when (cursorShape) {
-                CursorShape.UNDERLINE, CursorShape.STEADY_UNDERLINE,
-                CursorShape.BAR, CursorShape.STEADY_BAR -> {
-                    cell.text = cursorGlyph()
-                    cell.width = 1
-                    cell.continuation = false
-                    cell.style = cell.style.copy(fg = cursorColor, inverse = false)
-                }
-                else -> {
-                    if (cell.continuation) {
-                        cell.text = " "
-                        cell.width = 1
-                        cell.continuation = false
-                    }
-                    val originalFg = cell.style.fg
-                    val originalBg = cell.style.bg ?: Color(0xFF101010)
-                    cell.style = cell.style.copy(
-                        fg = originalBg,
-                        bg = cursorColor,
-                        inverse = false,
-                        concealed = false
-                    )
-                    if (cell.text == " ") {
-                        cell.text = " "
-                    }
-                    if (cell.style.fg == cursorColor) {
-                        cell.style = cell.style.copy(fg = originalFg)
-                    }
-                }
-            }
+
+    private fun AnnotatedString.Builder.appendRenderedRows(includeScrollback: Boolean, drawCursor: Boolean) {
+        var appended = false
+        fun appendLine(line: Array<Cell>, row: Int?) {
+            if (appended) append('\n') else appended = true
+            appendStyledLine(line, row, drawCursor && row != null)
         }
-        return copy
+        if (includeScrollback && !alternateScreen) scrollback.forEach { appendLine(it, null) }
+        screen.forEachIndexed { row, line -> appendLine(line, row) }
     }
 
-    private fun AnnotatedString.Builder.appendStyledLine(line: Array<Cell>) {
-        val last = line.indexOfLast { !it.continuation && it.text != " " }.coerceAtLeast(0)
+    private fun StringBuilder.appendPlainRows(includeScrollback: Boolean) {
+        var appended = false
+        fun appendLine(line: Array<Cell>) {
+            if (appended) append('\n') else appended = true
+            appendPlainLine(line)
+        }
+        if (includeScrollback && !alternateScreen) scrollback.forEach { appendLine(it) }
+        screen.forEach { appendLine(it) }
+    }
+
+    private fun StringBuilder.appendPlainLine(line: Array<Cell>) {
+        val last = line.lastContentColumn()
+        for (index in 0..last) {
+            if (!line[index].continuation) append(line[index].text)
+        }
+    }
+
+    private fun AnnotatedString.Builder.appendStyledLine(line: Array<Cell>, row: Int? = null, drawCursor: Boolean = false) {
+        val last = maxOf(line.lastContentColumn(), if (drawCursor && row == cursorRow) cursorCol else 0)
         var i = 0
         while (i <= last) {
-            val style = line[i].style
+            val style = renderedStyleAt(line, row, i, drawCursor)
             var j = i + 1
-            while (j <= last && line[j].style == style) j++
+            while (j <= last && renderedStyleAt(line, row, j, drawCursor) == style) j++
             val start = length
-            withStyle(style.toSpanStyle()) { for (k in i until j) if (!line[k].continuation) append(line[k].text) }
+            withStyle(style.toSpanStyle()) {
+                for (k in i until j) {
+                    if (!line[k].continuation || isCursorAt(row, k, drawCursor)) append(renderedTextAt(line, row, k, drawCursor))
+                }
+            }
             style.hyperlink?.let { link ->
                 addStringAnnotation(tag = "URL", annotation = link.uri, start = start, end = length)
             }
             i = j
+        }
+    }
+
+    private fun Array<Cell>.lastContentColumn(): Int = indexOfLast { !it.continuation && it.text != " " }.coerceAtLeast(0)
+
+    private fun Array<Cell>.isNotBlankLine(): Boolean = any { !it.continuation && it.text.isNotBlank() }
+
+    private fun isCursorAt(row: Int?, column: Int, drawCursor: Boolean): Boolean {
+        return drawCursor && cursorVisible && row == cursorRow && column == cursorCol && column in 0 until columns
+    }
+
+    private fun renderedTextAt(line: Array<Cell>, row: Int?, column: Int, drawCursor: Boolean): String {
+        if (!isCursorAt(row, column, drawCursor)) return line[column].text
+        return when (cursorShape) {
+            CursorShape.UNDERLINE, CursorShape.STEADY_UNDERLINE,
+            CursorShape.BAR, CursorShape.STEADY_BAR -> cursorGlyph()
+            else -> if (line[column].continuation) " " else line[column].text
+        }
+    }
+
+    private fun renderedStyleAt(line: Array<Cell>, row: Int?, column: Int, drawCursor: Boolean): Style {
+        val cell = line[column]
+        if (!isCursorAt(row, column, drawCursor)) return cell.style
+        return when (cursorShape) {
+            CursorShape.UNDERLINE, CursorShape.STEADY_UNDERLINE,
+            CursorShape.BAR, CursorShape.STEADY_BAR -> cell.style.copy(fg = cursorColor, inverse = false)
+            else -> {
+                val originalFg = cell.style.fg
+                val originalBg = cell.style.bg ?: Color(0xFF101010)
+                val cursorStyle = cell.style.copy(
+                    fg = originalBg,
+                    bg = cursorColor,
+                    inverse = false,
+                    concealed = false
+                )
+                if (cursorStyle.fg == cursorColor) cursorStyle.copy(fg = originalFg) else cursorStyle
+            }
         }
     }
 

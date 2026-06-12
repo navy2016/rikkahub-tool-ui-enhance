@@ -796,4 +796,35 @@ class TerminalEmulatorTest {
         assertEquals("\u0001", terminal.sequenceForCodePoint('a'.code, ctrl = true))
     }
 
+
+    @Test
+    fun renderRowsMatchesFullRenderTextAndPreservesHyperlinks() {
+        val terminal = TerminalEmulator(initialColumns = 30, initialRows = 6)
+        terminal.feed("top\n")
+        terminal.feed("\u001B]8;;https://example.com\u001B\\link\u001B]8;;\u001B\\")
+
+        val rows = terminal.renderRows(includeScrollback = false)
+        val joined = rows.joinToString("\n") { it.text.text }
+        val full = terminal.render(includeScrollback = false)
+
+        assertEquals(full.text, joined)
+        assertEquals(
+            "https://example.com",
+            rows[1].text.getStringAnnotations("URL", 0, rows[1].text.length).first().item
+        )
+    }
+
+    @Test
+    fun contentBoundsReportsNonBlankRowsWithoutPlainTextAllocation() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[3;4Hmiddle\u001B[6;1Hbottom")
+
+        val bounds = terminal.contentBounds(includeScrollback = false)
+
+        assertEquals(2, bounds.firstNonBlankRow)
+        assertEquals(5, bounds.lastNonBlankRow)
+        assertEquals(2, bounds.nonBlankRowCount)
+        assertEquals(4, bounds.height)
+        assertEquals(false, bounds.isEmpty)
+    }
 }

@@ -81,7 +81,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -618,7 +617,7 @@ private fun TerminalInteractivePanel(
             "npm config set prefix /usr/local && npm config set cache /tmp/npm-cache && npm config set python /usr/bin/python3)"
     }
     var input by remember { mutableStateOf("") }
-    var terminalText by remember { mutableStateOf(terminalEmulator.render()) }
+    var terminalRenderedRows by remember { mutableStateOf(terminalEmulator.renderRows()) }
     var terminalModeSummary by remember { mutableStateOf(terminalEmulator.modeSummary()) }
     var terminalStatus by remember { mutableStateOf("就绪") }
     var autoScroll by remember { mutableStateOf(true) }
@@ -662,7 +661,7 @@ private fun TerminalInteractivePanel(
     }
 
     fun renderTerminalFrame() {
-        terminalText = terminalEmulator.render()
+        terminalRenderedRows = terminalEmulator.renderRows()
         terminalModeSummary = terminalEmulator.modeSummary()
         lastRenderAt = System.currentTimeMillis()
     }
@@ -1082,12 +1081,23 @@ private fun TerminalInteractivePanel(
                         .verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)
                 ) {
                     val terminalContent: @Composable () -> Unit = {
-                        Text(
-                            text = if (terminalText.text.isEmpty()) AnnotatedString("等待输出...") else terminalText,
-                            style = terminalTextStyle,
-                            softWrap = false,
-                            maxLines = Int.MAX_VALUE
-                        )
+                        if (terminalRenderedRows.isEmpty()) {
+                            Text(
+                                text = "等待输出...",
+                                style = terminalTextStyle,
+                                softWrap = false,
+                                maxLines = 1
+                            )
+                        } else {
+                            terminalRenderedRows.forEach { row ->
+                                Text(
+                                    text = row.text,
+                                    style = terminalTextStyle,
+                                    softWrap = false,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
                     if (selectionMode) {
                         SelectionContainer { terminalContent() }
@@ -1207,14 +1217,12 @@ private fun shouldAutoScrollTerminalOutput(
     cellHeightPx: Int
 ): Boolean {
     if (scrollMaxValue <= cellHeightPx * 2) return false
-    val lines = terminal.plainText(includeScrollback = true).lines()
-    val nonBlankRows = lines.mapIndexedNotNull { index, line ->
-        if (line.isNotBlank()) index else null
-    }
-    val first = nonBlankRows.firstOrNull() ?: return false
-    val last = nonBlankRows.lastOrNull() ?: return false
-    val meaningfulHeight = last - first + 1
-    val meaningfulRows = nonBlankRows.size
+    val bounds = terminal.contentBounds(includeScrollback = true)
+    if (bounds.isEmpty) return false
+    val first = bounds.firstNonBlankRow ?: return false
+    val last = bounds.lastNonBlankRow ?: return false
+    val meaningfulHeight = bounds.height
+    val meaningfulRows = bounds.nonBlankRowCount
     val safeViewportRows = (viewportRows - 1).coerceAtLeast(TerminalEmulator.MIN_ROWS)
 
     // Do not autoscroll for a few prompts/lines followed by terminal blank rows. Scroll only when
