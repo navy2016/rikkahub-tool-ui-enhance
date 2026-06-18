@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.container
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -60,6 +62,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.focus.FocusRequester
@@ -81,8 +84,12 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
@@ -618,6 +625,7 @@ private fun TerminalInteractivePanel(
     }
     var input by remember { mutableStateOf("") }
     var terminalRenderedRows by remember { mutableStateOf(terminalEmulator.renderRows()) }
+    var terminalSelectionText by remember { mutableStateOf(terminalEmulator.render()) }
     var terminalModeSummary by remember { mutableStateOf(terminalEmulator.modeSummary()) }
     var terminalStatus by remember { mutableStateOf("就绪") }
     var autoScroll by remember { mutableStateOf(true) }
@@ -662,6 +670,9 @@ private fun TerminalInteractivePanel(
 
     fun renderTerminalFrame() {
         terminalRenderedRows = terminalEmulator.renderRows()
+        if (selectionMode) {
+            terminalSelectionText = terminalEmulator.render()
+        }
         terminalModeSummary = terminalEmulator.modeSummary()
         lastRenderAt = System.currentTimeMillis()
     }
@@ -911,6 +922,12 @@ private fun TerminalInteractivePanel(
         }
     }
 
+    LaunchedEffect(selectionMode, terminalRenderedRows) {
+        if (selectionMode) {
+            terminalSelectionText = terminalEmulator.render()
+        }
+    }
+
     LaunchedEffect(terminalPanMode) {
         if (!terminalPanMode) {
             if (outputScroll.value != 0) outputScroll.scrollTo(0)
@@ -1080,29 +1097,56 @@ private fun TerminalInteractivePanel(
                         // events intended for the TUI.
                         .verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)
                 ) {
-                    val terminalContent: @Composable () -> Unit = {
-                        if (terminalRenderedRows.isEmpty()) {
+                    val rowHeightDp = with(density) { terminalCellHeightPx.toDp() }
+                    val contentWidthDp = with(density) { (terminalColumns * terminalCellWidthPx).toDp() }
+                    if (selectionMode) {
+                        val selectionText = if (terminalSelectionText.text.isEmpty()) {
+                            AnnotatedString("等待输出...")
+                        } else {
+                            terminalSelectionText
+                        }
+                        SelectionContainer {
                             Text(
-                                text = "等待输出...",
+                                text = selectionText,
                                 style = terminalTextStyle,
                                 softWrap = false,
-                                maxLines = 1
+                                maxLines = Int.MAX_VALUE
                             )
-                        } else {
-                            terminalRenderedRows.forEach { row ->
-                                Text(
-                                    text = row.text,
-                                    style = terminalTextStyle,
-                                    softWrap = false,
-                                    maxLines = 1
-                                )
-                            }
                         }
-                    }
-                    if (selectionMode) {
-                        SelectionContainer { terminalContent() }
+                    } else if (terminalRenderedRows.isEmpty()) {
+                        Text(
+                            text = "等待输出...",
+                            modifier = Modifier.height(rowHeightDp),
+                            style = terminalTextStyle,
+                            softWrap = false,
+                            maxLines = 1
+                        )
                     } else {
-                        terminalContent()
+                        val totalRows = terminalRenderedRows.size
+                        val firstVisibleRow = if (terminalCellHeightPx > 0) {
+                            ((outputScroll.value / terminalCellHeightPx) - 2).coerceIn(0, totalRows - 1)
+                        } else {
+                            0
+                        }
+                        val lastVisibleRow = (firstVisibleRow + terminalRows + 6).coerceAtMost(totalRows)
+                        Box(
+                            modifier = Modifier
+                                .width(contentWidthDp)
+                                .height(with(density) { (terminalCellHeightPx * totalRows).toDp() })
+                        ) {
+                            TerminalCanvasContent(
+                                rows = terminalRenderedRows,
+                                firstRow = firstVisibleRow,
+                                lastRowExclusive = lastVisibleRow,
+                                textMeasurer = textMeasurer,
+                                style = terminalTextStyle,
+                                rowHeightPx = terminalCellHeightPx,
+                                modifier = Modifier
+                                    .offset(y = with(density) { (terminalCellHeightPx * firstVisibleRow).toDp() })
+                                    .width(contentWidthDp)
+                                    .height(with(density) { (terminalCellHeightPx * (lastVisibleRow - firstVisibleRow)).toDp() })
+                            )
+                        }
                     }
                     Spacer(
                         modifier = Modifier.height(
@@ -1207,6 +1251,38 @@ private fun TerminalInteractivePanel(
                 editingTerminalItems = null
             }
         )
+    }
+}
+
+@OptIn(ExperimentalTextApi::class)
+@Composable
+private fun TerminalCanvasContent(
+    rows: List<TerminalEmulator.RenderedRow>,
+    firstRow: Int,
+    lastRowExclusive: Int,
+    textMeasurer: TextMeasurer,
+    style: TextStyle,
+    rowHeightPx: Int,
+    modifier: Modifier = Modifier
+) {
+    val measuredRows = remember(rows, firstRow, lastRowExclusive, style) {
+        (firstRow until lastRowExclusive).map { rowIndex ->
+            rowIndex to textMeasurer.measure(
+                text = rows[rowIndex].text,
+                style = style,
+                softWrap = false,
+                maxLines = 1
+            )
+        }
+    }
+    Canvas(modifier = modifier) {
+        val safeRowHeight = rowHeightPx.coerceAtLeast(1).toFloat()
+        measuredRows.forEach { (rowIndex, layoutResult) ->
+            drawText(
+                textLayoutResult = layoutResult,
+                topLeft = Offset(0f, (rowIndex - firstRow) * safeRowHeight)
+            )
+        }
     }
 }
 
