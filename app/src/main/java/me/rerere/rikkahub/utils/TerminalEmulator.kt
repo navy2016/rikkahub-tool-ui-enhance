@@ -13,7 +13,6 @@ import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Base64
-import java.util.IdentityHashMap
 import kotlin.math.max
 import kotlin.math.min
 
@@ -87,7 +86,7 @@ class TerminalEmulator(
         KP_0, KP_1, KP_2, KP_3, KP_4, KP_5, KP_6, KP_7, KP_8, KP_9,
         KP_DECIMAL, KP_ADD, KP_SUBTRACT, KP_MULTIPLY, KP_DIVIDE, KP_ENTER
     }
-    data class RenderedRow(val id: Long, val version: Long, val text: AnnotatedString)
+    data class RenderedRow(val text: AnnotatedString)
 
     data class ContentBounds(
         val firstNonBlankRow: Int?,
@@ -184,15 +183,10 @@ class TerminalEmulator(
         .onUnmappableCharacter(CodingErrorAction.REPLACE)
     private var pendingUtf8 = ByteArray(0)
 
-    private data class CachedRenderedRow(val cursorKey: Long, val text: AnnotatedString)
-
     private val scrollback = ArrayDeque<Array<Cell>>()
     private val mainScreen = MutableList(rows) { blankLine() }
     private val altScreen = MutableList(rows) { blankLine() }
     private val screen: MutableList<Array<Cell>> get() = if (alternateScreen) altScreen else mainScreen
-    private val renderedLineCache = IdentityHashMap<Array<Cell>, CachedRenderedRow>()
-    private val lineIds = IdentityHashMap<Array<Cell>, Long>()
-    private var nextLineId = 1L
 
     init {
         resetTabStops()
@@ -202,9 +196,6 @@ class TerminalEmulator(
     fun reset() {
         currentStyle = defaultStyle
         scrollback.clear()
-        renderedLineCache.clear()
-        lineIds.clear()
-        nextLineId = 1L
         mainScreen.resetScreen()
         altScreen.resetScreen()
         cursorRow = 0
@@ -274,8 +265,6 @@ class TerminalEmulator(
         this.rows = newRows
         tabStops.removeIf { it >= newColumns }
         if (tabStops.isEmpty()) resetTabStops()
-        renderedLineCache.clear()
-        lineIds.clear()
         mainScreen.resizeScreen(newRows, newColumns)
         altScreen.resizeScreen(newRows, newColumns)
         val resizedScrollback = scrollback.map { resizedLine(it, newColumns, defaultStyle) }
@@ -623,14 +612,11 @@ class TerminalEmulator(
         val result = ArrayList<RenderedRow>(rows + if (includeScrollback && !alternateScreen) scrollback.size else 0)
         if (includeScrollback && !alternateScreen) {
             scrollback.forEach { line ->
-                result.add(renderLine(line, row = null, drawCursor = false))
+                result.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, drawCursor = false) }))
             }
         }
         screen.forEachIndexed { row, line ->
-            result.add(renderLine(line, row, drawCursor = true))
-        }
-        if (renderedLineCache.size > result.size + rows + 64) {
-            renderedLineCache.clear()
+            result.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }))
         }
         return result
     }
@@ -657,44 +643,6 @@ class TerminalEmulator(
     @Synchronized
     fun plainText(includeScrollback: Boolean = true): String = buildString {
         appendPlainRows(includeScrollback)
-    }
-
-
-    private fun renderLine(line: Array<Cell>, row: Int?, drawCursor: Boolean): RenderedRow {
-        val version = lineContentHash(line)
-        val cursorKey = renderedCursorKey(row, drawCursor)
-        val cached = renderedLineCache[line]
-        val text = if (cached != null && cached.cursorKey == cursorKey) {
-            cached.text
-        } else {
-            buildAnnotatedString { appendStyledLine(line, row, drawCursor) }.also { rendered ->
-                renderedLineCache[line] = CachedRenderedRow(cursorKey, rendered)
-            }
-        }
-        return RenderedRow(lineId(line), version, text)
-    }
-
-    private fun lineId(line: Array<Cell>): Long = lineIds.getOrPut(line) { nextLineId++ }
-
-    private fun renderedCursorKey(row: Int?, drawCursor: Boolean): Long {
-        var key = if (reverseVideo) 1L else 0L
-        if (drawCursor && row == cursorRow && cursorVisible && cursorCol in 0 until columns) {
-            key = key * 31 + cursorCol
-            key = key * 31 + cursorShape.ordinal
-            key = key * 31 + cursorColor.hashCode()
-        }
-        return key
-    }
-
-    private fun lineContentHash(line: Array<Cell>): Long {
-        var hash = 1125899906842597L
-        line.forEach { cell ->
-            hash = hash * 31 + cell.text.hashCode()
-            hash = hash * 31 + cell.style.hashCode()
-            hash = hash * 31 + cell.width
-            hash = hash * 31 + if (cell.continuation) 1 else 0
-        }
-        return hash
     }
 
     private fun resetDecoder() {

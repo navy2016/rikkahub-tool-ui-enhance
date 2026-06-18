@@ -815,19 +815,6 @@ class TerminalEmulatorTest {
     }
 
     @Test
-    fun renderRowsReusesStableRowsWhenCellsDoNotChange() {
-        val terminal = TerminalEmulator(initialColumns = 30, initialRows = 6)
-        terminal.feed("stable")
-
-        val first = terminal.renderRows(includeScrollback = false)
-        val second = terminal.renderRows(includeScrollback = false)
-
-        assertEquals(first[0].id, second[0].id)
-        assertEquals(first[0].version, second[0].version)
-        assertTrue(first[0].text === second[0].text)
-    }
-
-    @Test
     fun contentBoundsReportsNonBlankRowsWithoutPlainTextAllocation() {
         val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
         terminal.feed("\u001B[3;4Hmiddle\u001B[6;1Hbottom")
