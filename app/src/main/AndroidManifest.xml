@@ -103,6 +103,16 @@
       android:foregroundServiceType="dataSync" />
 
     <service
+      android:name=".service.ContainerProcessForegroundService"
+      android:enabled="true"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="keeps user-started local container commands and interactive terminal sessions running" />
+    </service>
+
+    <service
       android:name=".service.KnowledgeBaseIndexForegroundService"
       android:exported="false"
       android:foregroundServiceType="dataSync" />

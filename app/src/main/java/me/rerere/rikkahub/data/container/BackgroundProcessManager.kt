@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.service.ContainerProcessForegroundService
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.koin.core.context.GlobalContext
 import java.io.ByteArrayOutputStream
@@ -32,10 +33,10 @@ internal fun inferPtyMode(command: String, requested: PtyMode = PtyMode.AUTO): P
     if (requested != PtyMode.AUTO) return requested
     val normalized = command.lowercase()
     val rawRegexes = listOf(
-        Regex("""(^|[\s;&|()])(?:claude|claude-code|codex|opencode|opencode-ai|omp|oh-my-pi)([\s;&|()]|$)"""),
+        Regex("""(^|[\s;&|()])(?:claude|claude-code|codex|opencode|opencode-ai|omp|oh-my-pi|pi)([\s;&|()]|$)"""),
         Regex("""(^|[\s;&|()])(?:vim|nvim|vi|nano|emacs)([\s;&|()]|$)"""),
         Regex("""(^|[\s;&|()])(?:tmux|screen|ssh|less|more|top|htop|fzf)([\s;&|()]|$)"""),
-        Regex("""(^|[\s;&|()])(?:npx|pnpm\s+dlx|bunx|npm\s+exec)\s+[^;&|()]*?(?:claude|claude-code|codex|opencode|opencode-ai|omp|oh-my-pi)([\s;&|()]|$)""")
+        Regex("""(^|[\s;&|()])(?:npx|pnpm\s+dlx|bunx|npm\s+exec)\s+[^;&|()]*?(?:claude|claude-code|codex|opencode|opencode-ai|omp|oh-my-pi|pi)([\s;&|()]|$)""")
     )
     return if (rawRegexes.any { it.containsMatchIn(normalized) }) PtyMode.RAW else PtyMode.COOKED
 }
@@ -1044,6 +1045,7 @@ class BackgroundProcessManager @Inject constructor(
 
     private val appScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var monitoringJob: Job? = null
+    @Volatile private var foregroundProcessCount: Int = 0
 
     init {
         startProcessMonitoring()
@@ -2145,6 +2147,7 @@ class BackgroundProcessManager @Inject constructor(
         interactiveSessions.clear()
         interactiveReadOffsets.clear()
         _processStates.value = emptyList()
+        updateContainerProcessForegroundGuard()
         Log.d(TAG, "All process states cleared")
     }
 
@@ -2259,6 +2262,25 @@ class BackgroundProcessManager @Inject constructor(
 
         _processStates.value = (backgroundList + interactiveList)
             .sortedByDescending { it.createdAt }
+        updateContainerProcessForegroundGuard()
+    }
+
+    @Synchronized
+    private fun updateContainerProcessForegroundGuard() {
+        val activeCount = processes.values.count {
+            it.status == ProcessStatus.RUNNING || it.status == ProcessStatus.STARTING
+        } + interactiveSessions.values.count { it.process.isAlive }
+        if (activeCount == foregroundProcessCount) return
+        foregroundProcessCount = activeCount
+        runCatching {
+            if (activeCount > 0) {
+                ContainerProcessForegroundService.update(context, activeCount)
+            } else {
+                ContainerProcessForegroundService.stop(context)
+            }
+        }.onFailure { error ->
+            Log.w(TAG, "Unable to update container-process foreground service", error)
+        }
     }
 
     /**

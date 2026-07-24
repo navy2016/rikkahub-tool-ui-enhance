@@ -165,6 +165,7 @@ class SettingsStore(
         val TERMINAL_QUICK_COMMANDS = stringPreferencesKey("terminal_quick_commands")
         val TERMINAL_STATUS_BAR_ITEMS = stringPreferencesKey("terminal_status_bar_items")
         val TERMINAL_EXTRA_KEY_ITEMS = stringPreferencesKey("terminal_extra_key_items")
+        val TERMINAL_COMMAND_PREFERENCES = stringPreferencesKey("terminal_command_preferences")
 
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
@@ -291,6 +292,7 @@ class SettingsStore(
                 terminalQuickCommands = preferences[TERMINAL_QUICK_COMMANDS] ?: "",
                 terminalStatusBarItems = preferences[TERMINAL_STATUS_BAR_ITEMS] ?: "",
                 terminalExtraKeyItems = preferences[TERMINAL_EXTRA_KEY_ITEMS] ?: "",
+                terminalCommandPreferences = preferences[TERMINAL_COMMAND_PREFERENCES] ?: "",
                 backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: BackupReminderConfig(),
@@ -560,6 +562,7 @@ class SettingsStore(
             if (settings.terminalQuickCommands.isBlank()) preferences.remove(TERMINAL_QUICK_COMMANDS) else preferences[TERMINAL_QUICK_COMMANDS] = settings.terminalQuickCommands
             if (settings.terminalStatusBarItems.isBlank()) preferences.remove(TERMINAL_STATUS_BAR_ITEMS) else preferences[TERMINAL_STATUS_BAR_ITEMS] = settings.terminalStatusBarItems
             if (settings.terminalExtraKeyItems.isBlank()) preferences.remove(TERMINAL_EXTRA_KEY_ITEMS) else preferences[TERMINAL_EXTRA_KEY_ITEMS] = settings.terminalExtraKeyItems
+            if (settings.terminalCommandPreferences.isBlank()) preferences.remove(TERMINAL_COMMAND_PREFERENCES) else preferences[TERMINAL_COMMAND_PREFERENCES] = settings.terminalCommandPreferences
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
@@ -716,6 +719,7 @@ data class Settings(
     val terminalQuickCommands: String = "",
     val terminalStatusBarItems: String = "",
     val terminalExtraKeyItems: String = "",
+    val terminalCommandPreferences: String = "",
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,

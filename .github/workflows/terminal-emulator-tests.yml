@@ -13,6 +13,7 @@ on:
       - 'app/src/test/java/me/rerere/rikkahub/utils/TerminalEmulatorTest.kt'
       - 'app/src/test/java/me/rerere/rikkahub/data/container/ControlInputTest.kt'
       - 'app/src/test/java/me/rerere/rikkahub/data/container/InteractiveTerminalSnapshotTest.kt'
+      - 'app/src/test/java/me/rerere/rikkahub/data/container/PtyModeInferenceTest.kt'
       - '.github/workflows/terminal-emulator-tests.yml'
       - 'app/build.gradle.kts'
       - 'build.gradle.kts'
@@ -26,6 +27,7 @@ on:
       - 'app/src/test/java/me/rerere/rikkahub/utils/TerminalEmulatorTest.kt'
       - 'app/src/test/java/me/rerere/rikkahub/data/container/ControlInputTest.kt'
       - 'app/src/test/java/me/rerere/rikkahub/data/container/InteractiveTerminalSnapshotTest.kt'
+      - 'app/src/test/java/me/rerere/rikkahub/data/container/PtyModeInferenceTest.kt'
       - '.github/workflows/terminal-emulator-tests.yml'
       - 'app/build.gradle.kts'
       - 'build.gradle.kts'
@@ -99,6 +101,7 @@ jobs:
               --tests me.rerere.rikkahub.utils.TerminalEmulatorTest \
               --tests me.rerere.rikkahub.data.container.ControlInputTest \
               --tests me.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest \
+              --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest \
               --stacktrace; then
               exit 0
             fi
