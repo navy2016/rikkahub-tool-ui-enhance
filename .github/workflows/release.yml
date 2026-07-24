@@ -18,28 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          lfs: false
+          lfs: true
           fetch-depth: 0
-
-      - name: Restore bundled Bun asset from artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUNDLED_RUNTIME_ARTIFACT_ID: 7524840443
-        run: |
-          set -euo pipefail
-          STAGE="$GITHUB_WORKSPACE/.bundled-runtime"
-          mkdir -p app/src/main/assets/bun "$STAGE"
-          curl -fL \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -o "$STAGE/bundled-runtime.zip" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${BUNDLED_RUNTIME_ARTIFACT_ID}/zip"
-          unzip -o "$STAGE/bundled-runtime.zip" -d "$STAGE/extracted"
-          BUN_ASSET="$STAGE/extracted/bun/bun-alpine-aarch64-musl.tar.gz"
-          test -f "$BUN_ASSET"
-          ! grep -q 'version https://git-lfs.github.com/spec/v1' "$BUN_ASSET"
-          cp "$BUN_ASSET" app/src/main/assets/bun/bun-alpine-aarch64-musl.tar.gz
-          ls -lh app/src/main/assets/bun/bun-alpine-aarch64-musl.tar.gz
 
       - name: Set up JDK
         uses: actions/setup-java@v4
