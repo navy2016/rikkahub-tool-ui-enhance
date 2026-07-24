@@ -204,7 +204,6 @@ private fun defaultTerminalQuickCommands() = listOf(
     TerminalQuickCommandConfig("claude", "claude"),
     TerminalQuickCommandConfig("codex", "codex"),
     TerminalQuickCommandConfig("opencode", "opencode"),
-    TerminalQuickCommandConfig("pi", "pi"),
     TerminalQuickCommandConfig("fix-apk", "rikkahub-fix-apk"),
     TerminalQuickCommandConfig("test-network", "rikkahub-test-network"),
     TerminalQuickCommandConfig("clean-caches", "rikkahub-clean-caches"),
@@ -1306,7 +1305,7 @@ private fun defaultTerminalRowsForCommand(command: String): Int = if (isTuiComma
 private fun isTuiCommand(command: String): Boolean {
     val normalized = command.lowercase()
     return listOf(
-        "claude", "claude-code", "codex", "opencode", "opencode-ai", "omp", "oh-my-pi", "pi",
+        "claude", "claude-code", "codex", "opencode", "opencode-ai", "pi",
         "vim", "nvim", "vi", "nano", "emacs", "tmux", "screen",
         "less", "more", "top", "htop", "fzf"
     ).any { token ->

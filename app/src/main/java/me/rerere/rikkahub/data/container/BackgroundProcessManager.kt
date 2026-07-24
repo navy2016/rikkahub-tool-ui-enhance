@@ -33,10 +33,10 @@ internal fun inferPtyMode(command: String, requested: PtyMode = PtyMode.AUTO): P
     if (requested != PtyMode.AUTO) return requested
     val normalized = command.lowercase()
     val rawRegexes = listOf(
-        Regex("""(^|[\s;&|()])(?:claude|claude-code|codex|opencode|opencode-ai|omp|oh-my-pi|pi)([\s;&|()]|$)"""),
+        Regex("""(^|[\s;&|()])(?:claude|claude-code|codex|opencode|opencode-ai|pi)([\s;&|()]|$)"""),
         Regex("""(^|[\s;&|()])(?:vim|nvim|vi|nano|emacs)([\s;&|()]|$)"""),
         Regex("""(^|[\s;&|()])(?:tmux|screen|ssh|less|more|top|htop|fzf)([\s;&|()]|$)"""),
-        Regex("""(^|[\s;&|()])(?:npx|pnpm\s+dlx|bunx|npm\s+exec)\s+[^;&|()]*?(?:claude|claude-code|codex|opencode|opencode-ai|omp|oh-my-pi|pi)([\s;&|()]|$)""")
+        Regex("""(^|[\s;&|()])(?:npx|pnpm\s+dlx|bunx|npm\s+exec)\s+[^;&|()]*?(?:claude|claude-code|codex|opencode|opencode-ai|pi)([\s;&|()]|$)""")
     )
     return if (rawRegexes.any { it.containsMatchIn(normalized) }) PtyMode.RAW else PtyMode.COOKED
 }

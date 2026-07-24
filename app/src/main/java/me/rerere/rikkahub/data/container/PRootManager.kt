@@ -71,7 +71,7 @@ class PRootManager(
         private const val PROOT_RUNTIME_VERSION = "termux-proot-5.1.107.72-libtalloc-2.4.3-r3-seccomp-auto"
         private const val PROOT_RUNTIME_VERSION_FILE = "proot_runtime_version.txt"
 
-        // Bundled Bun runtime. oh-my-pi is installed by users with Bun when needed.
+        // Bundled Bun runtime.
         private const val BUN_BUNDLE_VERSION = "bun-alpine-aarch64-musl-r2"
         private const val BUN_BUNDLE_VERSION_FILE = "bun_bundle_version.txt"
     }
@@ -677,7 +677,6 @@ class PRootManager(
             "rikkahub-npm-env",
             "rikkahub-install-terminal-tools",
             "rikkahub-install-ai-cli",
-            "rikkahub-install-omp",
             "rikkahub-install-cli",
             "rikkahub-node-help",
             "rikkahub-install-node-build-tools",
@@ -685,8 +684,6 @@ class PRootManager(
             "rikkahub-disable-polling",
             "rikkahub-test-node-npm",
             "rikkahub-test-node-native",
-            "rikkahub-omp-help",
-            "rikkahub-test-omp",
             "rikkahub-test-watch",
             "rikkahub-test-service",
             "rikkahub-test-port",
@@ -1091,53 +1088,6 @@ printf '%s\n' 'rikkahub-install-cli now installs lightweight terminal tools only
 printf '%s\n' 'Run rikkahub-install-ai-cli separately for Claude Code / Codex / OpenCode.'
 exec rikkahub-install-terminal-tools
 """)
-            setExecutable(true, false)
-        }
-        File(binDir, "rikkahub-install-omp").apply {
-            writeText(containerShellScript("""
-                set -eu
-                command -v bun >/dev/null 2>&1 || {
-                  echo 'bun is unavailable; initialize/update the container runtime first' >&2
-                  exit 10
-                }
-                bun install -g @oh-my-pi/pi-coding-agent
-                printf '%s\n' 'oh-my-pi installed. Start its TUI with: pi'
-            """))
-            setExecutable(true, false)
-        }
-        File(binDir, "rikkahub-omp-help").apply {
-            writeText(containerShellScript("""
-                cat <<'EOF'
-                == oh-my-pi helper ==
-
-                oh-my-pi is not bundled in the APK. Install it when needed:
-                  bun install -g @oh-my-pi/pi-coding-agent
-                or:
-                  rikkahub-install-omp
-
-                Start the interactive TUI with:
-                  pi
-
-                Checks:
-                  command -v pi
-                  pi --version
-                  rikkahub-test-omp
-                EOF
-            """))
-            setExecutable(true, false)
-        }
-        File(binDir, "rikkahub-test-omp").apply {
-            writeText(containerShellScript("""
-                set -eu
-                printf 'bun='; command -v bun || exit 10
-                bun --version
-                printf 'pi='; command -v pi || {
-                  echo 'oh-my-pi is not installed; run: bun install -g @oh-my-pi/pi-coding-agent' >&2
-                  exit 11
-                }
-                pi --version
-                printf '%s\n' 'RIKKAHUB_OMP_OK'
-            """))
             setExecutable(true, false)
         }
         File(binDir, "rikkahub-node-help").apply {

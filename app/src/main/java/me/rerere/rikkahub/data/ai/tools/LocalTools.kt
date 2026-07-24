@@ -409,7 +409,7 @@ class LocalTools(
     fun createContainerShellTool(sandboxId: Uuid, enabledSkills: Set<String> = emptySet(), timeoutSeconds: Int = 300): Tool {
         return Tool(
             name = "container_shell",
-            description = """完整 Linux Shell（Alpine），支持 apk、git、wget、Python3、Node.js、Bun；oh-my-pi 可按需安装。超时 5 分钟。
+            description = """完整 Linux Shell（Alpine），支持 apk、git、wget、Python3、Node.js、Bun。超时 5 分钟。
 【工作目录】默认在 /workspace 下工作。/workspace 映射到当前对话的沙箱目录，用户在文件管理器中可见；后续命令应尽量在 /workspace 内操作，创建、修改、下载、解压出的用户文件也应优先放在这里。除非有明确理由，不要把项目文件放到 /root、/tmp、/usr/local 或其他 /workspace 之外的位置。
 【Skills】可写技能库挂载在 /skills；当前助手已启用的 skills 以只读镜像方式挂载在 /opt/rikkahub/skills。若用户要求创建或更新可复用 skill，应在 /skills/<directory>/ 下写入合规 skill 包，其中 SKILL.md frontmatter 至少包含 name 和 description。
 【交付】需要展示或交付给用户的最终文件请写入 /delivery。工具返回结果中的 delivery_items 会列出本轮新交付文件及其 render_url。
@@ -420,7 +420,7 @@ class LocalTools(
   - 安装：apk add nodejs npm
   - 使用：node script.js、npm install <package>、npm init
   - 示例：npm install lodash && echo "console.log(require('lodash').VERSION)" > test.js && node test.js
-【内置 CLI】Bun 由 APK 离线资产提供。oh-my-pi 不内置，可运行 `bun install -g @oh-my-pi/pi-coding-agent`，然后以 `pi` 启动。交互式 TUI 请使用 container_shell_bg 且 interactive=true, tty=true。
+【内置 CLI】Bun 由 APK 离线资产提供。交互式 TUI（包括用户自行安装的 `pi`）请使用 container_shell_bg 且 interactive=true, tty=true。
 【禁止】禁止使用此工具启动服务（如 uvicorn、npm start、redis-server 等），启动服务会导致客户端卡死 5 分钟。如需启动服务，请使用 container_shell_bg 工具。
 【故障排查】如 apk 安装失败，先配置 DNS：echo 'nameserver 8.8.8.8' > /etc/resolv.conf""".trimIndent(),
             parameters = {
@@ -576,7 +576,7 @@ class LocalTools(
                                 add("cooked")
                                 add("raw")
                             })
-                            put("description", "仅 interactive=true 且 tty=true 时有效。auto 自动识别 Claude Code/pi/omp/oh-my-pi/vim/TUI 使用 raw；cooked 保持普通 shell canonical/echo；raw 原始字节透传，不转换 \r。默认 auto")
+                            put("description", "仅 interactive=true 且 tty=true 时有效。auto 自动识别 Claude Code/pi/vim/TUI 使用 raw；cooked 保持普通 shell canonical/echo；raw 原始字节透传，不转换 \r。默认 auto")
                         })
                         put("columns", buildJsonObject {
                             put("type", "integer")
@@ -794,7 +794,7 @@ class LocalTools(
                         })
                         put("appendNewline", buildJsonObject {
                             put("type", "boolean")
-                            put("description", "input 操作时是否自动追加换行，默认 true。对 pi/omp/oh-my-pi、claude、codex、opencode 等 TUI，推荐先发送 data 且 appendNewline=false，再单独发送 control=ENTER")
+                            put("description", "input 操作时是否自动追加换行，默认 true。对 pi、claude、codex、opencode 等 TUI，推荐先发送 data 且 appendNewline=false，再单独发送 control=ENTER")
                         })
                         put("bracketedPaste", buildJsonObject {
                             put("type", "boolean")
@@ -1272,7 +1272,7 @@ class LocalTools(
             printf '\033[6n'
             printf '\n'
             echo '--- tools ---'
-            for cmd in vim nano claude codex opencode bun pi omp node npm npx script stty; do
+            for cmd in vim nano claude codex opencode bun node npm npx script stty; do
               printf '%s: ' "${'$'}cmd"
               command -v "${'$'}cmd" 2>/dev/null || printf 'missing\n'
             done
@@ -1282,8 +1282,6 @@ class LocalTools(
             node -v 2>/dev/null || true
             npm -v 2>/dev/null || true
             bun --version 2>/dev/null || true
-            pi --version 2>/dev/null || true
-            omp --version 2>/dev/null || true
         """.trimIndent()
         val result = prootManager.executeShellCancellable(
             sandboxId = sandboxId,
@@ -1307,8 +1305,6 @@ class LocalTools(
             command -v npm || true
             command -v npx || true
             command -v bun || true
-            command -v pi || true
-            command -v omp || true
             node -v 2>&1 || true
             npm -v 2>&1 || true
             npm config get prefix 2>&1 || true
