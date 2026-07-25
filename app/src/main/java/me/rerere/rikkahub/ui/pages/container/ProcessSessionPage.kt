@@ -105,6 +105,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.data.container.BackgroundProcessInfo
 import me.rerere.rikkahub.data.container.BackgroundProcessManager
+import me.rerere.rikkahub.data.container.isTuiCommand
 import me.rerere.rikkahub.data.container.ControlInput
 import me.rerere.rikkahub.data.container.ProcessStatus
 import me.rerere.rikkahub.data.container.PRootManager

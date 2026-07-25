@@ -113,7 +113,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     )
     val filesManager: FilesManager = koinInject()
-    val bgManager: BackgroundProcessManager = koinInject()
     val navController = LocalNavController.current
     val scope = rememberCoroutineScope()
 
@@ -321,6 +320,7 @@ private fun ChatPageContent(
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val bgManager: BackgroundProcessManager = koinInject()
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
 
