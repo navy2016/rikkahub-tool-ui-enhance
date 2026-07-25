@@ -677,6 +677,9 @@ class PRootManager(
             "rikkahub-npm-env",
             "rikkahub-install-terminal-tools",
             "rikkahub-install-ai-cli",
+            "rikkahub-install-omp",
+            "rikkahub-test-omp",
+            "rikkahub-omp-help",
             "rikkahub-install-cli",
             "rikkahub-node-help",
             "rikkahub-install-node-build-tools",
@@ -1110,6 +1113,94 @@ printf '%s\n' 'rikkahub-install-cli now installs lightweight terminal tools only
 printf '%s\n' 'Run rikkahub-install-ai-cli separately for Claude Code / Codex / OpenCode.'
 exec rikkahub-install-terminal-tools
 """)
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-install-omp").apply {
+            writeText(containerShellScript("""
+                set -eu
+                OMP_VERSION="${'$'}{OMP_VERSION:-latest}"
+                case "${'$'}{1:-}" in
+                  --version) OMP_VERSION="${'$'}{2:-${'$'}OMP_VERSION}" ;;
+                  -h|--help)
+                    cat <<'EOF'
+                    Install oh-my-pi / omp from official musl binary releases.
+
+                    Usage:
+                      rikkahub-install-omp [--version v17.1.3]
+
+                    This installs the standalone omp binary, not the npm package.
+                    Alpine/musl must use omp-linux-musl-arm64 or omp-linux-musl-x64.
+                    Do not use: bun install -g @oh-my-pi/pi-coding-agent
+                    EOF
+                    exit 0
+                    ;;
+                esac
+                arch="${'$'}(uname -m 2>/dev/null || true)"
+                case "${'$'}arch" in
+                  aarch64|arm64) asset=omp-linux-musl-arm64 ;;
+                  x86_64|amd64) asset=omp-linux-musl-x64 ;;
+                  *) echo "Unsupported architecture for omp musl binary: ${'$'}arch" >&2; exit 20 ;;
+                esac
+                if [ "${'$'}OMP_VERSION" = latest ]; then
+                  url="https://github.com/can1357/oh-my-pi/releases/latest/download/${'$'}asset"
+                else
+                  url="https://github.com/can1357/oh-my-pi/releases/download/${'$'}OMP_VERSION/${'$'}asset"
+                fi
+                tmp="/tmp/rikkahub-${'$'}asset.${'$'}${'$'}"
+                out="/tmp/rikkahub-omp-version.txt"
+                rm -f "${'$'}tmp" "${'$'}out"
+                if command -v curl >/dev/null 2>&1; then
+                  curl -fL --connect-timeout 20 --max-time 600 -o "${'$'}tmp" "${'$'}url"
+                elif command -v wget >/dev/null 2>&1; then
+                  wget -O "${'$'}tmp" "${'$'}url"
+                else
+                  rikkahub-fix-apk >/dev/null 2>&1 || true
+                  apk add --no-cache ca-certificates curl
+                  curl -fL --connect-timeout 20 --max-time 600 -o "${'$'}tmp" "${'$'}url"
+                fi
+                test -s "${'$'}tmp" || { echo "downloaded empty omp binary" >&2; exit 22; }
+                install -m 0755 "${'$'}tmp" /usr/local/bin/omp
+                rm -f "${'$'}tmp"
+                /usr/local/bin/omp --version >"${'$'}out" 2>&1 || {
+                  code="${'$'}?"
+                  echo 'Installed omp binary failed to execute:' >&2
+                  cat "${'$'}out" >&2 || true
+                  exit "${'$'}code"
+                }
+                cat "${'$'}out"
+                rm -f "${'$'}out"
+                printf '%s\n' 'RIKKAHUB_OMP_BINARY_OK'
+            """))
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-test-omp").apply {
+            writeText(containerShellScript("""
+                set -eu
+                printf 'omp='; command -v omp || { echo 'omp missing; install with rikkahub-install-omp' >&2; exit 10; }
+                file "${'$'}(command -v omp)" 2>/dev/null || true
+                omp --version
+                printf '%s\n' 'RIKKAHUB_OMP_OK'
+            """))
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-omp-help").apply {
+            writeText(containerShellScript("""
+                cat <<'EOF'
+                == oh-my-pi / omp helper ==
+
+                omp is a standalone TUI command. On Alpine/musl use the official musl binary release:
+                  rikkahub-install-omp
+
+                Optional pinned version:
+                  rikkahub-install-omp --version v17.1.3
+
+                Do not install omp through Bun/npm on Alpine/musl:
+                  bun install -g @oh-my-pi/pi-coding-agent
+                That can install glibc native addons and fail at runtime.
+
+                pi is a separate project/command and is not installed by this helper.
+                EOF
+            """))
             setExecutable(true, false)
         }
         File(binDir, "rikkahub-node-help").apply {

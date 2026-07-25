@@ -30,6 +30,15 @@ class BunCompatibilitySourceTest {
     }
 
     @Test
+    fun ompInstallerUsesOfficialMuslBinaryInsteadOfBunPackage() {
+        assertTrue(source.contains("rikkahub-install-omp"))
+        assertTrue(source.contains("omp-linux-musl-arm64"))
+        assertTrue(source.contains("omp-linux-musl-x64"))
+        assertTrue(source.contains("github.com/can1357/oh-my-pi/releases"))
+        assertTrue(source.contains("Do not use: bun install -g @oh-my-pi/pi-coding-agent"))
+    }
+
+    @Test
     fun bunGlobalBinRepairRecreatesPackageBinEntries() {
         assertTrue(source.contains("rikkahub-bun-bin-repair.js"))
         assertTrue(source.contains("package.json"))

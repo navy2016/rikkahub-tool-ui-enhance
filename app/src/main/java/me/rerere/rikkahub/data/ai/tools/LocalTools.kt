@@ -420,7 +420,7 @@ class LocalTools(
   - 安装：apk add nodejs npm
   - 使用：node script.js、npm install <package>、npm init
   - 示例：npm install lodash && echo "console.log(require('lodash').VERSION)" > test.js && node test.js
-【内置 CLI】Bun 由 APK 离线资产提供。交互式 TUI（包括用户自行安装的 `omp`、`pi`）请使用 container_shell_bg 且 interactive=true, tty=true。Bun 在容器内通过兼容 wrapper 运行：全局安装/bunx 使用稳定工作目录、独立持久 cache 和 copyfile 后端，并会重建全局 bin 入口以规避 PRoot 下 hardlink/symlink 与 cwd node_modules 问题。
+【内置 CLI】Bun 由 APK 离线资产提供。交互式 TUI（包括 `omp`、`pi`）请使用 container_shell_bg 且 interactive=true, tty=true。omp/oh-my-pi 在 Alpine/musl 上不要用 `bun install -g @oh-my-pi/pi-coding-agent`（会拉到 glibc native addon）；使用 `rikkahub-install-omp` 下载官方 `omp-linux-musl-arm64/x64` 二进制。pi 是独立项目，用户自行安装。Bun 在容器内通过兼容 wrapper 运行：全局安装/bunx 使用稳定工作目录、独立持久 cache 和 copyfile 后端，并会重建全局 bin 入口。
 【禁止】禁止使用此工具启动服务（如 uvicorn、npm start、redis-server 等），启动服务会导致客户端卡死 5 分钟。如需启动服务，请使用 container_shell_bg 工具。
 【故障排查】如 apk 安装失败，先配置 DNS：echo 'nameserver 8.8.8.8' > /etc/resolv.conf""".trimIndent(),
             parameters = {
@@ -1272,7 +1272,7 @@ class LocalTools(
             printf '\033[6n'
             printf '\n'
             echo '--- tools ---'
-            for cmd in vim nano claude codex opencode bun node npm npx script stty; do
+            for cmd in vim nano claude codex opencode bun omp node npm npx script stty; do
               printf '%s: ' "${'$'}cmd"
               command -v "${'$'}cmd" 2>/dev/null || printf 'missing\n'
             done
@@ -1282,6 +1282,7 @@ class LocalTools(
             node -v 2>/dev/null || true
             npm -v 2>/dev/null || true
             bun --version 2>/dev/null || true
+            omp --version 2>/dev/null || true
         """.trimIndent()
         val result = prootManager.executeShellCancellable(
             sandboxId = sandboxId,
@@ -1305,6 +1306,7 @@ class LocalTools(
             command -v npm || true
             command -v npx || true
             command -v bun || true
+            command -v omp || true
             node -v 2>&1 || true
             npm -v 2>&1 || true
             npm config get prefix 2>&1 || true
