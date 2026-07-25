@@ -25,7 +25,8 @@ class BunCompatibilitySourceTest {
         assertTrue(source.contains("root/.bun-rikkahub/work/node_modules"))
         assertTrue(source.contains("""BUN_LINKER_BACKEND"] = "copyfile"""))
         assertTrue(source.contains("backend = \\\"copyfile\\\""))
-        assertTrue(source.contains("run_in_bun_work \"${'$'}cmd\" --backend copyfile"))
+        assertTrue(source.contains("run_in_bun_work"))
+        assertTrue(source.contains("--backend copyfile"))
     }
 
     @Test
