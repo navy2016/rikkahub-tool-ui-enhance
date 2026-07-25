@@ -420,7 +420,7 @@ class LocalTools(
   - 安装：apk add nodejs npm
   - 使用：node script.js、npm install <package>、npm init
   - 示例：npm install lodash && echo "console.log(require('lodash').VERSION)" > test.js && node test.js
-【内置 CLI】Bun 由 APK 离线资产提供。交互式 TUI（包括用户自行安装的 `pi`）请使用 container_shell_bg 且 interactive=true, tty=true。
+【内置 CLI】Bun 由 APK 离线资产提供。交互式 TUI（包括用户自行安装的 `omp`、`pi`）请使用 container_shell_bg 且 interactive=true, tty=true。当前 Alpine/PRoot 环境下 Bun 1.3.x 的全局安装/bunx 可能依赖当前目录 node_modules，并可能出现 cache/link 异常；不要假定 `bun install -g` 后全局 bin 一定可用。
 【禁止】禁止使用此工具启动服务（如 uvicorn、npm start、redis-server 等），启动服务会导致客户端卡死 5 分钟。如需启动服务，请使用 container_shell_bg 工具。
 【故障排查】如 apk 安装失败，先配置 DNS：echo 'nameserver 8.8.8.8' > /etc/resolv.conf""".trimIndent(),
             parameters = {
@@ -576,7 +576,7 @@ class LocalTools(
                                 add("cooked")
                                 add("raw")
                             })
-                            put("description", "仅 interactive=true 且 tty=true 时有效。auto 自动识别 Claude Code/pi/vim/TUI 使用 raw；cooked 保持普通 shell canonical/echo；raw 原始字节透传，不转换 \r。默认 auto")
+                            put("description", "仅 interactive=true 且 tty=true 时有效。auto 自动识别 Claude Code/omp/pi/vim/TUI 使用 raw；cooked 保持普通 shell canonical/echo；raw 原始字节透传，不转换 \r。默认 auto")
                         })
                         put("columns", buildJsonObject {
                             put("type", "integer")
@@ -794,7 +794,7 @@ class LocalTools(
                         })
                         put("appendNewline", buildJsonObject {
                             put("type", "boolean")
-                            put("description", "input 操作时是否自动追加换行，默认 true。对 pi、claude、codex、opencode 等 TUI，推荐先发送 data 且 appendNewline=false，再单独发送 control=ENTER")
+                            put("description", "input 操作时是否自动追加换行，默认 true。对 omp、pi、claude、codex、opencode 等 TUI，推荐先发送 data 且 appendNewline=false，再单独发送 control=ENTER")
                         })
                         put("bracketedPaste", buildJsonObject {
                             put("type", "boolean")

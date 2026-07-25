@@ -1305,7 +1305,7 @@ private fun defaultTerminalRowsForCommand(command: String): Int = if (isTuiComma
 private fun isTuiCommand(command: String): Boolean {
     val normalized = command.lowercase()
     return listOf(
-        "claude", "claude-code", "codex", "opencode", "opencode-ai", "pi",
+        "claude", "claude-code", "codex", "opencode", "opencode-ai", "omp", "pi",
         "vim", "nvim", "vi", "nano", "emacs", "tmux", "screen",
         "less", "more", "top", "htop", "fzf"
     ).any { token ->

@@ -19,17 +19,23 @@ class PtyModeInferenceTest {
         assertEquals(PtyMode.RAW, inferPtyMode("npm exec claude", PtyMode.AUTO))
         assertEquals(PtyMode.RAW, inferPtyMode("vim README.md", PtyMode.AUTO))
         assertEquals(PtyMode.RAW, inferPtyMode("tmux new -A -s main", PtyMode.AUTO))
+        assertEquals(PtyMode.RAW, inferPtyMode("omp", PtyMode.AUTO))
+        assertEquals(PtyMode.RAW, inferPtyMode("omp --help", PtyMode.AUTO))
         assertEquals(PtyMode.RAW, inferPtyMode("pi", PtyMode.AUTO))
         assertEquals(PtyMode.RAW, inferPtyMode("pi --model test", PtyMode.AUTO))
+        assertEquals(PtyMode.RAW, inferPtyMode("bunx omp", PtyMode.AUTO))
         assertEquals(PtyMode.RAW, inferPtyMode("bunx pi", PtyMode.AUTO))
+        assertEquals(PtyMode.RAW, inferPtyMode("npm exec omp", PtyMode.AUTO))
         assertEquals(PtyMode.RAW, inferPtyMode("npm exec pi", PtyMode.AUTO))
     }
 
     @Test
-    fun piTokenDoesNotMatchUnrelatedCommands() {
+    fun ompAndPiTokensDoNotMatchUnrelatedCommands() {
         assertEquals(PtyMode.COOKED, inferPtyMode("pip install requests", PtyMode.AUTO))
         assertEquals(PtyMode.COOKED, inferPtyMode("ping example.com", PtyMode.AUTO))
         assertEquals(PtyMode.COOKED, inferPtyMode("python script.py", PtyMode.AUTO))
+        assertEquals(PtyMode.COOKED, inferPtyMode("compile source", PtyMode.AUTO))
+        assertEquals(PtyMode.COOKED, inferPtyMode("prompt-tool", PtyMode.AUTO))
     }
 
     @Test
