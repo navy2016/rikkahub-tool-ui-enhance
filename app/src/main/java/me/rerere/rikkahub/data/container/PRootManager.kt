@@ -1589,6 +1589,29 @@ function mkdirp(p) { try { fs.mkdirSync(p, { recursive: true }); } catch {} }
 function existsFile(p) { try { return fs.statSync(p).isFile(); } catch { return false; } }
 function rm(p) { try { fs.rmSync(p, { force: true }); } catch {} }
 function chmod(p) { try { fs.chmodSync(p, 0o755); } catch {} }
+function isBadSymlink(file) {
+  let target;
+  try { target = fs.readlinkSync(file); } catch { return false; }
+  if (target === '/tmp/npm-cache' || target.startsWith('/tmp/npm-cache/')) return true;
+  const resolved = path.isAbsolute(target) ? target : path.resolve(path.dirname(file), target);
+  try { return !fs.existsSync(resolved); } catch { return true; }
+}
+function packageHasBadSymlink(root) {
+  const stack = [root];
+  while (stack.length) {
+    const dir = stack.pop();
+    let children = [];
+    try { children = fs.readdirSync(dir); } catch { continue; }
+    for (const child of children) {
+      const full = path.join(dir, child);
+      let st;
+      try { st = fs.lstatSync(full); } catch { continue; }
+      if (st.isSymbolicLink() && isBadSymlink(full)) return true;
+      if (st.isDirectory()) stack.push(full);
+    }
+  }
+  return false;
+}
 function linkOrShim(name, target) {
   if (!name || !target || !existsFile(target)) return;
   for (const dir of [bunBin, localBin]) {
@@ -1612,6 +1635,10 @@ function binEntries(pkg, root) {
   return [];
 }
 function scanPackage(root) {
+  if (packageHasBadSymlink(root)) {
+    try { fs.rmSync(root, { recursive: true, force: true }); } catch {}
+    return;
+  }
   const pkgPath = path.join(root, 'package.json');
   if (!existsFile(pkgPath)) return;
   let pkg;
@@ -1670,6 +1697,10 @@ repair_bun_global_bins() {
   [ -d "${'$'}BUN_GLOBAL_DIR/node_modules" ] || return 0
   "${'$'}BUN_REAL" "${'$'}BUN_HOME/libexec/rikkahub-bun-bin-repair.js" "${'$'}BUN_GLOBAL_DIR/node_modules" "${'$'}BUN_GLOBAL_BIN" /usr/local/bin 2>/dev/null || true
 }
+sanitize_bun_global_store() {
+  [ -d "${'$'}BUN_GLOBAL_DIR/node_modules" ] || return 0
+  "${'$'}BUN_REAL" "${'$'}BUN_HOME/libexec/rikkahub-bun-bin-repair.js" "${'$'}BUN_GLOBAL_DIR/node_modules" "${'$'}BUN_GLOBAL_BIN" /usr/local/bin 2>/dev/null || true
+}
 run_in_bun_work() {
   oldpwd="${'$'}PWD"
   mkdir -p "${'$'}BUN_WORK/node_modules" 2>/dev/null || true
@@ -1686,6 +1717,7 @@ case "${'$'}cmd" in
   install|add)
     shift
     if has_arg -g "${'$'}@" || has_arg --global "${'$'}@"; then
+      sanitize_bun_global_store
       if needs_copy_backend "${'$'}@"; then
         run_in_bun_work "${'$'}cmd" --backend copyfile "${'$'}@"
       else

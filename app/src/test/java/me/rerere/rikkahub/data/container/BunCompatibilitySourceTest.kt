@@ -35,6 +35,9 @@ class BunCompatibilitySourceTest {
         assertTrue(source.contains("pkg.bin"))
         assertTrue(source.contains("fs.symlinkSync(target, out)"))
         assertTrue(source.contains("repair_bun_global_bins"))
+        assertTrue(source.contains("sanitize_bun_global_store"))
+        assertTrue(source.contains("/tmp/npm-cache"))
+        assertTrue(source.contains("packageHasBadSymlink"))
         assertTrue(source.contains("/usr/local/bin 2>/dev/null || true"))
     }
 }
