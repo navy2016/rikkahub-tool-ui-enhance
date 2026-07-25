@@ -141,6 +141,7 @@ private data class TerminalQuickCommandConfig(
 @Serializable
 private data class TerminalItemConfig(
     val id: String,
+    val label: String? = null,
 )
 
 @Serializable
@@ -210,6 +211,8 @@ private fun defaultTerminalQuickCommands() = listOf(
     TerminalQuickCommandConfig("npm-env", "rikkahub-npm-env"),
     TerminalQuickCommandConfig("terminal-tools", "rikkahub-install-terminal-tools"),
     TerminalQuickCommandConfig("ai-cli", "rikkahub-install-ai-cli"),
+    TerminalQuickCommandConfig("install-omp", "rikkahub-install-omp"),
+    TerminalQuickCommandConfig("test-omp", "rikkahub-test-omp"),
     TerminalQuickCommandConfig("node-help", "rikkahub-node-help"),
     TerminalQuickCommandConfig("build-tools", "rikkahub-install-node-build-tools"),
     TerminalQuickCommandConfig("enable-polling", "rikkahub-enable-polling"),
@@ -229,7 +232,7 @@ private fun defaultTerminalQuickCommands() = listOf(
 )
 
 private fun defaultTerminalStatusItems() = listOf("RAW", "AUTO", "COLS", "KEYS", "TOUCH", "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL").map { TerminalItemConfig(it) }
-private fun defaultTerminalExtraKeyItems() = listOf("CTRL", "ALT", "SEL", "KBD", "ESC", "TAB", "S-TAB", "UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "BKSP", "DEL", "ENTER", "C-C", "C-D", "C-Z", "C-L", "C-U", "C-W", "C-A", "C-E", "C-R", "COPY", "PASTE", "CLEAR", "TEST", "CLI").map { TerminalItemConfig(it) }
+private fun defaultTerminalExtraKeyItems() = listOf("CTRL", "ALT", "SHIFT", "SEL", "KBD", "ESC", "TAB", "S-TAB", "UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "BKSP", "DEL", "ENTER", "C-C", "C-D", "C-Z", "C-L", "C-U", "C-W", "C-A", "C-E", "C-R", "COPY", "PASTE", "CLEAR", "TEST", "CLI").map { TerminalItemConfig(it) }
 
 private val TerminalStatusPresets = listOf(
     TerminalActionPreset("RAW", "RAW/LINE"), TerminalActionPreset("AUTO", "AUTO/LOCK"), TerminalActionPreset("COLS", "FIT/80C/120C"), TerminalActionPreset("KEYS", "KEYS"),
@@ -238,7 +241,7 @@ private val TerminalStatusPresets = listOf(
     TerminalActionPreset("CLR", "CLR"), TerminalActionPreset("CTN", "CTN"), TerminalActionPreset("FULL", "FULL/EXIT"),
 )
 private val TerminalExtraKeyPresets = listOf(
-    TerminalActionPreset("CTRL", "CTRL"), TerminalActionPreset("ALT", "ALT"), TerminalActionPreset("SEL", "SEL"), TerminalActionPreset("KBD", "KBD"),
+    TerminalActionPreset("CTRL", "CTRL"), TerminalActionPreset("ALT", "ALT"), TerminalActionPreset("SHIFT", "SHIFT"), TerminalActionPreset("SEL", "SEL"), TerminalActionPreset("KBD", "KBD"),
     TerminalActionPreset("ESC", "ESC"), TerminalActionPreset("TAB", "TAB"), TerminalActionPreset("S-TAB", "S-TAB"), TerminalActionPreset("UP", "↑"),
     TerminalActionPreset("DOWN", "↓"), TerminalActionPreset("LEFT", "←"), TerminalActionPreset("RIGHT", "→"), TerminalActionPreset("HOME", "HOME"),
     TerminalActionPreset("END", "END"), TerminalActionPreset("PGUP", "PGUP"), TerminalActionPreset("PGDN", "PGDN"), TerminalActionPreset("BKSP", "BKSP"),
@@ -292,6 +295,7 @@ fun ProcessSessionPage(sandboxId: String) {
         }
     }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showCustomTuiDialog by remember { mutableStateOf(false) }
     var showLogsFor by remember { mutableStateOf<String?>(null) }
 
     val activeInteractiveProcess = sandboxProcesses.firstOrNull {
@@ -326,6 +330,7 @@ fun ProcessSessionPage(sandboxId: String) {
                             Text(if (showTerminalStatusBar) "隐藏状态" else "状态")
                         }
                     }
+                    TextButton(onClick = { showCustomTuiDialog = true }) { Text("TUI") }
                     IconButton(onClick = { showCreateDialog = true }) {
                         Text("+", fontSize = 20.sp)
                     }
@@ -409,6 +414,33 @@ fun ProcessSessionPage(sandboxId: String) {
         }
     }
 
+
+    if (showCustomTuiDialog) {
+        var text by remember(settings.terminalCustomTuiCommands) { mutableStateOf(settings.terminalCustomTuiCommands) }
+        AlertDialog(
+            onDismissRequest = { showCustomTuiDialog = false },
+            title = { Text("自定义 TUI 程序名单") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("每行一个命令名。AUTO PTY 会将这些程序按 TUI/RAW 处理。", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { text = it },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp),
+                        minLines = 6,
+                        label = { Text("例如：lazygit\nbtop\nyazi") }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch { settingsStore.update { it.copy(terminalCustomTuiCommands = text) } }
+                    showCustomTuiDialog = false
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { showCustomTuiDialog = false }) { Text("取消") } }
+        )
+    }
     if (showCreateDialog) {
         CreateSessionDialog(
             settingsStore = settingsStore,
@@ -420,8 +452,8 @@ fun ProcessSessionPage(sandboxId: String) {
                         sandboxId = sandboxId,
                         command = command,
                         preferTty = true,
-                        columns = defaultTerminalColumnsForCommand(command),
-                        rows = defaultTerminalRowsForCommand(command)
+                        columns = defaultTerminalColumnsForCommand(command, settings.terminalCustomTuiCommands),
+                        rows = defaultTerminalRowsForCommand(command, settings.terminalCustomTuiCommands)
                     )
                     if (result.success) {
                         activeInteractiveId = result.processId
@@ -695,18 +727,19 @@ private fun TerminalInteractivePanel(
     var terminalModeSummary by remember { mutableStateOf(terminalEmulator.modeSummary()) }
     var terminalStatus by remember { mutableStateOf("就绪") }
     var autoScroll by remember(processId) { mutableStateOf(savedPreference?.autoScroll ?: true) }
-    var rawInputMode by remember(processId) { mutableStateOf(savedPreference?.rawInputMode ?: isTuiCommand(process.command)) }
+    var rawInputMode by remember(processId, settings.terminalCustomTuiCommands) { mutableStateOf(savedPreference?.rawInputMode ?: isTuiCommand(process.command, settings.terminalCustomTuiCommands)) }
     var showExtraKeys by remember(processId) { mutableStateOf(savedPreference?.showExtraKeys ?: !fullscreen) }
     var selectionMode by remember { mutableStateOf(false) }
     var terminalPanMode by remember(processId) { mutableStateOf(savedPreference?.terminalPanMode ?: rawInputMode) }
     var showFullInputBar by remember(processId) { mutableStateOf(savedPreference?.showFullInputBar ?: !rawInputMode) }
     var ctrlLatch by remember { mutableStateOf(false) }
     var altLatch by remember { mutableStateOf(false) }
+    var shiftLatch by remember { mutableStateOf(false) }
     var terminalColumns by remember { mutableIntStateOf(80) }
     var terminalRows by remember { mutableIntStateOf(24) }
     var pendingTerminalRows by remember { mutableIntStateOf(24) }
     var measuredTerminalColumns by remember(processId) { mutableIntStateOf(80) }
-    var forcedTerminalColumns by remember(processId) { mutableStateOf(savedPreference?.forcedTerminalColumns ?: if (isTuiCommand(process.command)) 120 else null) }
+    var forcedTerminalColumns by remember(processId, settings.terminalCustomTuiCommands) { mutableStateOf(savedPreference?.forcedTerminalColumns ?: if (isTuiCommand(process.command, settings.terminalCustomTuiCommands)) 120 else null) }
     var terminalCellWidthPx by remember { mutableIntStateOf(7) }
     var terminalCellHeightPx by remember { mutableIntStateOf(14) }
     val terminalStatusItems = remember(settings.terminalStatusBarItems) {
@@ -827,6 +860,7 @@ private fun TerminalInteractivePanel(
     fun clearModifierLatches() {
         ctrlLatch = false
         altLatch = false
+        shiftLatch = false
     }
 
     fun sendPastedText(text: String) {
@@ -835,7 +869,7 @@ private fun TerminalInteractivePanel(
     }
 
     fun sendKey(key: Key) {
-        sendRaw(terminalEmulator.sequenceFor(key, alt = altLatch, ctrl = ctrlLatch))
+        sendRaw(terminalEmulator.sequenceFor(key, shift = shiftLatch, alt = altLatch, ctrl = ctrlLatch))
         clearModifierLatches()
     }
 
@@ -1208,9 +1242,11 @@ private fun TerminalInteractivePanel(
                     onEditItems = { editingTerminalItems = "keys" },
                     ctrlLatch = ctrlLatch,
                     altLatch = altLatch,
+                    shiftLatch = shiftLatch,
                     selectionMode = selectionMode,
                     onToggleCtrl = { ctrlLatch = !ctrlLatch },
                     onToggleAlt = { altLatch = !altLatch },
+                    onToggleShift = { shiftLatch = !shiftLatch },
                     onToggleSelection = {
                         selectionMode = !selectionMode
                         if (!selectionMode) terminalPanMode = true
@@ -1219,7 +1255,11 @@ private fun TerminalInteractivePanel(
                         inputFocusRequester.requestFocus()
                         keyboardController?.show()
                     },
-                    onControl = { control -> scope.launch { bgManager.sendControlInput(processId, control) } },
+                    onControl = { control ->
+                        val actual = if (shiftLatch && control == ControlInput.TAB) ControlInput.BACK_TAB else control
+                        scope.launch { bgManager.sendControlInput(processId, actual) }
+                        clearModifierLatches()
+                    },
                     onKey = { key -> sendKey(key) },
                     onCopy = {
                         context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
@@ -1298,20 +1338,9 @@ private fun TerminalInteractivePanel(
     }
 }
 
-private fun defaultTerminalColumnsForCommand(command: String): Int = if (isTuiCommand(command)) 120 else 80
+private fun defaultTerminalColumnsForCommand(command: String, customTuiCommands: String = ""): Int = if (isTuiCommand(command, customTuiCommands)) 120 else 80
 
-private fun defaultTerminalRowsForCommand(command: String): Int = if (isTuiCommand(command)) 40 else 24
-
-private fun isTuiCommand(command: String): Boolean {
-    val normalized = command.lowercase()
-    return listOf(
-        "claude", "claude-code", "codex", "opencode", "opencode-ai", "omp", "pi",
-        "vim", "nvim", "vi", "nano", "emacs", "tmux", "screen",
-        "less", "more", "top", "htop", "fzf"
-    ).any { token ->
-        Regex("""(^|[\s;&|()])""" + Regex.escape(token) + """([\s;&|()]|$)""").containsMatchIn(normalized)
-    }
-}
+private fun defaultTerminalRowsForCommand(command: String, customTuiCommands: String = ""): Int = if (isTuiCommand(command, customTuiCommands)) 40 else 24
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1403,9 +1432,11 @@ private fun TerminalExtraKeysRow(
     onEditItems: () -> Unit,
     ctrlLatch: Boolean,
     altLatch: Boolean,
+    shiftLatch: Boolean,
     selectionMode: Boolean,
     onToggleCtrl: () -> Unit,
     onToggleAlt: () -> Unit,
+    onToggleShift: () -> Unit,
     onToggleSelection: () -> Unit,
     onKeyboard: () -> Unit,
     onControl: (ControlInput) -> Unit,
@@ -1435,38 +1466,39 @@ private fun TerminalExtraKeysRow(
         )
         items.forEach { item ->
             when (item.id) {
-                "CTRL" -> TerminalKey("CTRL", highlight = ctrlLatch, onLongClick = onEditItems) { onToggleCtrl() }
-                "ALT" -> TerminalKey("ALT", highlight = altLatch, onLongClick = onEditItems) { onToggleAlt() }
-                "SEL" -> TerminalKey("SEL", highlight = selectionMode, onLongClick = onEditItems) { onToggleSelection() }
-                "KBD" -> TerminalKey("KBD", onLongClick = onEditItems) { onKeyboard() }
-                "ESC" -> TerminalKey("ESC", onLongClick = onEditItems) { onControl(ControlInput.ESC) }
-                "TAB" -> TerminalKey("TAB", onLongClick = onEditItems) { onControl(ControlInput.TAB) }
-                "S-TAB" -> TerminalKey("S-TAB", onLongClick = onEditItems) { onControl(ControlInput.BACK_TAB) }
-                "UP" -> TerminalKey("↑", onLongClick = onEditItems) { onKey(Key.UP) }
-                "DOWN" -> TerminalKey("↓", onLongClick = onEditItems) { onKey(Key.DOWN) }
-                "LEFT" -> TerminalKey("←", onLongClick = onEditItems) { onKey(Key.LEFT) }
-                "RIGHT" -> TerminalKey("→", onLongClick = onEditItems) { onKey(Key.RIGHT) }
-                "HOME" -> TerminalKey("HOME", onLongClick = onEditItems) { onKey(Key.HOME) }
-                "END" -> TerminalKey("END", onLongClick = onEditItems) { onKey(Key.END) }
-                "PGUP" -> TerminalKey("PGUP", onLongClick = onEditItems) { onKey(Key.PAGE_UP) }
-                "PGDN" -> TerminalKey("PGDN", onLongClick = onEditItems) { onKey(Key.PAGE_DOWN) }
-                "BKSP" -> TerminalKey("BKSP", onLongClick = onEditItems) { onControl(ControlInput.BACKSPACE) }
-                "DEL" -> TerminalKey("DEL", onLongClick = onEditItems) { onKey(Key.DELETE) }
-                "ENTER" -> TerminalKey("ENTER", highlight = true, onLongClick = onEditItems) { onControl(ControlInput.ENTER) }
-                "C-C" -> TerminalKey("C-C", onLongClick = onEditItems) { onControl(ControlInput.CTRL_C) }
-                "C-D" -> TerminalKey("C-D", onLongClick = onEditItems) { onControl(ControlInput.CTRL_D) }
-                "C-Z" -> TerminalKey("C-Z", onLongClick = onEditItems) { onControl(ControlInput.CTRL_Z) }
-                "C-L" -> TerminalKey("C-L", onLongClick = onEditItems) { onControl(ControlInput.CTRL_L) }
-                "C-U" -> TerminalKey("C-U", onLongClick = onEditItems) { onControl(ControlInput.CTRL_U) }
-                "C-W" -> TerminalKey("C-W", onLongClick = onEditItems) { onControl(ControlInput.CTRL_W) }
-                "C-A" -> TerminalKey("C-A", onLongClick = onEditItems) { onControl(ControlInput.CTRL_A) }
-                "C-E" -> TerminalKey("C-E", onLongClick = onEditItems) { onControl(ControlInput.CTRL_E) }
-                "C-R" -> TerminalKey("C-R", onLongClick = onEditItems) { onControl(ControlInput.CTRL_R) }
-                "COPY" -> TerminalKey("COPY", onLongClick = onEditItems) { onCopy() }
-                "PASTE" -> TerminalKey("PASTE", onLongClick = onEditItems) { onPaste() }
-                "CLEAR" -> TerminalKey("CLEAR", onLongClick = onEditItems) { onClear() }
-                "TEST" -> TerminalKey("TEST", onLongClick = onEditItems) { onSelfTest() }
-                "CLI" -> TerminalKey("CLI", onLongClick = onEditItems) { onInstallCli() }
+                "CTRL" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), highlight = ctrlLatch, onLongClick = onEditItems) { onToggleCtrl() }
+                "ALT" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), highlight = altLatch, onLongClick = onEditItems) { onToggleAlt() }
+                "SHIFT" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), highlight = shiftLatch, onLongClick = onEditItems) { onToggleShift() }
+                "SEL" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), highlight = selectionMode, onLongClick = onEditItems) { onToggleSelection() }
+                "KBD" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onKeyboard() }
+                "ESC" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.ESC) }
+                "TAB" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.TAB) }
+                "S-TAB" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.BACK_TAB) }
+                "UP" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onKey(Key.UP) }
+                "DOWN" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onKey(Key.DOWN) }
+                "LEFT" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onKey(Key.LEFT) }
+                "RIGHT" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onKey(Key.RIGHT) }
+                "HOME" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onKey(Key.HOME) }
+                "END" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onKey(Key.END) }
+                "PGUP" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onKey(Key.PAGE_UP) }
+                "PGDN" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onKey(Key.PAGE_DOWN) }
+                "BKSP" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.BACKSPACE) }
+                "DEL" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onKey(Key.DELETE) }
+                "ENTER" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), highlight = true, onLongClick = onEditItems) { onControl(ControlInput.ENTER) }
+                "C-C" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.CTRL_C) }
+                "C-D" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.CTRL_D) }
+                "C-Z" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.CTRL_Z) }
+                "C-L" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.CTRL_L) }
+                "C-U" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.CTRL_U) }
+                "C-W" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.CTRL_W) }
+                "C-A" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.CTRL_A) }
+                "C-E" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.CTRL_E) }
+                "C-R" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onControl(ControlInput.CTRL_R) }
+                "COPY" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onCopy() }
+                "PASTE" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onPaste() }
+                "CLEAR" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onClear() }
+                "TEST" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onSelfTest() }
+                "CLI" -> TerminalKey(labelForTerminalItem(item, TerminalExtraKeyPresets), onLongClick = onEditItems) { onInstallCli() }
             }
         }
     }
@@ -1655,6 +1687,9 @@ private fun TerminalInputBar(
 private fun labelForTerminalItem(id: String, presets: List<TerminalActionPreset>): String =
     presets.firstOrNull { it.id == id }?.label ?: id
 
+private fun labelForTerminalItem(item: TerminalItemConfig, presets: List<TerminalActionPreset>): String =
+    item.label?.takeIf { it.isNotBlank() } ?: labelForTerminalItem(item.id, presets)
+
 @Composable
 private fun TerminalItemsEditorDialog(
     title: String,
@@ -1704,9 +1739,18 @@ private fun TerminalItemsEditorDialog(
                         )
                         Text(
                             text = labelForTerminalItem(item.id, presets),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.width(84.dp),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
+                        )
+                        OutlinedTextField(
+                            value = item.label.orEmpty(),
+                            onValueChange = { value ->
+                                if (index in working.indices) working[index] = working[index].copy(label = value.take(16))
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("显示名") },
+                            singleLine = true
                         )
                         TextButton(onClick = { if (index in working.indices) working.removeAt(index) }) {
                             Text("删除")

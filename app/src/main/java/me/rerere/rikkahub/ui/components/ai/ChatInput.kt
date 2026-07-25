@@ -10,6 +10,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -169,6 +170,8 @@ fun ChatInput(
     workflowEnabled: Boolean = false,
     workflowActive: Boolean = false,
     onToggleWorkflow: () -> Unit = {},
+    onOpenProcessSessions: () -> Unit = {},
+    onStartFirstTerminalQuickCommand: () -> Unit = {},
     onOpenSandboxFileManager: () -> Unit,
     onCompressContext: (
         additionalPrompt: String,
@@ -512,6 +515,11 @@ fun ChatInput(
                                     onlyIcon = true,
                                 )
                             }
+
+                            TerminalSessionButton(
+                                onClick = onOpenProcessSessions,
+                                onLongClick = onStartFirstTerminalQuickCommand,
+                            )
 
                             if (workflowEnabled) {
                                 WorkflowButton(
@@ -1234,6 +1242,29 @@ private fun FilesPicker(
         )
     }
 
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TerminalSessionButton(
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .size(40.dp)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        shape = CircleShape,
+        tonalElevation = 0.dp,
+        color = Color.Transparent,
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = HugeIcons.Package,
+                contentDescription = "Terminal",
+            )
+        }
+    }
 }
 
 @Composable

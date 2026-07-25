@@ -96,8 +96,8 @@ jobs:
       - name: Run PTY mode inference tests
         run: ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest --stacktrace
 
-      - name: Run Bun compatibility source tests
-        run: ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest --stacktrace
+      - name: Run Bun and terminal UI source tests
+        run: ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest --stacktrace
 
       - name: Run focused unit tests
         run: |
@@ -109,6 +109,7 @@ jobs:
               --tests me.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest \
               --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest \
               --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest \
+              --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest \
               --stacktrace; then
               exit 0
             fi

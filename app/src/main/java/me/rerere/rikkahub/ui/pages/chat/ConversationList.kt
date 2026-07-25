@@ -75,6 +75,7 @@ fun ColumnScope.ConversationList(
     current: Conversation,
     conversations: LazyPagingItems<ConversationListItem>,
     conversationJobs: Collection<Uuid>,
+    runningProcessCounts: Map<Uuid, Int> = emptyMap(),
     listState: LazyListState,
     modifier: Modifier = Modifier,
     onClick: (Conversation) -> Unit = {},
@@ -153,6 +154,7 @@ fun ColumnScope.ConversationList(
                         conversation = item.conversation,
                         selected = item.conversation.id == current.id,
                         loading = item.conversation.id in conversationJobs,
+                        runningProcessCount = runningProcessCounts[item.conversation.id] ?: 0,
                         onClick = onClick,
                         onDelete = onDelete,
                         onRegenerateTitle = onRegenerateTitle,
@@ -224,6 +226,7 @@ private fun ConversationItem(
     conversation: Conversation,
     selected: Boolean,
     loading: Boolean,
+    runningProcessCount: Int = 0,
     modifier: Modifier = Modifier,
     onDelete: (Conversation) -> Unit = {},
     onRegenerateTitle: (Conversation) -> Unit = {},
@@ -266,6 +269,15 @@ private fun ConversationItem(
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.weight(1f))
+            AnimatedVisibility(runningProcessCount > 0) {
+                Text(
+                    text = runningProcessCount.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                )
+            }
 
             // 置顶图标
             AnimatedVisibility(conversation.isPinned) {

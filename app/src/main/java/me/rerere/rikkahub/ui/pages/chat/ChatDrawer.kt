@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,7 +41,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.compose.collectAsLazyPagingItems
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -58,6 +58,8 @@ import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.hugeicons.stroke.TransactionHistory
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.container.BackgroundProcessManager
+import me.rerere.rikkahub.data.container.ProcessStatus
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getEmbeddingModel
 import me.rerere.rikkahub.data.model.Assistant
@@ -91,6 +93,15 @@ fun ChatDrawerContent(
     val context = LocalContext.current
     val isPlayStore = rememberIsPlayStoreVersion()
     val repo = koinInject<ConversationRepository>()
+    val backgroundProcessManager = koinInject<BackgroundProcessManager>()
+    val processStates by backgroundProcessManager.processStates.collectAsStateWithLifecycle()
+    val runningProcessCounts = remember(processStates) {
+        processStates
+            .filter { it.status == ProcessStatus.RUNNING }
+            .mapNotNull { process -> runCatching { Uuid.parse(process.sandboxId) }.getOrNull() }
+            .groupingBy { it }
+            .eachCount()
+    }
 
     val conversations = vm.conversations.collectAsLazyPagingItems()
     val conversationListState = rememberLazyListState()
@@ -199,6 +210,7 @@ fun ChatDrawerContent(
                 current = current,
                 conversations = conversations,
                 conversationJobs = conversationJobs.keys,
+                runningProcessCounts = runningProcessCounts,
                 listState = conversationListState,
                 modifier = Modifier
                     .fillMaxWidth()

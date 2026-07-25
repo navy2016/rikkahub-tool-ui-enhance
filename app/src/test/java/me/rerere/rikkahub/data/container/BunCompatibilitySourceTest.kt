@@ -36,6 +36,9 @@ class BunCompatibilitySourceTest {
         assertTrue(source.contains("omp-linux-musl-x64"))
         assertTrue(source.contains("github.com/can1357/oh-my-pi/releases"))
         assertTrue(source.contains("Do not use: bun install -g @oh-my-pi/pi-coding-agent"))
+        val installSection = source.substringAfter("File(binDir, \"rikkahub-install-omp\")")
+            .substringBefore("File(binDir, \"rikkahub-test-omp\")")
+        assertTrue(!installSection.contains("cat <<'EOF'"))
     }
 
     @Test

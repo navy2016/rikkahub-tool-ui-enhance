@@ -748,6 +748,9 @@ class PRootManager(
         }
     }
 
+
+    fun getCustomTuiCommands(): String = settingsStore.settingsFlow.value.terminalCustomTuiCommands
+
     /**
      * 获取容器大小（用于统计展示）
      */
@@ -1122,16 +1125,15 @@ exec rikkahub-install-terminal-tools
                 case "${'$'}{1:-}" in
                   --version) OMP_VERSION="${'$'}{2:-${'$'}OMP_VERSION}" ;;
                   -h|--help)
-                    cat <<'EOF'
-                    Install oh-my-pi / omp from official musl binary releases.
-
-                    Usage:
-                      rikkahub-install-omp [--version v17.1.3]
-
-                    This installs the standalone omp binary, not the npm package.
-                    Alpine/musl must use omp-linux-musl-arm64 or omp-linux-musl-x64.
-                    Do not use: bun install -g @oh-my-pi/pi-coding-agent
-                    EOF
+                    printf '%s\n' \
+                      'Install oh-my-pi / omp from official musl binary releases.' \
+                      '' \
+                      'Usage:' \
+                      '  rikkahub-install-omp [--version v17.1.3]' \
+                      '' \
+                      'This installs the standalone omp binary, not the npm package.' \
+                      'Alpine/musl must use omp-linux-musl-arm64 or omp-linux-musl-x64.' \
+                      'Do not use: bun install -g @oh-my-pi/pi-coding-agent'
                     exit 0
                     ;;
                 esac
@@ -1185,21 +1187,20 @@ exec rikkahub-install-terminal-tools
         }
         File(binDir, "rikkahub-omp-help").apply {
             writeText(containerShellScript("""
-                cat <<'EOF'
-                == oh-my-pi / omp helper ==
-
-                omp is a standalone TUI command. On Alpine/musl use the official musl binary release:
-                  rikkahub-install-omp
-
-                Optional pinned version:
-                  rikkahub-install-omp --version v17.1.3
-
-                Do not install omp through Bun/npm on Alpine/musl:
-                  bun install -g @oh-my-pi/pi-coding-agent
-                That can install glibc native addons and fail at runtime.
-
-                pi is a separate project/command and is not installed by this helper.
-                EOF
+                printf '%s\n' \
+                  '== oh-my-pi / omp helper ==' \
+                  '' \
+                  'omp is a standalone TUI command. On Alpine/musl use the official musl binary release:' \
+                  '  rikkahub-install-omp' \
+                  '' \
+                  'Optional pinned version:' \
+                  '  rikkahub-install-omp --version v17.1.3' \
+                  '' \
+                  'Do not install omp through Bun/npm on Alpine/musl:' \
+                  '  bun install -g @oh-my-pi/pi-coding-agent' \
+                  'That can install glibc native addons and fail at runtime.' \
+                  '' \
+                  'pi is a separate project/command and is not installed by this helper.'
             """))
             setExecutable(true, false)
         }

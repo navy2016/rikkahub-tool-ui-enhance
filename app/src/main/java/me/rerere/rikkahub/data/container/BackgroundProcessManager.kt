@@ -29,18 +29,6 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-internal fun inferPtyMode(command: String, requested: PtyMode = PtyMode.AUTO): PtyMode {
-    if (requested != PtyMode.AUTO) return requested
-    val normalized = command.lowercase()
-    val rawRegexes = listOf(
-        Regex("""(^|[\s;&|()])(?:claude|claude-code|codex|opencode|opencode-ai|omp|pi)([\s;&|()]|$)"""),
-        Regex("""(^|[\s;&|()])(?:vim|nvim|vi|nano|emacs)([\s;&|()]|$)"""),
-        Regex("""(^|[\s;&|()])(?:tmux|screen|ssh|less|more|top|htop|fzf)([\s;&|()]|$)"""),
-        Regex("""(^|[\s;&|()])(?:npx|pnpm\s+dlx|bunx|npm\s+exec)\s+[^;&|()]*?(?:claude|claude-code|codex|opencode|opencode-ai|omp|pi)([\s;&|()]|$)""")
-    )
-    return if (rawRegexes.any { it.containsMatchIn(normalized) }) PtyMode.RAW else PtyMode.COOKED
-}
-
 internal fun ptyModeWireName(mode: PtyMode): String = mode.name.lowercase()
 
 
@@ -1359,7 +1347,7 @@ class BackgroundProcessManager @Inject constructor(
             val ttyEnabled = nativePtyEnabled || scriptTtyEnabled
             val initialColumns = columns.coerceIn(20, 240)
             val initialRows = rows.coerceIn(6, 80)
-            val effectivePtyMode = if (preferTty) inferPtyMode(command, ptyMode) else PtyMode.COOKED
+            val effectivePtyMode = if (preferTty) inferPtyMode(command, ptyMode, prootManager.getCustomTuiCommands()) else PtyMode.COOKED
             val sttyMode = if (effectivePtyMode == PtyMode.RAW) {
                 "stty raw -echo -ixon isig rows $initialRows cols $initialColumns 2>/dev/null || true; "
             } else {

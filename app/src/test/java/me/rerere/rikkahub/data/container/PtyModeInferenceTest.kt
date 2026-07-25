@@ -39,6 +39,15 @@ class PtyModeInferenceTest {
     }
 
     @Test
+    fun customTuiCommandsUseRawWithoutMatchingUnrelatedCommands() {
+        val custom = "lazygit\nbtop, yazi\ninvalid token;evil"
+        assertEquals(PtyMode.RAW, inferPtyMode("lazygit", PtyMode.AUTO, custom))
+        assertEquals(PtyMode.RAW, inferPtyMode("bunx yazi", PtyMode.AUTO, custom))
+        assertEquals(PtyMode.COOKED, inferPtyMode("lazy", PtyMode.AUTO, custom))
+        assertEquals(PtyMode.COOKED, inferPtyMode("evil", PtyMode.AUTO, "invalid token;evil"))
+    }
+
+    @Test
     fun explicitModeOverridesAuto() {
         assertEquals(PtyMode.COOKED, inferPtyMode("claude", PtyMode.COOKED))
         assertEquals(PtyMode.RAW, inferPtyMode("sh", PtyMode.RAW))

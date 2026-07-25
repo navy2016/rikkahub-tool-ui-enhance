@@ -50,6 +50,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessagePart
@@ -60,6 +63,7 @@ import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.container.BackgroundProcessManager
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -86,6 +90,20 @@ import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
 
+private val ChatTerminalQuickCommandJson = Json { ignoreUnknownKeys = true }
+
+@Serializable
+private data class ChatTerminalQuickCommandConfig(
+    val name: String,
+    val command: String,
+)
+
+private fun firstTerminalQuickCommand(raw: String): ChatTerminalQuickCommandConfig =
+    runCatching {
+        if (raw.isBlank()) emptyList() else ChatTerminalQuickCommandJson.decodeFromString<List<ChatTerminalQuickCommandConfig>>(raw)
+    }.getOrDefault(emptyList()).firstOrNull { it.command.isNotBlank() }
+        ?: ChatTerminalQuickCommandConfig("tmux", "rikkahub-tmux")
+
 @Composable
 fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val vm: ChatVM = koinViewModel(
@@ -95,6 +113,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         }
     )
     val filesManager: FilesManager = koinInject()
+    val bgManager: BackgroundProcessManager = koinInject()
     val navController = LocalNavController.current
     val scope = rememberCoroutineScope()
 
@@ -377,6 +396,28 @@ private fun ChatPageContent(
                             vm.initializeWorkflowState()
                         } else {
                             vm.disableWorkflowState()
+                        }
+                    },
+                    onOpenProcessSessions = {
+                        navController.navigate(Screen.ProcessSessions(conversation.id.toString()))
+                    },
+                    onStartFirstTerminalQuickCommand = {
+                        val quick = firstTerminalQuickCommand(setting.terminalQuickCommands)
+                        scope.launch {
+                            val result = bgManager.startInteractiveSession(
+                                sandboxId = conversation.id.toString(),
+                                command = quick.command,
+                                tag = quick.name,
+                                preferTty = true,
+                                columns = 120,
+                                rows = 40,
+                            )
+                            if (result.success) {
+                                toaster.show("已启动终端: ${quick.name}", type = ToastType.Success)
+                                navController.navigate(Screen.ProcessSessions(conversation.id.toString()))
+                            } else {
+                                toaster.show("启动终端失败: ${result.error ?: result.status.name}", type = ToastType.Error)
+                            }
                         }
                     },
                     onOpenSandboxFileManager = {
