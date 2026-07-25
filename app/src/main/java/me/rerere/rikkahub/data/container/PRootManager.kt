@@ -824,6 +824,10 @@ class PRootManager(
         if (bunExists) {
             toolPaths.add("/usr/local/bun/bin")
             env["BUN_INSTALL"] = "/usr/local/bun"
+            env["BUN_CACHE_DIR"] = "/root/.cache/bun/install/cache"
+            env["BUN_CONFIG_CACHE_DIR"] = "/root/.cache/bun/install/cache"
+            env["BUN_RUNTIME_TRANSPILER_CACHE_PATH"] = "/root/.cache/bun/transpiler"
+            env["BUN_LINKER_BACKEND"] = "copyfile"
         }
 
         // Node.js 模块路径（确保 npm 可用）
@@ -834,11 +838,9 @@ class PRootManager(
         env["NPM_CONFIG_CACHE"] = "/tmp/npm-cache"
 
         // 组合 PATH：工具路径 + 基础 PATH（确保基础命令可用）
-        val finalPath = if (toolPaths.isNotEmpty()) {
-            toolPaths.joinToString(":") + ":" + basePath
-        } else {
-            basePath
-        }
+        val finalPath = (basePath.split(":") + toolPaths)
+            .distinct()
+            .joinToString(":")
         env["PATH"] = finalPath
 
         Log.d(TAG, "[ToolEnv] Generated PATH: $finalPath")
@@ -876,6 +878,11 @@ class PRootManager(
                     "export NPM_CONFIG_PREFIX=/usr/local\n" +
                     "export npm_config_prefix=/usr/local\n" +
                     "export NPM_CONFIG_CACHE=/tmp/npm-cache\n" +
+                    "export BUN_INSTALL=/usr/local/bun\n" +
+                    "export BUN_CACHE_DIR=/root/.cache/bun/install/cache\n" +
+                    "export BUN_CONFIG_CACHE_DIR=/root/.cache/bun/install/cache\n" +
+                    "export BUN_RUNTIME_TRANSPILER_CACHE_PATH=/root/.cache/bun/transpiler\n" +
+                    "export BUN_LINKER_BACKEND=copyfile\n" +
                     "export NPM_CONFIG_AUDIT=false\n" +
                     "export NPM_CONFIG_FUND=false\n" +
                     "export NPM_CONFIG_UPDATE_NOTIFIER=false\n" +
@@ -899,6 +906,9 @@ class PRootManager(
         File(upperDir, "usr/local/lib/node_modules").mkdirs()
         File(upperDir, "usr/lib").mkdirs()
         File(upperDir, "root").mkdirs()
+        File(upperDir, "root/.cache/bun/install/cache").mkdirs()
+        File(upperDir, "root/.cache/bun/transpiler").mkdirs()
+        File(upperDir, "root/.bun-rikkahub/work/node_modules").mkdirs()
         File(upperDir, "tmp").apply {
             mkdirs()
             setReadable(true, false)
@@ -932,6 +942,13 @@ class PRootManager(
                 "python=/usr/bin/python3\n" +
                 "nodedir=/usr\n"
         )
+        File(upperDir, "root/.bunfig.toml").writeText(
+            "[install]\n" +
+                "cache = \"/root/.cache/bun/install/cache\"\n" +
+                "backend = \"copyfile\"\n" +
+                "globalDir = \"/usr/local/bun/install/global\"\n" +
+                "globalBinDir = \"/usr/local/bun/bin\"\n"
+        )
         writeContainerUtilityScripts(upperDir)
     }
 
@@ -946,7 +963,7 @@ class PRootManager(
 set -u
 printf 'https://dl-cdn.alpinelinux.org/alpine/v3.19/main\nhttps://dl-cdn.alpinelinux.org/alpine/v3.19/community\n' > /etc/apk/repositories || exit 11
 printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions timeout:2 attempts:2\n' > /etc/resolv.conf || exit 12
-mkdir -p /tmp /tmp/npm-cache /tmp/pip-cache /var/cache/apk
+mkdir -p /tmp /tmp/npm-cache /tmp/pip-cache /root/.cache/bun/install/cache /root/.cache/bun/transpiler /root/.bun-rikkahub/work/node_modules /var/cache/apk
 chmod 1777 /tmp /tmp/npm-cache /tmp/pip-cache 2>/dev/null || true
 command -v apk >/dev/null 2>&1 || { echo 'apk not found in PATH' >&2; exit 13; }
 apk update || apk update --no-cache
@@ -994,7 +1011,7 @@ apk update || apk update --no-cache
             writeText(containerShellScript("""
                 set -u
                 printf '%s\n' '== RikkaHub clean caches =='
-                for p in /tmp/npm-cache /tmp/pip-cache /root/.npm/_cacache /root/.cache/pip /var/cache/apk; do
+                for p in /tmp/npm-cache /tmp/pip-cache /root/.npm/_cacache /root/.cache/pip /root/.cache/bun/install/cache /root/.cache/bun/transpiler /var/cache/apk; do
                   if [ -e "${'$'}p" ]; then
                     size="${'$'}(du -sh "${'$'}p" 2>/tmp/rikkahub-du.err | awk '{print ${'$'}1}')"
                     find "${'$'}p" -mindepth 1 -maxdepth 1 -exec rm -r -- {} + 2>/tmp/rikkahub-rm.err || true
@@ -1015,6 +1032,11 @@ apk update || apk update --no-cache
                 export NPM_CONFIG_PREFIX=/usr/local
                 export npm_config_prefix=/usr/local
                 export NPM_CONFIG_CACHE=/tmp/npm-cache
+                export BUN_INSTALL=/usr/local/bun
+                export BUN_CACHE_DIR=/root/.cache/bun/install/cache
+                export BUN_CONFIG_CACHE_DIR=/root/.cache/bun/install/cache
+                export BUN_RUNTIME_TRANSPILER_CACHE_PATH=/root/.cache/bun/transpiler
+                export BUN_LINKER_BACKEND=copyfile
                 export NPM_CONFIG_AUDIT=false
                 export NPM_CONFIG_FUND=false
                 export NPM_CONFIG_UPDATE_NOTIFIER=false
@@ -1534,16 +1556,172 @@ printf '%s\n' 'RIKKAHUB_NODE_NPM_REGRESSION_OK'
             label = "Bun"
         )
         val bun = File(upperDir, "usr/local/bun/bin/bun")
-        if (bun.exists()) bun.setExecutable(true, false)
-        val wrapper = File(upperDir, "usr/local/bin/bun")
-        if (bun.exists() && (!wrapper.exists() || wrapper.readTextOrEmpty().contains("RikkaHub bundled Bun"))) {
-            wrapper.writeText("""#!/bin/sh
-# RikkaHub bundled Bun wrapper
-export LD_LIBRARY_PATH="/usr/local/bun/lib:/usr/local/lib:${'$'}{LD_LIBRARY_PATH:-}"
-exec /usr/local/bun/bin/bun "${'$'}@"
-""")
-            wrapper.setExecutable(true, false)
+        if (bun.exists()) {
+            bun.setExecutable(true, false)
+            writeBunCompatibilityWrappers(upperDir)
         }
+    }
+
+    private fun writeBunCompatibilityWrappers(upperDir: File) {
+        val localBin = File(upperDir, "usr/local/bin").apply { mkdirs() }
+        val bunBin = File(upperDir, "usr/local/bun/bin").apply { mkdirs() }
+        writeBunWrapper(File(localBin, "bun"), isBunx = false)
+        writeBunWrapper(File(localBin, "bunx"), isBunx = true)
+        File(bunBin, "bunx").apply {
+            writeText("""#!/bin/sh
+# RikkaHub Bun x shim
+exec /usr/local/bin/bun x "${'$'}@"
+""")
+            setExecutable(true, false)
+        }
+        writeBunGlobalBinRepairScript(upperDir)
+    }
+
+    private fun writeBunGlobalBinRepairScript(upperDir: File) {
+        val libexecDir = File(upperDir, "usr/local/bun/libexec").apply { mkdirs() }
+        File(libexecDir, "rikkahub-bun-bin-repair.js").writeText("""
+const fs = require('fs');
+const path = require('path');
+const nm = process.argv[2];
+const bunBin = process.argv[3];
+const localBin = process.argv[4];
+function mkdirp(p) { try { fs.mkdirSync(p, { recursive: true }); } catch {} }
+function existsFile(p) { try { return fs.statSync(p).isFile(); } catch { return false; } }
+function rm(p) { try { fs.rmSync(p, { force: true }); } catch {} }
+function chmod(p) { try { fs.chmodSync(p, 0o755); } catch {} }
+function linkOrShim(name, target) {
+  if (!name || !target || !existsFile(target)) return;
+  for (const dir of [bunBin, localBin]) {
+    mkdirp(dir);
+    const out = path.join(dir, name);
+    rm(out);
+    try { fs.symlinkSync(target, out); chmod(target); continue; } catch {}
+    try {
+      fs.writeFileSync(out, `#!/bin/sh
+exec ${'$'}{JSON.stringify(target)} "${'$'}@"
+`);
+      chmod(out);
+    } catch {}
+  }
+}
+function binEntries(pkg, root) {
+  const bin = pkg.bin;
+  if (!bin) return [];
+  if (typeof bin === 'string') return [[pkg.name && pkg.name.split('/').pop(), path.resolve(root, bin)]];
+  if (typeof bin === 'object') return Object.entries(bin).map(([k, v]) => [k, path.resolve(root, String(v))]);
+  return [];
+}
+function scanPackage(root) {
+  const pkgPath = path.join(root, 'package.json');
+  if (!existsFile(pkgPath)) return;
+  let pkg;
+  try { pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')); } catch { return; }
+  for (const [name, target] of binEntries(pkg, root)) linkOrShim(name, target);
+}
+if (nm) {
+  mkdirp(bunBin); mkdirp(localBin);
+  let entries = [];
+  try { entries = fs.readdirSync(nm); } catch {}
+  for (const entry of entries) {
+    if (entry.startsWith('.')) continue;
+    const full = path.join(nm, entry);
+    if (entry.startsWith('@')) {
+      let scoped = [];
+      try { scoped = fs.readdirSync(full); } catch {}
+      for (const child of scoped) scanPackage(path.join(full, child));
+    } else {
+      scanPackage(full);
+    }
+  }
+}
+""".trimIndent())
+    }
+
+    private fun writeBunWrapper(target: File, isBunx: Boolean) {
+        val marker = if (isBunx) "RikkaHub Bun x compatibility wrapper" else "RikkaHub Bun compatibility wrapper"
+        target.writeText("""#!/bin/sh
+# ${marker}
+set -u
+BUN_REAL=/usr/local/bun/bin/bun
+BUN_HOME=/usr/local/bun
+BUN_GLOBAL_DIR="${'$'}BUN_HOME/install/global"
+BUN_GLOBAL_BIN="${'$'}BUN_HOME/bin"
+BUN_CACHE="${'$'}{BUN_CACHE_DIR:-/root/.cache/bun/install/cache}"
+BUN_WORK="${'$'}{BUN_RIKKAHUB_WORKDIR:-/root/.bun-rikkahub/work}"
+export BUN_INSTALL="${'$'}BUN_HOME"
+export BUN_CACHE_DIR="${'$'}BUN_CACHE"
+export BUN_CONFIG_CACHE_DIR="${'$'}{BUN_CONFIG_CACHE_DIR:-${'$'}BUN_CACHE}"
+export BUN_RUNTIME_TRANSPILER_CACHE_PATH="${'$'}{BUN_RUNTIME_TRANSPILER_CACHE_PATH:-/root/.cache/bun/transpiler}"
+export BUN_LINKER_BACKEND="${'$'}{BUN_LINKER_BACKEND:-copyfile}"
+export LD_LIBRARY_PATH="/usr/local/bun/lib:/usr/local/lib:${'$'}{LD_LIBRARY_PATH:-}"
+mkdir -p "${'$'}BUN_GLOBAL_DIR/node_modules" "${'$'}BUN_GLOBAL_BIN" "${'$'}BUN_CACHE" "${'$'}BUN_RUNTIME_TRANSPILER_CACHE_PATH" "${'$'}BUN_WORK/node_modules" /usr/local/bin 2>/dev/null || true
+
+has_arg() {
+  needle="${'$'}1"; shift
+  for arg do [ "${'$'}arg" = "${'$'}needle" ] && return 0; done
+  return 1
+}
+needs_copy_backend() {
+  has_arg --backend "${'$'}@" && return 1
+  for arg do case "${'$'}arg" in --backend=*|--backend) return 1;; esac; done
+  return 0
+}
+repair_bun_global_bins() {
+  [ -d "${'$'}BUN_GLOBAL_DIR/node_modules" ] || return 0
+  "${'$'}BUN_REAL" "${'$'}BUN_HOME/libexec/rikkahub-bun-bin-repair.js" "${'$'}BUN_GLOBAL_DIR/node_modules" "${'$'}BUN_GLOBAL_BIN" /usr/local/bin 2>/dev/null || true
+}
+run_in_bun_work() {
+  oldpwd="${'$'}PWD"
+  mkdir -p "${'$'}BUN_WORK/node_modules" 2>/dev/null || true
+  cd "${'$'}BUN_WORK" 2>/dev/null || cd /root || true
+  "${'$'}BUN_REAL" "${'$'}@"
+  code="${'$'}?"
+  cd "${'$'}oldpwd" 2>/dev/null || true
+  return "${'$'}code"
+}
+
+${if (isBunx) "set -- x \"${'$'}@\"" else ""}
+cmd="${'$'}{1:-}"
+case "${'$'}cmd" in
+  install|add)
+    shift
+    if has_arg -g "${'$'}@" || has_arg --global "${'$'}@"; then
+      if needs_copy_backend "${'$'}@"; then
+        run_in_bun_work "${'$'}cmd" --backend copyfile "${'$'}@"
+      else
+        run_in_bun_work "${'$'}cmd" "${'$'}@"
+      fi
+      code="${'$'}?"
+      repair_bun_global_bins
+      exit "${'$'}code"
+    fi
+    if needs_copy_backend "${'$'}@"; then
+      exec "${'$'}BUN_REAL" "${'$'}cmd" --backend copyfile "${'$'}@"
+    fi
+    exec "${'$'}BUN_REAL" "${'$'}cmd" "${'$'}@"
+    ;;
+  x|bunx)
+    shift
+    run_in_bun_work x "${'$'}@"
+    code="${'$'}?"
+    repair_bun_global_bins
+    exit "${'$'}code"
+    ;;
+  pm)
+    shift
+    sub="${'$'}{1:-}"
+    if [ "${'$'}sub" = bin ] && [ -n "${'$'}{2:-}" ] && [ "${'$'}2" = -g ]; then
+      printf '%s\n' "${'$'}BUN_GLOBAL_BIN"
+      exit 0
+    fi
+    exec "${'$'}BUN_REAL" pm "${'$'}@"
+    ;;
+  *)
+    exec "${'$'}BUN_REAL" "${'$'}@"
+    ;;
+esac
+""")
+        target.setExecutable(true, false)
     }
 
     private fun installBundledTarAssetIfNeeded(
@@ -2867,13 +3045,17 @@ exec /usr/local/bun/bin/bun "${'$'}@"
         processEnv["NPM_CONFIG_PREFIX"] = "/usr/local"
         processEnv["npm_config_prefix"] = "/usr/local"
         processEnv["NPM_CONFIG_CACHE"] = "/tmp/npm-cache"
+        processEnv["BUN_CACHE_DIR"] = "/root/.cache/bun/install/cache"
+        processEnv["BUN_CONFIG_CACHE_DIR"] = "/root/.cache/bun/install/cache"
+        processEnv["BUN_RUNTIME_TRANSPILER_CACHE_PATH"] = "/root/.cache/bun/transpiler"
+        processEnv["BUN_LINKER_BACKEND"] = "copyfile"
         processEnv["NPM_CONFIG_AUDIT"] = "false"
         processEnv["NPM_CONFIG_FUND"] = "false"
         processEnv["NO_UPDATE_NOTIFIER"] = "1"
         processEnv["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
         processEnv["NODE_PATH"] = "/usr/local/lib/node_modules:/usr/lib/node_modules"
         processEnv["BUN_INSTALL"] = "/usr/local/bun"
-        processEnv["PATH"] = "/usr/local/bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bun/bin"
 
         // 合并自定义环境变量
         processEnv.putAll(customEnv)

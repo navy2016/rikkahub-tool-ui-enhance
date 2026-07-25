@@ -420,7 +420,7 @@ class LocalTools(
   - 安装：apk add nodejs npm
   - 使用：node script.js、npm install <package>、npm init
   - 示例：npm install lodash && echo "console.log(require('lodash').VERSION)" > test.js && node test.js
-【内置 CLI】Bun 由 APK 离线资产提供。交互式 TUI（包括用户自行安装的 `omp`、`pi`）请使用 container_shell_bg 且 interactive=true, tty=true。当前 Alpine/PRoot 环境下 Bun 1.3.x 的全局安装/bunx 可能依赖当前目录 node_modules，并可能出现 cache/link 异常；不要假定 `bun install -g` 后全局 bin 一定可用。
+【内置 CLI】Bun 由 APK 离线资产提供。交互式 TUI（包括用户自行安装的 `omp`、`pi`）请使用 container_shell_bg 且 interactive=true, tty=true。Bun 在容器内通过兼容 wrapper 运行：全局安装/bunx 使用稳定工作目录、独立持久 cache 和 copyfile 后端，并会重建全局 bin 入口以规避 PRoot 下 hardlink/symlink 与 cwd node_modules 问题。
 【禁止】禁止使用此工具启动服务（如 uvicorn、npm start、redis-server 等），启动服务会导致客户端卡死 5 分钟。如需启动服务，请使用 container_shell_bg 工具。
 【故障排查】如 apk 安装失败，先配置 DNS：echo 'nameserver 8.8.8.8' > /etc/resolv.conf""".trimIndent(),
             parameters = {
