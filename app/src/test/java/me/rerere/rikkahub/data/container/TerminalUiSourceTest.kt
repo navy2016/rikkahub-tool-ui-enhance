@@ -17,6 +17,18 @@ class TerminalUiSourceTest {
         File("app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ConversationList.kt"),
         File("src/main/java/me/rerere/rikkahub/ui/pages/chat/ConversationList.kt")
     ).first { it.isFile }.readText()
+    private val advancedSettingsSource = listOf(
+        File("app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingAdvancedPage.kt"),
+        File("src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingAdvancedPage.kt")
+    ).first { it.isFile }.readText()
+    private val chatPageSource = listOf(
+        File("app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt"),
+        File("src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt")
+    ).first { it.isFile }.readText()
+    private val routeSource = listOf(
+        File("app/src/main/java/me/rerere/rikkahub/RouteActivity.kt"),
+        File("src/main/java/me/rerere/rikkahub/RouteActivity.kt")
+    ).first { it.isFile }.readText()
 
     @Test
     fun terminalKeysSupportCustomLabelsAndShiftLatch() {
@@ -24,7 +36,7 @@ class TerminalUiSourceTest {
         assertTrue(processSessionSource.contains("SHIFT"))
         assertTrue(processSessionSource.contains("shiftLatch"))
         assertTrue(processSessionSource.contains("sequenceFor(key, shift = shiftLatch"))
-        assertTrue(processSessionSource.contains("显示名"))
+        assertTrue(processSessionSource.contains("""placeholder = { Text("显示名") }"""))
     }
 
     @Test
@@ -38,6 +50,22 @@ class TerminalUiSourceTest {
         assertTrue(chatInputSource.contains("TerminalSessionButton"))
         assertTrue(chatInputSource.contains("onStartFirstTerminalQuickCommand"))
         assertTrue(chatInputSource.contains("combinedClickable(onClick = onClick, onLongClick = onLongClick)"))
+        assertTrue(chatInputSource.contains("padding(top = 2.dp)"))
+    }
+
+    @Test
+    fun customTuiEntryLivesInAdvancedSettingsNotSessionToolbar() {
+        assertTrue(advancedSettingsSource.contains("自定义 TUI 程序名单"))
+        assertTrue(advancedSettingsSource.contains("terminalCustomTuiCommands"))
+        assertTrue(!processSessionSource.contains("showCustomTuiDialog"))
+        assertTrue(!processSessionSource.contains("TextButton(onClick = { showCustomTuiDialog = true })"))
+    }
+
+    @Test
+    fun longPressTerminalButtonNavigatesToStartedTerminalPanel() {
+        assertTrue(routeSource.contains("data class ProcessSessions(val sandboxId: String, val processId: String? = null)"))
+        assertTrue(processSessionSource.contains("initialProcessId"))
+        assertTrue(chatPageSource.contains("Screen.ProcessSessions(conversation.id.toString(), result.processId)"))
     }
 
     @Test

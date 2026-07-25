@@ -266,7 +266,7 @@ private fun ensureTerminalStatusItems(items: List<TerminalItemConfig>): List<Ter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProcessSessionPage(sandboxId: String) {
+fun ProcessSessionPage(sandboxId: String, initialProcessId: String? = null) {
     val bgManager = koinInject<BackgroundProcessManager>()
     val settingsStore: SettingsStore = koinInject()
     val settings = LocalSettings.current
@@ -296,11 +296,18 @@ fun ProcessSessionPage(sandboxId: String) {
         }
     }
     var showCreateDialog by remember { mutableStateOf(false) }
-    var showCustomTuiDialog by remember { mutableStateOf(false) }
     var showLogsFor by remember { mutableStateOf<String?>(null) }
 
     val activeInteractiveProcess = sandboxProcesses.firstOrNull {
         it.processId == activeInteractiveId && it.isInteractive
+    }
+    LaunchedEffect(initialProcessId, sandboxProcesses) {
+        val target = initialProcessId?.let { id -> sandboxProcesses.firstOrNull { it.processId == id && it.isInteractive } }
+        if (target != null && activeInteractiveId != target.processId) {
+            activeInteractiveId = target.processId
+            terminalFullscreen = true
+            restoreStatusBarPreference(target.command)
+        }
     }
     Scaffold(
         topBar = {
@@ -331,7 +338,6 @@ fun ProcessSessionPage(sandboxId: String) {
                             Text(if (showTerminalStatusBar) "隐藏状态" else "状态")
                         }
                     }
-                    TextButton(onClick = { showCustomTuiDialog = true }) { Text("TUI") }
                     IconButton(onClick = { showCreateDialog = true }) {
                         Text("+", fontSize = 20.sp)
                     }
@@ -415,33 +421,6 @@ fun ProcessSessionPage(sandboxId: String) {
         }
     }
 
-
-    if (showCustomTuiDialog) {
-        var text by remember(settings.terminalCustomTuiCommands) { mutableStateOf(settings.terminalCustomTuiCommands) }
-        AlertDialog(
-            onDismissRequest = { showCustomTuiDialog = false },
-            title = { Text("自定义 TUI 程序名单") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("每行一个命令名。AUTO PTY 会将这些程序按 TUI/RAW 处理。", style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(
-                        value = text,
-                        onValueChange = { text = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp),
-                        minLines = 6,
-                        label = { Text("例如：lazygit\nbtop\nyazi") }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch { settingsStore.update { it.copy(terminalCustomTuiCommands = text) } }
-                    showCustomTuiDialog = false
-                }) { Text("保存") }
-            },
-            dismissButton = { TextButton(onClick = { showCustomTuiDialog = false }) { Text("取消") } }
-        )
-    }
     if (showCreateDialog) {
         CreateSessionDialog(
             settingsStore = settingsStore,
@@ -1738,20 +1717,20 @@ private fun TerminalItemsEditorDialog(
                             label = { Text("序号") },
                             singleLine = true
                         )
-                        Text(
-                            text = labelForTerminalItem(item.id, presets),
-                            modifier = Modifier.width(84.dp),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
                         OutlinedTextField(
                             value = item.label.orEmpty(),
                             onValueChange = { value ->
                                 if (index in working.indices) working[index] = working[index].copy(label = value.take(16))
                             },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("显示名") },
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                            placeholder = { Text("显示名") },
                             singleLine = true
+                        )
+                        Text(
+                            text = labelForTerminalItem(item.id, presets),
+                            modifier = Modifier.width(64.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         TextButton(onClick = { if (index in working.indices) working.removeAt(index) }) {
                             Text("删除")

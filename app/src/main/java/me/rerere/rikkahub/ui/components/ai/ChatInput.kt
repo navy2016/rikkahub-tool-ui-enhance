@@ -1252,7 +1252,8 @@ private fun TerminalSessionButton(
 ) {
     Surface(
         modifier = Modifier
-            .size(40.dp)
+            .size(36.dp)
+            .padding(top = 2.dp)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = CircleShape,
         tonalElevation = 0.dp,

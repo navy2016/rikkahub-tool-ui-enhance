@@ -414,7 +414,7 @@ private fun ChatPageContent(
                             )
                             if (result.success) {
                                 toaster.show("已启动终端: ${quick.name}", type = ToastType.Success)
-                                navController.navigate(Screen.ProcessSessions(conversation.id.toString()))
+                                navController.navigate(Screen.ProcessSessions(conversation.id.toString(), result.processId))
                             } else {
                                 toaster.show("启动终端失败: ${result.message.ifBlank { result.status.name }}", type = ToastType.Error)
                             }

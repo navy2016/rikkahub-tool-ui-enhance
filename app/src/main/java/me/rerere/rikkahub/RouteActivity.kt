@@ -488,7 +488,7 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.ProcessSessions> { key ->
-                                ProcessSessionPage(sandboxId = key.sandboxId)
+                                ProcessSessionPage(sandboxId = key.sandboxId, initialProcessId = key.processId)
                             }
 
                             entry<Screen.ScheduledTaskRuns> {
@@ -683,7 +683,7 @@ sealed interface Screen : NavKey {
     data class ScheduledTaskRunDetail(val id: String) : Screen
 
     @Serializable
-    data class ProcessSessions(val sandboxId: String) : Screen
+    data class ProcessSessions(val sandboxId: String, val processId: String? = null) : Screen
 
     @Serializable
     data object MessageSearch : Screen

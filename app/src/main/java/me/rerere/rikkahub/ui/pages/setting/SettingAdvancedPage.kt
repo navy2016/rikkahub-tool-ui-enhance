@@ -119,6 +119,24 @@ fun SettingAdvancedPage() {
                             headlineContent = { Text("容器运行时管理") },
                             supportingContent = { Text("初始化、启动/停止、诊断修复、Node/npm 与长期服务辅助") },
                         )
+
+                        item(
+                            headlineContent = {
+                                SaveOnBlurTextField(
+                                    label = "自定义 TUI 程序名单",
+                                    description = "每行一个命令名。容器交互会话的 AUTO PTY 会将这些程序按 TUI/RAW 处理。示例：lazygit、btop、yazi。",
+                                    value = settings.terminalCustomTuiCommands,
+                                    placeholder = "lazygit\nbtop\nyazi\nranger",
+                                    minLines = 4,
+                                    maxLines = 8,
+                                    onSave = { value ->
+                                        scope.launch {
+                                            settingsStore.update { s -> s.copy(terminalCustomTuiCommands = value) }
+                                        }
+                                    }
+                                )
+                            }
+                        )
                         item(
                             headlineContent = {
                                 SaveOnBlurTextField(
