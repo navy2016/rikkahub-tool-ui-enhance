@@ -37,6 +37,10 @@ class TerminalUiSourceTest {
         File("app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt"),
         File("src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt")
     ).first { it.isFile }.readText()
+    private val backgroundProcessManagerSource = listOf(
+        File("app/src/main/java/me/rerere/rikkahub/data/container/BackgroundProcessManager.kt"),
+        File("src/main/java/me/rerere/rikkahub/data/container/BackgroundProcessManager.kt")
+    ).first { it.isFile }.readText()
 
     @Test
     fun terminalKeysSupportCustomLabelsAndShiftLatch() {
@@ -102,5 +106,9 @@ class TerminalUiSourceTest {
         assertTrue(pRootManagerSource.contains("rikkahub-network-boost-cn"))
         assertTrue(pRootManagerSource.contains("rikkahub-set-apk-mirror"))
         assertTrue(pRootManagerSource.contains("rikkahub-set-npm-registry"))
+        assertTrue(backgroundProcessManagerSource.contains("private val settingsStore: SettingsStore"))
+        assertTrue(backgroundProcessManagerSource.contains("containerNetworkEnvironment"))
+        assertTrue(backgroundProcessManagerSource.contains("env = processEnv"))
+        assertTrue(backgroundProcessManagerSource.contains("env = containerNetworkEnvironment()"))
     }
 }

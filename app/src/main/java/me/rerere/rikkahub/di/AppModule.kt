@@ -79,7 +79,7 @@ val appModule = module {
     }
 
     single {
-        BackgroundProcessManager(get())
+        BackgroundProcessManager(get(), get())
     }
 
     single {

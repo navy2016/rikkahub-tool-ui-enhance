@@ -17,6 +17,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.service.ContainerProcessForegroundService
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.koin.core.context.GlobalContext
 import java.io.ByteArrayOutputStream
@@ -996,7 +997,8 @@ internal fun controlInputBytes(control: ControlInput): ByteArray {
  */
 @Singleton
 class BackgroundProcessManager @Inject constructor(
-    private val context: Context
+    private val context: Context,
+    private val settingsStore: SettingsStore
 ) {
     private val prootManager: PRootManager
         get() = GlobalContext.get().get()
@@ -1037,6 +1039,22 @@ class BackgroundProcessManager @Inject constructor(
 
     init {
         startProcessMonitoring()
+    }
+
+    private fun containerNetworkEnvironment(): Map<String, String> {
+        val settings = settingsStore.settingsFlow.value
+        val env = mutableMapOf<String, String>()
+        settings.containerApkMirror.trim().takeIf { it.isNotBlank() }?.let {
+            env["RIKKAHUB_APK_MIRROR"] = it
+        }
+        settings.containerNpmRegistry.trim().takeIf { it.isNotBlank() }?.let {
+            env["RIKKAHUB_NPM_REGISTRY"] = it
+            env["NPM_CONFIG_REGISTRY"] = it
+        }
+        settings.containerGithubProxyPrefix.trim().takeIf { it.isNotBlank() }?.let {
+            env["RIKKAHUB_GITHUB_PROXY_PREFIX"] = it
+        }
+        return env
     }
 
     /**
@@ -1260,7 +1278,8 @@ class BackgroundProcessManager @Inject constructor(
                 command = listOf("sh", "-c", command),
                 processId = processId,
                 stdoutFile = stdoutFile,
-                stderrFile = stderrFile
+                stderrFile = stderrFile,
+                env = containerNetworkEnvironment()
             )
 
             if (result.exitCode == 0) {
@@ -1357,6 +1376,7 @@ class BackgroundProcessManager @Inject constructor(
             val envPrefix = "export TERM=xterm-256color LINES=$initialRows COLUMNS=$initialColumns; " +
                 "export FORCE_COLOR=1 COLORTERM=truecolor; " +
                 sttyMode
+            val processEnv = containerNetworkEnvironment()
             var actualNativePtyEnabled = nativePtyEnabled
             var actualScriptTtyEnabled = scriptTtyEnabled
             val process = if (nativePtyEnabled) {
@@ -1364,6 +1384,7 @@ class BackgroundProcessManager @Inject constructor(
                     prootManager.execNativePty(
                         sandboxId = sandboxId,
                         command = listOf("sh", "-lc", "$envPrefix exec $command"),
+                        env = processEnv,
                         columns = initialColumns,
                         rows = initialRows,
                         ptyMode = effectivePtyMode
@@ -1381,7 +1402,8 @@ class BackgroundProcessManager @Inject constructor(
                     }
                     prootManager.execInteractive(
                         sandboxId = sandboxId,
-                        command = listOf("sh", "-lc", wrappedCommand)
+                        command = listOf("sh", "-lc", wrappedCommand),
+                        env = processEnv
                     )
                 }
             } else {
@@ -1394,7 +1416,8 @@ class BackgroundProcessManager @Inject constructor(
                 }
                 prootManager.execInteractive(
                     sandboxId = sandboxId,
-                    command = listOf("sh", "-lc", wrappedCommand)
+                    command = listOf("sh", "-lc", wrappedCommand),
+                    env = processEnv
                 )
             }
             actualScriptTtyEnabled = !actualNativePtyEnabled && process !is NativePtyProcess && actualScriptTtyEnabled
