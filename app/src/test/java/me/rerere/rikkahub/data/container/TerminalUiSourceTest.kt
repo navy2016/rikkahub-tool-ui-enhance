@@ -50,7 +50,8 @@ class TerminalUiSourceTest {
         assertTrue(chatInputSource.contains("TerminalSessionButton"))
         assertTrue(chatInputSource.contains("onStartFirstTerminalQuickCommand"))
         assertTrue(chatInputSource.contains("combinedClickable(onClick = onClick, onLongClick = onLongClick)"))
-        assertTrue(chatInputSource.contains("padding(top = 2.dp)"))
+        assertTrue(chatInputSource.contains("Lucide.Terminal"))
+        assertTrue(chatInputSource.contains("modifier = Modifier.size(22.dp)"))
     }
 
     @Test

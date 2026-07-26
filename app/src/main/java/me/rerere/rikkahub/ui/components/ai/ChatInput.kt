@@ -94,6 +94,8 @@ import androidx.core.net.toFile
 import androidx.core.net.toUri
 import coil3.compose.AsyncImage
 import com.dokar.sonner.ToastType
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Terminal
 import com.yalantis.ucrop.UCrop
 import com.yalantis.ucrop.UCropActivity
 import dev.chrisbanes.haze.HazeState
@@ -1253,7 +1255,6 @@ private fun TerminalSessionButton(
     Surface(
         modifier = Modifier
             .size(36.dp)
-            .padding(top = 2.dp)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = CircleShape,
         tonalElevation = 0.dp,
@@ -1261,8 +1262,9 @@ private fun TerminalSessionButton(
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Icon(
-                imageVector = HugeIcons.Package,
+                imageVector = Lucide.Terminal,
                 contentDescription = "Terminal",
+                modifier = Modifier.size(22.dp),
             )
         }
     }
