@@ -208,6 +208,7 @@ private fun defaultTerminalQuickCommands() = listOf(
     TerminalQuickCommandConfig("opencode", "opencode"),
     TerminalQuickCommandConfig("fix-apk", "rikkahub-fix-apk"),
     TerminalQuickCommandConfig("test-network", "rikkahub-test-network"),
+    TerminalQuickCommandConfig("network-boost-cn", "rikkahub-network-boost-cn"),
     TerminalQuickCommandConfig("clean-caches", "rikkahub-clean-caches"),
     TerminalQuickCommandConfig("npm-env", "rikkahub-npm-env"),
     TerminalQuickCommandConfig("terminal-tools", "rikkahub-install-terminal-tools"),

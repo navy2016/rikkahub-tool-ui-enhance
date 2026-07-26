@@ -29,6 +29,14 @@ class TerminalUiSourceTest {
         File("app/src/main/java/me/rerere/rikkahub/RouteActivity.kt"),
         File("src/main/java/me/rerere/rikkahub/RouteActivity.kt")
     ).first { it.isFile }.readText()
+    private val pRootManagerSource = listOf(
+        File("app/src/main/java/me/rerere/rikkahub/data/container/PRootManager.kt"),
+        File("src/main/java/me/rerere/rikkahub/data/container/PRootManager.kt")
+    ).first { it.isFile }.readText()
+    private val preferencesStoreSource = listOf(
+        File("app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt"),
+        File("src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt")
+    ).first { it.isFile }.readText()
 
     @Test
     fun terminalKeysSupportCustomLabelsAndShiftLatch() {
@@ -43,6 +51,7 @@ class TerminalUiSourceTest {
     fun terminalQuickCommandsIncludeOmpInstallAndTest() {
         assertTrue(processSessionSource.contains("""TerminalQuickCommandConfig("install-omp", "rikkahub-install-omp")"""))
         assertTrue(processSessionSource.contains("""TerminalQuickCommandConfig("test-omp", "rikkahub-test-omp")"""))
+        assertTrue(processSessionSource.contains("""TerminalQuickCommandConfig("network-boost-cn", "rikkahub-network-boost-cn")"""))
     }
 
     @Test
@@ -77,5 +86,21 @@ class TerminalUiSourceTest {
     fun conversationListDisplaysRunningProcessCountInErrorColor() {
         assertTrue(conversationListSource.contains("runningProcessCount"))
         assertTrue(conversationListSource.contains("MaterialTheme.colorScheme.error"))
+    }
+
+    @Test
+    fun containerNetworkAccelerationSettingsAreExposed() {
+        assertTrue(advancedSettingsSource.contains("APK 镜像源"))
+        assertTrue(advancedSettingsSource.contains("npm registry"))
+        assertTrue(advancedSettingsSource.contains("GitHub 下载代理前缀"))
+        assertTrue(preferencesStoreSource.contains("CONTAINER_APK_MIRROR"))
+        assertTrue(preferencesStoreSource.contains("CONTAINER_NPM_REGISTRY"))
+        assertTrue(preferencesStoreSource.contains("CONTAINER_GITHUB_PROXY_PREFIX"))
+        assertTrue(pRootManagerSource.contains("RIKKAHUB_APK_MIRROR"))
+        assertTrue(pRootManagerSource.contains("RIKKAHUB_NPM_REGISTRY"))
+        assertTrue(pRootManagerSource.contains("RIKKAHUB_GITHUB_PROXY_PREFIX"))
+        assertTrue(pRootManagerSource.contains("rikkahub-network-boost-cn"))
+        assertTrue(pRootManagerSource.contains("rikkahub-set-apk-mirror"))
+        assertTrue(pRootManagerSource.contains("rikkahub-set-npm-registry"))
     }
 }

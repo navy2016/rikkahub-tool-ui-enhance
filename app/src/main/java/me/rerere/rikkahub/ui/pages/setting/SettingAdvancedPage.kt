@@ -152,6 +152,57 @@ fun SettingAdvancedPage() {
                                 )
                             }
                         )
+                        item(
+                            headlineContent = {
+                                SaveOnBlurTextField(
+                                    label = "APK 镜像源",
+                                    description = "容器 apk 源。可填 default、aliyun、tuna、ustc 或 Alpine 镜像 URL，例如 https://mirrors.aliyun.com/alpine/v3.19。留空使用官方源。",
+                                    value = settings.containerApkMirror,
+                                    placeholder = "aliyun",
+                                    minLines = 1,
+                                    maxLines = 2,
+                                    onSave = { value ->
+                                        scope.launch {
+                                            settingsStore.update { s -> s.copy(containerApkMirror = value) }
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                        item(
+                            headlineContent = {
+                                SaveOnBlurTextField(
+                                    label = "npm registry",
+                                    description = "容器 npm 源。可填 official、npmmirror、tencent、huawei 或 registry URL。安装终端工具时会自动应用。",
+                                    value = settings.containerNpmRegistry,
+                                    placeholder = "npmmirror",
+                                    minLines = 1,
+                                    maxLines = 2,
+                                    onSave = { value ->
+                                        scope.launch {
+                                            settingsStore.update { s -> s.copy(containerNpmRegistry = value) }
+                                        }
+                                    }
+                                )
+                            }
+                        )
+                        item(
+                            headlineContent = {
+                                SaveOnBlurTextField(
+                                    label = "GitHub 下载代理前缀",
+                                    description = "用于 GitHub release 下载加速。示例：https://gh-proxy.com/。留空直连。当前用于 rikkahub-install-omp。",
+                                    value = settings.containerGithubProxyPrefix,
+                                    placeholder = "https://gh-proxy.com/",
+                                    minLines = 1,
+                                    maxLines = 2,
+                                    onSave = { value ->
+                                        scope.launch {
+                                            settingsStore.update { s -> s.copy(containerGithubProxyPrefix = value) }
+                                        }
+                                    }
+                                )
+                            }
+                        )
                     }
                 }
             }
@@ -161,6 +212,7 @@ fun SettingAdvancedPage() {
                     CardGroup(
                         title = { Text("消息失败自动重发") },
                     ) {
+
                         item(
                             headlineContent = {
                                 SaveOnBlurNumberField(

@@ -156,6 +156,9 @@ class SettingsStore(
         val MAX_SUBAGENT_STEPS = intPreferencesKey("max_subagent_steps")
         val WEB_SERVER_LOCALHOST_ONLY = booleanPreferencesKey("web_server_localhost_only")
         val CONTAINER_CUSTOM_HOSTS = stringPreferencesKey("container_custom_hosts")
+        val CONTAINER_APK_MIRROR = stringPreferencesKey("container_apk_mirror")
+        val CONTAINER_NPM_REGISTRY = stringPreferencesKey("container_npm_registry")
+        val CONTAINER_GITHUB_PROXY_PREFIX = stringPreferencesKey("container_github_proxy_prefix")
         val AUTO_RESEND_USER_MESSAGE_INTERVAL_SECONDS = intPreferencesKey("auto_resend_user_message_interval_seconds")
         val AUTO_RESEND_USER_MESSAGE_MAX_ATTEMPTS = intPreferencesKey("auto_resend_user_message_max_attempts")
         val AUTO_RESEND_USER_MESSAGE_FAILURE_MATCHERS = stringPreferencesKey("auto_resend_user_message_failure_matchers")
@@ -284,6 +287,9 @@ class SettingsStore(
                 maxSubagentSteps = preferences[MAX_SUBAGENT_STEPS] ?: 50,
                 webServerLocalhostOnly = preferences[WEB_SERVER_LOCALHOST_ONLY] == true,
                 containerCustomHosts = preferences[CONTAINER_CUSTOM_HOSTS] ?: "",
+                containerApkMirror = preferences[CONTAINER_APK_MIRROR] ?: "",
+                containerNpmRegistry = preferences[CONTAINER_NPM_REGISTRY] ?: "",
+                containerGithubProxyPrefix = preferences[CONTAINER_GITHUB_PROXY_PREFIX] ?: "",
                 autoResendUserMessageIntervalSeconds = preferences[AUTO_RESEND_USER_MESSAGE_INTERVAL_SECONDS] ?: 10,
                 autoResendUserMessageMaxAttempts = preferences[AUTO_RESEND_USER_MESSAGE_MAX_ATTEMPTS] ?: 0,
                 autoResendUserMessageFailureMatchers = preferences[AUTO_RESEND_USER_MESSAGE_FAILURE_MATCHERS] ?: "",
@@ -547,6 +553,9 @@ class SettingsStore(
             } else {
                 preferences[CONTAINER_CUSTOM_HOSTS] = settings.containerCustomHosts
             }
+            if (settings.containerApkMirror.isBlank()) preferences.remove(CONTAINER_APK_MIRROR) else preferences[CONTAINER_APK_MIRROR] = settings.containerApkMirror.trim()
+            if (settings.containerNpmRegistry.isBlank()) preferences.remove(CONTAINER_NPM_REGISTRY) else preferences[CONTAINER_NPM_REGISTRY] = settings.containerNpmRegistry.trim()
+            if (settings.containerGithubProxyPrefix.isBlank()) preferences.remove(CONTAINER_GITHUB_PROXY_PREFIX) else preferences[CONTAINER_GITHUB_PROXY_PREFIX] = settings.containerGithubProxyPrefix.trim()
             preferences[AUTO_RESEND_USER_MESSAGE_INTERVAL_SECONDS] = settings.autoResendUserMessageIntervalSeconds.coerceAtLeast(1)
             preferences[AUTO_RESEND_USER_MESSAGE_MAX_ATTEMPTS] = settings.autoResendUserMessageMaxAttempts.coerceAtLeast(0)
             if (settings.autoResendUserMessageFailureMatchers.isBlank()) {
@@ -713,6 +722,9 @@ data class Settings(
     val maxSubagentSteps: Int = 50,
     val webServerLocalhostOnly: Boolean = false,
     val containerCustomHosts: String = "",
+    val containerApkMirror: String = "",
+    val containerNpmRegistry: String = "",
+    val containerGithubProxyPrefix: String = "",
     val autoResendUserMessageIntervalSeconds: Int = 10,
     val autoResendUserMessageMaxAttempts: Int = 0,
     val autoResendUserMessageFailureMatchers: String = "",

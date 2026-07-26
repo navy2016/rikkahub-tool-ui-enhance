@@ -672,6 +672,9 @@ class PRootManager(
     ): ExecutionResult = withContext(Dispatchers.IO) {
         val allowedScripts = setOf(
             "rikkahub-fix-apk",
+            "rikkahub-network-boost-cn",
+            "rikkahub-set-apk-mirror",
+            "rikkahub-set-npm-registry",
             "rikkahub-test-network",
             "rikkahub-clean-caches",
             "rikkahub-npm-env",
@@ -842,6 +845,17 @@ class PRootManager(
         env["NPM_CONFIG_PREFIX"] = "/usr/local"
         env["npm_config_prefix"] = "/usr/local"
         env["NPM_CONFIG_CACHE"] = "/tmp/npm-cache"
+        val networkSettings = settingsStore.settingsFlow.value
+        networkSettings.containerApkMirror.trim().takeIf { it.isNotBlank() }?.let {
+            env["RIKKAHUB_APK_MIRROR"] = it
+        }
+        networkSettings.containerNpmRegistry.trim().takeIf { it.isNotBlank() }?.let {
+            env["RIKKAHUB_NPM_REGISTRY"] = it
+            env["NPM_CONFIG_REGISTRY"] = it
+        }
+        networkSettings.containerGithubProxyPrefix.trim().takeIf { it.isNotBlank() }?.let {
+            env["RIKKAHUB_GITHUB_PROXY_PREFIX"] = it
+        }
 
         // 组合 PATH：工具路径 + 基础 PATH（确保基础命令可用）
         val finalPath = (basePath.split(":") + toolPaths)
@@ -965,15 +979,78 @@ class PRootManager(
     private fun writeContainerUtilityScripts(upperDir: File) {
         val binDir = File(upperDir, "usr/local/bin").apply { mkdirs() }
         File(binDir, "rikkahub-fix-apk").apply {
-            writeText("""#!/bin/sh
-set -u
-printf 'https://dl-cdn.alpinelinux.org/alpine/v3.19/main\nhttps://dl-cdn.alpinelinux.org/alpine/v3.19/community\n' > /etc/apk/repositories || exit 11
-printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions timeout:2 attempts:2\n' > /etc/resolv.conf || exit 12
-mkdir -p /tmp /tmp/npm-cache /tmp/pip-cache /root/.cache/bun/install/cache /root/.cache/bun/transpiler /root/.bun-rikkahub/work/node_modules /var/cache/apk
-chmod 1777 /tmp /tmp/npm-cache /tmp/pip-cache 2>/dev/null || true
-command -v apk >/dev/null 2>&1 || { echo 'apk not found in PATH' >&2; exit 13; }
-apk update || apk update --no-cache
-""")
+            writeText(containerShellScript("""
+                set -u
+                mirror="${'$'}{RIKKAHUB_APK_MIRROR:-https://dl-cdn.alpinelinux.org/alpine/v3.19}"
+                case "${'$'}mirror" in
+                  default|official) mirror="https://dl-cdn.alpinelinux.org/alpine/v3.19" ;;
+                  aliyun) mirror="https://mirrors.aliyun.com/alpine/v3.19" ;;
+                  tuna|tsinghua) mirror="https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.19" ;;
+                  ustc) mirror="https://mirrors.ustc.edu.cn/alpine/v3.19" ;;
+                  */main|*/community) mirror="${'$'}{mirror%/main}"; mirror="${'$'}{mirror%/community}" ;;
+                esac
+                mirror="${'$'}{mirror%/}"
+                printf '%s/main\n%s/community\n' "${'$'}mirror" "${'$'}mirror" > /etc/apk/repositories || exit 11
+                if [ "${'$'}{RIKKAHUB_CN_DNS:-0}" = 1 ]; then
+                  printf 'nameserver 223.5.5.5\nnameserver 119.29.29.29\noptions timeout:2 attempts:2\n' > /etc/resolv.conf || exit 12
+                else
+                  printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\noptions timeout:2 attempts:2\n' > /etc/resolv.conf || exit 12
+                fi
+                mkdir -p /tmp /tmp/npm-cache /tmp/pip-cache /root/.cache/bun/install/cache /root/.cache/bun/transpiler /root/.bun-rikkahub/work/node_modules /var/cache/apk
+                chmod 1777 /tmp /tmp/npm-cache /tmp/pip-cache 2>/dev/null || true
+                command -v apk >/dev/null 2>&1 || { echo 'apk not found in PATH' >&2; exit 13; }
+                apk update || apk update --no-cache
+                printf 'RIKKAHUB_APK_MIRROR=%s\n' "${'$'}mirror"
+            """))
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-set-apk-mirror").apply {
+            writeText(containerShellScript("""
+                set -eu
+                mirror="${'$'}{1:-}"
+                [ -n "${'$'}mirror" ] || { echo 'Usage: rikkahub-set-apk-mirror default|aliyun|tuna|ustc|URL' >&2; exit 2; }
+                RIKKAHUB_APK_MIRROR="${'$'}mirror" rikkahub-fix-apk
+            """))
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-set-npm-registry").apply {
+            writeText(containerShellScript("""
+                set -eu
+                registry="${'$'}{1:-}"
+                case "${'$'}registry" in
+                  ""|-h|--help) echo 'Usage: rikkahub-set-npm-registry official|npmmirror|tencent|huawei|URL' >&2; exit 2 ;;
+                  official|default) registry="https://registry.npmjs.org/" ;;
+                  npmmirror|taobao) registry="https://registry.npmmirror.com" ;;
+                  tencent) registry="https://mirrors.cloud.tencent.com/npm/" ;;
+                  huawei) registry="https://repo.huaweicloud.com/repository/npm/" ;;
+                esac
+                command -v npm >/dev/null 2>&1 || { echo 'npm not installed; run apk add nodejs npm' >&2; exit 3; }
+                npm config set registry "${'$'}registry"
+                npm config set cache /tmp/npm-cache
+                npm config set audit false
+                npm config set fund false
+                npm config set update-notifier false
+                npm config set progress false
+                npm config set fetch-retries 5
+                npm config set fetch-retry-mintimeout 20000
+                npm config set fetch-retry-maxtimeout 120000
+                printf 'RIKKAHUB_NPM_REGISTRY=%s\n' "${'$'}registry"
+            """))
+            setExecutable(true, false)
+        }
+        File(binDir, "rikkahub-network-boost-cn").apply {
+            writeText(containerShellScript("""
+                set -u
+                export RIKKAHUB_CN_DNS=1
+                export RIKKAHUB_APK_MIRROR="${'$'}{RIKKAHUB_APK_MIRROR:-aliyun}"
+                rikkahub-fix-apk || exit ${'$'}?
+                if command -v npm >/dev/null 2>&1; then
+                  rikkahub-set-npm-registry "${'$'}{RIKKAHUB_NPM_REGISTRY:-npmmirror}" || true
+                else
+                  echo 'npm not installed; npm registry will be applied after apk add nodejs npm via helper scripts.'
+                fi
+                printf '%s\n' 'RIKKAHUB_NETWORK_BOOST_CN_OK'
+            """))
             setExecutable(true, false)
         }
         File(binDir, "rikkahub-test-network").apply {
@@ -1085,6 +1162,7 @@ rikkahub-fix-apk || exit ${'$'}?
 apk add --no-cache bash ca-certificates curl git openssh-client vim nano util-linux nodejs npm tmux || exit ${'$'}?
 command -v update-ca-certificates >/dev/null 2>&1 && update-ca-certificates || true
 npm config set prefix /usr/local
+[ -n "${'$'}{RIKKAHUB_NPM_REGISTRY:-}" ] && npm config set registry "${'$'}RIKKAHUB_NPM_REGISTRY" || true
 npm config set cache /tmp/npm-cache
 npm config set audit false
 npm config set fund false
@@ -1147,6 +1225,9 @@ exec rikkahub-install-terminal-tools
                   url="https://github.com/can1357/oh-my-pi/releases/latest/download/${'$'}asset"
                 else
                   url="https://github.com/can1357/oh-my-pi/releases/download/${'$'}OMP_VERSION/${'$'}asset"
+                fi
+                if [ -n "${'$'}{RIKKAHUB_GITHUB_PROXY_PREFIX:-}" ]; then
+                  url="${'$'}{RIKKAHUB_GITHUB_PROXY_PREFIX%/}/${'$'}url"
                 fi
                 tmp="/tmp/rikkahub-${'$'}asset.${'$'}${'$'}"
                 out="/tmp/rikkahub-omp-version.txt"
