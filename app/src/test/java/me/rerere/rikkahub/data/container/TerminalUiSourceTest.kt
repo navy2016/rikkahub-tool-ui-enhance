@@ -49,9 +49,13 @@ class TerminalUiSourceTest {
     fun chatInputHasTerminalButtonWithLongPress() {
         assertTrue(chatInputSource.contains("TerminalSessionButton"))
         assertTrue(chatInputSource.contains("onStartFirstTerminalQuickCommand"))
-        assertTrue(chatInputSource.contains("combinedClickable(onClick = onClick, onLongClick = onLongClick)"))
+        assertTrue(chatInputSource.contains("modifier = Modifier.combinedClickable("))
+        assertTrue(chatInputSource.contains("onLongClick = onLongClick"))
         assertTrue(chatInputSource.contains("Lucide.Terminal"))
         assertTrue(chatInputSource.contains("modifier = Modifier.size(22.dp)"))
+        assertTrue(chatInputSource.contains("verticalAlignment = Alignment.CenterVertically"))
+        assertTrue(chatInputSource.contains("Modifier.size(24.dp)"))
+        assertTrue(chatInputSource.contains("padding(vertical = 8.dp, horizontal = 8.dp)"))
     }
 
     @Test

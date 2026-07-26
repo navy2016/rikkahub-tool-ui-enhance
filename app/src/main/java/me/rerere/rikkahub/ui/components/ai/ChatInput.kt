@@ -468,7 +468,8 @@ fun ChatInput(
                             modifier = Modifier
                                 .weight(1f)
                                 .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // Model Picker
                             ModelSelector(
@@ -1253,19 +1254,31 @@ private fun TerminalSessionButton(
     onLongClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .size(36.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        shape = CircleShape,
+        modifier = Modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = onLongClick,
+        ),
+        shape = RoundedCornerShape(50),
         tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Lucide.Terminal,
-                contentDescription = "Terminal",
-                modifier = Modifier.size(22.dp),
-            )
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier.size(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Lucide.Terminal,
+                    contentDescription = "Terminal",
+                    modifier = Modifier.size(22.dp),
+                )
+            }
         }
     }
 }
