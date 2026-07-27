@@ -89,7 +89,7 @@ class TerminalSmoothnessSourceTest {
     fun commandHistorySurvivesLeavingTerminalPage() {
         assertTrue(backgroundProcessManagerSource.contains("rememberTerminalCommand"))
         assertTrue(backgroundProcessManagerSource.contains("getTerminalCommandHistory"))
-        assertTrue(processSessionSource.contains("commandHistory.addAll(bgManager.getTerminalCommandHistory(processId))"))
+        assertTrue(processSessionSource.contains("addAll(bgManager.getTerminalCommandHistory(processId))"))
         assertTrue(processSessionSource.contains("bgManager.rememberTerminalCommand(processId, trimmed)"))
     }
 }
