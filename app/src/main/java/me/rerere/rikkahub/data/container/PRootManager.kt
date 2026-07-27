@@ -754,6 +754,16 @@ class PRootManager(
 
     fun getCustomTuiCommands(): String = settingsStore.settingsFlow.value.terminalCustomTuiCommands
 
+    private fun normalizeNpmRegistrySetting(value: String): String {
+        return when (value.trim()) {
+            "official", "default" -> "https://registry.npmjs.org/"
+            "npmmirror", "taobao" -> "https://registry.npmmirror.com"
+            "tencent" -> "https://mirrors.cloud.tencent.com/npm/"
+            "huawei" -> "https://repo.huaweicloud.com/repository/npm/"
+            else -> value.trim()
+        }
+    }
+
     /**
      * 获取容器大小（用于统计展示）
      */
@@ -851,7 +861,7 @@ class PRootManager(
         }
         networkSettings.containerNpmRegistry.trim().takeIf { it.isNotBlank() }?.let {
             env["RIKKAHUB_NPM_REGISTRY"] = it
-            env["NPM_CONFIG_REGISTRY"] = it
+            env["NPM_CONFIG_REGISTRY"] = normalizeNpmRegistrySetting(it)
         }
         networkSettings.containerGithubProxyPrefix.trim().takeIf { it.isNotBlank() }?.let {
             env["RIKKAHUB_GITHUB_PROXY_PREFIX"] = it
@@ -1162,7 +1172,7 @@ rikkahub-fix-apk || exit ${'$'}?
 apk add --no-cache bash ca-certificates curl git openssh-client vim nano util-linux nodejs npm tmux || exit ${'$'}?
 command -v update-ca-certificates >/dev/null 2>&1 && update-ca-certificates || true
 npm config set prefix /usr/local
-[ -n "${'$'}{RIKKAHUB_NPM_REGISTRY:-}" ] && npm config set registry "${'$'}RIKKAHUB_NPM_REGISTRY" || true
+[ -n "${'$'}{RIKKAHUB_NPM_REGISTRY:-}" ] && rikkahub-set-npm-registry "${'$'}RIKKAHUB_NPM_REGISTRY" || true
 npm config set cache /tmp/npm-cache
 npm config set audit false
 npm config set fund false

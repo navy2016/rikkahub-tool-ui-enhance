@@ -1041,6 +1041,16 @@ class BackgroundProcessManager @Inject constructor(
         startProcessMonitoring()
     }
 
+    private fun normalizeNpmRegistrySetting(value: String): String {
+        return when (value.trim()) {
+            "official", "default" -> "https://registry.npmjs.org/"
+            "npmmirror", "taobao" -> "https://registry.npmmirror.com"
+            "tencent" -> "https://mirrors.cloud.tencent.com/npm/"
+            "huawei" -> "https://repo.huaweicloud.com/repository/npm/"
+            else -> value.trim()
+        }
+    }
+
     private fun containerNetworkEnvironment(): Map<String, String> {
         val settings = settingsStore.settingsFlow.value
         val env = mutableMapOf<String, String>()
@@ -1049,7 +1059,7 @@ class BackgroundProcessManager @Inject constructor(
         }
         settings.containerNpmRegistry.trim().takeIf { it.isNotBlank() }?.let {
             env["RIKKAHUB_NPM_REGISTRY"] = it
-            env["NPM_CONFIG_REGISTRY"] = it
+            env["NPM_CONFIG_REGISTRY"] = normalizeNpmRegistrySetting(it)
         }
         settings.containerGithubProxyPrefix.trim().takeIf { it.isNotBlank() }?.let {
             env["RIKKAHUB_GITHUB_PROXY_PREFIX"] = it

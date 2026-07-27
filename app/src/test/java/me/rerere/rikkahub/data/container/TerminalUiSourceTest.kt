@@ -108,6 +108,8 @@ class TerminalUiSourceTest {
         assertTrue(pRootManagerSource.contains("rikkahub-set-npm-registry"))
         assertTrue(backgroundProcessManagerSource.contains("private val settingsStore: SettingsStore"))
         assertTrue(backgroundProcessManagerSource.contains("containerNetworkEnvironment"))
+        assertTrue(backgroundProcessManagerSource.contains("normalizeNpmRegistrySetting"))
+        assertTrue(backgroundProcessManagerSource.contains("https://registry.npmmirror.com"))
         assertTrue(backgroundProcessManagerSource.contains("env = processEnv"))
         assertTrue(backgroundProcessManagerSource.contains("env = containerNetworkEnvironment()"))
     }
