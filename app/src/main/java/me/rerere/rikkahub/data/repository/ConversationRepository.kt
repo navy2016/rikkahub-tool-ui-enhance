@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.db.AppDatabase
+import me.rerere.rikkahub.data.container.BackgroundProcessManager
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.dao.CompressionEventDAO
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
@@ -41,6 +42,7 @@ class ConversationRepository(
     private val filesManager: FilesManager,
     private val context: Context,
     private val messageFtsManager: MessageFtsManager,
+    private val backgroundProcessManager: BackgroundProcessManager,
 ) {
     companion object {
         private const val PAGE_SIZE = 20
@@ -242,16 +244,18 @@ class ConversationRepository(
         } else {
             conversation
         }
-        messageFtsManager.deleteConversation(conversation.id.toString())
+        val sandboxId = fullConversation.id.toString()
+        backgroundProcessManager.cleanupSandboxProcesses(sandboxId)
+        messageFtsManager.deleteConversation(sandboxId)
         database.withTransaction {
             // message_node 会通过 CASCADE 自动删除
             conversationDAO.delete(
                 conversationToConversationEntity(conversation)
             )
-            compressionEventDAO.deleteByConversation(conversation.id.toString())
+            compressionEventDAO.deleteByConversation(sandboxId)
         }
         filesManager.deleteChatFiles(fullConversation.files)
-        SandboxEngine.deleteSandbox(context, fullConversation.id.toString())
+        SandboxEngine.deleteSandbox(context, sandboxId)
     }
 
     suspend fun searchMessages(keyword: String) = messageFtsManager.search(keyword)

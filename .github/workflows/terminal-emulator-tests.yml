@@ -11,6 +11,8 @@ on:
       - 'app/src/main/java/me/rerere/rikkahub/RouteActivity.kt'
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/**'
+      - 'app/src/main/java/me/rerere/rikkahub/data/repository/ConversationRepository.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/di/RepositoryModule.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/chat/**'
@@ -30,6 +32,8 @@ on:
       - 'app/src/main/java/me/rerere/rikkahub/RouteActivity.kt'
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/**'
+      - 'app/src/main/java/me/rerere/rikkahub/data/repository/ConversationRepository.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/di/RepositoryModule.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/chat/**'
@@ -108,7 +112,7 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest --stacktrace
 
       - name: Run Bun and terminal UI source tests
-        run: ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest --stacktrace
+        run: ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest --tests me.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest --stacktrace
 
       - name: Run focused unit tests
         run: |
@@ -122,6 +126,7 @@ jobs:
               --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest \
               --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest \
               --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest \
+              --tests me.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest \
               --stacktrace; then
               exit 0
             fi
