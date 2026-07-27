@@ -4,16 +4,22 @@ on:
   push:
     branches:
       - feature/interactive-session
+      - fix/container-terminal-lifecycle
       - main
       - master
     paths:
+      - 'app/src/main/java/me/rerere/rikkahub/RouteActivity.kt'
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
-      - 'app/src/main/java/me/rerere/rikkahub/data/container/BackgroundProcessManager.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/**'
+      - 'app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/chat/**'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/**'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingAdvancedPage.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/service/ContainerProcessForegroundService.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/ai/tools/LocalTools.kt'
       - 'app/src/test/java/me/rerere/rikkahub/utils/TerminalEmulatorTest.kt'
-      - 'app/src/test/java/me/rerere/rikkahub/data/container/ControlInputTest.kt'
-      - 'app/src/test/java/me/rerere/rikkahub/data/container/InteractiveTerminalSnapshotTest.kt'
-      - 'app/src/test/java/me/rerere/rikkahub/data/container/PtyModeInferenceTest.kt'
+      - 'app/src/test/java/me/rerere/rikkahub/data/container/**'
       - '.github/workflows/terminal-emulator-tests.yml'
       - 'app/build.gradle.kts'
       - 'build.gradle.kts'
@@ -21,13 +27,18 @@ on:
       - 'gradle/wrapper/gradle-wrapper.properties'
   pull_request:
     paths:
+      - 'app/src/main/java/me/rerere/rikkahub/RouteActivity.kt'
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
-      - 'app/src/main/java/me/rerere/rikkahub/data/container/BackgroundProcessManager.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/**'
+      - 'app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/chat/**'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/**'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingAdvancedPage.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/service/ContainerProcessForegroundService.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/ai/tools/LocalTools.kt'
       - 'app/src/test/java/me/rerere/rikkahub/utils/TerminalEmulatorTest.kt'
-      - 'app/src/test/java/me/rerere/rikkahub/data/container/ControlInputTest.kt'
-      - 'app/src/test/java/me/rerere/rikkahub/data/container/InteractiveTerminalSnapshotTest.kt'
-      - 'app/src/test/java/me/rerere/rikkahub/data/container/PtyModeInferenceTest.kt'
+      - 'app/src/test/java/me/rerere/rikkahub/data/container/**'
       - '.github/workflows/terminal-emulator-tests.yml'
       - 'app/build.gradle.kts'
       - 'build.gradle.kts'
@@ -97,7 +108,7 @@ jobs:
         run: ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest --stacktrace
 
       - name: Run Bun and terminal UI source tests
-        run: ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest --stacktrace
+        run: ./gradlew :app:testDebugUnitTest --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest --stacktrace
 
       - name: Run focused unit tests
         run: |
@@ -110,6 +121,7 @@ jobs:
               --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest \
               --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest \
               --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest \
+              --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest \
               --stacktrace; then
               exit 0
             fi

@@ -7,6 +7,8 @@ private val BUILTIN_TUI_COMMANDS = setOf(
 )
 
 private val CUSTOM_TUI_TOKEN_REGEX = Regex("^[A-Za-z0-9._+-]{1,80}$")
+private val SHELL_COMMAND_SEPARATOR = Regex("(?:&&|\\|\\||[;&|()])")
+private val SHELL_ASSIGNMENT = Regex("^[A-Za-z_][A-Za-z0-9_]*=.*$")
 
 internal fun parseCustomTuiCommands(raw: String): Set<String> {
     if (raw.isBlank()) return emptySet()
@@ -22,20 +24,36 @@ internal fun parseCustomTuiCommands(raw: String): Set<String> {
 
 internal fun terminalTuiCommands(customRaw: String = ""): Set<String> = BUILTIN_TUI_COMMANDS + parseCustomTuiCommands(customRaw)
 
-internal fun isTuiCommand(command: String, customRaw: String = ""): Boolean {
-    val normalized = command.lowercase()
-    return terminalTuiCommands(customRaw).any { token ->
-        Regex("""(^|[\s;&|()])""" + Regex.escape(token) + """([\s;&|()]|$)""").containsMatchIn(normalized)
+private fun commandSegments(command: String): Sequence<List<String>> = sequence {
+    SHELL_COMMAND_SEPARATOR.split(command.lowercase()).forEach { segment ->
+        val tokens = segment.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.toMutableList()
+        while (tokens.firstOrNull()?.matches(SHELL_ASSIGNMENT) == true) tokens.removeAt(0)
+        if (tokens.isNotEmpty()) yield(tokens)
     }
 }
 
-internal fun inferPtyMode(command: String, requested: PtyMode = PtyMode.AUTO, customTuiCommandsRaw: String = ""): PtyMode {
+private fun isTuiExecutable(token: String, commands: Set<String>): Boolean =
+    token.substringAfterLast('/').trim().lowercase() in commands
+
+internal fun isTuiCommand(command: String, customRaw: String = ""): Boolean {
+    val commands = terminalTuiCommands(customRaw)
+    return commandSegments(command).any { tokens ->
+        when (tokens.firstOrNull()) {
+            "npx", "bunx" -> tokens.drop(1).firstOrNull()?.let { isTuiExecutable(it, commands) } == true
+            "npm" -> tokens.getOrNull(1) == "exec" &&
+                tokens.drop(2).firstOrNull { !it.startsWith('-') }?.let { isTuiExecutable(it, commands) } == true
+            "pnpm" -> tokens.getOrNull(1) == "dlx" &&
+                tokens.drop(2).firstOrNull { !it.startsWith('-') }?.let { isTuiExecutable(it, commands) } == true
+            else -> isTuiExecutable(tokens.first(), commands)
+        }
+    }
+}
+
+internal fun inferPtyMode(
+    command: String,
+    requested: PtyMode = PtyMode.AUTO,
+    customTuiCommandsRaw: String = ""
+): PtyMode {
     if (requested != PtyMode.AUTO) return requested
-    val normalized = command.lowercase()
-    val cliTokens = terminalTuiCommands(customTuiCommandsRaw).joinToString("|") { Regex.escape(it) }
-    val rawRegexes = listOf(
-        Regex("""(^|[\s;&|()])(?:$cliTokens)([\s;&|()]|$)"""),
-        Regex("""(^|[\s;&|()])(?:npx|pnpm\s+dlx|bunx|npm\s+exec)\s+[^;&|()]*?(?:$cliTokens)([\s;&|()]|$)""")
-    )
-    return if (rawRegexes.any { it.containsMatchIn(normalized) }) PtyMode.RAW else PtyMode.COOKED
+    return if (isTuiCommand(command, customTuiCommandsRaw)) PtyMode.RAW else PtyMode.COOKED
 }

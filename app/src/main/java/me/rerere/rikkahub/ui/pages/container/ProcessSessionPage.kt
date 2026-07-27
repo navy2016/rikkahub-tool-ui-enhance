@@ -302,13 +302,14 @@ fun ProcessSessionPage(sandboxId: String, initialProcessId: String? = null) {
     val activeInteractiveProcess = sandboxProcesses.firstOrNull {
         it.processId == activeInteractiveId && it.isInteractive
     }
-    LaunchedEffect(initialProcessId, sandboxProcesses) {
-        val target = initialProcessId?.let { id -> sandboxProcesses.firstOrNull { it.processId == id && it.isInteractive } }
-        if (target != null && activeInteractiveId != target.processId) {
-            activeInteractiveId = target.processId
-            terminalFullscreen = true
-            restoreStatusBarPreference(target.command)
-        }
+    var pendingInitialProcessId by remember(initialProcessId) { mutableStateOf(initialProcessId) }
+    LaunchedEffect(pendingInitialProcessId, sandboxProcesses) {
+        val id = pendingInitialProcessId ?: return@LaunchedEffect
+        val target = sandboxProcesses.firstOrNull { it.processId == id && it.isInteractive } ?: return@LaunchedEffect
+        activeInteractiveId = target.processId
+        terminalFullscreen = true
+        restoreStatusBarPreference(target.command)
+        pendingInitialProcessId = null
     }
     Scaffold(
         topBar = {
@@ -723,6 +724,10 @@ private fun TerminalInteractivePanel(
     var forcedTerminalColumns by remember(processId, settings.terminalCustomTuiCommands) { mutableStateOf(savedPreference?.forcedTerminalColumns ?: if (isTuiCommand(process.command, settings.terminalCustomTuiCommands)) 120 else null) }
     var terminalCellWidthPx by remember { mutableIntStateOf(7) }
     var terminalCellHeightPx by remember { mutableIntStateOf(14) }
+    var terminalPreferencesDirty by remember(processId) { mutableStateOf(false) }
+    fun markTerminalPreferencesDirty() {
+        terminalPreferencesDirty = true
+    }
     val terminalStatusItems = remember(settings.terminalStatusBarItems) {
         ensureTerminalStatusItems(decodeTerminalConfig(settings.terminalStatusBarItems, defaultTerminalStatusItems()))
     }
@@ -990,8 +995,10 @@ private fun TerminalInteractivePanel(
             }
     }
 
+    // Persist only explicit terminal-control changes. Scroll position is deliberately session-local.
     LaunchedEffect(
         processId,
+        terminalPreferencesDirty,
         rawInputMode,
         autoScroll,
         showExtraKeys,
@@ -1000,7 +1007,8 @@ private fun TerminalInteractivePanel(
         terminalFontSizeSp,
         forcedTerminalColumns,
     ) {
-        delay(300)
+        if (!terminalPreferencesDirty) return@LaunchedEffect
+        delay(800)
         settingsStore.update { current ->
             current.copy(terminalCommandPreferences = updatedTerminalCommandPreferences(
                 current.terminalCommandPreferences,
@@ -1017,6 +1025,7 @@ private fun TerminalInteractivePanel(
                 )
             })
         }
+        terminalPreferencesDirty = false
     }
 
     LaunchedEffect(pendingTerminalRows, imeVisible) {
@@ -1089,16 +1098,33 @@ private fun TerminalInteractivePanel(
                     onRawInputModeChange = {
                         rawInputMode = it
                         input = ""
+                        markTerminalPreferencesDirty()
                     },
-                    onAutoScrollChange = { autoScroll = it },
-                    onShowExtraKeysChange = { showExtraKeys = it },
+                    onAutoScrollChange = {
+                        autoScroll = it
+                        markTerminalPreferencesDirty()
+                    },
+                    onShowExtraKeysChange = {
+                        showExtraKeys = it
+                        markTerminalPreferencesDirty()
+                    },
                     onTerminalPanModeChange = {
                         terminalPanMode = it
                         if (!it) selectionMode = false
+                        markTerminalPreferencesDirty()
                     },
-                    onShowFullInputBarChange = { showFullInputBar = it },
-                    onTerminalFontSizeChange = { terminalFontSizeSp = it.coerceIn(9f, 22f) },
-                    onCycleForcedTerminalColumns = { cycleForcedTerminalColumns() },
+                    onShowFullInputBarChange = {
+                        showFullInputBar = it
+                        markTerminalPreferencesDirty()
+                    },
+                    onTerminalFontSizeChange = {
+                        terminalFontSizeSp = it.coerceIn(9f, 22f)
+                        markTerminalPreferencesDirty()
+                    },
+                    onCycleForcedTerminalColumns = {
+                        cycleForcedTerminalColumns()
+                        markTerminalPreferencesDirty()
+                    },
                     onFullscreenToggle = { onFullscreenChange(!fullscreen) },
                     onCopy = {
                         context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
@@ -1230,7 +1256,10 @@ private fun TerminalInteractivePanel(
                     onToggleShift = { shiftLatch = !shiftLatch },
                     onToggleSelection = {
                         selectionMode = !selectionMode
-                        if (!selectionMode) terminalPanMode = true
+                        if (!selectionMode) {
+                            terminalPanMode = true
+                            markTerminalPreferencesDirty()
+                        }
                     },
                     onKeyboard = {
                         inputFocusRequester.requestFocus()

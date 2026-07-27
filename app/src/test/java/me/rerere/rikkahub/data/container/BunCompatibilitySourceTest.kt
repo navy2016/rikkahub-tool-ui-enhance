@@ -12,8 +12,9 @@ class BunCompatibilitySourceTest {
 
     @Test
     fun bunWrapperIsPreferredOverRawBundledBinaryInPath() {
-        assertTrue(source.contains("processEnv[\"PATH\"] = \"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bun/bin\""))
-        assertTrue(source.contains("val finalPath = (basePath.split(\":\") + toolPaths)"))
+        assertTrue(source.contains("processEnv[\"PATH\"] = \"/usr/local/sbin:/usr/local/bin:/usr/local/node/bin"))
+        assertTrue(source.contains("listOf(\"/usr/local/sbin\", \"/usr/local/bin\") + toolPaths"))
+        assertTrue(source.contains("/usr/local/bun/bin\""))
         assertTrue(source.contains("writeBunWrapper(File(localBin, \"bun\"), isBunx = false)"))
         assertTrue(source.contains("writeBunWrapper(File(localBin, \"bunx\"), isBunx = true)"))
     }
@@ -36,6 +37,8 @@ class BunCompatibilitySourceTest {
         assertTrue(source.contains("omp-linux-musl-x64"))
         assertTrue(source.contains("github.com/can1357/oh-my-pi/releases"))
         assertTrue(source.contains("Do not use: bun install -g @oh-my-pi/pi-coding-agent"))
+        assertTrue(source.contains("OMP_VERSION:-v17.1.4"))
+        assertTrue(source.contains("downloaded omp asset is not an ELF executable"))
         val installSection = source.substringAfter("File(binDir, \"rikkahub-install-omp\")")
             .substringBefore("File(binDir, \"rikkahub-test-omp\")")
         assertTrue(!installSection.contains("cat <<'EOF'"))

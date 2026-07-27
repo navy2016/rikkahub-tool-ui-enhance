@@ -867,8 +867,11 @@ class PRootManager(
             env["RIKKAHUB_GITHUB_PROXY_PREFIX"] = it
         }
 
-        // 组合 PATH：工具路径 + 基础 PATH（确保基础命令可用）
-        val finalPath = (basePath.split(":") + toolPaths)
+        // Keep user-installed runtimes ahead of Alpine, but leave bundled Bun last so
+        // /usr/local/bin/bun always resolves to our compatibility wrapper first.
+        val wrapperAndSystemPaths = basePath.split(":")
+        val finalPath = (listOf("/usr/local/sbin", "/usr/local/bin") + toolPaths +
+            wrapperAndSystemPaths.filterNot { it == "/usr/local/sbin" || it == "/usr/local/bin" })
             .distinct()
             .joinToString(":")
         env["PATH"] = finalPath
@@ -1209,7 +1212,8 @@ exec rikkahub-install-terminal-tools
         File(binDir, "rikkahub-install-omp").apply {
             writeText(containerShellScript("""
                 set -eu
-                OMP_VERSION="${'$'}{OMP_VERSION:-latest}"
+                # Pin the default to a reviewed release; callers may explicitly request another version.
+                OMP_VERSION="${'$'}{OMP_VERSION:-v17.1.4}"
                 case "${'$'}{1:-}" in
                   --version) OMP_VERSION="${'$'}{2:-${'$'}OMP_VERSION}" ;;
                   -h|--help)
@@ -1217,7 +1221,7 @@ exec rikkahub-install-terminal-tools
                       'Install oh-my-pi / omp from official musl binary releases.' \
                       '' \
                       'Usage:' \
-                      '  rikkahub-install-omp [--version v17.1.3]' \
+                      '  rikkahub-install-omp [--version v17.1.4]' \
                       '' \
                       'This installs the standalone omp binary, not the npm package.' \
                       'Alpine/musl must use omp-linux-musl-arm64 or omp-linux-musl-x64.' \
@@ -1248,10 +1252,16 @@ exec rikkahub-install-terminal-tools
                   wget -O "${'$'}tmp" "${'$'}url"
                 else
                   rikkahub-fix-apk >/dev/null 2>&1 || true
-                  apk add --no-cache ca-certificates curl
+                  apk add --no-cache ca-certificates curl coreutils
                   curl -fL --connect-timeout 20 --max-time 600 -o "${'$'}tmp" "${'$'}url"
                 fi
                 test -s "${'$'}tmp" || { echo "downloaded empty omp binary" >&2; exit 22; }
+                magic="${'$'}(od -An -tx1 -N4 "${'$'}tmp" 2>/dev/null | tr -d ' \n')"
+                [ "${'$'}magic" = "7f454c46" ] || {
+                  echo "downloaded omp asset is not an ELF executable (version=${'$'}OMP_VERSION asset=${'$'}asset)" >&2
+                  rm -f "${'$'}tmp"
+                  exit 23
+                }
                 install -m 0755 "${'$'}tmp" /usr/local/bin/omp
                 rm -f "${'$'}tmp"
                 /usr/local/bin/omp --version >"${'$'}out" 2>&1 || {
@@ -1285,7 +1295,7 @@ exec rikkahub-install-terminal-tools
                   '  rikkahub-install-omp' \
                   '' \
                   'Optional pinned version:' \
-                  '  rikkahub-install-omp --version v17.1.3' \
+                  '  rikkahub-install-omp --version v17.1.4' \
                   '' \
                   'Do not install omp through Bun/npm on Alpine/musl:' \
                   '  bun install -g @oh-my-pi/pi-coding-agent' \
@@ -3181,6 +3191,17 @@ esac
     }
 
     /**
+     * Returns null while the managed process is still alive; otherwise its real exit code.
+     * Kept separate from PID probing because Process.pid() may be unavailable on some Android builds.
+     */
+    fun getFinishedBackgroundProcessExitCode(processId: String): Int? {
+        val record = backgroundProcesses[processId] ?: return null
+        val process = record.process ?: return -1
+        if (process.isAlive) return null
+        return runCatching { process.exitValue() }.getOrDefault(-1)
+    }
+
+    /**
      * 清理已结束的后台进程
      */
     suspend fun cleanupFinishedBackgroundProcesses() = withContext(Dispatchers.IO) {
@@ -3270,7 +3291,7 @@ esac
         processEnv["PIP_DISABLE_PIP_VERSION_CHECK"] = "1"
         processEnv["NODE_PATH"] = "/usr/local/lib/node_modules:/usr/lib/node_modules"
         processEnv["BUN_INSTALL"] = "/usr/local/bun"
-        processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bun/bin"
+        processEnv["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/local/node/bin:/usr/local/go/bin:/usr/local/rust/bin:/usr/local/python3/bin:/usr/local/python/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bun/bin"
 
         // 合并自定义环境变量
         processEnv.putAll(customEnv)

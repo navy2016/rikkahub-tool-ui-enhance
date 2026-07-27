@@ -55,6 +55,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import me.rerere.highlight.Highlighter
 import me.rerere.highlight.LocalHighlighter
+import me.rerere.rikkahub.data.container.BackgroundProcessManager
 import me.rerere.rikkahub.data.container.PRootManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.components.ui.TTSController
@@ -146,11 +147,13 @@ class RouteActivity : ComponentActivity() {
         }
 
         val prootManager: PRootManager by inject()
+        val backgroundProcessManager: BackgroundProcessManager by inject()
         lifecycleScope.launch {
             settingsStore.settingsFlow.collect { settings ->
                 prootManager.enableAutoManagement(settings.enableContainerRuntime)
             }
         }
+        backgroundProcessManager.refreshForegroundProcessGuard()
 
         setContent {
             RikkahubTheme {
@@ -166,6 +169,12 @@ class RouteActivity : ComponentActivity() {
                 AppRoutes()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val backgroundProcessManager: BackgroundProcessManager by inject()
+        backgroundProcessManager.refreshForegroundProcessGuard()
     }
 
     private fun disableNavigationBarContrast() {

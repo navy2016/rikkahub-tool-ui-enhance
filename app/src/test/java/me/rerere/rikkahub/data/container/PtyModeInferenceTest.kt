@@ -39,6 +39,16 @@ class PtyModeInferenceTest {
     }
 
     @Test
+    fun tuiTokenInArgumentsDoesNotForceRawMode() {
+        assertEquals(PtyMode.COOKED, inferPtyMode("echo pi", PtyMode.AUTO))
+        assertEquals(PtyMode.COOKED, inferPtyMode("apk add pi", PtyMode.AUTO))
+        assertEquals(PtyMode.COOKED, inferPtyMode("printf '%s' omp", PtyMode.AUTO))
+        assertEquals(PtyMode.RAW, inferPtyMode("echo ok; pi --model test", PtyMode.AUTO))
+        assertEquals(PtyMode.RAW, inferPtyMode("/usr/local/bin/omp", PtyMode.AUTO))
+        assertEquals(PtyMode.RAW, inferPtyMode("TERM=xterm-256color omp", PtyMode.AUTO))
+    }
+
+    @Test
     fun customTuiCommandsUseRawWithoutMatchingUnrelatedCommands() {
         val custom = "lazygit\nbtop, yazi\ninvalid token;evil"
         assertEquals(PtyMode.RAW, inferPtyMode("lazygit", PtyMode.AUTO, custom))

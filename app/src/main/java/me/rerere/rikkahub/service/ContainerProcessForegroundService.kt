@@ -25,6 +25,7 @@ class ContainerProcessForegroundService : Service() {
         private const val EXTRA_PROCESS_COUNT = "process_count"
         private const val CHANNEL_ID = "container_processes"
         private const val NOTIFICATION_ID = 2004
+        private const val WAKE_LOCK_TIMEOUT_MS = 6 * 60 * 60 * 1000L
 
         fun update(context: Context, processCount: Int) {
             if (processCount <= 0) {
@@ -75,14 +76,17 @@ class ContainerProcessForegroundService : Service() {
 
     private fun acquireWakeLock() {
         if (wakeLock?.isHeld == true) return
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "RikkaHub:ContainerProcessWakeLock"
-        ).apply {
-            setReferenceCounted(false)
-            acquire()
-        }
+        runCatching {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "RikkaHub:ContainerProcessWakeLock"
+            ).apply {
+                setReferenceCounted(false)
+                // The manager renews this while active sessions exist; timeout prevents a stuck lock.
+                acquire(WAKE_LOCK_TIMEOUT_MS)
+            }
+        }.onSuccess { wakeLock = it }
     }
 
     private fun createChannel() {

@@ -128,8 +128,10 @@ internal fun renderInteractiveTerminalSnapshot(
     val safeRows = rows.coerceIn(6, 80)
     val terminal = TerminalEmulator(initialColumns = safeColumns, initialRows = safeRows)
     terminal.feed(bytes)
-    val screen = terminal.plainText(includeScrollback = false)
-    val screenLines = screen.lines()
+    val screenLines = terminal.plainText(includeScrollback = false)
+        .lines()
+        .map { it.trimEnd() }
+    val screen = screenLines.joinToString("\n")
     val edgeBandSize = safeRows.coerceAtMost(3)
     val topLinesStartRow = 1
     val topLinesEndRow = edgeBandSize
@@ -1543,6 +1545,12 @@ class BackgroundProcessManager @Inject constructor(
         return _processStates.value
     }
 
+    /** Re-attempt foreground protection after the app returns to foreground. */
+    fun refreshForegroundProcessGuard() {
+        foregroundProcessCount = -1
+        refreshProcessStates()
+    }
+
     /**
      * 向交互式 session 发送文本输入
      */
@@ -2204,12 +2212,13 @@ class BackgroundProcessManager @Inject constructor(
      */
     private suspend fun updateProcessStates() {
         val updatedBackground = processes.values.map { process ->
-            if (process.status == ProcessStatus.RUNNING && process.pid != null) {
-                if (!isProcessAlive(process.pid)) {
+            if (process.status == ProcessStatus.RUNNING || process.status == ProcessStatus.STARTING) {
+                val exitCode = prootManager.getFinishedBackgroundProcessExitCode(process.processId)
+                if (exitCode != null) {
                     process.copy(
-                        status = ProcessStatus.FAILED,
+                        status = if (exitCode == 0) ProcessStatus.COMPLETED else ProcessStatus.FAILED,
                         exitedAt = System.currentTimeMillis(),
-                        exitCode = -1
+                        exitCode = exitCode
                     )
                 } else {
                     process
@@ -2292,14 +2301,15 @@ class BackgroundProcessManager @Inject constructor(
             it.status == ProcessStatus.RUNNING || it.status == ProcessStatus.STARTING
         } + interactiveSessions.values.count { it.process.isAlive }
         if (activeCount == foregroundProcessCount) return
-        foregroundProcessCount = activeCount
         runCatching {
             if (activeCount > 0) {
                 ContainerProcessForegroundService.update(context, activeCount)
             } else {
                 ContainerProcessForegroundService.stop(context)
             }
+            foregroundProcessCount = activeCount
         }.onFailure { error ->
+            // Keep the previous value so periodic process monitoring retries service start/stop.
             Log.w(TAG, "Unable to update container-process foreground service", error)
         }
     }
