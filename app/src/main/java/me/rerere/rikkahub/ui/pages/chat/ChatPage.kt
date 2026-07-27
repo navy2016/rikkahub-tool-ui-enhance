@@ -403,18 +403,25 @@ private fun ChatPageContent(
                     },
                     onStartFirstTerminalQuickCommand = {
                         val quick = firstTerminalQuickCommand(setting.terminalQuickCommands)
+                        focusManager.clearFocus(force = true)
+                        softwareKeyboardController?.hide()
                         scope.launch {
+                            val sandboxId = conversation.id.toString()
+                            bgManager.findRunningInteractiveSession(sandboxId, quick.command)?.let { existing ->
+                                navController.navigate(Screen.ProcessSessions(sandboxId, existing.processId))
+                                return@launch
+                            }
+                            val sizeHint = bgManager.getTerminalSizeHint(quick.command)
                             val result = bgManager.startInteractiveSession(
-                                sandboxId = conversation.id.toString(),
+                                sandboxId = sandboxId,
                                 command = quick.command,
                                 tag = quick.name,
                                 preferTty = true,
-                                columns = 120,
-                                rows = 40,
+                                columns = sizeHint?.columns ?: 80,
+                                rows = sizeHint?.rows ?: 24,
                             )
                             if (result.success) {
-                                toaster.show("已启动终端: ${quick.name}", type = ToastType.Success)
-                                navController.navigate(Screen.ProcessSessions(conversation.id.toString(), result.processId))
+                                navController.navigate(Screen.ProcessSessions(sandboxId, result.processId))
                             } else {
                                 toaster.show("启动终端失败: ${result.message.ifBlank { result.status.name }}", type = ToastType.Error)
                             }

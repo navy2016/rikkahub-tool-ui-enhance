@@ -361,6 +361,26 @@ internal fun renderInteractiveTerminalSnapshot(
     )
 }
 
+data class TerminalViewportState(
+    val verticalOffsetPx: Int = 0,
+    val horizontalOffsetPx: Int = 0,
+    val autoScroll: Boolean = true,
+    val atBottom: Boolean = true,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+data class TerminalSandboxUiState(
+    val activeInteractiveProcessId: String? = null,
+    val terminalFullscreen: Boolean = true,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+data class TerminalSizeHint(
+    val columns: Int? = null,
+    val rows: Int? = null,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 enum class ControlInput {
     CTRL_SPACE,
     CTRL_A,
@@ -1028,6 +1048,10 @@ class BackgroundProcessManager @Inject constructor(
     private val interactiveSessions = ConcurrentHashMap<String, InteractiveSessionRecord>()
 
     private val interactiveReadOffsets = ConcurrentHashMap<String, Long>()
+    private val terminalViewportStates = ConcurrentHashMap<String, TerminalViewportState>()
+    private val terminalSandboxUiStates = ConcurrentHashMap<String, TerminalSandboxUiState>()
+    private val terminalCommandHistories = ConcurrentHashMap<String, MutableList<String>>()
+    private val terminalSizeHints = ConcurrentHashMap<String, TerminalSizeHint>()
 
     /**
      * 统一状态流（后台进程 + 交互 session）
@@ -1764,6 +1788,7 @@ class BackgroundProcessManager @Inject constructor(
         } else if (record.ttyEnabled) {
             prootManager.signalProcessTree(record.process, "WINCH")
         }
+        refreshProcessStates()
         Result.success(Unit)
     }
 
@@ -1972,6 +1997,101 @@ class BackgroundProcessManager @Inject constructor(
         }
     }
 
+    fun saveTerminalViewportState(
+        processId: String,
+        verticalOffsetPx: Int,
+        horizontalOffsetPx: Int,
+        autoScroll: Boolean,
+        atBottom: Boolean
+    ) {
+        terminalViewportStates[processId] = TerminalViewportState(
+            verticalOffsetPx = verticalOffsetPx.coerceAtLeast(0),
+            horizontalOffsetPx = horizontalOffsetPx.coerceAtLeast(0),
+            autoScroll = autoScroll,
+            atBottom = atBottom,
+            updatedAt = System.currentTimeMillis()
+        )
+    }
+
+    fun getTerminalViewportState(processId: String): TerminalViewportState? = terminalViewportStates[processId]
+
+    fun saveTerminalSandboxUiState(
+        sandboxId: String,
+        activeInteractiveProcessId: String?,
+        terminalFullscreen: Boolean
+    ) {
+        if (activeInteractiveProcessId == null) {
+            terminalSandboxUiStates.remove(sandboxId)
+        } else {
+            terminalSandboxUiStates[sandboxId] = TerminalSandboxUiState(
+                activeInteractiveProcessId = activeInteractiveProcessId,
+                terminalFullscreen = terminalFullscreen,
+                updatedAt = System.currentTimeMillis()
+            )
+        }
+    }
+
+    fun getTerminalSandboxUiState(sandboxId: String): TerminalSandboxUiState? = terminalSandboxUiStates[sandboxId]
+
+    fun rememberTerminalCommand(processId: String, command: String, maxEntries: Int = 50) {
+        val trimmed = command.trim()
+        if (trimmed.isBlank()) return
+        val history = terminalCommandHistories.getOrPut(processId) { mutableListOf() }
+        synchronized(history) {
+            if (history.lastOrNull() != trimmed) history.add(trimmed)
+            while (history.size > maxEntries) history.removeAt(0)
+        }
+    }
+
+    fun getTerminalCommandHistory(processId: String): List<String> {
+        val history = terminalCommandHistories[processId] ?: return emptyList()
+        return synchronized(history) { history.toList() }
+    }
+
+    fun saveTerminalSizeHint(command: String, columns: Int, rows: Int) {
+        val key = command.trim()
+        if (key.isBlank()) return
+        terminalSizeHints[key] = TerminalSizeHint(
+            columns = columns.coerceIn(20, 240),
+            rows = rows.coerceIn(6, 80),
+            updatedAt = System.currentTimeMillis()
+        )
+    }
+
+    fun getTerminalSizeHint(command: String): TerminalSizeHint? = terminalSizeHints[command.trim()]
+
+    fun findRunningInteractiveSession(sandboxId: String, command: String): BackgroundProcessInfo? {
+        val normalized = command.trim()
+        return interactiveSessions.values
+            .asSequence()
+            .filter { it.sandboxId == sandboxId && it.command.trim() == normalized && it.process.isAlive }
+            .sortedByDescending { it.createdAt }
+            .map { record ->
+                BackgroundProcessInfo(
+                    processId = record.processId,
+                    sandboxId = record.sandboxId,
+                    command = record.command,
+                    status = ProcessStatus.RUNNING,
+                    pid = tryGetPid(record.process),
+                    stdoutPath = "",
+                    stderrPath = "",
+                    createdAt = record.createdAt,
+                    startedAt = record.startedAt,
+                    exitedAt = null,
+                    exitCode = null,
+                    tag = record.tag,
+                    isInteractive = true,
+                    stdinEnabled = true,
+                    ttyEnabled = record.ttyEnabled,
+                    terminalColumns = record.columns,
+                    terminalRows = record.rows,
+                    terminalBackend = if (record.nativePtyEnabled) "native-pty" else if (record.ttyEnabled) "script-sigwinch" else "pipe",
+                    ptyMode = ptyModeWireName(record.ptyMode)
+                )
+            }
+            .firstOrNull()
+    }
+
     /**
      * 删除单条进程记录（仅允许删除已结束记录）
      */
@@ -1984,6 +2104,11 @@ class BackgroundProcessManager @Inject constructor(
             interactive.waiterJob?.cancel()
             interactiveSessions.remove(processId)
             interactiveReadOffsets.remove(processId)
+            terminalViewportStates.remove(processId)
+            terminalCommandHistories.remove(processId)
+            if (terminalSandboxUiStates[interactive.sandboxId]?.activeInteractiveProcessId == processId) {
+                terminalSandboxUiStates.remove(interactive.sandboxId)
+            }
             refreshProcessStates()
             return true
         }
@@ -2042,6 +2167,8 @@ class BackgroundProcessManager @Inject constructor(
                 }
                 interactiveSessions.remove(processId)
                 interactiveReadOffsets.remove(processId)
+                terminalViewportStates.remove(processId)
+                terminalCommandHistories.remove(processId)
             }
 
             refreshProcessStates()
@@ -2088,7 +2215,10 @@ class BackgroundProcessManager @Inject constructor(
                 interactiveSessions[processId]?.waiterJob?.cancel()
                 interactiveSessions.remove(processId)
                 interactiveReadOffsets.remove(processId)
+                terminalViewportStates.remove(processId)
+                terminalCommandHistories.remove(processId)
             }
+            terminalSandboxUiStates.remove(sandboxId)
 
             refreshProcessStates()
             Result.success(bgToRemove.size + interactiveIds.size)

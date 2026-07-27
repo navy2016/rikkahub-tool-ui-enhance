@@ -83,7 +83,7 @@ class TerminalUiSourceTest {
     fun longPressTerminalButtonNavigatesToStartedTerminalPanel() {
         assertTrue(routeSource.contains("data class ProcessSessions(val sandboxId: String, val processId: String? = null)"))
         assertTrue(processSessionSource.contains("initialProcessId"))
-        assertTrue(chatPageSource.contains("Screen.ProcessSessions(conversation.id.toString(), result.processId)"))
+        assertTrue(chatPageSource.contains("Screen.ProcessSessions(sandboxId, result.processId)"))
     }
 
     @Test
