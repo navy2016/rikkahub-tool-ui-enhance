@@ -34,13 +34,20 @@ class TerminalSmoothnessSourceTest {
 
     @Test
     fun imeResizeKeepsUiSmoothButDebouncesPtyResize() {
-        assertTrue(processSessionSource.contains("TERMINAL_PTY_RESIZE_DEBOUNCE_MS"))
+        assertTrue(processSessionSource.contains("TERMINAL_IME_RESIZE_DEBOUNCE_MS"))
         assertTrue(processSessionSource.contains("keepBottomAfterNextLayout"))
         assertTrue(processSessionSource.contains("LaunchedEffect(imeVisible)"))
+        assertTrue(processSessionSource.contains("LaunchedEffect(processId, terminalColumns, terminalRows)"))
+        assertTrue(processSessionSource.contains("columnsChanged = terminalColumns != lastAppliedTerminalColumns"))
+        assertTrue(processSessionSource.contains("rowsChanged && !columnsChanged && insideImeAnimationWindow"))
+        assertTrue(processSessionSource.contains("val measuredCell = remember(terminalTextStyle, density)"))
+        assertFalse(processSessionSource.contains("var terminalCellWidthPx by remember"))
+        assertTrue(processSessionSource.contains("delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)"))
         assertTrue(processSessionSource.contains("terminalEmulator.resize(terminalColumns, terminalRows)"))
         assertTrue(processSessionSource.contains("delay(TERMINAL_PTY_RESIZE_DEBOUNCE_MS)"))
+        assertTrue(processSessionSource.contains("imeStableForSizeHint"))
         assertTrue(processSessionSource.contains("bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)"))
-        assertFalse(processSessionSource.contains("if (imeVisible) kotlinx.coroutines.delay(300)"))
+        assertFalse(processSessionSource.contains("pendingImeResizeJob"))
     }
 
     @Test

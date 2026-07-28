@@ -56,6 +56,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -138,6 +139,7 @@ private val TERMINAL_FORCED_COLUMN_PRESETS = listOf(80, 100, 120, 160, 200)
 private const val TERMINAL_RENDER_FRAME_MS = 33L
 private const val TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS = 100L
 private const val TERMINAL_PTY_RESIZE_DEBOUNCE_MS = 160L
+private const val TERMINAL_IME_RESIZE_DEBOUNCE_MS = 120L
 private const val TERMINAL_FAST_FLING_VELOCITY_PX = 3500f
 private const val TERMINAL_FAST_FLING_WINDOW_MS = 700L
 private const val TERMINAL_FAST_FLING_REQUIRED_COUNT = 2
@@ -762,8 +764,13 @@ private fun TerminalInteractivePanel(
     var terminalRows by remember(processId) { mutableIntStateOf(initialTerminalRows) }
     var measuredTerminalColumns by remember(processId) { mutableIntStateOf(initialTerminalColumns) }
     var forcedTerminalColumns by remember(processId) { mutableStateOf(savedPreference?.forcedTerminalColumns) }
-    var terminalCellWidthPx by remember { mutableIntStateOf(7) }
-    var terminalCellHeightPx by remember { mutableIntStateOf(14) }
+    val density = LocalDensity.current
+    val measuredCell = remember(terminalTextStyle, density) { textMeasurer.measure("W", style = terminalTextStyle) }
+    val terminalCellWidthPx = measuredCell.size.width.coerceAtLeast(1)
+    val terminalCellHeightPx = with(density) { terminalTextStyle.lineHeight.toPx() }
+        .roundToInt()
+        .coerceAtLeast(measuredCell.size.height)
+        .coerceAtLeast(1)
     var terminalPreferencesDirty by remember(processId) { mutableStateOf(false) }
     fun markTerminalPreferencesDirty() {
         terminalPreferencesDirty = true
@@ -775,7 +782,6 @@ private fun TerminalInteractivePanel(
         decodeTerminalConfig(settings.terminalExtraKeyItems, defaultTerminalExtraKeyItems())
     }
     var editingTerminalItems by remember { mutableStateOf<String?>(null) }
-    val density = LocalDensity.current
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val inputBarVisible = !rawInputMode || showFullInputBar
     val terminalInputBarHeight = if (inputBarVisible) 46.dp else 0.dp
@@ -785,6 +791,11 @@ private fun TerminalInteractivePanel(
     var lastRenderAt by remember(processId) { mutableLongStateOf(0L) }
     var viewportRestored by remember(processId) { mutableStateOf(false) }
     var keepBottomAfterNextLayout by remember(processId) { mutableStateOf(false) }
+    var imeVisibilityObserved by remember(processId) { mutableStateOf(false) }
+    var lastImeTransitionAt by remember(processId) { mutableLongStateOf(0L) }
+    var lastAppliedTerminalColumns by remember(processId) { mutableIntStateOf(initialTerminalColumns) }
+    var lastAppliedTerminalRows by remember(processId) { mutableIntStateOf(initialTerminalRows) }
+    val currentImeVisible by rememberUpdatedState(imeVisible)
 
     fun terminalNearBottom(thresholdPx: Int = terminalCellHeightPx * 2): Boolean =
         outputScroll.maxValue <= thresholdPx || outputScroll.value >= outputScroll.maxValue - thresholdPx
@@ -1093,14 +1104,33 @@ private fun TerminalInteractivePanel(
     }
 
     LaunchedEffect(imeVisible) {
-        keepBottomAfterNextLayout = autoScroll && terminalNearBottom()
+        if (imeVisibilityObserved) {
+            lastImeTransitionAt = System.currentTimeMillis()
+            keepBottomAfterNextLayout = autoScroll && terminalNearBottom()
+        } else {
+            imeVisibilityObserved = true
+        }
     }
 
     LaunchedEffect(processId, terminalColumns, terminalRows) {
+        val columnsChanged = terminalColumns != lastAppliedTerminalColumns
+        val rowsChanged = terminalRows != lastAppliedTerminalRows
+        val insideImeAnimationWindow = currentImeVisible ||
+            System.currentTimeMillis() - lastImeTransitionAt < TERMINAL_IME_RESIZE_DEBOUNCE_MS
+        // Let Compose layout follow IME movement immediately, but avoid resizing the
+        // terminal emulator / PTY on every keyboard animation frame. Column changes
+        // still apply immediately; only IME-driven row churn is debounced.
+        if (rowsChanged && !columnsChanged && insideImeAnimationWindow) {
+            delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
+        }
         val wasNearBottom = keepBottomAfterNextLayout || terminalNearBottom()
         terminalEmulator.resize(terminalColumns, terminalRows)
         renderTerminalFrame()
-        if (!imeVisible) bgManager.saveTerminalSizeHint(process.command, terminalColumns, terminalRows)
+        lastAppliedTerminalColumns = terminalColumns
+        lastAppliedTerminalRows = terminalRows
+        val imeStableForSizeHint = !currentImeVisible &&
+            System.currentTimeMillis() - lastImeTransitionAt >= TERMINAL_IME_RESIZE_DEBOUNCE_MS
+        if (imeStableForSizeHint) bgManager.saveTerminalSizeHint(process.command, terminalColumns, terminalRows)
         if (autoScroll && wasNearBottom) {
             withFrameNanos { }
             runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
@@ -1284,13 +1314,6 @@ private fun TerminalInteractivePanel(
                     .padding(horizontal = if (fullscreen) 4.dp else 6.dp, vertical = if (fullscreen) 3.dp else 5.dp)
                     .onSizeChanged { size ->
                         if (autoScroll && terminalNearBottom()) keepBottomAfterNextLayout = true
-                        val measuredCell = textMeasurer.measure("W", style = terminalTextStyle)
-                        val measuredLineHeight = with(density) { terminalTextStyle.lineHeight.toPx() }
-                            .roundToInt()
-                            .coerceAtLeast(measuredCell.size.height)
-                            .coerceAtLeast(1)
-                        terminalCellWidthPx = measuredCell.size.width.coerceAtLeast(1)
-                        terminalCellHeightPx = measuredLineHeight
                         val measuredCols = (size.width / terminalCellWidthPx).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
                         measuredTerminalColumns = measuredCols
                         val cols = (forcedTerminalColumns ?: measuredCols).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
