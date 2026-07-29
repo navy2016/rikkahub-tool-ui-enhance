@@ -33,21 +33,27 @@ class TerminalSmoothnessSourceTest {
     }
 
     @Test
-    fun imeResizeKeepsUiSmoothButDebouncesPtyResize() {
-        assertTrue(processSessionSource.contains("TERMINAL_IME_RESIZE_DEBOUNCE_MS"))
-        assertTrue(processSessionSource.contains("keepBottomAfterNextLayout"))
-        assertTrue(processSessionSource.contains("LaunchedEffect(imeVisible)"))
-        assertTrue(processSessionSource.contains("LaunchedEffect(processId, terminalColumns, terminalRows)"))
-        assertTrue(processSessionSource.contains("columnsChanged = terminalColumns != lastAppliedTerminalColumns"))
-        assertTrue(processSessionSource.contains("rowsChanged && !columnsChanged && insideImeAnimationWindow"))
-        assertTrue(processSessionSource.contains("val measuredCell = remember(terminalTextStyle, density)"))
-        assertFalse(processSessionSource.contains("var terminalCellWidthPx by remember"))
+    fun imeResizeKeepsAStableFrameUntilTheTuiRedraws() {
+        assertTrue(processSessionSource.contains("WindowInsets.isImeVisible"))
+        assertTrue(processSessionSource.contains("AtomicInteger(initialTerminalRows)"))
+        assertTrue(processSessionSource.contains("pendingImeRowResizeJob.getAndSet(null)?.cancel()"))
+        assertTrue(processSessionSource.contains("rows != measuredTerminalRows.getAndSet(rows)"))
+        assertTrue(processSessionSource.contains("imeResizePending.set(true)"))
         assertTrue(processSessionSource.contains("delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)"))
+        assertTrue(processSessionSource.contains("imeDrivenRowsChanged = rowsChanged && !columnsChanged && imeResizePending.get()"))
+        assertTrue(processSessionSource.contains("renderPending.set(false)"))
+        assertTrue(processSessionSource.contains("TERMINAL_RESIZE_RENDER_FALLBACK_MS"))
+        assertTrue(processSessionSource.contains("resizeRenderFallbackJob.getAndSet(null)?.cancel()"))
+        assertTrue(processSessionSource.contains("val renderJob = remember(processId) { AtomicReference<Job?>(null) }"))
+        assertTrue(processSessionSource.contains("snapshotFlow { Triple(outputScroll.maxValue, terminalRenderedRows.size, autoScroll) }"))
+        assertFalse(processSessionSource.contains("LaunchedEffect(imeVisible, terminalRows, terminalRenderedRows.size, outputScroll.maxValue"))
+        assertFalse(processSessionSource.contains("LaunchedEffect(processId, terminalRenderedRows.size, outputScroll.maxValue"))
         assertTrue(processSessionSource.contains("terminalEmulator.resize(terminalColumns, terminalRows)"))
-        assertTrue(processSessionSource.contains("delay(TERMINAL_PTY_RESIZE_DEBOUNCE_MS)"))
         assertTrue(processSessionSource.contains("imeStableForSizeHint"))
         assertTrue(processSessionSource.contains("bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)"))
-        assertFalse(processSessionSource.contains("pendingImeResizeJob"))
+        assertTrue(processSessionSource.contains("val measuredCell = remember(terminalTextStyle, density)"))
+        assertFalse(processSessionSource.contains("WindowInsets.ime.getBottom"))
+        assertFalse(processSessionSource.contains("var terminalCellWidthPx by remember"))
     }
 
     @Test
@@ -85,11 +91,27 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("TERMINAL_FAST_FLING_VELOCITY_PX"))
         assertTrue(processSessionSource.contains("TERMINAL_FAST_FLING_WINDOW_MS"))
         assertTrue(processSessionSource.contains("fastFlingCount < TERMINAL_FAST_FLING_REQUIRED_COUNT"))
-        assertTrue(processSessionSource.contains("terminalPanMode || selectionMode || !rawInputMode"))
+        assertTrue(processSessionSource.contains(".verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)"))
         assertTrue(processSessionSource.contains("if (!fastFlingEnabled) return Velocity.Zero"))
         assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(outputScroll.maxValue)"))
         assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(0)"))
         assertTrue(processSessionSource.contains(".nestedScroll(fastFlingConnection)"))
+    }
+
+    @Test
+    fun mouseModeOwnsTouchDragAndSerializesPtyInput() {
+        assertTrue(processSessionSource.contains("AtomicReference<MouseButton?>(null)"))
+        assertTrue(processSessionSource.contains("activeButton != null || event.buttonState != 0"))
+        assertTrue(processSessionSource.contains("MotionEvent.ACTION_CANCEL"))
+        assertTrue(processSessionSource.contains("activeTerminalMouseButton.set(button)"))
+        assertTrue(processSessionSource.contains("activeTerminalMouseButton.set(null)"))
+        assertTrue(processSessionSource.contains("sequence != null || hadActivePress"))
+        assertTrue(processSessionSource.contains(".verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)"))
+        assertFalse(processSessionSource.contains("enabled = terminalPanMode || selectionMode || !rawInputMode"))
+        assertTrue(processSessionSource.contains("Channel<String>(Channel.UNLIMITED)"))
+        assertTrue(processSessionSource.contains("rawInputChannel.trySend(sequence)"))
+        assertTrue(backgroundProcessManagerSource.contains("val inputMutex: Mutex = Mutex()"))
+        assertTrue(backgroundProcessManagerSource.contains("record.inputMutex.withLock"))
     }
 
     @Test

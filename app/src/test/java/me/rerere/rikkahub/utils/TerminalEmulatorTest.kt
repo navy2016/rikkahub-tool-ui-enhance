@@ -140,6 +140,49 @@ class TerminalEmulatorTest {
 
 
     @Test
+    fun sgrButtonDragAndReleaseKeepThePressedButton() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[?1002h\u001B[?1006h")
+
+        assertEquals(
+            "\u001B[<0;2;2M",
+            terminal.sequenceForMouse(TerminalEmulator.MouseEvent(
+                row = 1,
+                column = 1,
+                button = TerminalEmulator.MouseButton.LEFT,
+                type = TerminalEmulator.MouseEventType.PRESS
+            ))
+        )
+        assertEquals(
+            "\u001B[<32;6;2M",
+            terminal.sequenceForMouse(TerminalEmulator.MouseEvent(
+                row = 1,
+                column = 5,
+                button = TerminalEmulator.MouseButton.LEFT,
+                type = TerminalEmulator.MouseEventType.DRAG
+            ))
+        )
+        assertEquals(
+            "\u001B[<0;6;2m",
+            terminal.sequenceForMouse(TerminalEmulator.MouseEvent(
+                row = 1,
+                column = 5,
+                button = TerminalEmulator.MouseButton.LEFT,
+                type = TerminalEmulator.MouseEventType.RELEASE
+            ))
+        )
+        assertEquals(
+            "\u001B[<0;6;2m",
+            terminal.sequenceForMouse(TerminalEmulator.MouseEvent(
+                row = 1,
+                column = 5,
+                button = TerminalEmulator.MouseButton.RELEASE,
+                type = TerminalEmulator.MouseEventType.RELEASE
+            ))
+        )
+    }
+
+    @Test
     fun x10AndUrxvtMouseModesAreReportedCorrectly() {
         val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
         terminal.feed("[?9h")

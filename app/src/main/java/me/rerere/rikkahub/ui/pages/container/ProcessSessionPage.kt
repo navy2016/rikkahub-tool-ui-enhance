@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -101,9 +101,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -132,6 +134,9 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import java.security.MessageDigest
 
 private val TerminalConfigJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
@@ -140,6 +145,7 @@ private const val TERMINAL_RENDER_FRAME_MS = 33L
 private const val TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS = 100L
 private const val TERMINAL_PTY_RESIZE_DEBOUNCE_MS = 160L
 private const val TERMINAL_IME_RESIZE_DEBOUNCE_MS = 120L
+private const val TERMINAL_RESIZE_RENDER_FALLBACK_MS = 180L
 private const val TERMINAL_FAST_FLING_VELOCITY_PX = 3500f
 private const val TERMINAL_FAST_FLING_WINDOW_MS = 700L
 private const val TERMINAL_FAST_FLING_REQUIRED_COUNT = 2
@@ -763,6 +769,8 @@ private fun TerminalInteractivePanel(
     var terminalColumns by remember(processId) { mutableIntStateOf(initialTerminalColumns) }
     var terminalRows by remember(processId) { mutableIntStateOf(initialTerminalRows) }
     var measuredTerminalColumns by remember(processId) { mutableIntStateOf(initialTerminalColumns) }
+    val measuredTerminalRows = remember(processId) { AtomicInteger(initialTerminalRows) }
+    val pendingImeRowResizeJob = remember(processId) { AtomicReference<Job?>(null) }
     var forcedTerminalColumns by remember(processId) { mutableStateOf(savedPreference?.forcedTerminalColumns) }
     val density = LocalDensity.current
     val measuredCell = remember(terminalTextStyle, density) { textMeasurer.measure("W", style = terminalTextStyle) }
@@ -782,23 +790,32 @@ private fun TerminalInteractivePanel(
         decodeTerminalConfig(settings.terminalExtraKeyItems, defaultTerminalExtraKeyItems())
     }
     var editingTerminalItems by remember { mutableStateOf<String?>(null) }
-    val imeVisible = WindowInsets.ime.getBottom(density) > 0
+    val imeVisible = WindowInsets.isImeVisible
     val inputBarVisible = !rawInputMode || showFullInputBar
     val terminalInputBarHeight = if (inputBarVisible) 46.dp else 0.dp
     val terminalBottomRevealPadding = (if (showExtraKeys) 54.dp else 8.dp) + terminalInputBarHeight
+    val rawInputChannel = remember(processId) { Channel<String>(Channel.UNLIMITED) }
     val renderPending = remember(processId) { AtomicBoolean(false) }
-    var renderJob by remember(processId) { mutableStateOf<Job?>(null) }
-    var lastRenderAt by remember(processId) { mutableLongStateOf(0L) }
-    var viewportRestored by remember(processId) { mutableStateOf(false) }
-    var keepBottomAfterNextLayout by remember(processId) { mutableStateOf(false) }
-    var imeVisibilityObserved by remember(processId) { mutableStateOf(false) }
-    var lastImeTransitionAt by remember(processId) { mutableLongStateOf(0L) }
-    var lastAppliedTerminalColumns by remember(processId) { mutableIntStateOf(initialTerminalColumns) }
-    var lastAppliedTerminalRows by remember(processId) { mutableIntStateOf(initialTerminalRows) }
+    val renderJob = remember(processId) { AtomicReference<Job?>(null) }
+    val resizeRenderFallbackJob = remember(processId) { AtomicReference<Job?>(null) }
+    val lastRenderAt = remember(processId) { AtomicLong(0L) }
+    val keepBottomAfterNextLayout = remember(processId) { AtomicBoolean(false) }
+    val lastObservedImeVisible = remember(processId) { AtomicBoolean(imeVisible) }
+    val lastImeTransitionAt = remember(processId) { AtomicLong(0L) }
+    val lastAppliedTerminalColumns = remember(processId) { AtomicInteger(initialTerminalColumns) }
+    val lastAppliedTerminalRows = remember(processId) { AtomicInteger(initialTerminalRows) }
+    val imeResizePending = remember(processId) { AtomicBoolean(false) }
+    val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
     val currentImeVisible by rememberUpdatedState(imeVisible)
 
     fun terminalNearBottom(thresholdPx: Int = terminalCellHeightPx * 2): Boolean =
         outputScroll.maxValue <= thresholdPx || outputScroll.value >= outputScroll.maxValue - thresholdPx
+
+    fun recordImeTransition(visible: Boolean) {
+        if (lastObservedImeVisible.getAndSet(visible) == visible) return
+        lastImeTransitionAt.set(System.currentTimeMillis())
+        keepBottomAfterNextLayout.set(autoScroll && terminalNearBottom())
+    }
 
     fun saveTerminalViewport() {
         bgManager.saveTerminalViewportState(
@@ -822,15 +839,16 @@ private fun TerminalInteractivePanel(
     fun renderTerminalFrame() {
         terminalRenderedRows = terminalEmulator.renderRows()
         terminalModeSummary = terminalEmulator.modeSummary()
-        lastRenderAt = System.currentTimeMillis()
+        lastRenderAt.set(System.currentTimeMillis())
     }
 
     fun scheduleTerminalRender() {
+        resizeRenderFallbackJob.getAndSet(null)?.cancel()
         renderPending.set(true)
-        if (renderJob?.isActive == true) return
-        renderJob = scope.launch {
+        if (renderJob.get()?.isActive == true) return
+        renderJob.set(scope.launch {
             while (renderPending.getAndSet(false)) {
-                val elapsed = System.currentTimeMillis() - lastRenderAt
+                val elapsed = System.currentTimeMillis() - lastRenderAt.get()
                 if (elapsed in 0 until TERMINAL_RENDER_FRAME_MS) {
                     delay(TERMINAL_RENDER_FRAME_MS - elapsed)
                 }
@@ -848,7 +866,7 @@ private fun TerminalInteractivePanel(
                     runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
                 }
             }
-        }
+        })
     }
 
     LaunchedEffect(processId) {
@@ -907,10 +925,8 @@ private fun TerminalInteractivePanel(
     }
 
     fun sendRaw(sequence: String) {
-        scope.launch {
-            val result = bgManager.sendInput(processId, sequence, appendNewline = false)
-            result.exceptionOrNull()?.let { terminalStatus = it.message ?: "发送失败" }
-        }
+        if (sequence.isEmpty()) return
+        if (!rawInputChannel.trySend(sequence).isSuccess) terminalStatus = "发送失败"
     }
 
     fun clearModifierLatches() {
@@ -1055,6 +1071,13 @@ private fun TerminalInteractivePanel(
         renderTerminalFrame()
     }
 
+    LaunchedEffect(processId, rawInputChannel) {
+        for (sequence in rawInputChannel) {
+            val result = bgManager.sendInput(processId, sequence, appendNewline = false)
+            result.exceptionOrNull()?.let { terminalStatus = it.message ?: "发送失败" }
+        }
+    }
+
     LaunchedEffect(processId, outputScroll) {
         snapshotFlow { Triple(outputScroll.isScrollInProgress, outputScroll.value, outputScroll.maxValue) }
             .distinctUntilChanged()
@@ -1104,49 +1127,58 @@ private fun TerminalInteractivePanel(
     }
 
     LaunchedEffect(imeVisible) {
-        if (imeVisibilityObserved) {
-            lastImeTransitionAt = System.currentTimeMillis()
-            keepBottomAfterNextLayout = autoScroll && terminalNearBottom()
-        } else {
-            imeVisibilityObserved = true
-        }
+        recordImeTransition(imeVisible)
     }
 
     LaunchedEffect(processId, terminalColumns, terminalRows) {
-        val columnsChanged = terminalColumns != lastAppliedTerminalColumns
-        val rowsChanged = terminalRows != lastAppliedTerminalRows
-        val insideImeAnimationWindow = currentImeVisible ||
-            System.currentTimeMillis() - lastImeTransitionAt < TERMINAL_IME_RESIZE_DEBOUNCE_MS
-        // Let Compose layout follow IME movement immediately, but avoid resizing the
-        // terminal emulator / PTY on every keyboard animation frame. Column changes
-        // still apply immediately; only IME-driven row churn is debounced.
-        if (rowsChanged && !columnsChanged && insideImeAnimationWindow) {
-            delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
+        val columnsChanged = terminalColumns != lastAppliedTerminalColumns.get()
+        val rowsChanged = terminalRows != lastAppliedTerminalRows.get()
+        val imeDrivenRowsChanged = rowsChanged && !columnsChanged && imeResizePending.get()
+        if (rowsChanged) imeResizePending.set(false)
+
+        val wasNearBottom = keepBottomAfterNextLayout.get() || terminalNearBottom()
+        if (imeDrivenRowsChanged) {
+            // Keep the last complete frame visible until the TUI redraws for SIGWINCH.
+            // Showing the locally resized buffer first produces a blank intermediate frame.
+            resizeRenderFallbackJob.getAndSet(null)?.cancel()
+            renderJob.getAndSet(null)?.cancel()
+            renderPending.set(false)
         }
-        val wasNearBottom = keepBottomAfterNextLayout || terminalNearBottom()
         terminalEmulator.resize(terminalColumns, terminalRows)
-        renderTerminalFrame()
-        lastAppliedTerminalColumns = terminalColumns
-        lastAppliedTerminalRows = terminalRows
+        lastAppliedTerminalColumns.set(terminalColumns)
+        lastAppliedTerminalRows.set(terminalRows)
         val imeStableForSizeHint = !currentImeVisible &&
-            System.currentTimeMillis() - lastImeTransitionAt >= TERMINAL_IME_RESIZE_DEBOUNCE_MS
+            System.currentTimeMillis() - lastImeTransitionAt.get() >= TERMINAL_IME_RESIZE_DEBOUNCE_MS
         if (imeStableForSizeHint) bgManager.saveTerminalSizeHint(process.command, terminalColumns, terminalRows)
+
+        if (imeDrivenRowsChanged) {
+            resizeRenderFallbackJob.set(scope.launch {
+                delay(TERMINAL_RESIZE_RENDER_FALLBACK_MS)
+                renderTerminalFrame()
+                if (autoScroll && wasNearBottom) {
+                    withFrameNanos { }
+                    runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+                }
+            })
+            bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)
+        } else {
+            renderTerminalFrame()
+            delay(TERMINAL_PTY_RESIZE_DEBOUNCE_MS)
+            bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)
+        }
         if (autoScroll && wasNearBottom) {
             withFrameNanos { }
             runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
         }
-        keepBottomAfterNextLayout = false
-        delay(TERMINAL_PTY_RESIZE_DEBOUNCE_MS)
-        bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)
+        keepBottomAfterNextLayout.set(false)
     }
 
-    LaunchedEffect(processId, terminalRenderedRows.size, outputScroll.maxValue, horizontalScroll.maxValue) {
-        if (viewportRestored) return@LaunchedEffect
-        val restored = restoredViewportState ?: run {
-            viewportRestored = true
-            return@LaunchedEffect
-        }
-        if (!restored.atBottom && restored.verticalOffsetPx > 0 && outputScroll.maxValue == 0) return@LaunchedEffect
+    LaunchedEffect(processId, restoredViewportState) {
+        val restored = restoredViewportState ?: return@LaunchedEffect
+        snapshotFlow { terminalRenderedRows.size to outputScroll.maxValue }
+            .first { (renderedRows, maxValue) ->
+                renderedRows > 0 && (restored.atBottom || restored.verticalOffsetPx <= 0 || maxValue > 0)
+            }
         withFrameNanos { }
         if (restored.atBottom && restored.autoScroll) {
             runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
@@ -1154,7 +1186,6 @@ private fun TerminalInteractivePanel(
             runCatching { outputScroll.scrollTo(restored.verticalOffsetPx.coerceIn(0, outputScroll.maxValue)) }
         }
         runCatching { horizontalScroll.scrollTo(restored.horizontalOffsetPx.coerceIn(0, horizontalScroll.maxValue)) }
-        viewportRestored = true
     }
 
     LaunchedEffect(processId, outputScroll, horizontalScroll) {
@@ -1165,14 +1196,22 @@ private fun TerminalInteractivePanel(
 
     DisposableEffect(processId) {
         onDispose {
+            pendingImeRowResizeJob.getAndSet(null)?.cancel()
+            renderJob.getAndSet(null)?.cancel()
+            resizeRenderFallbackJob.getAndSet(null)?.cancel()
+            rawInputChannel.close()
             saveTerminalViewport()
         }
     }
 
-    LaunchedEffect(imeVisible, terminalRows, terminalRenderedRows.size, outputScroll.maxValue, autoScroll) {
-        if (!autoScroll || !terminalNearBottom()) return@LaunchedEffect
-        withFrameNanos { }
-        runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+    LaunchedEffect(processId, outputScroll) {
+        snapshotFlow { Triple(outputScroll.maxValue, terminalRenderedRows.size, autoScroll) }
+            .distinctUntilChanged()
+            .collect { (_, _, followBottom) ->
+                if (!followBottom) return@collect
+                withFrameNanos { }
+                runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+            }
     }
 
     LaunchedEffect(processId) {
@@ -1313,13 +1352,25 @@ private fun TerminalInteractivePanel(
                     .background(terminalBackground, RoundedCornerShape(if (fullscreen) 0.dp else 8.dp))
                     .padding(horizontal = if (fullscreen) 4.dp else 6.dp, vertical = if (fullscreen) 3.dp else 5.dp)
                     .onSizeChanged { size ->
-                        if (autoScroll && terminalNearBottom()) keepBottomAfterNextLayout = true
+                        if (autoScroll && terminalNearBottom()) keepBottomAfterNextLayout.set(true)
                         val measuredCols = (size.width / terminalCellWidthPx).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
                         measuredTerminalColumns = measuredCols
                         val cols = (forcedTerminalColumns ?: measuredCols).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
                         val rows = (size.height / terminalCellHeightPx).coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
                         if (cols != terminalColumns) terminalColumns = cols
-                        if (rows != terminalRows) terminalRows = rows
+                        if (rows != measuredTerminalRows.getAndSet(rows)) {
+                            recordImeTransition(currentImeVisible)
+                            pendingImeRowResizeJob.getAndSet(null)?.cancel()
+                            val insideImeAnimationWindow = currentImeVisible || imeResizePending.get() ||
+                                System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
+                            if (insideImeAnimationWindow) imeResizePending.set(true)
+                            pendingImeRowResizeJob.set(scope.launch {
+                                if (insideImeAnimationWindow) delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
+                                if (measuredTerminalRows.get() == rows) {
+                                    if (rows != terminalRows) terminalRows = rows else imeResizePending.set(false)
+                                }
+                            })
+                        }
                     }
                     .onFocusChanged { focusState ->
                         terminalEmulator.sequenceForFocus(focusState.isFocused)?.let { sequence -> sendRaw(sequence) }
@@ -1340,25 +1391,34 @@ private fun TerminalInteractivePanel(
                         val absoluteY = event.y + if (terminalEmulator.isAlternateScreen) 0 else outputScroll.value
                         val col = (absoluteX.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
                         val row = (absoluteY.toInt() / terminalCellHeightPx).coerceIn(0, terminalRows - 1)
+                        val activeButton = activeTerminalMouseButton.get()
                         val eventType = when (event.actionMasked) {
                             MotionEvent.ACTION_DOWN -> MouseEventType.PRESS
-                            MotionEvent.ACTION_UP -> MouseEventType.RELEASE
-                            MotionEvent.ACTION_MOVE -> if (event.buttonState != 0) MouseEventType.DRAG else MouseEventType.MOVE
+                            MotionEvent.ACTION_BUTTON_PRESS -> if (activeButton == null) MouseEventType.PRESS else return@pointerInteropFilter true
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> MouseEventType.RELEASE
+                            MotionEvent.ACTION_BUTTON_RELEASE -> if (activeButton != null) MouseEventType.RELEASE else return@pointerInteropFilter false
+                            MotionEvent.ACTION_MOVE -> if (activeButton != null || event.buttonState != 0) MouseEventType.DRAG else MouseEventType.MOVE
+                            MotionEvent.ACTION_HOVER_MOVE -> MouseEventType.MOVE
                             MotionEvent.ACTION_SCROLL -> MouseEventType.WHEEL
-                            else -> return@pointerInteropFilter true
+                            else -> return@pointerInteropFilter false
+                        }
+                        val pressedButton = when {
+                            event.buttonState and MotionEvent.BUTTON_SECONDARY != 0 || event.actionButton == MotionEvent.BUTTON_SECONDARY -> MouseButton.RIGHT
+                            event.buttonState and MotionEvent.BUTTON_TERTIARY != 0 || event.actionButton == MotionEvent.BUTTON_TERTIARY -> MouseButton.MIDDLE
+                            else -> MouseButton.LEFT
                         }
                         val button = when {
                             eventType == MouseEventType.WHEEL && event.getAxisValue(MotionEvent.AXIS_VSCROLL) < 0f -> MouseButton.WHEEL_DOWN
                             eventType == MouseEventType.WHEEL -> MouseButton.WHEEL_UP
-                            eventType == MouseEventType.RELEASE -> MouseButton.RELEASE
-                            event.buttonState and MotionEvent.BUTTON_SECONDARY != 0 -> MouseButton.RIGHT
-                            event.buttonState and MotionEvent.BUTTON_TERTIARY != 0 -> MouseButton.MIDDLE
-                            else -> MouseButton.LEFT
+                            eventType == MouseEventType.DRAG || eventType == MouseEventType.RELEASE -> activeButton ?: pressedButton
+                            else -> pressedButton
                         }
+                        val hadActivePress = activeButton != null
                         val sequence = terminalEmulator.sequenceForMouse(MouseEvent(row = row, column = col, button = button, type = eventType))
-                            ?: return@pointerInteropFilter false
-                        sendRaw(sequence)
-                        true
+                        if (eventType == MouseEventType.PRESS && sequence != null) activeTerminalMouseButton.set(button)
+                        if (eventType == MouseEventType.RELEASE) activeTerminalMouseButton.set(null)
+                        if (sequence != null) sendRaw(sequence)
+                        sequence != null || hadActivePress
                     })
             ) {
                 Column(
@@ -1369,7 +1429,7 @@ private fun TerminalInteractivePanel(
                         // Keep a tiny manual viewport pan available in TOUCH/selection modes. In
                         // MOUSE mode, do not let Compose scroll gestures compete with xterm mouse
                         // events intended for the TUI.
-                        .verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode || !rawInputMode)
+                        .verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)
                 ) {
                     val terminalContent: @Composable () -> Unit = {
                         if (terminalRenderedRows.isEmpty()) {

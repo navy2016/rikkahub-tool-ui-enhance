@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.service.ContainerProcessForegroundService
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -1257,6 +1259,7 @@ class BackgroundProcessManager @Inject constructor(
         var stdoutJob: Job? = null,
         var stderrJob: Job? = null,
         var waiterJob: Job? = null,
+        val inputMutex: Mutex = Mutex(),
         val createdAt: Long = System.currentTimeMillis(),
         var startedAt: Long? = System.currentTimeMillis(),
         var exitedAt: Long? = null,
@@ -1595,9 +1598,11 @@ class BackgroundProcessManager @Inject constructor(
             } else {
                 input.toByteArray(Charsets.UTF_8)
             }
-            record.process.outputStream.write(bytes)
-            record.process.outputStream.flush()
-            record.lastActivityAt = System.currentTimeMillis()
+            record.inputMutex.withLock {
+                record.process.outputStream.write(bytes)
+                record.process.outputStream.flush()
+                record.lastActivityAt = System.currentTimeMillis()
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error sending input to session: $processId", e)
@@ -1623,9 +1628,11 @@ class BackgroundProcessManager @Inject constructor(
             } else {
                 controlInputBytes(control)
             }
-            record.process.outputStream.write(bytes)
-            record.process.outputStream.flush()
-            record.lastActivityAt = System.currentTimeMillis()
+            record.inputMutex.withLock {
+                record.process.outputStream.write(bytes)
+                record.process.outputStream.flush()
+                record.lastActivityAt = System.currentTimeMillis()
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error sending control input to session: $processId", e)

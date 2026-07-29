@@ -548,7 +548,13 @@ class TerminalEmulator(
             MouseButton.WHEEL_LEFT -> 66
             MouseButton.WHEEL_RIGHT -> 67
         }
-        if (event.type == MouseEventType.RELEASE) code = 3
+        if (event.type == MouseEventType.RELEASE) {
+            code = when {
+                mouseProtocol !in setOf(MouseProtocol.SGR, MouseProtocol.SGR_PIXELS) -> 3
+                event.button == MouseButton.RELEASE -> 0
+                else -> code
+            }
+        }
         if (event.type == MouseEventType.DRAG) code += 32
         if (event.shift) code += 4
         if (event.alt) code += 8
