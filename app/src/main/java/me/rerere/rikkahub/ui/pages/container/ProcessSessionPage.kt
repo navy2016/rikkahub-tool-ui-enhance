@@ -24,6 +24,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -709,7 +712,10 @@ private fun TerminalInteractivePanel(
     val context = LocalContext.current
     val processId = process.processId
     val restoredViewportState = remember(processId) { bgManager.getTerminalViewportState(processId) }
+    // Full-history scroll is kept only for explicit text selection. Normal terminal rendering
+    // uses LazyColumn so IME animation never measures the entire scrollback.
     val outputScroll = rememberScrollState(restoredViewportState?.verticalOffsetPx ?: 0)
+    val terminalListState = rememberLazyListState()
     val horizontalScroll = rememberScrollState(restoredViewportState?.horizontalOffsetPx ?: 0)
     val inputFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -754,7 +760,9 @@ private fun TerminalInteractivePanel(
             "npm config set prefix /usr/local && npm config set cache /tmp/npm-cache && npm config set python /usr/bin/python3)"
     }
     var input by remember { mutableStateOf("") }
-    var terminalRenderedRows by remember { mutableStateOf(terminalEmulator.renderRows()) }
+    var terminalRenderRevision by remember(processId) { mutableIntStateOf(0) }
+    var terminalRenderedRowCount by remember(processId) { mutableIntStateOf(terminalEmulator.renderedRowCount()) }
+    var terminalScreenStartRow by remember(processId) { mutableIntStateOf(terminalEmulator.screenStartRow()) }
     var terminalModeSummary by remember { mutableStateOf(terminalEmulator.modeSummary()) }
     var terminalStatus by remember { mutableStateOf("就绪") }
     var autoScroll by remember(processId) { mutableStateOf(restoredViewportState?.autoScroll ?: savedPreference?.autoScroll ?: true) }
@@ -779,6 +787,8 @@ private fun TerminalInteractivePanel(
         .roundToInt()
         .coerceAtLeast(measuredCell.size.height)
         .coerceAtLeast(1)
+    val terminalCellHeightDp = with(density) { terminalCellHeightPx.toDp() }
+    val terminalContentWidth = with(density) { (terminalColumns * terminalCellWidthPx).toDp() }
     var terminalPreferencesDirty by remember(processId) { mutableStateOf(false) }
     fun markTerminalPreferencesDirty() {
         terminalPreferencesDirty = true
@@ -806,10 +816,40 @@ private fun TerminalInteractivePanel(
     val lastAppliedTerminalRows = remember(processId) { AtomicInteger(initialTerminalRows) }
     val imeResizePending = remember(processId) { AtomicBoolean(false) }
     val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
+    val activeTerminalMousePosition = remember(processId) { AtomicReference<MouseEvent?>(null) }
     val currentImeVisible by rememberUpdatedState(imeVisible)
 
-    fun terminalNearBottom(thresholdPx: Int = terminalCellHeightPx * 2): Boolean =
-        outputScroll.maxValue <= thresholdPx || outputScroll.value >= outputScroll.maxValue - thresholdPx
+    fun terminalNearBottom(thresholdPx: Int = terminalCellHeightPx * 2): Boolean {
+        if (selectionMode) {
+            return outputScroll.maxValue <= thresholdPx ||
+                outputScroll.value >= outputScroll.maxValue - thresholdPx
+        }
+        val layout = terminalListState.layoutInfo
+        val lastVisible = layout.visibleItemsInfo.lastOrNull() ?: return true
+        return terminalRenderedRowCount == 0 ||
+            (lastVisible.index >= terminalRenderedRowCount - 1 &&
+                lastVisible.offset + lastVisible.size <= layout.viewportEndOffset + thresholdPx)
+    }
+
+    suspend fun scrollTerminalToBottom() {
+        if (selectionMode) {
+            outputScroll.scrollTo(outputScroll.maxValue)
+        } else if (terminalRenderedRowCount > 0) {
+            terminalListState.scrollToItem(terminalRenderedRowCount - 1)
+        }
+    }
+
+    suspend fun animateTerminalToTop() {
+        if (selectionMode) outputScroll.animateScrollTo(0) else terminalListState.animateScrollToItem(0)
+    }
+
+    suspend fun animateTerminalToBottom() {
+        if (selectionMode) {
+            outputScroll.animateScrollTo(outputScroll.maxValue)
+        } else if (terminalRenderedRowCount > 0) {
+            terminalListState.animateScrollToItem(terminalRenderedRowCount - 1)
+        }
+    }
 
     fun recordImeTransition(visible: Boolean) {
         if (lastObservedImeVisible.getAndSet(visible) == visible) return
@@ -818,12 +858,16 @@ private fun TerminalInteractivePanel(
     }
 
     fun saveTerminalViewport() {
+        val firstVisibleRow = if (selectionMode) null else terminalListState.firstVisibleItemIndex
+        val firstVisibleOffset = if (selectionMode) 0 else terminalListState.firstVisibleItemScrollOffset
         bgManager.saveTerminalViewportState(
             processId = processId,
-            verticalOffsetPx = outputScroll.value,
+            verticalOffsetPx = if (selectionMode) outputScroll.value else firstVisibleRow * terminalCellHeightPx + firstVisibleOffset,
             horizontalOffsetPx = horizontalScroll.value,
             autoScroll = autoScroll,
-            atBottom = terminalNearBottom()
+            atBottom = terminalNearBottom(),
+            firstVisibleRow = firstVisibleRow,
+            firstVisibleRowOffsetPx = firstVisibleOffset
         )
     }
 
@@ -837,8 +881,12 @@ private fun TerminalInteractivePanel(
     }
 
     fun renderTerminalFrame() {
-        terminalRenderedRows = terminalEmulator.renderRows()
+        // Only metadata changes here. LazyColumn renders visible rows on demand, avoiding
+        // a full AnnotatedString allocation for every scrollback line on output/IME resize.
+        terminalRenderedRowCount = terminalEmulator.renderedRowCount()
+        terminalScreenStartRow = terminalEmulator.screenStartRow()
         terminalModeSummary = terminalEmulator.modeSummary()
+        terminalRenderRevision++
         lastRenderAt.set(System.currentTimeMillis())
     }
 
@@ -857,16 +905,18 @@ private fun TerminalInteractivePanel(
                     delay(16L)
                     syncWaited += 16L
                 }
-                val bottomThreshold = terminalCellHeightPx * 2
-                val wasNearBottom = outputScroll.maxValue <= bottomThreshold ||
-                    outputScroll.value >= outputScroll.maxValue - bottomThreshold
+                val wasNearBottom = terminalNearBottom()
                 renderTerminalFrame()
                 if (!terminalEmulator.isAlternateScreen && autoScroll && wasNearBottom) {
                     withFrameNanos { }
-                    runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+                    runCatching { scrollTerminalToBottom() }
                 }
             }
         })
+    }
+
+    LaunchedEffect(processId, terminalCellWidthPx, terminalCellHeightPx) {
+        terminalEmulator.setCellPixelSize(terminalCellWidthPx, terminalCellHeightPx)
     }
 
     LaunchedEffect(processId) {
@@ -1078,12 +1128,22 @@ private fun TerminalInteractivePanel(
         }
     }
 
-    LaunchedEffect(processId, outputScroll) {
-        snapshotFlow { Triple(outputScroll.isScrollInProgress, outputScroll.value, outputScroll.maxValue) }
+    LaunchedEffect(processId, outputScroll, terminalListState) {
+        snapshotFlow {
+            if (selectionMode) {
+                Triple(outputScroll.isScrollInProgress, outputScroll.value, outputScroll.maxValue)
+            } else {
+                Triple(
+                    terminalListState.isScrollInProgress,
+                    terminalListState.firstVisibleItemIndex,
+                    terminalListState.layoutInfo.totalItemsCount
+                )
+            }
+        }
             .distinctUntilChanged()
-            .collect { (scrolling, value, maxValue) ->
+            .collect { (scrolling, _, _) ->
                 if (!scrolling) return@collect
-                val nearBottom = maxValue <= terminalCellHeightPx * 2 || value >= maxValue - terminalCellHeightPx * 2
+                val nearBottom = terminalNearBottom()
                 if (autoScroll != nearBottom) autoScroll = nearBottom
             }
     }
@@ -1157,7 +1217,7 @@ private fun TerminalInteractivePanel(
                 renderTerminalFrame()
                 if (autoScroll && wasNearBottom) {
                     withFrameNanos { }
-                    runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+                    runCatching { scrollTerminalToBottom() }
                 }
             })
             bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)
@@ -1168,28 +1228,35 @@ private fun TerminalInteractivePanel(
         }
         if (autoScroll && wasNearBottom) {
             withFrameNanos { }
-            runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+            runCatching { scrollTerminalToBottom() }
         }
         keepBottomAfterNextLayout.set(false)
     }
 
     LaunchedEffect(processId, restoredViewportState) {
         val restored = restoredViewportState ?: return@LaunchedEffect
-        snapshotFlow { terminalRenderedRows.size to outputScroll.maxValue }
-            .first { (renderedRows, maxValue) ->
-                renderedRows > 0 && (restored.atBottom || restored.verticalOffsetPx <= 0 || maxValue > 0)
-            }
+        snapshotFlow { terminalRenderedRowCount }
+            .first { it > 0 }
         withFrameNanos { }
         if (restored.atBottom && restored.autoScroll) {
-            runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+            runCatching { scrollTerminalToBottom() }
         } else {
-            runCatching { outputScroll.scrollTo(restored.verticalOffsetPx.coerceIn(0, outputScroll.maxValue)) }
+            val fallbackRow = restored.verticalOffsetPx / terminalCellHeightPx
+            val fallbackOffset = restored.verticalOffsetPx % terminalCellHeightPx
+            val row = (restored.firstVisibleRow ?: fallbackRow)
+                .coerceIn(0, (terminalRenderedRowCount - 1).coerceAtLeast(0))
+            val offset = restored.firstVisibleRow?.let { restored.firstVisibleRowOffsetPx } ?: fallbackOffset
+            runCatching { terminalListState.scrollToItem(row, offset.coerceAtLeast(0)) }
         }
         runCatching { horizontalScroll.scrollTo(restored.horizontalOffsetPx.coerceIn(0, horizontalScroll.maxValue)) }
     }
 
-    LaunchedEffect(processId, outputScroll, horizontalScroll) {
-        snapshotFlow { Triple(outputScroll.value, horizontalScroll.value, autoScroll) }
+    LaunchedEffect(processId, outputScroll, horizontalScroll, terminalListState) {
+        snapshotFlow {
+            val vertical = if (selectionMode) outputScroll.value else terminalListState.firstVisibleItemIndex
+            val offset = if (selectionMode) outputScroll.maxValue else terminalListState.firstVisibleItemScrollOffset
+            (vertical to offset) to (horizontalScroll.value to autoScroll)
+        }
             .distinctUntilChanged()
             .collect { saveTerminalViewport() }
     }
@@ -1204,13 +1271,13 @@ private fun TerminalInteractivePanel(
         }
     }
 
-    LaunchedEffect(processId, outputScroll) {
-        snapshotFlow { Triple(outputScroll.maxValue, terminalRenderedRows.size, autoScroll) }
+    LaunchedEffect(processId, outputScroll, terminalListState) {
+        snapshotFlow { Triple(selectionMode, terminalRenderRevision, autoScroll) }
             .distinctUntilChanged()
             .collect { (_, _, followBottom) ->
                 if (!followBottom) return@collect
                 withFrameNanos { }
-                runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+                runCatching { scrollTerminalToBottom() }
             }
     }
 
@@ -1252,16 +1319,22 @@ private fun TerminalInteractivePanel(
                 fastFlingCount = 0
                 var consumed = false
                 if (direction > 0) {
-                    if (outputScroll.maxValue - outputScroll.value > TERMINAL_EDGE_THRESHOLD_PX) {
+                    if (!terminalNearBottom()) {
                         autoScroll = true
-                        outputScroll.animateScrollTo(outputScroll.maxValue)
+                        animateTerminalToBottom()
                         saveTerminalViewport()
                         consumed = true
                     }
                 } else {
-                    if (outputScroll.value > TERMINAL_EDGE_THRESHOLD_PX) {
+                    val awayFromTop = if (selectionMode) {
+                        outputScroll.value > TERMINAL_EDGE_THRESHOLD_PX
+                    } else {
+                        terminalListState.firstVisibleItemIndex > 0 ||
+                            terminalListState.firstVisibleItemScrollOffset > TERMINAL_EDGE_THRESHOLD_PX
+                    }
+                    if (awayFromTop) {
                         autoScroll = false
-                        outputScroll.animateScrollTo(0)
+                        animateTerminalToTop()
                         saveTerminalViewport()
                         consumed = true
                     }
@@ -1387,10 +1460,6 @@ private fun TerminalInteractivePanel(
                         }
                     }
                     .then(if (selectionMode || terminalPanMode) Modifier else Modifier.pointerInteropFilter { event ->
-                        val absoluteX = event.x + horizontalScroll.value
-                        val absoluteY = event.y + if (terminalEmulator.isAlternateScreen) 0 else outputScroll.value
-                        val col = (absoluteX.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
-                        val row = (absoluteY.toInt() / terminalCellHeightPx).coerceIn(0, terminalRows - 1)
                         val activeButton = activeTerminalMouseButton.get()
                         val eventType = when (event.actionMasked) {
                             MotionEvent.ACTION_DOWN -> MouseEventType.PRESS
@@ -1402,6 +1471,28 @@ private fun TerminalInteractivePanel(
                             MotionEvent.ACTION_SCROLL -> MouseEventType.WHEEL
                             else -> return@pointerInteropFilter false
                         }
+                        // Resolve the actual LazyColumn row under the pointer. This keeps hit
+                        // testing exact with history, fixed row height, and IME viewport changes.
+                        val hitItem = terminalListState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+                            event.y >= item.offset && event.y < item.offset + item.size
+                        }
+                        val terminalRow = hitItem?.index?.minus(terminalScreenStartRow)
+                        if (terminalRow == null || terminalRow !in 0 until terminalRows) {
+                            if (eventType == MouseEventType.RELEASE) {
+                                val lastEvent = activeTerminalMousePosition.getAndSet(null)
+                                activeTerminalMouseButton.set(null)
+                                lastEvent?.let { previous ->
+                                    terminalEmulator.sequenceForMouse(previous.copy(
+                                        button = activeButton ?: previous.button,
+                                        type = MouseEventType.RELEASE
+                                    ))?.let(::sendRaw)
+                                }
+                            }
+                            return@pointerInteropFilter activeButton != null
+                        }
+                        val localY = (event.y - hitItem.offset).toInt().coerceIn(0, (hitItem.size - 1).coerceAtLeast(0))
+                        val absoluteX = event.x.toInt() + horizontalScroll.value
+                        val col = (absoluteX / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
                         val pressedButton = when {
                             event.buttonState and MotionEvent.BUTTON_SECONDARY != 0 || event.actionButton == MotionEvent.BUTTON_SECONDARY -> MouseButton.RIGHT
                             event.buttonState and MotionEvent.BUTTON_TERTIARY != 0 || event.actionButton == MotionEvent.BUTTON_TERTIARY -> MouseButton.MIDDLE
@@ -1413,55 +1504,99 @@ private fun TerminalInteractivePanel(
                             eventType == MouseEventType.DRAG || eventType == MouseEventType.RELEASE -> activeButton ?: pressedButton
                             else -> pressedButton
                         }
-                        val hadActivePress = activeButton != null
-                        val sequence = terminalEmulator.sequenceForMouse(MouseEvent(row = row, column = col, button = button, type = eventType))
-                        if (eventType == MouseEventType.PRESS && sequence != null) activeTerminalMouseButton.set(button)
-                        if (eventType == MouseEventType.RELEASE) activeTerminalMouseButton.set(null)
+                        val mouseEvent = MouseEvent(
+                            row = terminalRow,
+                            column = col,
+                            button = button,
+                            type = eventType,
+                            pixelX = absoluteX,
+                            pixelY = terminalRow * terminalCellHeightPx + localY
+                        )
+                        val sequence = terminalEmulator.sequenceForMouse(mouseEvent)
+                        if (eventType == MouseEventType.PRESS && sequence != null) {
+                            activeTerminalMouseButton.set(button)
+                            activeTerminalMousePosition.set(mouseEvent)
+                        }
+                        if (eventType == MouseEventType.DRAG && sequence != null) activeTerminalMousePosition.set(mouseEvent)
+                        if (eventType == MouseEventType.RELEASE) {
+                            activeTerminalMouseButton.set(null)
+                            activeTerminalMousePosition.set(null)
+                        }
                         if (sequence != null) sendRaw(sequence)
-                        sequence != null || hadActivePress
+                        sequence != null || activeButton != null
                     })
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .nestedScroll(fastFlingConnection)
-                        .horizontalScroll(horizontalScroll, enabled = terminalPanMode || selectionMode)
-                        // Keep a tiny manual viewport pan available in TOUCH/selection modes. In
-                        // MOUSE mode, do not let Compose scroll gestures compete with xterm mouse
-                        // events intended for the TUI.
-                        .verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)
-                ) {
-                    val terminalContent: @Composable () -> Unit = {
-                        if (terminalRenderedRows.isEmpty()) {
-                            Text(
-                                text = "等待输出...",
-                                style = terminalTextStyle,
-                                softWrap = false,
-                                maxLines = 1
+                if (selectionMode) {
+                    // Selection is intentionally the only full-history path: it is an explicit
+                    // user action, while normal output remains virtualized.
+                    val selectionRows = remember(terminalRenderRevision) { terminalEmulator.renderRows() }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .nestedScroll(fastFlingConnection)
+                            .horizontalScroll(horizontalScroll, enabled = true)
+                            .verticalScroll(outputScroll, enabled = true)
+                    ) {
+                        SelectionContainer {
+                            Column {
+                                selectionRows.forEach { row ->
+                                    Text(
+                                        text = row.text,
+                                        style = terminalTextStyle,
+                                        softWrap = false,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(
+                            modifier = Modifier.height(
+                                if (terminalEmulator.isAlternateScreen) terminalBottomRevealPadding else 8.dp
                             )
-                        } else {
-                            terminalRenderedRows.forEach { row ->
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        state = terminalListState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .nestedScroll(fastFlingConnection)
+                            .horizontalScroll(horizontalScroll, enabled = terminalPanMode),
+                        userScrollEnabled = terminalPanMode
+                    ) {
+                        if (terminalRenderedRowCount == 0) {
+                            item {
                                 Text(
-                                    text = row.text,
+                                    text = "等待输出...",
                                     style = terminalTextStyle,
                                     softWrap = false,
                                     maxLines = 1
                                 )
                             }
+                        } else {
+                            items(count = terminalRenderedRowCount, key = { index -> index }) { index ->
+                                val row = remember(terminalRenderRevision, index) {
+                                    terminalEmulator.renderRowAt(index)
+                                }
+                                Text(
+                                    text = row.text,
+                                    style = terminalTextStyle,
+                                    softWrap = false,
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .height(terminalCellHeightDp)
+                                        .width(terminalContentWidth)
+                                )
+                            }
+                        }
+                        item(key = "terminal-bottom-reveal") {
+                            Spacer(
+                                modifier = Modifier.height(
+                                    if (terminalEmulator.isAlternateScreen) terminalBottomRevealPadding else 8.dp
+                                )
+                            )
                         }
                     }
-                    if (selectionMode) {
-                        SelectionContainer {
-                            Column { terminalContent() }
-                        }
-                    } else {
-                        terminalContent()
-                    }
-                    Spacer(
-                        modifier = Modifier.height(
-                            if (terminalEmulator.isAlternateScreen) terminalBottomRevealPadding else 8.dp
-                        )
-                    )
                 }
             }
 

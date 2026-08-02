@@ -37,6 +37,29 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun virtualRowsRenderScrollbackOnDemand() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("l0\r\nl1\r\nl2\r\nl3\r\nl4\r\nl5\r\nl6")
+
+        assertEquals(7, terminal.renderedRowCount())
+        assertEquals(1, terminal.screenStartRow())
+        assertTrue(terminal.renderRowAt(0).text.startsWith("l0"))
+        assertTrue(terminal.renderRowAt(6).text.startsWith("l6"))
+        assertEquals("", terminal.renderRowAt(999).text.toString())
+    }
+
+    @Test
+    fun rowOnlyResizeKeepsScrollbackAvailableForVirtualRows() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("l0\r\nl1\r\nl2\r\nl3\r\nl4\r\nl5\r\nl6")
+        terminal.resize(columns = 20, rows = 8)
+
+        assertEquals(1, terminal.screenStartRow())
+        assertTrue(terminal.renderRowAt(0).text.startsWith("l0"))
+        assertEquals(9, terminal.renderedRowCount())
+    }
+
+    @Test
     fun cjkAndCombiningCharactersUseExpectedCells() {
         val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
         terminal.feed("中a")
@@ -223,6 +246,14 @@ class TerminalEmulatorTest {
                 )
             )
         )
+    }
+
+    @Test
+    fun xtermPixelQueriesUseConfiguredCellMetrics() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.setCellPixelSize(widthPx = 9, heightPx = 17)
+        terminal.feed("\u001B[14t\u001B[16t")
+        assertEquals(listOf("\u001B[4;102;180t", "\u001B[6;17;9t"), terminal.drainResponses())
     }
 
     @Test
@@ -606,6 +637,15 @@ class TerminalEmulatorTest {
         assertEquals(
             "\u001B[<0;15;29M",
             terminal.sequenceForMouse(TerminalEmulator.MouseEvent(row = 2, column = 2))
+        )
+        assertEquals(
+            "\u001B[<0;124;46M",
+            terminal.sequenceForMouse(TerminalEmulator.MouseEvent(
+                row = 2,
+                column = 2,
+                pixelX = 123,
+                pixelY = 45
+            ))
         )
         assertTrue(terminal.mouseModeSummary().contains("SGR-PIXELS"))
         terminal.feed("\u001B[?1016l\u001B[?1016\$p")

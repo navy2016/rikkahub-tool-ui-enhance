@@ -368,6 +368,9 @@ data class TerminalViewportState(
     val horizontalOffsetPx: Int = 0,
     val autoScroll: Boolean = true,
     val atBottom: Boolean = true,
+    /** Lazy terminal viewport anchor. Null keeps compatibility with old pixel-only snapshots. */
+    val firstVisibleRow: Int? = null,
+    val firstVisibleRowOffsetPx: Int = 0,
     val updatedAt: Long = System.currentTimeMillis()
 )
 
@@ -2009,13 +2012,17 @@ class BackgroundProcessManager @Inject constructor(
         verticalOffsetPx: Int,
         horizontalOffsetPx: Int,
         autoScroll: Boolean,
-        atBottom: Boolean
+        atBottom: Boolean,
+        firstVisibleRow: Int? = null,
+        firstVisibleRowOffsetPx: Int = 0
     ) {
         terminalViewportStates[processId] = TerminalViewportState(
             verticalOffsetPx = verticalOffsetPx.coerceAtLeast(0),
             horizontalOffsetPx = horizontalOffsetPx.coerceAtLeast(0),
             autoScroll = autoScroll,
             atBottom = atBottom,
+            firstVisibleRow = firstVisibleRow?.coerceAtLeast(0),
+            firstVisibleRowOffsetPx = firstVisibleRowOffsetPx.coerceAtLeast(0),
             updatedAt = System.currentTimeMillis()
         )
     }

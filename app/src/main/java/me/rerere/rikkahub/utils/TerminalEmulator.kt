@@ -73,7 +73,10 @@ class TerminalEmulator(
         val type: MouseEventType = MouseEventType.PRESS,
         val shift: Boolean = false,
         val alt: Boolean = false,
-        val ctrl: Boolean = false
+        val ctrl: Boolean = false,
+        /** Zero-based physical coordinates within the terminal screen for SGR Pixel mode. */
+        val pixelX: Int? = null,
+        val pixelY: Int? = null
     )
 
     private enum class MouseProtocol { DEFAULT, UTF8, SGR, SGR_PIXELS, URXVT }
@@ -122,6 +125,8 @@ class TerminalEmulator(
 
     private val defaultStyle = Style()
     private var currentStyle = defaultStyle
+    private var cellPixelWidth = 7
+    private var cellPixelHeight = 14
     private var cursorRow = 0
     private var cursorCol = 0
     private var savedRow = 0
@@ -256,20 +261,31 @@ class TerminalEmulator(
     }
 
     @Synchronized
+    fun setCellPixelSize(widthPx: Int, heightPx: Int) {
+        cellPixelWidth = widthPx.coerceAtLeast(1)
+        cellPixelHeight = heightPx.coerceAtLeast(1)
+    }
+
+    @Synchronized
     fun resize(columns: Int, rows: Int) {
         val newColumns = columns.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
         val newRows = rows.coerceIn(MIN_ROWS, MAX_ROWS)
         if (newColumns == this.columns && newRows == this.rows) return
 
+        val columnsChanged = newColumns != this.columns
         this.columns = newColumns
         this.rows = newRows
         tabStops.removeIf { it >= newColumns }
         if (tabStops.isEmpty()) resetTabStops()
         mainScreen.resizeScreen(newRows, newColumns)
         altScreen.resizeScreen(newRows, newColumns)
-        val resizedScrollback = scrollback.map { resizedLine(it, newColumns, defaultStyle) }
-        scrollback.clear()
-        resizedScrollback.takeLast(maxScrollbackLines).forEach { scrollback.addLast(it) }
+        // IME only changes rows. Reallocating every scrollback line for that path makes
+        // long histories hitch exactly while the keyboard animates.
+        if (columnsChanged) {
+            val resizedScrollback = scrollback.map { resizedLine(it, newColumns, defaultStyle) }
+            scrollback.clear()
+            resizedScrollback.takeLast(maxScrollbackLines).forEach { scrollback.addLast(it) }
+        }
         scrollTop = 0
         scrollBottom = newRows - 1
         cursorRow = cursorRow.coerceIn(0, newRows - 1)
@@ -536,8 +552,8 @@ class TerminalEmulator(
         if (event.type == MouseEventType.RELEASE && mouseTrackingMode == MouseTrackingMode.X10) return null
         val col = (event.column + 1).coerceIn(1, columns)
         val row = (event.row + 1).coerceIn(1, rows)
-        val pixelCol = (event.column * 7 + 1).coerceAtLeast(1)
-        val pixelRow = (event.row * 14 + 1).coerceAtLeast(1)
+        val pixelCol = ((event.pixelX ?: event.column * cellPixelWidth) + 1).coerceAtLeast(1)
+        val pixelRow = ((event.pixelY ?: event.row * cellPixelHeight) + 1).coerceAtLeast(1)
         var code = when (event.button) {
             MouseButton.LEFT -> 0
             MouseButton.MIDDLE -> 1
@@ -625,6 +641,33 @@ class TerminalEmulator(
             result.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }))
         }
         return result
+    }
+
+    /** Number of visual rows available to the virtualized terminal viewport. */
+    @Synchronized
+    fun renderedRowCount(includeScrollback: Boolean = true): Int =
+        rows + if (includeScrollback && !alternateScreen) scrollback.size else 0
+
+    /** Visual row where the live terminal screen starts after scrollback rows. */
+    @Synchronized
+    fun screenStartRow(includeScrollback: Boolean = true): Int =
+        if (includeScrollback && !alternateScreen) scrollback.size else 0
+
+    /** Renders one visual row without materializing the entire scrollback. */
+    @Synchronized
+    fun renderRowAt(index: Int, includeScrollback: Boolean = true): RenderedRow {
+        val scrollbackRows = if (includeScrollback && !alternateScreen) scrollback.size else 0
+        return when {
+            index in 0 until scrollbackRows -> {
+                val line = scrollback.elementAt(index)
+                RenderedRow(buildAnnotatedString { appendStyledLine(line, drawCursor = false) })
+            }
+            index - scrollbackRows in screen.indices -> {
+                val screenRow = index - scrollbackRows
+                RenderedRow(buildAnnotatedString { appendStyledLine(screen[screenRow], screenRow, drawCursor = true) })
+            }
+            else -> RenderedRow(AnnotatedString(""))
+        }
     }
 
     @Synchronized
@@ -1791,9 +1834,9 @@ class TerminalEmulator(
         when (seq.paramZero(0)) {
             11 -> pendingResponses.add("\u001B[1t")
             13 -> pendingResponses.add("\u001B[3;0;0t")
-            14 -> pendingResponses.add("\u001B[4;${rows * 14};${columns * 7}t")
-            15 -> pendingResponses.add("\u001B[5;${rows * 14};${columns * 7}t")
-            16 -> pendingResponses.add("\u001B[6;14;7t")
+            14 -> pendingResponses.add("\u001B[4;${rows * cellPixelHeight};${columns * cellPixelWidth}t")
+            15 -> pendingResponses.add("\u001B[5;${rows * cellPixelHeight};${columns * cellPixelWidth}t")
+            16 -> pendingResponses.add("\u001B[6;${cellPixelHeight};${cellPixelWidth}t")
             18 -> pendingResponses.add("\u001B[8;${rows};${columns}t")
             19 -> pendingResponses.add("\u001B[9;${rows};${columns}t")
             20 -> pendingResponses.add("\u001B]L;${iconTitle.ifEmpty { title }}\u001B\\")
