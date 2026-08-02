@@ -862,7 +862,7 @@ private fun TerminalInteractivePanel(
         val firstVisibleOffset = if (selectionMode) 0 else terminalListState.firstVisibleItemScrollOffset
         bgManager.saveTerminalViewportState(
             processId = processId,
-            verticalOffsetPx = if (selectionMode) outputScroll.value else firstVisibleRow * terminalCellHeightPx + firstVisibleOffset,
+            verticalOffsetPx = if (selectionMode) outputScroll.value else (firstVisibleRow ?: 0) * terminalCellHeightPx + firstVisibleOffset,
             horizontalOffsetPx = horizontalScroll.value,
             autoScroll = autoScroll,
             atBottom = terminalNearBottom(),
