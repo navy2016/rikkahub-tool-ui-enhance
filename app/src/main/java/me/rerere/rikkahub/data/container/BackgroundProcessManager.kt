@@ -1039,7 +1039,6 @@ class BackgroundProcessManager @Inject constructor(
         private const val PROCESS_CHECK_INTERVAL_MS = 5000L
         private const val MAX_RUNNING_PROCESSES_PER_SANDBOX = 10
         private const val MAX_INTERACTIVE_SESSIONS = 5
-        private const val INTERACTIVE_BUFFER_MAX_BYTES = 256 * 1024
     }
 
     /**
@@ -1099,28 +1098,17 @@ class BackgroundProcessManager @Inject constructor(
     }
 
     /**
-     * 交互式会话输出缓冲
-     * 仅保留最近 maxBytes 数据，供 UI 展示和 tool read/logs 复用
+     * 交互式会话输出缓冲。
+     * LazyColumn 负责虚拟化显示，不能再用一个隐藏的字节上限丢掉历史。
      */
-    private class SessionOutputBuffer(
-        private val maxBytes: Int = INTERACTIVE_BUFFER_MAX_BYTES
-    ) {
+    private class SessionOutputBuffer {
         private val data = ByteArrayOutputStream()
-        private var baseOffset: Long = 0L
         private var totalWritten: Long = 0L
 
         @Synchronized
         fun append(bytes: ByteArray) {
             data.write(bytes)
             totalWritten += bytes.size
-            if (data.size() > maxBytes) {
-                val current = data.toByteArray()
-                val drop = current.size - maxBytes
-                val trimmed = current.copyOfRange(drop, current.size)
-                data.reset()
-                data.write(trimmed)
-                baseOffset += drop.toLong()
-            }
         }
 
         @Synchronized
@@ -1134,19 +1122,19 @@ class BackgroundProcessManager @Inject constructor(
 
         @Synchronized
         fun readFrom(offset: Long, limitBytes: Int): BufferRead {
-            val safeLimit = limitBytes.coerceIn(1, maxBytes)
-            val effectiveOffset = offset.coerceAtLeast(baseOffset).coerceAtMost(totalWritten)
-            val localStart = (effectiveOffset - baseOffset).toInt()
+            val safeLimit = limitBytes.coerceAtLeast(1)
+            val effectiveOffset = offset.coerceIn(0L, totalWritten)
+            val localStart = effectiveOffset.toInt().coerceIn(0, data.size())
             val bytes = data.toByteArray()
-            val end = minOf(localStart + safeLimit, bytes.size)
+            val end = minOf(localStart.toLong() + safeLimit.toLong(), bytes.size.toLong()).toInt()
             val slice = if (localStart < end) bytes.copyOfRange(localStart, end) else ByteArray(0)
-            val toOffset = baseOffset + end
+            val toOffset = end.toLong()
             return BufferRead(
                 content = slice.toString(StandardCharsets.UTF_8),
                 fromOffset = effectiveOffset,
                 toOffset = toOffset,
                 totalBytes = totalWritten,
-                baseOffset = baseOffset,
+                baseOffset = 0L,
                 hasMore = toOffset < totalWritten
             )
         }

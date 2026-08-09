@@ -429,7 +429,7 @@ class TerminalEmulatorTest {
 
     @Test
     fun clearScrollbackApplicationKeypadAndSyncOutputModesAreSupported() {
-        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 20)
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
         terminal.feed((1..8).joinToString("\n") { "line$it" })
         assertTrue(terminal.plainText(includeScrollback = true).contains("line1"))
         terminal.feed("\u001B[3J")
@@ -894,6 +894,42 @@ class TerminalEmulatorTest {
         assertEquals(
             "https://example.com",
             rows[1].text.getStringAnnotations("URL", 0, rows[1].text.length).first().item
+        )
+    }
+
+    @Test
+    fun virtualRowsKeepCompleteScrollbackAndStableKeysAcrossRowResize() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed((1..80).joinToString("\n") { "history-$it" })
+
+        val countBefore = terminal.renderedRowCount()
+        val firstKey = terminal.renderedRowKeyAt(0)
+        assertTrue(countBefore > TerminalEmulator.MAX_ROWS)
+        assertTrue(terminal.renderRowAt(0).text.text.contains("history-1"))
+
+        terminal.resize(20, 12)
+
+        assertEquals(countBefore + 6, terminal.renderedRowCount())
+        assertEquals(firstKey, terminal.renderedRowKeyAt(0))
+        assertTrue(terminal.renderRowAt(0).text.text.contains("history-1"))
+    }
+
+    @Test
+    fun normalMouseTrackingEmitsHeldDragAndSgrRelease() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[?1000h\u001B[?1006h")
+
+        assertEquals(
+            "\u001B[<0;2;2M",
+            terminal.sequenceForMouse(TerminalEmulator.MouseEvent(1, 1, type = TerminalEmulator.MouseEventType.PRESS))
+        )
+        assertEquals(
+            "\u001B[<32;4;3M",
+            terminal.sequenceForMouse(TerminalEmulator.MouseEvent(2, 3, type = TerminalEmulator.MouseEventType.DRAG))
+        )
+        assertEquals(
+            "\u001B[<0;4;3m",
+            terminal.sequenceForMouse(TerminalEmulator.MouseEvent(2, 3, type = TerminalEmulator.MouseEventType.RELEASE))
         )
     }
 

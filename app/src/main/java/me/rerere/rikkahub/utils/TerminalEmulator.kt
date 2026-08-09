@@ -13,14 +13,14 @@ import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Base64
+import java.util.WeakHashMap
 import kotlin.math.max
 import kotlin.math.min
 
 /** Lightweight VT100/xterm screen emulator for the in-app terminal. */
 class TerminalEmulator(
     initialColumns: Int = 80,
-    initialRows: Int = 24,
-    private val maxScrollbackLines: Int = 1000
+    initialRows: Int = 24
 ) {
     var columns: Int = initialColumns.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
         private set
@@ -188,7 +188,11 @@ class TerminalEmulator(
         .onUnmappableCharacter(CodingErrorAction.REPLACE)
     private var pendingUtf8 = ByteArray(0)
 
-    private val scrollback = ArrayDeque<Array<Cell>>()
+    // Scrollback is intentionally unbounded. LazyColumn virtualizes composition, not terminal
+    // history: visible output must never disappear merely because the terminal was active long.
+    private val scrollback = ArrayList<Array<Cell>>()
+    private val lineIds = WeakHashMap<Array<Cell>, Long>()
+    private var nextLineId = 1L
     private val mainScreen = MutableList(rows) { blankLine() }
     private val altScreen = MutableList(rows) { blankLine() }
     private val screen: MutableList<Array<Cell>> get() = if (alternateScreen) altScreen else mainScreen
@@ -201,6 +205,8 @@ class TerminalEmulator(
     fun reset() {
         currentStyle = defaultStyle
         scrollback.clear()
+        lineIds.clear()
+        nextLineId = 1L
         mainScreen.resetScreen()
         altScreen.resetScreen()
         cursorRow = 0
@@ -282,9 +288,13 @@ class TerminalEmulator(
         // IME only changes rows. Reallocating every scrollback line for that path makes
         // long histories hitch exactly while the keyboard animates.
         if (columnsChanged) {
-            val resizedScrollback = scrollback.map { resizedLine(it, newColumns, defaultStyle) }
-            scrollback.clear()
-            resizedScrollback.takeLast(maxScrollbackLines).forEach { scrollback.addLast(it) }
+            for (index in scrollback.indices) {
+                val oldLine = scrollback[index]
+                val resized = resizedLine(oldLine, newColumns, defaultStyle)
+                scrollback[index] = resized
+                lineIds[resized] = lineIdOf(oldLine)
+                lineIds.remove(oldLine)
+            }
         }
         scrollTop = 0
         scrollBottom = newRows - 1
@@ -548,7 +558,9 @@ class TerminalEmulator(
     fun sequenceForMouse(event: MouseEvent): String? {
         if (mouseTrackingMode == MouseTrackingMode.OFF) return alternateScrollSequence(event)
         if (event.type == MouseEventType.MOVE && mouseTrackingMode != MouseTrackingMode.ANY_EVENT) return null
-        if (event.type == MouseEventType.DRAG && mouseTrackingMode !in setOf(MouseTrackingMode.BUTTON_EVENT, MouseTrackingMode.ANY_EVENT)) return null
+        // Some terminal TUIs request normal tracking (1000) but still expect a held touch
+        // drag to update widgets such as scrollbars. Android has no separate mouse capture
+        // stream, so preserve that drag sequence once a press was accepted.
         if (event.type == MouseEventType.RELEASE && mouseTrackingMode == MouseTrackingMode.X10) return null
         val col = (event.column + 1).coerceIn(1, columns)
         val row = (event.row + 1).coerceIn(1, rows)
@@ -653,13 +665,47 @@ class TerminalEmulator(
     fun screenStartRow(includeScrollback: Boolean = true): Int =
         if (includeScrollback && !alternateScreen) scrollback.size else 0
 
+    /** Stable item key for a virtualized terminal row. */
+    @Synchronized
+    fun renderedRowKeyAt(index: Int, includeScrollback: Boolean = true): Long {
+        val scrollbackRows = if (includeScrollback && !alternateScreen) scrollback.size else 0
+        return when {
+            index in 0 until scrollbackRows -> lineIdOf(scrollback[index])
+            index - scrollbackRows in screen.indices -> lineIdOf(screen[index - scrollbackRows])
+            else -> Long.MIN_VALUE + index
+        }
+    }
+
+    /** Content/version key for caching one virtualized row between output frames. */
+    @Synchronized
+    fun renderedRowVersionAt(index: Int, includeScrollback: Boolean = true): Long {
+        val scrollbackRows = if (includeScrollback && !alternateScreen) scrollback.size else 0
+        val screenRow = index - scrollbackRows
+        val line = when {
+            index in 0 until scrollbackRows -> scrollback[index]
+            screenRow in screen.indices -> screen[screenRow]
+            else -> return Long.MIN_VALUE + index
+        }
+        var version = line.contentHashCode().toLong()
+        if (screenRow in screen.indices) {
+            version = 31L * version + screenRow
+            if (screenRow == cursorRow) {
+                version = 31L * version + cursorCol
+                version = 31L * version + if (cursorVisible) 1L else 0L
+                version = 31L * version + cursorShape.ordinal
+                version = 31L * version + cursorColor.hashCode()
+            }
+        }
+        return version
+    }
+
     /** Renders one visual row without materializing the entire scrollback. */
     @Synchronized
     fun renderRowAt(index: Int, includeScrollback: Boolean = true): RenderedRow {
         val scrollbackRows = if (includeScrollback && !alternateScreen) scrollback.size else 0
         return when {
             index in 0 until scrollbackRows -> {
-                val line = scrollback.elementAt(index)
+                val line = scrollback[index]
                 RenderedRow(buildAnnotatedString { appendStyledLine(line, drawCursor = false) })
             }
             index - scrollbackRows in screen.indices -> {
@@ -710,8 +756,20 @@ class TerminalEmulator(
         val old = toList()
         clear()
         val copyRows = min(old.size, newRows)
-        repeat(copyRows) { row -> add(resizedLine(old[row], newColumns, defaultStyle)) }
-        repeat(newRows - copyRows) { add(Array(newColumns) { Cell(style = defaultStyle) }) }
+        repeat(copyRows) { row ->
+            val oldLine = old[row]
+            if (oldLine.size == newColumns) {
+                // Row-only IME resizes must not replace visible line objects. Keeping their
+                // identity lets LazyColumn retain composition and prevents a full-frame flash.
+                add(oldLine)
+            } else {
+                val resized = resizedLine(oldLine, newColumns, defaultStyle)
+                lineIds[resized] = lineIdOf(oldLine)
+                lineIds.remove(oldLine)
+                add(resized)
+            }
+        }
+        repeat(newRows - copyRows) { add(blankLine()) }
     }
 
     private fun MutableList<Array<Cell>>.resetScreen() {
@@ -1444,8 +1502,11 @@ class TerminalEmulator(
     private fun scrollUp() {
         val removed = screen[scrollTop]
         if (!alternateScreen && scrollTop == 0) {
-            scrollback.addLast(Array(columns) { i -> removed[i].copy() })
-            while (scrollback.size > maxScrollbackLines) scrollback.removeFirst()
+            val archivedLine = Array(columns) { i -> removed[i].copy() }
+            scrollback.add(archivedLine)
+            // The archived line is a new immutable history item; do not reuse a mutable
+            // screen-line key that will immediately be recycled by the terminal.
+            lineIds[archivedLine] = nextLineId++
         }
         for (r in scrollTop until scrollBottom) {
             screen[r] = screen[r + 1]
@@ -2089,7 +2150,10 @@ class TerminalEmulator(
         )
     }
 
+    private fun lineIdOf(line: Array<Cell>): Long = lineIds[line] ?: nextLineId++.also { lineIds[line] = it }
+
     private fun blankLine(): Array<Cell> = Array(columns) { Cell(style = currentStyle.copy(hyperlink = currentHyperlink)) }
+        .also(::lineIdOf)
 
     private fun cursorGlyph(): String = when (cursorShape) {
         CursorShape.UNDERLINE, CursorShape.STEADY_UNDERLINE -> "▁"

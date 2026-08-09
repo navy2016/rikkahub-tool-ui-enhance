@@ -112,10 +112,24 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("activeTerminalMousePosition"))
         assertTrue(processSessionSource.contains("previous.copy("))
         assertTrue(processSessionSource.contains("activeTerminalMouseButton.set(null)"))
-        assertTrue(processSessionSource.contains("Channel<String>(Channel.UNLIMITED)"))
-        assertTrue(processSessionSource.contains("rawInputChannel.trySend(sequence)"))
+        assertTrue(processSessionSource.contains("Channel<TerminalInputPacket>(Channel.UNLIMITED)"))
+        assertTrue(processSessionSource.contains("rawInputChannel.trySend(TerminalInputPacket(sequence, coalescibleMouseMotion))"))
+        assertTrue(processSessionSource.contains("coalescibleMouseMotion"))
         assertTrue(backgroundProcessManagerSource.contains("val inputMutex: Mutex = Mutex()"))
         assertTrue(backgroundProcessManagerSource.contains("record.inputMutex.withLock"))
+    }
+
+    @Test
+    fun lazyTerminalKeepsCompleteHistoryAndBatchesStreamingOutput() {
+        assertTrue(processSessionSource.contains("TerminalRenderFrame"))
+        assertTrue(processSessionSource.contains("outputBatchChannel"))
+        assertTrue(processSessionSource.contains("ByteArrayOutputStream"))
+        assertTrue(processSessionSource.contains("withTimeoutOrNull(8L)"))
+        assertTrue(processSessionSource.contains("renderedRowKeyAt(index)"))
+        assertTrue(processSessionSource.contains("renderedRowVersionAt(index)"))
+        assertFalse(processSessionSource.contains("items(count = terminalRenderedRowCount, key = { index -> index })"))
+        assertFalse(backgroundProcessManagerSource.contains("INTERACTIVE_BUFFER_MAX_BYTES"))
+        assertFalse(backgroundProcessManagerSource.contains("仅保留最近 maxBytes"))
     }
 
     @Test
