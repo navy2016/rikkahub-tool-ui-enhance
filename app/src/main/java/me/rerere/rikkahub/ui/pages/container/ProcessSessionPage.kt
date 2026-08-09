@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -1129,6 +1130,13 @@ private fun TerminalInteractivePanel(
 
     LaunchedEffect(imeVisible) {
         recordImeTransition(imeVisible)
+        if (!imeVisible) {
+            val stableRows = measuredTerminalRows.get()
+            if (stableRows != terminalRows) {
+                imeResizePending.set(false)
+                terminalRows = stableRows
+            }
+        }
     }
 
     // Follow the IME movement without changing the terminal grid on every animation frame.
@@ -1384,17 +1392,13 @@ private fun TerminalInteractivePanel(
                             pendingImeRowResizeJob.set(scope.launch {
                                 if (insideImeAnimationWindow) {
                                     delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
-                                    // Do not resize the PTY while the IME is animating. The
-                                    // final onSizeChanged after dismissal supplies the stable grid.
-                                    if (currentImeVisible) {
-                                        snapshotFlow { WindowInsets.isImeVisible }.first { !it }
-                                    }
                                 }
-                                val stableRows = measuredTerminalRows.get()
-                                if (stableRows == measuredTerminalRows.get() && stableRows != terminalRows) {
-                                    imeResizePending.set(false)
-                                    terminalRows = stableRows
-                                } else if (!currentImeVisible) {
+                                // Do not resize the PTY while the IME is visible. The IME
+                                // transition effect below applies the latest stable row count
+                                // after dismissal.
+                                if (!currentImeVisible) {
+                                    val stableRows = measuredTerminalRows.get()
+                                    if (stableRows != terminalRows) terminalRows = stableRows
                                     imeResizePending.set(false)
                                 }
                             })
