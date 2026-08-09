@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1130,6 +1131,22 @@ private fun TerminalInteractivePanel(
         recordImeTransition(imeVisible)
     }
 
+    // Follow the IME movement without changing the terminal grid on every animation frame.
+    // imePadding changes the viewport and the delta scroll keeps a bottom-following terminal
+    // anchored while the extra-key bar remains available for simultaneous use.
+    LaunchedEffect(processId, density) {
+        var previousImeBottom = 0
+        snapshotFlow { WindowInsets.ime.getBottom(density) }
+            .distinctUntilChanged()
+            .collect { imeBottom ->
+                val delta = imeBottom - previousImeBottom
+                if (delta != 0 && terminalNearBottom()) {
+                    runCatching { outputScroll.scrollBy(delta.toFloat()) }
+                }
+                previousImeBottom = imeBottom
+            }
+    }
+
     LaunchedEffect(processId, terminalColumns, terminalRows) {
         val columnsChanged = terminalColumns != lastAppliedTerminalColumns.get()
         val rowsChanged = terminalRows != lastAppliedTerminalRows.get()
@@ -1365,9 +1382,20 @@ private fun TerminalInteractivePanel(
                                 System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
                             if (insideImeAnimationWindow) imeResizePending.set(true)
                             pendingImeRowResizeJob.set(scope.launch {
-                                if (insideImeAnimationWindow) delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
-                                if (measuredTerminalRows.get() == rows) {
-                                    if (rows != terminalRows) terminalRows = rows else imeResizePending.set(false)
+                                if (insideImeAnimationWindow) {
+                                    delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
+                                    // Do not resize the PTY while the IME is animating. The
+                                    // final onSizeChanged after dismissal supplies the stable grid.
+                                    if (currentImeVisible) {
+                                        snapshotFlow { WindowInsets.isImeVisible }.first { !it }
+                                    }
+                                }
+                                val stableRows = measuredTerminalRows.get()
+                                if (stableRows == measuredTerminalRows.get() && stableRows != terminalRows) {
+                                    imeResizePending.set(false)
+                                    terminalRows = stableRows
+                                } else if (!currentImeVisible) {
+                                    imeResizePending.set(false)
                                 }
                             })
                         }
