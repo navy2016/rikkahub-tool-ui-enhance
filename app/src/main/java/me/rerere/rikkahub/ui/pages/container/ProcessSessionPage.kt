@@ -809,6 +809,7 @@ private fun TerminalInteractivePanel(
     val imeResizePending = remember(processId) { AtomicBoolean(false) }
     val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
     val currentImeVisible by rememberUpdatedState(imeVisible)
+    val imeInsets = WindowInsets.ime
 
     fun terminalNearBottom(thresholdPx: Int = terminalCellHeightPx * 2): Boolean =
         outputScroll.maxValue <= thresholdPx || outputScroll.value >= outputScroll.maxValue - thresholdPx
@@ -1144,7 +1145,7 @@ private fun TerminalInteractivePanel(
     // anchored while the extra-key bar remains available for simultaneous use.
     LaunchedEffect(processId, density) {
         var previousImeBottom = 0
-        snapshotFlow { WindowInsets.ime.getBottom(density) }
+        snapshotFlow { imeInsets.getBottom(density) }
             .distinctUntilChanged()
             .collect { imeBottom ->
                 val delta = imeBottom - previousImeBottom
