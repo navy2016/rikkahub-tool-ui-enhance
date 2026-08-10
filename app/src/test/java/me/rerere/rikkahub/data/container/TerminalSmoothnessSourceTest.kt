@@ -52,7 +52,11 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("imeStableForSizeHint"))
         assertTrue(processSessionSource.contains("bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)"))
         assertTrue(processSessionSource.contains("val measuredCell = remember(terminalTextStyle, density)"))
-        assertFalse(processSessionSource.contains("WindowInsets.ime.getBottom"))
+        assertTrue(processSessionSource.contains("val imeInsets = WindowInsets.ime"))
+        assertTrue(processSessionSource.contains("snapshotFlow { imeInsets.getBottom(density) }"))
+        assertTrue(processSessionSource.contains("TerminalImeViewportAnchor"))
+        assertTrue(processSessionSource.contains("shouldFollowTerminalBottom()"))
+        assertTrue(processSessionSource.contains("imeViewportAnchor.getAndSet(null)?.let { anchor ->"))
         assertFalse(processSessionSource.contains("var terminalCellWidthPx by remember"))
     }
 
@@ -90,12 +94,33 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("NestedScrollConnection"))
         assertTrue(processSessionSource.contains("TERMINAL_FAST_FLING_VELOCITY_PX"))
         assertTrue(processSessionSource.contains("TERMINAL_FAST_FLING_WINDOW_MS"))
-        assertTrue(processSessionSource.contains("fastFlingCount < TERMINAL_FAST_FLING_REQUIRED_COUNT"))
+        assertTrue(processSessionSource.contains("fastFlingCount < fastFlingRequiredCount"))
+        assertTrue(processSessionSource.contains("fastFlingRequiredCount: Int = 2"))
+        assertTrue(processSessionSource.contains("TerminalNumberSettingDialog"))
+        assertTrue(processSessionSource.contains("\"HIST\""))
+        assertTrue(processSessionSource.contains("\"JUMP\""))
         assertTrue(processSessionSource.contains(".verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)"))
         assertTrue(processSessionSource.contains("if (!fastFlingEnabled) return Velocity.Zero"))
         assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(outputScroll.maxValue)"))
         assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(0)"))
         assertTrue(processSessionSource.contains(".nestedScroll(fastFlingConnection)"))
+    }
+
+    @Test
+    fun outputPathRemainsImmediateAndUnbatched() {
+        assertTrue(processSessionSource.contains("terminalEmulator.feed(bytes)"))
+        assertTrue(processSessionSource.contains("scheduleTerminalRender()"))
+        assertFalse(processSessionSource.contains("TERMINAL_OUTPUT_BATCH_WINDOW_MS"))
+        assertFalse(processSessionSource.contains("delay(8L)"))
+    }
+
+    @Test
+    fun terminalScrollbackAndFastFlingPreferencesAreBoundedAndPersisted() {
+        assertTrue(processSessionSource.contains("val maxScrollbackLines: Int = TerminalEmulator.DEFAULT_MAX_SCROLLBACK_LINES"))
+        assertTrue(processSessionSource.contains("val fastFlingRequiredCount: Int = 2"))
+        assertTrue(processSessionSource.contains("terminalEmulator.setMaxScrollbackLines(maxScrollbackLines)"))
+        assertTrue(processSessionSource.contains("maxScrollbackLines = maxScrollbackLines"))
+        assertTrue(processSessionSource.contains("fastFlingRequiredCount = fastFlingRequiredCount"))
     }
 
     @Test

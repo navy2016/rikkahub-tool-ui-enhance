@@ -20,8 +20,9 @@ import kotlin.math.min
 class TerminalEmulator(
     initialColumns: Int = 80,
     initialRows: Int = 24,
-    private val maxScrollbackLines: Int = 1000
+    maxScrollbackLines: Int = DEFAULT_MAX_SCROLLBACK_LINES
 ) {
+    private var scrollbackLimit = maxScrollbackLines.coerceIn(MIN_SCROLLBACK_LINES, MAX_SCROLLBACK_LINES)
     var columns: Int = initialColumns.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
         private set
     var rows: Int = initialRows.coerceIn(MIN_ROWS, MAX_ROWS)
@@ -32,6 +33,9 @@ class TerminalEmulator(
         const val MAX_COLUMNS = 240
         const val MIN_ROWS = 6
         const val MAX_ROWS = 80
+        const val MIN_SCROLLBACK_LINES = 1
+        const val DEFAULT_MAX_SCROLLBACK_LINES = 1000
+        const val MAX_SCROLLBACK_LINES = 10000
         private const val MAX_CSI_LENGTH = 256
         private const val MAX_STRING_SEQUENCE = 4096
         private const val ZERO_WIDTH_JOINER = 0x200D
@@ -256,6 +260,15 @@ class TerminalEmulator(
     }
 
     @Synchronized
+    fun setMaxScrollbackLines(value: Int) {
+        scrollbackLimit = value.coerceIn(MIN_SCROLLBACK_LINES, MAX_SCROLLBACK_LINES)
+        while (scrollback.size > scrollbackLimit) scrollback.removeFirst()
+    }
+
+    @Synchronized
+    fun maxScrollbackLines(): Int = scrollbackLimit
+
+    @Synchronized
     fun resize(columns: Int, rows: Int) {
         val newColumns = columns.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
         val newRows = rows.coerceIn(MIN_ROWS, MAX_ROWS)
@@ -269,7 +282,7 @@ class TerminalEmulator(
         altScreen.resizeScreen(newRows, newColumns)
         val resizedScrollback = scrollback.map { resizedLine(it, newColumns, defaultStyle) }
         scrollback.clear()
-        resizedScrollback.takeLast(maxScrollbackLines).forEach { scrollback.addLast(it) }
+        resizedScrollback.takeLast(scrollbackLimit).forEach { scrollback.addLast(it) }
         scrollTop = 0
         scrollBottom = newRows - 1
         cursorRow = cursorRow.coerceIn(0, newRows - 1)
@@ -1402,7 +1415,7 @@ class TerminalEmulator(
         val removed = screen[scrollTop]
         if (!alternateScreen && scrollTop == 0) {
             scrollback.addLast(Array(columns) { i -> removed[i].copy() })
-            while (scrollback.size > maxScrollbackLines) scrollback.removeFirst()
+            while (scrollback.size > scrollbackLimit) scrollback.removeFirst()
         }
         for (r in scrollTop until scrollBottom) {
             screen[r] = screen[r + 1]

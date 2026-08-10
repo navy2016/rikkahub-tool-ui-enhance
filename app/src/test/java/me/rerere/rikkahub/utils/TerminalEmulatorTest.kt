@@ -397,6 +397,20 @@ class TerminalEmulatorTest {
 
 
     @Test
+    fun scrollbackLimitCanBeAdjustedWithoutResettingTheScreen() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 100)
+        terminal.feed((1..120).joinToString("\n") { "line$it" })
+        terminal.setMaxScrollbackLines(100)
+        assertEquals(100, terminal.maxScrollbackLines())
+        assertTrue(terminal.plainText(includeScrollback = false).contains("line120"))
+
+        terminal.setMaxScrollbackLines(10000)
+        assertEquals(10000, terminal.maxScrollbackLines())
+        terminal.setMaxScrollbackLines(1)
+        assertEquals(TerminalEmulator.MIN_SCROLLBACK_LINES, terminal.maxScrollbackLines())
+    }
+
+    @Test
     fun clearScrollbackApplicationKeypadAndSyncOutputModesAreSupported() {
         val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 20)
         terminal.feed((1..8).joinToString("\n") { "line$it" })

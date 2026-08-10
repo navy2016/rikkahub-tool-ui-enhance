@@ -150,8 +150,10 @@ private const val TERMINAL_IME_RESIZE_DEBOUNCE_MS = 120L
 private const val TERMINAL_RESIZE_RENDER_FALLBACK_MS = 180L
 private const val TERMINAL_FAST_FLING_VELOCITY_PX = 3500f
 private const val TERMINAL_FAST_FLING_WINDOW_MS = 700L
-private const val TERMINAL_FAST_FLING_REQUIRED_COUNT = 2
 private const val TERMINAL_EDGE_THRESHOLD_PX = 80
+private const val TERMINAL_UI_MIN_SCROLLBACK_LINES = 100
+private val TERMINAL_SCROLLBACK_PRESETS = listOf(100, 500, 1000, 2000, 5000, 10000)
+private val TERMINAL_FAST_FLING_PRESETS = listOf(1, 2, 3, 4, 5)
 
 @Serializable
 private data class TerminalQuickCommandConfig(
@@ -178,6 +180,8 @@ private data class TerminalCommandPreference(
     val showFullInputBar: Boolean? = null,
     val terminalFontSizeSp: Float = 12f,
     val forcedTerminalColumns: Int? = null,
+    val maxScrollbackLines: Int = TerminalEmulator.DEFAULT_MAX_SCROLLBACK_LINES,
+    val fastFlingRequiredCount: Int = 2,
 )
 
 private fun normalizedTerminalCommand(command: String): String = command.trim()
@@ -218,6 +222,11 @@ private data class TerminalActionPreset(
     val label: String,
 )
 
+private data class TerminalImeViewportAnchor(
+    val followBottom: Boolean,
+    val offsetPx: Int,
+)
+
 private fun defaultTerminalQuickCommands() = listOf(
     TerminalQuickCommandConfig("tmux", "rikkahub-tmux"),
     TerminalQuickCommandConfig("bash", "bash"),
@@ -253,11 +262,11 @@ private fun defaultTerminalQuickCommands() = listOf(
     TerminalQuickCommandConfig("tty", "tty; stty size; echo ${'$'}TERM"),
 )
 
-private fun defaultTerminalStatusItems() = listOf("RAW", "AUTO", "COLS", "KEYS", "TOUCH", "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL").map { TerminalItemConfig(it) }
+private fun defaultTerminalStatusItems() = listOf("RAW", "AUTO", "COLS", "HIST", "JUMP", "KEYS", "TOUCH", "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL").map { TerminalItemConfig(it) }
 private fun defaultTerminalExtraKeyItems() = listOf("CTRL", "ALT", "SHIFT", "SEL", "KBD", "ESC", "TAB", "S-TAB", "UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "BKSP", "DEL", "ENTER", "C-C", "C-D", "C-Z", "C-L", "C-U", "C-W", "C-A", "C-E", "C-R", "COPY", "PASTE", "CLEAR", "TEST", "CLI").map { TerminalItemConfig(it) }
 
 private val TerminalStatusPresets = listOf(
-    TerminalActionPreset("RAW", "RAW/LINE"), TerminalActionPreset("AUTO", "AUTO/LOCK"), TerminalActionPreset("COLS", "FIT/80C/120C"), TerminalActionPreset("KEYS", "KEYS"),
+    TerminalActionPreset("RAW", "RAW/LINE"), TerminalActionPreset("AUTO", "AUTO/LOCK"), TerminalActionPreset("COLS", "FIT/80C/120C"), TerminalActionPreset("HIST", "HIST"), TerminalActionPreset("JUMP", "JUMP"), TerminalActionPreset("KEYS", "KEYS"),
     TerminalActionPreset("TOUCH", "TOUCH/MOUSE"), TerminalActionPreset("INPUT", "INPUT/MINI"), TerminalActionPreset("A-", "A-"),
     TerminalActionPreset("A+", "A+"), TerminalActionPreset("COPY", "COPY"), TerminalActionPreset("PASTE", "PASTE"),
     TerminalActionPreset("CLR", "CLR"), TerminalActionPreset("CTN", "CTN"), TerminalActionPreset("FULL", "FULL/EXIT"),
@@ -279,10 +288,16 @@ private inline fun <reified T> decodeTerminalConfig(raw: String, fallback: List<
 private fun encodeTerminalQuickCommands(items: List<TerminalQuickCommandConfig>) = TerminalConfigJson.encodeToString(items)
 private fun encodeTerminalItems(items: List<TerminalItemConfig>) = TerminalConfigJson.encodeToString(items)
 
+private fun terminalScrollbackLabel(lines: Int): String =
+    if (lines >= 1000) "H${lines / 1000}K" else "H$lines"
+
 private fun ensureTerminalStatusItems(items: List<TerminalItemConfig>): List<TerminalItemConfig> {
-    if (items.any { it.id == "COLS" }) return items
-    val insertAfterAuto = items.indexOfFirst { it.id == "AUTO" }.takeIf { it >= 0 }?.plus(1) ?: items.size
-    return items.toMutableList().apply { add(insertAfterAuto, TerminalItemConfig("COLS")) }
+    val result = items.toMutableList()
+    if (result.none { it.id == "COLS" }) {
+        val afterAuto = result.indexOfFirst { it.id == "AUTO" }.takeIf { it >= 0 }?.plus(1) ?: result.size
+        result.add(afterAuto, TerminalItemConfig("COLS"))
+    }
+    return result
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -733,7 +748,16 @@ private fun TerminalInteractivePanel(
             .coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
     }
 
-    val terminalEmulator = remember(processId) { TerminalEmulator(initialColumns = initialTerminalColumns, initialRows = initialTerminalRows) }
+    val initialMaxScrollbackLines = savedPreference?.maxScrollbackLines
+        ?.coerceIn(TERMINAL_UI_MIN_SCROLLBACK_LINES, TerminalEmulator.MAX_SCROLLBACK_LINES)
+        ?: TerminalEmulator.DEFAULT_MAX_SCROLLBACK_LINES
+    val terminalEmulator = remember(processId) {
+        TerminalEmulator(
+            initialColumns = initialTerminalColumns,
+            initialRows = initialTerminalRows,
+            maxScrollbackLines = initialMaxScrollbackLines,
+        )
+    }
     val terminalBackground = Color(0xFF101010)
     val terminalForeground = Color(0xFF00E676)
     val terminalMuted = Color(0xFFB0BEC5)
@@ -774,6 +798,11 @@ private fun TerminalInteractivePanel(
     val measuredTerminalRows = remember(processId) { AtomicInteger(initialTerminalRows) }
     val pendingImeRowResizeJob = remember(processId) { AtomicReference<Job?>(null) }
     var forcedTerminalColumns by remember(processId) { mutableStateOf(savedPreference?.forcedTerminalColumns) }
+    var maxScrollbackLines by remember(processId) { mutableIntStateOf(initialMaxScrollbackLines) }
+    var fastFlingRequiredCount by remember(processId) {
+        mutableIntStateOf((savedPreference?.fastFlingRequiredCount ?: 2).coerceIn(1, TERMINAL_FAST_FLING_PRESETS.last()))
+    }
+    var terminalSettingsDialog by remember { mutableStateOf<String?>(null) }
     val density = LocalDensity.current
     val measuredCell = remember(terminalTextStyle, density) { textMeasurer.measure("W", style = terminalTextStyle) }
     val terminalCellWidthPx = measuredCell.size.width.coerceAtLeast(1)
@@ -807,6 +836,8 @@ private fun TerminalInteractivePanel(
     val lastAppliedTerminalColumns = remember(processId) { AtomicInteger(initialTerminalColumns) }
     val lastAppliedTerminalRows = remember(processId) { AtomicInteger(initialTerminalRows) }
     val imeResizePending = remember(processId) { AtomicBoolean(false) }
+    val imeViewportAnchor = remember(processId) { AtomicReference<TerminalImeViewportAnchor?>(null) }
+    val imeViewportRestoreJob = remember(processId) { AtomicReference<Job?>(null) }
     val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
     val currentImeVisible by rememberUpdatedState(imeVisible)
     val imeInsets = WindowInsets.ime
@@ -814,10 +845,22 @@ private fun TerminalInteractivePanel(
     fun terminalNearBottom(thresholdPx: Int = terminalCellHeightPx * 2): Boolean =
         outputScroll.maxValue <= thresholdPx || outputScroll.value >= outputScroll.maxValue - thresholdPx
 
+    fun shouldFollowTerminalBottom(): Boolean =
+        autoScroll && (imeViewportAnchor.get()?.followBottom != false)
+
     fun recordImeTransition(visible: Boolean) {
         if (lastObservedImeVisible.getAndSet(visible) == visible) return
         lastImeTransitionAt.set(System.currentTimeMillis())
-        keepBottomAfterNextLayout.set(autoScroll && terminalNearBottom())
+        if (visible) {
+            // A short transcript has no real bottom position yet. Do not reinterpret it as
+            // bottom-following when imePadding later makes it scrollable.
+            val hasScrollableRange = outputScroll.maxValue > terminalCellHeightPx * 2
+            imeViewportAnchor.set(TerminalImeViewportAnchor(
+                followBottom = autoScroll && hasScrollableRange && terminalNearBottom(),
+                offsetPx = outputScroll.value,
+            ))
+        }
+        keepBottomAfterNextLayout.set(shouldFollowTerminalBottom() && terminalNearBottom())
     }
 
     fun saveTerminalViewport() {
@@ -864,7 +907,7 @@ private fun TerminalInteractivePanel(
                 val wasNearBottom = outputScroll.maxValue <= bottomThreshold ||
                     outputScroll.value >= outputScroll.maxValue - bottomThreshold
                 renderTerminalFrame()
-                if (!terminalEmulator.isAlternateScreen && autoScroll && wasNearBottom) {
+                if (!terminalEmulator.isAlternateScreen && shouldFollowTerminalBottom() && wasNearBottom) {
                     withFrameNanos { }
                     runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
                 }
@@ -1102,6 +1145,8 @@ private fun TerminalInteractivePanel(
         showFullInputBar,
         terminalFontSizeSp,
         forcedTerminalColumns,
+        maxScrollbackLines,
+        fastFlingRequiredCount,
     ) {
         if (!terminalPreferencesDirty) return@LaunchedEffect
         delay(800)
@@ -1118,10 +1163,17 @@ private fun TerminalInteractivePanel(
                     showFullInputBar = showFullInputBar,
                     terminalFontSizeSp = terminalFontSizeSp,
                     forcedTerminalColumns = forcedTerminalColumns,
+                    maxScrollbackLines = maxScrollbackLines,
+                    fastFlingRequiredCount = fastFlingRequiredCount,
                 )
             })
         }
         terminalPreferencesDirty = false
+    }
+
+    LaunchedEffect(maxScrollbackLines) {
+        terminalEmulator.setMaxScrollbackLines(maxScrollbackLines)
+        renderTerminalFrame()
     }
 
     LaunchedEffect(forcedTerminalColumns, measuredTerminalColumns) {
@@ -1132,11 +1184,31 @@ private fun TerminalInteractivePanel(
     LaunchedEffect(imeVisible) {
         recordImeTransition(imeVisible)
         if (!imeVisible) {
-            val stableRows = measuredTerminalRows.get()
-            if (stableRows != terminalRows) {
-                imeResizePending.set(false)
-                terminalRows = stableRows
-            }
+            // Let the inset and weighted terminal viewport settle before applying one final
+            // emulator/PTY row count, rather than resizing through an intermediate height.
+            pendingImeRowResizeJob.getAndSet(null)?.cancel()
+            pendingImeRowResizeJob.set(scope.launch {
+                delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
+                if (!currentImeVisible) {
+                    val stableRows = measuredTerminalRows.get()
+                    if (stableRows != terminalRows) terminalRows = stableRows
+                    imeResizePending.set(false)
+                }
+            })
+            imeViewportRestoreJob.getAndSet(null)?.cancel()
+            imeViewportRestoreJob.set(scope.launch {
+                delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
+                if (!currentImeVisible) {
+                    withFrameNanos { }
+                    imeViewportAnchor.getAndSet(null)?.let { anchor ->
+                        if (anchor.followBottom) {
+                            runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+                        } else {
+                            runCatching { outputScroll.scrollTo(anchor.offsetPx.coerceIn(0, outputScroll.maxValue)) }
+                        }
+                    }
+                }
+            })
         }
     }
 
@@ -1149,7 +1221,8 @@ private fun TerminalInteractivePanel(
             .distinctUntilChanged()
             .collect { imeBottom ->
                 val delta = imeBottom - previousImeBottom
-                if (delta != 0 && terminalNearBottom()) {
+                val anchor = imeViewportAnchor.get()
+                if (delta != 0 && anchor?.followBottom == true) {
                     runCatching { outputScroll.scrollBy(delta.toFloat()) }
                 }
                 previousImeBottom = imeBottom
@@ -1181,7 +1254,7 @@ private fun TerminalInteractivePanel(
             resizeRenderFallbackJob.set(scope.launch {
                 delay(TERMINAL_RESIZE_RENDER_FALLBACK_MS)
                 renderTerminalFrame()
-                if (autoScroll && wasNearBottom) {
+                if (shouldFollowTerminalBottom() && wasNearBottom) {
                     withFrameNanos { }
                     runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
                 }
@@ -1192,7 +1265,7 @@ private fun TerminalInteractivePanel(
             delay(TERMINAL_PTY_RESIZE_DEBOUNCE_MS)
             bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)
         }
-        if (autoScroll && wasNearBottom) {
+        if (shouldFollowTerminalBottom() && wasNearBottom) {
             withFrameNanos { }
             runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
         }
@@ -1225,6 +1298,7 @@ private fun TerminalInteractivePanel(
             pendingImeRowResizeJob.getAndSet(null)?.cancel()
             renderJob.getAndSet(null)?.cancel()
             resizeRenderFallbackJob.getAndSet(null)?.cancel()
+            imeViewportRestoreJob.getAndSet(null)?.cancel()
             rawInputChannel.close()
             saveTerminalViewport()
         }
@@ -1234,7 +1308,7 @@ private fun TerminalInteractivePanel(
         snapshotFlow { Triple(outputScroll.maxValue, terminalRenderedRows.size, autoScroll) }
             .distinctUntilChanged()
             .collect { (_, _, followBottom) ->
-                if (!followBottom) return@collect
+                if (!followBottom || !shouldFollowTerminalBottom()) return@collect
                 withFrameNanos { }
                 runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
             }
@@ -1257,7 +1331,7 @@ private fun TerminalInteractivePanel(
     var lastFastFlingDirection by remember(processId) { mutableIntStateOf(0) }
     var lastFastFlingAt by remember(processId) { mutableLongStateOf(0L) }
     var fastFlingCount by remember(processId) { mutableIntStateOf(0) }
-    val fastFlingConnection = remember(processId, terminalPanMode, selectionMode) {
+    val fastFlingConnection = remember(processId, terminalPanMode, selectionMode, fastFlingRequiredCount) {
         object : NestedScrollConnection {
             override suspend fun onPreFling(available: Velocity): Velocity {
                 val fastFlingEnabled = terminalPanMode && !selectionMode
@@ -1273,7 +1347,7 @@ private fun TerminalInteractivePanel(
                 }
                 lastFastFlingDirection = direction
                 lastFastFlingAt = now
-                if (fastFlingCount < TERMINAL_FAST_FLING_REQUIRED_COUNT) return Velocity.Zero
+                if (fastFlingCount < fastFlingRequiredCount) return Velocity.Zero
 
                 fastFlingCount = 0
                 var consumed = false
@@ -1325,6 +1399,8 @@ private fun TerminalInteractivePanel(
                     showFullInputBar = showFullInputBar,
                     terminalFontSizeSp = terminalFontSizeSp,
                     forcedTerminalColumns = forcedTerminalColumns,
+                    maxScrollbackLines = maxScrollbackLines,
+                    fastFlingRequiredCount = fastFlingRequiredCount,
                     fullscreen = fullscreen,
                     terminalMuted = terminalMuted,
                     items = terminalStatusItems,
@@ -1359,6 +1435,8 @@ private fun TerminalInteractivePanel(
                         cycleForcedTerminalColumns()
                         markTerminalPreferencesDirty()
                     },
+                    onMaxScrollbackLinesClick = { terminalSettingsDialog = "scrollback" },
+                    onFastFlingRequiredCountClick = { terminalSettingsDialog = "fastFling" },
                     onFullscreenToggle = { onFullscreenChange(!fullscreen) },
                     onCopy = {
                         context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
@@ -1579,6 +1657,37 @@ private fun TerminalInteractivePanel(
             prootManager = prootManager,
         )
     }
+    when (terminalSettingsDialog) {
+        "scrollback" -> TerminalNumberSettingDialog(
+            title = "终端历史行数",
+            value = maxScrollbackLines,
+            presets = TERMINAL_SCROLLBACK_PRESETS,
+            min = TERMINAL_UI_MIN_SCROLLBACK_LINES,
+            max = TerminalEmulator.MAX_SCROLLBACK_LINES,
+            suffix = "行",
+            onDismiss = { terminalSettingsDialog = null },
+            onSave = {
+                maxScrollbackLines = it
+                markTerminalPreferencesDirty()
+                terminalSettingsDialog = null
+            }
+        )
+        "fastFling" -> TerminalNumberSettingDialog(
+            title = "连续快速滑动次数",
+            value = fastFlingRequiredCount,
+            presets = TERMINAL_FAST_FLING_PRESETS,
+            min = TERMINAL_FAST_FLING_PRESETS.first(),
+            max = TERMINAL_FAST_FLING_PRESETS.last(),
+            suffix = "次",
+            onDismiss = { terminalSettingsDialog = null },
+            onSave = {
+                fastFlingRequiredCount = it
+                fastFlingCount = 0
+                markTerminalPreferencesDirty()
+                terminalSettingsDialog = null
+            }
+        )
+    }
     when (editingTerminalItems) {
         "status" -> TerminalItemsEditorDialog(
             title = "编辑终端状态栏选项",
@@ -1624,6 +1733,8 @@ private fun TerminalStatusBar(
     showFullInputBar: Boolean,
     terminalFontSizeSp: Float,
     forcedTerminalColumns: Int?,
+    maxScrollbackLines: Int,
+    fastFlingRequiredCount: Int,
     fullscreen: Boolean,
     terminalMuted: Color,
     items: List<TerminalItemConfig>,
@@ -1635,6 +1746,8 @@ private fun TerminalStatusBar(
     onShowFullInputBarChange: (Boolean) -> Unit,
     onTerminalFontSizeChange: (Float) -> Unit,
     onCycleForcedTerminalColumns: () -> Unit,
+    onMaxScrollbackLinesClick: () -> Unit,
+    onFastFlingRequiredCountClick: () -> Unit,
     onFullscreenToggle: () -> Unit,
     onCopy: () -> Unit,
     onPaste: () -> Unit,
@@ -1674,6 +1787,8 @@ private fun TerminalStatusBar(
                 "RAW" -> TerminalStatusKey(if (rawInputMode) "RAW" else "LINE", rawInputMode, onLongClick = onEditItems) { onRawInputModeChange(!rawInputMode) }
                 "AUTO" -> TerminalStatusKey(if (autoScroll) "AUTO" else "LOCK", autoScroll, onLongClick = onEditItems) { onAutoScrollChange(!autoScroll) }
                 "COLS" -> TerminalStatusKey(forcedTerminalColumns?.let { "${it}C" } ?: "FIT", forcedTerminalColumns != null, onLongClick = onEditItems) { onCycleForcedTerminalColumns() }
+                "HIST" -> TerminalStatusKey(terminalScrollbackLabel(maxScrollbackLines), onLongClick = onEditItems, onClick = onMaxScrollbackLinesClick)
+                "JUMP" -> TerminalStatusKey("J${fastFlingRequiredCount}", onLongClick = onEditItems, onClick = onFastFlingRequiredCountClick)
                 "KEYS" -> TerminalStatusKey("KEYS", showExtraKeys, onLongClick = onEditItems) { onShowExtraKeysChange(!showExtraKeys) }
                 "TOUCH" -> TerminalStatusKey(if (terminalPanMode) "TOUCH" else "MOUSE", !terminalPanMode, onLongClick = onEditItems) { onTerminalPanModeChange(!terminalPanMode) }
                 "INPUT" -> TerminalStatusKey(if (showFullInputBar) "INPUT" else "HIDE", showFullInputBar, onLongClick = onEditItems) { onShowFullInputBarChange(!showFullInputBar) }
@@ -1954,6 +2069,52 @@ private fun labelForTerminalItem(id: String, presets: List<TerminalActionPreset>
 
 private fun labelForTerminalItem(item: TerminalItemConfig, presets: List<TerminalActionPreset>): String =
     item.label?.takeIf { it.isNotBlank() } ?: labelForTerminalItem(item.id, presets)
+
+@Composable
+private fun TerminalNumberSettingDialog(
+    title: String,
+    value: Int,
+    presets: List<Int>,
+    min: Int,
+    max: Int,
+    suffix: String,
+    onDismiss: () -> Unit,
+    onSave: (Int) -> Unit,
+) {
+    var input by remember(value) { mutableStateOf(value.toString()) }
+    val parsed = input.toIntOrNull()?.coerceIn(min, max)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("范围：$min～$max$suffix", style = MaterialTheme.typography.bodySmall)
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    presets.forEach { preset ->
+                        TerminalKey("$preset$suffix", highlight = parsed == preset) { input = preset.toString() }
+                    }
+                }
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it.filter(Char::isDigit).take(6) },
+                    label = { Text("数值") },
+                    supportingText = {
+                        if (input.isNotBlank() && input.toIntOrNull() == null) Text("请输入有效数字")
+                        else if (input.toIntOrNull()?.let { it !in min..max } == true) Text("将限制在范围内")
+                    },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { parsed?.let(onSave) }, enabled = parsed != null) { Text("保存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
 
 @Composable
 private fun TerminalItemsEditorDialog(
