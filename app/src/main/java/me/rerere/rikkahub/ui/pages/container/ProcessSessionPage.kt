@@ -152,8 +152,11 @@ private const val TERMINAL_FAST_FLING_VELOCITY_PX = 3500f
 private const val TERMINAL_FAST_FLING_WINDOW_MS = 700L
 private const val TERMINAL_EDGE_THRESHOLD_PX = 80
 private const val TERMINAL_UI_MIN_SCROLLBACK_LINES = 100
+private const val TERMINAL_IME_HEIGHT_MIN_DP = 80
+private const val TERMINAL_IME_HEIGHT_MAX_DP = 800
 private val TERMINAL_SCROLLBACK_PRESETS = listOf(100, 500, 1000, 2000, 5000, 10000)
 private val TERMINAL_FAST_FLING_PRESETS = listOf(1, 2, 3, 4, 5)
+private val TERMINAL_IME_HEIGHT_PRESETS = listOf(240, 280, 320, 360, 400, 440)
 
 @Serializable
 private data class TerminalQuickCommandConfig(
@@ -182,6 +185,7 @@ private data class TerminalCommandPreference(
     val forcedTerminalColumns: Int? = null,
     val maxScrollbackLines: Int = TerminalEmulator.DEFAULT_MAX_SCROLLBACK_LINES,
     val fastFlingRequiredCount: Int = 2,
+    val customImeHeightDp: Int? = null,
 )
 
 private fun normalizedTerminalCommand(command: String): String = command.trim()
@@ -224,8 +228,19 @@ private data class TerminalActionPreset(
 
 private data class TerminalImeViewportAnchor(
     val followBottom: Boolean,
+    val shouldAvoidIme: Boolean,
     val offsetPx: Int,
 )
+
+private fun shouldAvoidTerminalIme(
+    terminalContentHeightPx: Int,
+    fullOutputViewportHeightPx: Int,
+    effectiveImeHeightPx: Int,
+): Boolean = fullOutputViewportHeightPx > 0 && effectiveImeHeightPx > 0 &&
+    terminalContentHeightPx > fullOutputViewportHeightPx - effectiveImeHeightPx
+
+private fun terminalImeHeightLabel(customImeHeightDp: Int?): String =
+    customImeHeightDp?.let { "I$it" } ?: "IAUTO"
 
 private fun defaultTerminalQuickCommands() = listOf(
     TerminalQuickCommandConfig("tmux", "rikkahub-tmux"),
@@ -262,11 +277,11 @@ private fun defaultTerminalQuickCommands() = listOf(
     TerminalQuickCommandConfig("tty", "tty; stty size; echo ${'$'}TERM"),
 )
 
-private fun defaultTerminalStatusItems() = listOf("RAW", "AUTO", "COLS", "HIST", "JUMP", "KEYS", "TOUCH", "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL").map { TerminalItemConfig(it) }
+private fun defaultTerminalStatusItems() = listOf("RAW", "AUTO", "COLS", "HIST", "JUMP", "IME", "KEYS", "TOUCH", "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL").map { TerminalItemConfig(it) }
 private fun defaultTerminalExtraKeyItems() = listOf("CTRL", "ALT", "SHIFT", "SEL", "KBD", "ESC", "TAB", "S-TAB", "UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "BKSP", "DEL", "ENTER", "C-C", "C-D", "C-Z", "C-L", "C-U", "C-W", "C-A", "C-E", "C-R", "COPY", "PASTE", "CLEAR", "TEST", "CLI").map { TerminalItemConfig(it) }
 
 private val TerminalStatusPresets = listOf(
-    TerminalActionPreset("RAW", "RAW/LINE"), TerminalActionPreset("AUTO", "AUTO/LOCK"), TerminalActionPreset("COLS", "FIT/80C/120C"), TerminalActionPreset("HIST", "HIST"), TerminalActionPreset("JUMP", "JUMP"), TerminalActionPreset("KEYS", "KEYS"),
+    TerminalActionPreset("RAW", "RAW/LINE"), TerminalActionPreset("AUTO", "AUTO/LOCK"), TerminalActionPreset("COLS", "FIT/80C/120C"), TerminalActionPreset("HIST", "HIST"), TerminalActionPreset("JUMP", "JUMP"), TerminalActionPreset("IME", "IME/AUTO"), TerminalActionPreset("KEYS", "KEYS"),
     TerminalActionPreset("TOUCH", "TOUCH/MOUSE"), TerminalActionPreset("INPUT", "INPUT/MINI"), TerminalActionPreset("A-", "A-"),
     TerminalActionPreset("A+", "A+"), TerminalActionPreset("COPY", "COPY"), TerminalActionPreset("PASTE", "PASTE"),
     TerminalActionPreset("CLR", "CLR"), TerminalActionPreset("CTN", "CTN"), TerminalActionPreset("FULL", "FULL/EXIT"),
@@ -802,14 +817,26 @@ private fun TerminalInteractivePanel(
     var fastFlingRequiredCount by remember(processId) {
         mutableIntStateOf((savedPreference?.fastFlingRequiredCount ?: 2).coerceIn(1, TERMINAL_FAST_FLING_PRESETS.last()))
     }
+    var customImeHeightDp by remember(processId) {
+        mutableStateOf(savedPreference?.customImeHeightDp?.coerceIn(TERMINAL_IME_HEIGHT_MIN_DP, TERMINAL_IME_HEIGHT_MAX_DP))
+    }
     var terminalSettingsDialog by remember { mutableStateOf<String?>(null) }
+    val imeVisible = WindowInsets.isImeVisible
     val density = LocalDensity.current
+    val imeInsets = WindowInsets.ime
     val measuredCell = remember(terminalTextStyle, density) { textMeasurer.measure("W", style = terminalTextStyle) }
     val terminalCellWidthPx = measuredCell.size.width.coerceAtLeast(1)
     val terminalCellHeightPx = with(density) { terminalTextStyle.lineHeight.toPx() }
         .roundToInt()
         .coerceAtLeast(measuredCell.size.height)
         .coerceAtLeast(1)
+    val inputBarVisible = !rawInputMode || showFullInputBar
+    val terminalInputBarHeight = if (inputBarVisible) 46.dp else 0.dp
+    val terminalBottomRevealPadding = (if (showExtraKeys) 54.dp else 8.dp) + terminalInputBarHeight
+    val actualImeHeightPx = imeInsets.getBottom(density)
+    val effectiveImeHeightPx = with(density) {
+        (customImeHeightDp?.dp ?: actualImeHeightPx.toDp()).roundToPx()
+    }.coerceAtLeast(0)
     var terminalPreferencesDirty by remember(processId) { mutableStateOf(false) }
     fun markTerminalPreferencesDirty() {
         terminalPreferencesDirty = true
@@ -821,10 +848,6 @@ private fun TerminalInteractivePanel(
         decodeTerminalConfig(settings.terminalExtraKeyItems, defaultTerminalExtraKeyItems())
     }
     var editingTerminalItems by remember { mutableStateOf<String?>(null) }
-    val imeVisible = WindowInsets.isImeVisible
-    val inputBarVisible = !rawInputMode || showFullInputBar
-    val terminalInputBarHeight = if (inputBarVisible) 46.dp else 0.dp
-    val terminalBottomRevealPadding = (if (showExtraKeys) 54.dp else 8.dp) + terminalInputBarHeight
     val rawInputChannel = remember(processId) { Channel<String>(Channel.UNLIMITED) }
     val renderPending = remember(processId) { AtomicBoolean(false) }
     val renderJob = remember(processId) { AtomicReference<Job?>(null) }
@@ -838,9 +861,25 @@ private fun TerminalInteractivePanel(
     val imeResizePending = remember(processId) { AtomicBoolean(false) }
     val imeViewportAnchor = remember(processId) { AtomicReference<TerminalImeViewportAnchor?>(null) }
     val imeViewportRestoreJob = remember(processId) { AtomicReference<Job?>(null) }
+    val fullOutputViewportHeightPx = remember(processId) { AtomicInteger(0) }
     val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
     val currentImeVisible by rememberUpdatedState(imeVisible)
-    val imeInsets = WindowInsets.ime
+    val terminalContentHeightPx = with(density) {
+        val bounds = terminalEmulator.contentBounds(includeScrollback = true)
+        val contentRows = bounds.lastNonBlankRow?.plus(1) ?: 0
+        contentRows * terminalCellHeightPx + terminalBottomRevealPadding.toPx().roundToInt()
+    }
+    val shouldAvoidIme = shouldAvoidTerminalIme(
+        terminalContentHeightPx = terminalContentHeightPx,
+        fullOutputViewportHeightPx = fullOutputViewportHeightPx.get(),
+        effectiveImeHeightPx = effectiveImeHeightPx,
+    )
+    // imePadding keeps the input controls above the real IME. A custom value adds only the
+    // calibration delta to the output viewport, so values smaller than the platform inset
+    // remain safe and values larger than it move terminal content further upward.
+    val imeOutputExtraPadding = if (imeVisible && autoScroll && shouldAvoidIme) {
+        with(density) { (effectiveImeHeightPx - actualImeHeightPx).coerceAtLeast(0).toDp() }
+    } else 0.dp
 
     fun terminalNearBottom(thresholdPx: Int = terminalCellHeightPx * 2): Boolean =
         outputScroll.maxValue <= thresholdPx || outputScroll.value >= outputScroll.maxValue - thresholdPx
@@ -852,11 +891,14 @@ private fun TerminalInteractivePanel(
         if (lastObservedImeVisible.getAndSet(visible) == visible) return
         lastImeTransitionAt.set(System.currentTimeMillis())
         if (visible) {
-            // A short transcript has no real bottom position yet. Do not reinterpret it as
-            // bottom-following when imePadding later makes it scrollable.
-            val hasScrollableRange = outputScroll.maxValue > terminalCellHeightPx * 2
+            // Decide from the post-IME viewport, not from the old maxValue. This covers the
+            // important case where content was shorter than the full viewport but becomes
+            // scrollable after the IME reduces the available height.
+            val avoidIme = shouldAvoidIme
+            val followBottom = autoScroll && avoidIme && terminalNearBottom()
             imeViewportAnchor.set(TerminalImeViewportAnchor(
-                followBottom = autoScroll && hasScrollableRange && terminalNearBottom(),
+                followBottom = followBottom,
+                shouldAvoidIme = avoidIme,
                 offsetPx = outputScroll.value,
             ))
         }
@@ -1147,6 +1189,7 @@ private fun TerminalInteractivePanel(
         forcedTerminalColumns,
         maxScrollbackLines,
         fastFlingRequiredCount,
+        customImeHeightDp,
     ) {
         if (!terminalPreferencesDirty) return@LaunchedEffect
         delay(800)
@@ -1165,6 +1208,7 @@ private fun TerminalInteractivePanel(
                     forcedTerminalColumns = forcedTerminalColumns,
                     maxScrollbackLines = maxScrollbackLines,
                     fastFlingRequiredCount = fastFlingRequiredCount,
+                    customImeHeightDp = customImeHeightDp,
                 )
             })
         }
@@ -1181,7 +1225,7 @@ private fun TerminalInteractivePanel(
         if (cols != terminalColumns) terminalColumns = cols
     }
 
-    LaunchedEffect(imeVisible) {
+    LaunchedEffect(imeVisible, effectiveImeHeightPx) {
         recordImeTransition(imeVisible)
         if (!imeVisible) {
             // Let the inset and weighted terminal viewport settle before applying one final
@@ -1201,9 +1245,9 @@ private fun TerminalInteractivePanel(
                 if (!currentImeVisible) {
                     withFrameNanos { }
                     imeViewportAnchor.getAndSet(null)?.let { anchor ->
-                        if (anchor.followBottom) {
+                        if (anchor.followBottom && autoScroll) {
                             runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
-                        } else {
+                        } else if (!anchor.shouldAvoidIme) {
                             runCatching { outputScroll.scrollTo(anchor.offsetPx.coerceIn(0, outputScroll.maxValue)) }
                         }
                     }
@@ -1212,21 +1256,17 @@ private fun TerminalInteractivePanel(
         }
     }
 
-    // Follow the IME movement without changing the terminal grid on every animation frame.
-    // imePadding changes the viewport and the delta scroll keeps a bottom-following terminal
-    // anchored while the extra-key bar remains available for simultaneous use.
-    LaunchedEffect(processId, density) {
-        var previousImeBottom = 0
-        snapshotFlow { imeInsets.getBottom(density) }
-            .distinctUntilChanged()
-            .collect { imeBottom ->
-                val delta = imeBottom - previousImeBottom
-                val anchor = imeViewportAnchor.get()
-                if (delta != 0 && anchor?.followBottom == true) {
-                    runCatching { outputScroll.scrollBy(delta.toFloat()) }
-                }
-                previousImeBottom = imeBottom
-            }
+    // Re-evaluate after the output viewport has been measured. Directly targeting maxValue
+    // also handles maxValue changing from zero to positive when the IME first appears.
+    LaunchedEffect(processId, outputScroll) {
+        snapshotFlow {
+            Triple(terminalRenderedRows.size, outputScroll.maxValue, imeVisible to shouldAvoidIme)
+        }.distinctUntilChanged().collect { (_, _, imeState) ->
+            val anchor = imeViewportAnchor.get()
+            if (!imeState.first || !imeState.second || !autoScroll || anchor?.followBottom != true || !anchor.shouldAvoidIme) return@collect
+            withFrameNanos { }
+            if (currentImeVisible) runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+        }
     }
 
     LaunchedEffect(processId, terminalColumns, terminalRows) {
@@ -1379,6 +1419,8 @@ private fun TerminalInteractivePanel(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // Keep the input and extra-key bars above the real IME. The configured height
+                // is a virtual calibration value used for terminal avoidance decisions.
                 .imePadding()
                 .navigationBarsPadding()
                 .padding(horizontal = if (fullscreen) 4.dp else 8.dp, vertical = if (showStatusBar) 0.dp else if (fullscreen) 4.dp else 8.dp)
@@ -1401,6 +1443,7 @@ private fun TerminalInteractivePanel(
                     forcedTerminalColumns = forcedTerminalColumns,
                     maxScrollbackLines = maxScrollbackLines,
                     fastFlingRequiredCount = fastFlingRequiredCount,
+                    customImeHeightDp = customImeHeightDp,
                     fullscreen = fullscreen,
                     terminalMuted = terminalMuted,
                     items = terminalStatusItems,
@@ -1437,6 +1480,7 @@ private fun TerminalInteractivePanel(
                     },
                     onMaxScrollbackLinesClick = { terminalSettingsDialog = "scrollback" },
                     onFastFlingRequiredCountClick = { terminalSettingsDialog = "fastFling" },
+                    onCustomImeHeightClick = { terminalSettingsDialog = "imeHeight" },
                     onFullscreenToggle = { onFullscreenChange(!fullscreen) },
                     onCopy = {
                         context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
@@ -1455,7 +1499,11 @@ private fun TerminalInteractivePanel(
                     .weight(1f)
                     .background(terminalBackground, RoundedCornerShape(if (fullscreen) 0.dp else 8.dp))
                     .padding(horizontal = if (fullscreen) 4.dp else 6.dp, vertical = if (fullscreen) 3.dp else 5.dp)
+                    .padding(bottom = imeOutputExtraPadding)
                     .onSizeChanged { size ->
+                        if (!currentImeVisible || fullOutputViewportHeightPx.get() == 0) {
+                            fullOutputViewportHeightPx.set(size.height)
+                        }
                         if (autoScroll && terminalNearBottom()) keepBottomAfterNextLayout.set(true)
                         val measuredCols = (size.width / terminalCellWidthPx).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
                         measuredTerminalColumns = measuredCols
@@ -1672,6 +1720,15 @@ private fun TerminalInteractivePanel(
                 terminalSettingsDialog = null
             }
         )
+        "imeHeight" -> TerminalImeHeightSettingDialog(
+            value = customImeHeightDp,
+            onDismiss = { terminalSettingsDialog = null },
+            onSave = {
+                customImeHeightDp = it
+                markTerminalPreferencesDirty()
+                terminalSettingsDialog = null
+            }
+        )
         "fastFling" -> TerminalNumberSettingDialog(
             title = "连续快速滑动次数",
             value = fastFlingRequiredCount,
@@ -1735,6 +1792,7 @@ private fun TerminalStatusBar(
     forcedTerminalColumns: Int?,
     maxScrollbackLines: Int,
     fastFlingRequiredCount: Int,
+    customImeHeightDp: Int?,
     fullscreen: Boolean,
     terminalMuted: Color,
     items: List<TerminalItemConfig>,
@@ -1748,6 +1806,7 @@ private fun TerminalStatusBar(
     onCycleForcedTerminalColumns: () -> Unit,
     onMaxScrollbackLinesClick: () -> Unit,
     onFastFlingRequiredCountClick: () -> Unit,
+    onCustomImeHeightClick: () -> Unit,
     onFullscreenToggle: () -> Unit,
     onCopy: () -> Unit,
     onPaste: () -> Unit,
@@ -1789,6 +1848,7 @@ private fun TerminalStatusBar(
                 "COLS" -> TerminalStatusKey(forcedTerminalColumns?.let { "${it}C" } ?: "FIT", forcedTerminalColumns != null, onLongClick = onEditItems) { onCycleForcedTerminalColumns() }
                 "HIST" -> TerminalStatusKey(terminalScrollbackLabel(maxScrollbackLines), onLongClick = onEditItems, onClick = onMaxScrollbackLinesClick)
                 "JUMP" -> TerminalStatusKey("J${fastFlingRequiredCount}", onLongClick = onEditItems, onClick = onFastFlingRequiredCountClick)
+                "IME" -> TerminalStatusKey(terminalImeHeightLabel(customImeHeightDp), highlight = customImeHeightDp != null, onLongClick = onEditItems, onClick = onCustomImeHeightClick)
                 "KEYS" -> TerminalStatusKey("KEYS", showExtraKeys, onLongClick = onEditItems) { onShowExtraKeysChange(!showExtraKeys) }
                 "TOUCH" -> TerminalStatusKey(if (terminalPanMode) "TOUCH" else "MOUSE", !terminalPanMode, onLongClick = onEditItems) { onTerminalPanModeChange(!terminalPanMode) }
                 "INPUT" -> TerminalStatusKey(if (showFullInputBar) "INPUT" else "HIDE", showFullInputBar, onLongClick = onEditItems) { onShowFullInputBarChange(!showFullInputBar) }
@@ -2111,6 +2171,48 @@ private fun TerminalNumberSettingDialog(
         },
         confirmButton = {
             TextButton(onClick = { parsed?.let(onSave) }, enabled = parsed != null) { Text("保存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun TerminalImeHeightSettingDialog(
+    value: Int?,
+    onDismiss: () -> Unit,
+    onSave: (Int?) -> Unit,
+) {
+    var input by remember(value) { mutableStateOf(value?.toString().orEmpty()) }
+    val parsed = input.toIntOrNull()?.coerceIn(TERMINAL_IME_HEIGHT_MIN_DP, TERMINAL_IME_HEIGHT_MAX_DP)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("IME 避让高度") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("自动适配或手动设置 IME 高度（$TERMINAL_IME_HEIGHT_MIN_DP～$TERMINAL_IME_HEIGHT_MAX_DP dp）。", style = MaterialTheme.typography.bodySmall)
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TerminalKey("自动", highlight = value == null && input.isBlank()) { input = "" }
+                    TERMINAL_IME_HEIGHT_PRESETS.forEach { preset ->
+                        TerminalKey("${preset}dp", highlight = parsed == preset) { input = preset.toString() }
+                    }
+                }
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it.filter(Char::isDigit).take(3) },
+                    label = { Text("高度 dp") },
+                    supportingText = {
+                        if (input.isNotBlank() && input.toIntOrNull() == null) Text("请输入有效数字")
+                        else if (input.toIntOrNull()?.let { it !in TERMINAL_IME_HEIGHT_MIN_DP..TERMINAL_IME_HEIGHT_MAX_DP } == true) Text("将限制在范围内")
+                    },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(if (input.isBlank()) null else parsed) }, enabled = input.isBlank() || parsed != null) { Text("保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )

@@ -53,7 +53,9 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)"))
         assertTrue(processSessionSource.contains("val measuredCell = remember(terminalTextStyle, density)"))
         assertTrue(processSessionSource.contains("val imeInsets = WindowInsets.ime"))
-        assertTrue(processSessionSource.contains("snapshotFlow { imeInsets.getBottom(density) }"))
+        assertTrue(processSessionSource.contains("effectiveImeHeightPx"))
+        assertTrue(processSessionSource.contains("shouldAvoidTerminalIme"))
+        assertTrue(processSessionSource.contains("snapshotFlow {\n            Triple(terminalRenderedRows.size, outputScroll.maxValue, imeVisible to shouldAvoidIme)"))
         assertTrue(processSessionSource.contains("TerminalImeViewportAnchor"))
         assertTrue(processSessionSource.contains("shouldFollowTerminalBottom()"))
         assertTrue(processSessionSource.contains("imeViewportAnchor.getAndSet(null)?.let { anchor ->"))
@@ -112,6 +114,19 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("scheduleTerminalRender()"))
         assertFalse(processSessionSource.contains("TERMINAL_OUTPUT_BATCH_WINDOW_MS"))
         assertFalse(processSessionSource.contains("delay(8L)"))
+    }
+
+    @Test
+    fun imeAvoidanceCoversNewScrollRangeAndSupportsPerCommandCalibration() {
+        assertTrue(processSessionSource.contains("val customImeHeightDp: Int? = null"))
+        assertTrue(processSessionSource.contains("TERMINAL_IME_HEIGHT_MIN_DP = 80"))
+        assertTrue(processSessionSource.contains("TERMINAL_IME_HEIGHT_MAX_DP = 800"))
+        assertTrue(processSessionSource.contains("customImeHeightDp = customImeHeightDp"))
+        assertTrue(processSessionSource.contains("\"IME\" -> TerminalStatusKey"))
+        assertTrue(processSessionSource.contains("TerminalImeHeightSettingDialog"))
+        assertTrue(processSessionSource.contains("terminalContentHeightPx > fullOutputViewportHeightPx - effectiveImeHeightPx"))
+        assertTrue(processSessionSource.contains("if (!currentImeVisible || fullOutputViewportHeightPx.get() == 0)"))
+        assertTrue(processSessionSource.contains("if (imeVisible && autoScroll && shouldAvoidIme)"))
     }
 
     @Test
