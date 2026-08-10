@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.container
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PtyModeInferenceTest {
@@ -55,6 +57,16 @@ class PtyModeInferenceTest {
         assertEquals(PtyMode.RAW, inferPtyMode("bunx yazi", PtyMode.AUTO, custom))
         assertEquals(PtyMode.COOKED, inferPtyMode("lazy", PtyMode.AUTO, custom))
         assertEquals(PtyMode.COOKED, inferPtyMode("evil", PtyMode.AUTO, "invalid token;evil"))
+    }
+
+    @Test
+    fun fullGridMatcherUsesOnlyTheUserConfiguredList() {
+        assertFalse(isConfiguredTerminalCommand("vim README.md", ""))
+        assertFalse(isConfiguredTerminalCommand("tmux new", "lazygit\nyazi"))
+        assertTrue(isConfiguredTerminalCommand("vim README.md", "vim"))
+        assertTrue(isConfiguredTerminalCommand("/usr/bin/tmux new", "tmux"))
+        assertTrue(isConfiguredTerminalCommand("bunx yazi", "yazi"))
+        assertFalse(isConfiguredTerminalCommand("echo yazi", "yazi"))
     }
 
     @Test

@@ -80,6 +80,16 @@ class TerminalUiSourceTest {
     }
 
     @Test
+    fun fullGridProgramListIsIndependentEmptyByDefaultAndPersisted() {
+        assertTrue(preferencesStoreSource.contains("TERMINAL_FULL_GRID_COMMANDS"))
+        assertTrue(preferencesStoreSource.contains("terminalFullGridCommands = preferences[TERMINAL_FULL_GRID_COMMANDS] ?: \"\""))
+        assertTrue(preferencesStoreSource.contains("preferences[TERMINAL_FULL_GRID_COMMANDS] = settings.terminalFullGridCommands"))
+        assertTrue(preferencesStoreSource.contains("val terminalFullGridCommands: String = \"\""))
+        assertTrue(processSessionSource.contains("settings.terminalFullGridCommands"))
+        assertTrue(!processSessionSource.contains("terminalGridStatusItemMigrated"))
+    }
+
+    @Test
     fun longPressTerminalButtonNavigatesToStartedTerminalPanel() {
         assertTrue(routeSource.contains("data class ProcessSessions(val sandboxId: String, val processId: String? = null)"))
         assertTrue(processSessionSource.contains("initialProcessId"))

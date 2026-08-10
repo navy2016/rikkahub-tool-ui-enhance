@@ -35,6 +35,21 @@ private fun commandSegments(command: String): Sequence<List<String>> = sequence 
 private fun isTuiExecutable(token: String, commands: Set<String>): Boolean =
     token.substringAfterLast('/').trim().lowercase() in commands
 
+internal fun isConfiguredTerminalCommand(command: String, configuredRaw: String): Boolean {
+    val commands = parseCustomTuiCommands(configuredRaw)
+    if (commands.isEmpty()) return false
+    return commandSegments(command).any { tokens ->
+        when (tokens.firstOrNull()) {
+            "npx", "bunx" -> tokens.drop(1).firstOrNull()?.let { isTuiExecutable(it, commands) } == true
+            "npm" -> tokens.getOrNull(1) == "exec" &&
+                tokens.drop(2).firstOrNull { !it.startsWith('-') }?.let { isTuiExecutable(it, commands) } == true
+            "pnpm" -> tokens.getOrNull(1) == "dlx" &&
+                tokens.drop(2).firstOrNull { !it.startsWith('-') }?.let { isTuiExecutable(it, commands) } == true
+            else -> isTuiExecutable(tokens.first(), commands)
+        }
+    }
+}
+
 internal fun isTuiCommand(command: String, customRaw: String = ""): Boolean {
     val commands = terminalTuiCommands(customRaw)
     return commandSegments(command).any { tokens ->

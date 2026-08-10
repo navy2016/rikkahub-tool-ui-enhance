@@ -114,6 +114,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.data.container.BackgroundProcessInfo
 import me.rerere.rikkahub.data.container.BackgroundProcessManager
+import me.rerere.rikkahub.data.container.isConfiguredTerminalCommand
 import me.rerere.rikkahub.data.container.isTuiCommand
 import me.rerere.rikkahub.data.container.ControlInput
 import me.rerere.rikkahub.data.container.ProcessStatus
@@ -236,8 +237,9 @@ private data class TerminalImeViewportSnapshot(
     val renderedRowCount: Int,
     val lastNonBlankRow: Int?,
     val viewportHeightPx: Int,
-    val maxScrollPx: Int,
+    val bottomTargetPx: Int,
     val imeState: Pair<Boolean, Boolean>,
+    val anchorRevision: Int,
 )
 
 private data class TerminalScrollSnapshot(
@@ -247,7 +249,7 @@ private data class TerminalScrollSnapshot(
     val autoScroll: Boolean,
 )
 
-private fun terminalImeAnchorScrollTarget(
+internal fun terminalImeAnchorScrollTarget(
     lastNonBlankRow: Int?,
     terminalCellHeightPx: Int,
     viewportHeightPx: Int,
@@ -259,12 +261,30 @@ private fun terminalImeAnchorScrollTarget(
     return (lastContentBottomPx - viewportHeightPx).coerceIn(0, maxScrollPx)
 }
 
+internal fun terminalWasFollowingBeforeIme(
+    scrollValuePx: Int,
+    currentBottomTargetPx: Int,
+    fullViewportHeightPx: Int,
+    currentViewportHeightPx: Int,
+    thresholdPx: Int,
+): Boolean {
+    if (fullViewportHeightPx <= 0 || currentViewportHeightPx <= 0) {
+        return scrollValuePx >= currentBottomTargetPx - thresholdPx
+    }
+    val viewportShrinkPx = (fullViewportHeightPx - currentViewportHeightPx).coerceAtLeast(0)
+    val preImeBottomTargetPx = (currentBottomTargetPx - viewportShrinkPx).coerceAtLeast(0)
+    return scrollValuePx >= preImeBottomTargetPx - thresholdPx
+}
+
 private fun shouldAvoidTerminalIme(
     terminalContentHeightPx: Int,
-    fullOutputViewportHeightPx: Int,
-    effectiveImeHeightPx: Int,
-): Boolean = fullOutputViewportHeightPx > 0 && effectiveImeHeightPx > 0 &&
-    terminalContentHeightPx > fullOutputViewportHeightPx - effectiveImeHeightPx
+    imeVisible: Boolean,
+    outputViewportHeightPx: Int,
+): Boolean = imeVisible && outputViewportHeightPx > 0 &&
+    terminalContentHeightPx > outputViewportHeightPx
+
+private fun terminalGridAlignmentLabel(preservesFullTerminalGrid: Boolean): String =
+    if (preservesFullTerminalGrid) "GRID" else "TAIL"
 
 private fun terminalImeHeightLabel(customImeHeightDp: Int?): String =
     customImeHeightDp?.let { "I$it" } ?: "IAUTO"
@@ -304,11 +324,11 @@ private fun defaultTerminalQuickCommands() = listOf(
     TerminalQuickCommandConfig("tty", "tty; stty size; echo ${'$'}TERM"),
 )
 
-private fun defaultTerminalStatusItems() = listOf("RAW", "AUTO", "COLS", "HIST", "JUMP", "IME", "KEYS", "TOUCH", "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL").map { TerminalItemConfig(it) }
+private fun defaultTerminalStatusItems() = listOf("RAW", "AUTO", "COLS", "HIST", "JUMP", "IME", "GRID", "KEYS", "TOUCH", "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL").map { TerminalItemConfig(it) }
 private fun defaultTerminalExtraKeyItems() = listOf("CTRL", "ALT", "SHIFT", "SEL", "KBD", "ESC", "TAB", "S-TAB", "UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "BKSP", "DEL", "ENTER", "C-C", "C-D", "C-Z", "C-L", "C-U", "C-W", "C-A", "C-E", "C-R", "COPY", "PASTE", "CLEAR", "TEST", "CLI").map { TerminalItemConfig(it) }
 
 private val TerminalStatusPresets = listOf(
-    TerminalActionPreset("RAW", "RAW/LINE"), TerminalActionPreset("AUTO", "AUTO/LOCK"), TerminalActionPreset("COLS", "FIT/80C/120C"), TerminalActionPreset("HIST", "HIST"), TerminalActionPreset("JUMP", "JUMP"), TerminalActionPreset("IME", "IME/AUTO"), TerminalActionPreset("KEYS", "KEYS"),
+    TerminalActionPreset("RAW", "RAW/LINE"), TerminalActionPreset("AUTO", "AUTO/LOCK"), TerminalActionPreset("COLS", "FIT/80C/120C"), TerminalActionPreset("HIST", "HIST"), TerminalActionPreset("JUMP", "JUMP"), TerminalActionPreset("IME", "IME/AUTO"), TerminalActionPreset("GRID", "GRID/TAIL"), TerminalActionPreset("KEYS", "KEYS"),
     TerminalActionPreset("TOUCH", "TOUCH/MOUSE"), TerminalActionPreset("INPUT", "INPUT/MINI"), TerminalActionPreset("A-", "A-"),
     TerminalActionPreset("A+", "A+"), TerminalActionPreset("COPY", "COPY"), TerminalActionPreset("PASTE", "PASTE"),
     TerminalActionPreset("CLR", "CLR"), TerminalActionPreset("CTN", "CTN"), TerminalActionPreset("FULL", "FULL/EXIT"),
@@ -859,7 +879,6 @@ private fun TerminalInteractivePanel(
         .coerceAtLeast(1)
     val inputBarVisible = !rawInputMode || showFullInputBar
     val terminalInputBarHeight = if (inputBarVisible) 46.dp else 0.dp
-    val terminalBottomRevealPadding = (if (showExtraKeys) 54.dp else 8.dp) + terminalInputBarHeight
     val actualImeHeightPx = imeInsets.getBottom(density)
     val effectiveImeHeightPx = with(density) {
         (customImeHeightDp?.dp ?: actualImeHeightPx.toDp()).roundToPx()
@@ -887,72 +906,111 @@ private fun TerminalInteractivePanel(
     val lastAppliedTerminalRows = remember(processId) { AtomicInteger(initialTerminalRows) }
     val imeResizePending = remember(processId) { AtomicBoolean(false) }
     val imeViewportAnchor = remember(processId) { AtomicReference<TerminalImeViewportAnchor?>(null) }
+    var imeViewportAnchorRevision by remember(processId) { mutableIntStateOf(0) }
     val imeViewportRestoreJob = remember(processId) { AtomicReference<Job?>(null) }
     val fullOutputViewportHeightPx = remember(processId) { AtomicInteger(0) }
     var outputViewportHeightPx by remember(processId) { mutableIntStateOf(0) }
     val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
     val currentImeVisible by rememberUpdatedState(imeVisible)
     val terminalContentBounds = terminalEmulator.contentBounds(includeScrollback = true)
+    val shouldPreserveFullTerminalGrid = isConfiguredTerminalCommand(
+        process.command,
+        settings.terminalFullGridCommands,
+    )
     // Only the rendered terminal tail belongs to the scroll content. Input and extra-key bars
     // are siblings of the output Box and have already been removed from its weighted height.
-    val terminalTailPaddingPx = with(density) {
-        (if (terminalEmulator.isAlternateScreen) terminalBottomRevealPadding else 8.dp).roundToPx()
+    val terminalTailPaddingPx = with(density) { 8.dp.roundToPx() }
+    val terminalContentHeightPx = if (shouldPreserveFullTerminalGrid) {
+        terminalRenderedRows.size * terminalCellHeightPx + terminalTailPaddingPx
+    } else {
+        terminalContentBounds.lastNonBlankRow?.let { lastRow ->
+            (lastRow + 1) * terminalCellHeightPx + terminalTailPaddingPx
+        } ?: 0
     }
-    val terminalContentHeightPx = terminalContentBounds.lastNonBlankRow?.let { lastRow ->
-        (lastRow + 1) * terminalCellHeightPx + terminalTailPaddingPx
-    } ?: 0
     val shouldAvoidIme = shouldAvoidTerminalIme(
         terminalContentHeightPx = terminalContentHeightPx,
-        fullOutputViewportHeightPx = fullOutputViewportHeightPx.get(),
-        effectiveImeHeightPx = effectiveImeHeightPx,
+        imeVisible = imeVisible,
+        outputViewportHeightPx = outputViewportHeightPx,
     )
-    // imePadding keeps the input controls above the real IME. A custom value adds only the
-    // calibration delta to the output viewport, so values smaller than the platform inset
-    // remain safe and values larger than it move terminal content further upward.
-    val imeOutputExtraPadding = if (imeVisible && autoScroll && shouldAvoidIme) {
+    val currentLastNonBlankRow by rememberUpdatedState(terminalContentBounds.lastNonBlankRow)
+    val currentTerminalTailPaddingPx by rememberUpdatedState(terminalTailPaddingPx)
+    val currentPreserveFullTerminalGrid by rememberUpdatedState(shouldPreserveFullTerminalGrid)
+    val currentShouldAvoidIme by rememberUpdatedState(shouldAvoidIme)
+    val customImeRequiresExtraAvoidance = customImeHeightDp != null &&
+        fullOutputViewportHeightPx.get() > 0 &&
+        terminalContentHeightPx > fullOutputViewportHeightPx.get() - effectiveImeHeightPx
+    // imePadding keeps controls above the real IME. A larger custom height adds the difference
+    // to the measured output viewport; smaller values never move controls into the keyboard.
+    val imeOutputExtraPadding = if (imeVisible && autoScroll && (shouldAvoidIme || customImeRequiresExtraAvoidance)) {
         with(density) { (effectiveImeHeightPx - actualImeHeightPx).coerceAtLeast(0).toDp() }
     } else 0.dp
 
-    fun terminalNearBottom(thresholdPx: Int = terminalCellHeightPx * 2): Boolean =
-        outputScroll.maxValue <= thresholdPx || outputScroll.value >= outputScroll.maxValue - thresholdPx
-
-    suspend fun scrollTerminalContentBottomToIme() {
-        // Alternate-screen TUIs own the complete grid, including intentionally blank rows, so
-        // they continue to align the physical grid bottom. Normal shell transcripts instead
-        // anchor the last nonblank rendered row to avoid a large blank gap above the IME.
-        if (terminalEmulator.isAlternateScreen) {
-            outputScroll.scrollTo(outputScroll.maxValue)
-            return
-        }
-        val target = terminalImeAnchorScrollTarget(
-            lastNonBlankRow = terminalContentBounds.lastNonBlankRow,
+    fun terminalViewportBottomScrollTarget(): Int {
+        if (currentPreserveFullTerminalGrid) return outputScroll.maxValue
+        return terminalImeAnchorScrollTarget(
+            lastNonBlankRow = currentLastNonBlankRow,
             terminalCellHeightPx = terminalCellHeightPx,
             viewportHeightPx = outputViewportHeightPx,
-            terminalTailPaddingPx = terminalTailPaddingPx,
+            terminalTailPaddingPx = currentTerminalTailPaddingPx,
             maxScrollPx = outputScroll.maxValue,
         )
-        outputScroll.scrollTo(target)
+    }
+
+    fun terminalNearBottom(thresholdPx: Int = terminalCellHeightPx * 2): Boolean {
+        val target = terminalViewportBottomScrollTarget()
+        return outputScroll.value >= target - thresholdPx
+    }
+
+    suspend fun scrollTerminalContentBottomToIme() {
+        // Full physical-grid anchoring is controlled only by the user-managed GRID list.
+        // All other commands anchor the last nonblank row, even on the alternate screen.
+        outputScroll.scrollTo(terminalViewportBottomScrollTarget())
     }
 
     fun shouldFollowTerminalBottom(): Boolean =
         autoScroll && (imeViewportAnchor.get()?.followBottom != false)
 
-    fun recordImeTransition(visible: Boolean) {
-        if (lastObservedImeVisible.getAndSet(visible) == visible) return
+    fun scheduleStableTerminalRows(expectedImeVisible: Boolean, debounce: Boolean = true) {
+        pendingImeRowResizeJob.getAndSet(null)?.cancel()
+        pendingImeRowResizeJob.set(scope.launch {
+            if (debounce) delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
+            if (currentImeVisible == expectedImeVisible) {
+                val stableRows = measuredTerminalRows.get()
+                if (stableRows != terminalRows) {
+                    terminalRows = stableRows
+                } else {
+                    imeResizePending.set(false)
+                }
+            }
+        })
+    }
+
+    fun recordImeTransition(
+        visible: Boolean,
+        currentViewportHeightPx: Int = outputViewportHeightPx,
+    ): Boolean {
+        if (lastObservedImeVisible.getAndSet(visible) == visible) return false
         lastImeTransitionAt.set(System.currentTimeMillis())
         if (visible) {
-            // Decide from the post-IME viewport, not from the old maxValue. This covers the
-            // important case where content was shorter than the full viewport but becomes
-            // scrollable after the IME reduces the available height.
-            val avoidIme = shouldAvoidIme
-            val followBottom = autoScroll && avoidIme && terminalNearBottom()
+            // IME visibility commonly flips before WindowInsets.ime and the output viewport have
+            // reached their final values. Capture only the pre-animation follow state here; the
+            // measured viewport decides shouldAvoidIme after layout.
+            val followBottom = autoScroll && terminalWasFollowingBeforeIme(
+                scrollValuePx = outputScroll.value,
+                currentBottomTargetPx = terminalViewportBottomScrollTarget(),
+                fullViewportHeightPx = fullOutputViewportHeightPx.get(),
+                currentViewportHeightPx = currentViewportHeightPx,
+                thresholdPx = terminalCellHeightPx * 2,
+            )
             imeViewportAnchor.set(TerminalImeViewportAnchor(
                 followBottom = followBottom,
-                shouldAvoidIme = avoidIme,
+                shouldAvoidIme = false,
                 offsetPx = outputScroll.value,
             ))
+            imeViewportAnchorRevision++
         }
         keepBottomAfterNextLayout.set(shouldFollowTerminalBottom() && terminalNearBottom())
+        return true
     }
 
     fun saveTerminalViewport() {
@@ -996,12 +1054,11 @@ private fun TerminalInteractivePanel(
                     syncWaited += 16L
                 }
                 val bottomThreshold = terminalCellHeightPx * 2
-                val wasNearBottom = outputScroll.maxValue <= bottomThreshold ||
-                    outputScroll.value >= outputScroll.maxValue - bottomThreshold
+                val wasNearBottom = terminalNearBottom(bottomThreshold)
                 renderTerminalFrame()
-                if (!terminalEmulator.isAlternateScreen && shouldFollowTerminalBottom() && wasNearBottom) {
+                if (shouldFollowTerminalBottom() && wasNearBottom) {
                     withFrameNanos { }
-                    runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+                    runCatching { scrollTerminalContentBottomToIme() }
                 }
             }
         })
@@ -1219,9 +1276,9 @@ private fun TerminalInteractivePanel(
     LaunchedEffect(processId, outputScroll) {
         snapshotFlow { Triple(outputScroll.isScrollInProgress, outputScroll.value, outputScroll.maxValue) }
             .distinctUntilChanged()
-            .collect { (scrolling, value, maxValue) ->
+            .collect { (scrolling, value, _) ->
                 if (!scrolling) return@collect
-                val nearBottom = maxValue <= terminalCellHeightPx * 2 || value >= maxValue - terminalCellHeightPx * 2
+                val nearBottom = value >= terminalViewportBottomScrollTarget() - terminalCellHeightPx * 2
                 if (autoScroll != nearBottom) autoScroll = nearBottom
             }
     }
@@ -1276,19 +1333,13 @@ private fun TerminalInteractivePanel(
     }
 
     LaunchedEffect(imeVisible, effectiveImeHeightPx) {
-        recordImeTransition(imeVisible)
+        val imeChanged = recordImeTransition(imeVisible)
+        if (imeChanged || imeVisible || imeResizePending.get()) {
+            imeResizePending.set(true)
+            scheduleStableTerminalRows(expectedImeVisible = imeVisible)
+        }
         if (!imeVisible) {
-            // Let the inset and weighted terminal viewport settle before applying one final
-            // emulator/PTY row count, rather than resizing through an intermediate height.
-            pendingImeRowResizeJob.getAndSet(null)?.cancel()
-            pendingImeRowResizeJob.set(scope.launch {
-                delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
-                if (!currentImeVisible) {
-                    val stableRows = measuredTerminalRows.get()
-                    if (stableRows != terminalRows) terminalRows = stableRows
-                    imeResizePending.set(false)
-                }
-            })
+            // Let the inset and weighted terminal viewport settle before restoring its anchor.
             imeViewportRestoreJob.getAndSet(null)?.cancel()
             imeViewportRestoreJob.set(scope.launch {
                 delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
@@ -1296,8 +1347,8 @@ private fun TerminalInteractivePanel(
                     withFrameNanos { }
                     imeViewportAnchor.getAndSet(null)?.let { anchor ->
                         if (anchor.followBottom && autoScroll) {
-                            runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
-                        } else if (!anchor.shouldAvoidIme) {
+                            runCatching { scrollTerminalContentBottomToIme() }
+                        } else {
                             runCatching { outputScroll.scrollTo(anchor.offsetPx.coerceIn(0, outputScroll.maxValue)) }
                         }
                     }
@@ -1312,17 +1363,53 @@ private fun TerminalInteractivePanel(
         snapshotFlow {
             TerminalImeViewportSnapshot(
                 renderedRowCount = terminalRenderedRows.size,
-                lastNonBlankRow = terminalContentBounds.lastNonBlankRow,
+                lastNonBlankRow = currentLastNonBlankRow,
                 viewportHeightPx = outputViewportHeightPx,
-                maxScrollPx = outputScroll.maxValue,
-                imeState = imeVisible to shouldAvoidIme,
+                bottomTargetPx = terminalViewportBottomScrollTarget(),
+                imeState = currentImeVisible to currentShouldAvoidIme,
+                anchorRevision = imeViewportAnchorRevision,
             )
         }.distinctUntilChanged().collect { snapshot ->
             val imeState = snapshot.imeState
-            val anchor = imeViewportAnchor.get()
-            if (!imeState.first || !imeState.second || !autoScroll || anchor?.followBottom != true || !anchor.shouldAvoidIme) return@collect
+            var anchor = imeViewportAnchor.get() ?: return@collect
+            if (!imeState.first || !autoScroll) return@collect
+            if (!anchor.followBottom) {
+                val measuredFollowBottom = terminalWasFollowingBeforeIme(
+                    scrollValuePx = anchor.offsetPx,
+                    currentBottomTargetPx = snapshot.bottomTargetPx,
+                    fullViewportHeightPx = fullOutputViewportHeightPx.get(),
+                    currentViewportHeightPx = snapshot.viewportHeightPx,
+                    thresholdPx = terminalCellHeightPx * 2,
+                )
+                if (measuredFollowBottom) {
+                    val corrected = anchor.copy(followBottom = true)
+                    if (imeViewportAnchor.compareAndSet(anchor, corrected)) {
+                        anchor = corrected
+                        imeViewportAnchorRevision++
+                    } else {
+                        anchor = imeViewportAnchor.get() ?: return@collect
+                    }
+                }
+            }
+            if (!anchor.followBottom) return@collect
+            val avoidIme = imeState.second
+            if (anchor.shouldAvoidIme != avoidIme) {
+                val updated = anchor.copy(shouldAvoidIme = avoidIme)
+                if (imeViewportAnchor.compareAndSet(anchor, updated)) {
+                    anchor = updated
+                    imeViewportAnchorRevision++
+                } else {
+                    anchor = imeViewportAnchor.get() ?: return@collect
+                }
+            }
             withFrameNanos { }
-            if (currentImeVisible) runCatching { scrollTerminalContentBottomToIme() }
+            if (currentImeVisible) runCatching {
+                if (avoidIme) {
+                    scrollTerminalContentBottomToIme()
+                } else {
+                    outputScroll.scrollTo(anchor.offsetPx.coerceIn(0, outputScroll.maxValue))
+                }
+            }
         }
     }
 
@@ -1353,7 +1440,7 @@ private fun TerminalInteractivePanel(
                 renderTerminalFrame()
                 if (shouldFollowTerminalBottom() && wasNearBottom) {
                     withFrameNanos { }
-                    runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+                    runCatching { scrollTerminalContentBottomToIme() }
                 }
             })
             bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)
@@ -1364,7 +1451,7 @@ private fun TerminalInteractivePanel(
         }
         if (shouldFollowTerminalBottom() && wasNearBottom) {
             withFrameNanos { }
-            runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+            runCatching { scrollTerminalContentBottomToIme() }
         }
         keepBottomAfterNextLayout.set(false)
     }
@@ -1377,7 +1464,7 @@ private fun TerminalInteractivePanel(
             }
         withFrameNanos { }
         if (restored.atBottom && restored.autoScroll) {
-            runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+            runCatching { scrollTerminalContentBottomToIme() }
         } else {
             runCatching { outputScroll.scrollTo(restored.verticalOffsetPx.coerceIn(0, outputScroll.maxValue)) }
         }
@@ -1414,10 +1501,10 @@ private fun TerminalInteractivePanel(
                 withFrameNanos { }
                 val imeAnchor = imeViewportAnchor.get()
                 runCatching {
-                    if (currentImeVisible && imeAnchor?.followBottom == true && imeAnchor.shouldAvoidIme) {
-                        scrollTerminalContentBottomToIme()
+                    if (currentImeVisible && imeAnchor?.followBottom == true && !currentShouldAvoidIme) {
+                        outputScroll.scrollTo(imeAnchor.offsetPx.coerceIn(0, outputScroll.maxValue))
                     } else {
-                        outputScroll.scrollTo(outputScroll.maxValue)
+                        scrollTerminalContentBottomToIme()
                     }
                 }
             }
@@ -1461,9 +1548,9 @@ private fun TerminalInteractivePanel(
                 fastFlingCount = 0
                 var consumed = false
                 if (direction > 0) {
-                    if (outputScroll.maxValue - outputScroll.value > TERMINAL_EDGE_THRESHOLD_PX) {
+                    if (terminalViewportBottomScrollTarget() - outputScroll.value > TERMINAL_EDGE_THRESHOLD_PX) {
                         autoScroll = true
-                        outputScroll.animateScrollTo(outputScroll.maxValue)
+                        outputScroll.animateScrollTo(terminalViewportBottomScrollTarget())
                         saveTerminalViewport()
                         consumed = true
                     }
@@ -1513,6 +1600,7 @@ private fun TerminalInteractivePanel(
                     maxScrollbackLines = maxScrollbackLines,
                     fastFlingRequiredCount = fastFlingRequiredCount,
                     customImeHeightDp = customImeHeightDp,
+                    preservesFullTerminalGrid = shouldPreserveFullTerminalGrid,
                     fullscreen = fullscreen,
                     terminalMuted = terminalMuted,
                     items = terminalStatusItems,
@@ -1550,6 +1638,7 @@ private fun TerminalInteractivePanel(
                     onMaxScrollbackLinesClick = { terminalSettingsDialog = "scrollback" },
                     onFastFlingRequiredCountClick = { terminalSettingsDialog = "fastFling" },
                     onCustomImeHeightClick = { terminalSettingsDialog = "imeHeight" },
+                    onTerminalGridAlignmentClick = { terminalSettingsDialog = "gridPrograms" },
                     onFullscreenToggle = { onFullscreenChange(!fullscreen) },
                     onCopy = {
                         context.writeClipboardText(terminalEmulator.plainText(includeScrollback = true))
@@ -1569,38 +1658,6 @@ private fun TerminalInteractivePanel(
                     .background(terminalBackground, RoundedCornerShape(if (fullscreen) 0.dp else 8.dp))
                     .padding(horizontal = if (fullscreen) 4.dp else 6.dp, vertical = if (fullscreen) 3.dp else 5.dp)
                     .padding(bottom = imeOutputExtraPadding)
-                    .onSizeChanged { size ->
-                        outputViewportHeightPx = size.height
-                        if (!currentImeVisible || fullOutputViewportHeightPx.get() == 0) {
-                            fullOutputViewportHeightPx.set(size.height)
-                        }
-                        if (autoScroll && terminalNearBottom()) keepBottomAfterNextLayout.set(true)
-                        val measuredCols = (size.width / terminalCellWidthPx).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
-                        measuredTerminalColumns = measuredCols
-                        val cols = (forcedTerminalColumns ?: measuredCols).coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
-                        val rows = (size.height / terminalCellHeightPx).coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
-                        if (cols != terminalColumns) terminalColumns = cols
-                        if (rows != measuredTerminalRows.getAndSet(rows)) {
-                            recordImeTransition(currentImeVisible)
-                            pendingImeRowResizeJob.getAndSet(null)?.cancel()
-                            val insideImeAnimationWindow = currentImeVisible || imeResizePending.get() ||
-                                System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
-                            if (insideImeAnimationWindow) imeResizePending.set(true)
-                            pendingImeRowResizeJob.set(scope.launch {
-                                if (insideImeAnimationWindow) {
-                                    delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
-                                }
-                                // Do not resize the PTY while the IME is visible. The IME
-                                // transition effect below applies the latest stable row count
-                                // after dismissal.
-                                if (!currentImeVisible) {
-                                    val stableRows = measuredTerminalRows.get()
-                                    if (stableRows != terminalRows) terminalRows = stableRows
-                                    imeResizePending.set(false)
-                                }
-                            })
-                        }
-                    }
                     .onFocusChanged { focusState ->
                         terminalEmulator.sequenceForFocus(focusState.isFocused)?.let { sequence -> sendRaw(sequence) }
                     }
@@ -1653,6 +1710,31 @@ private fun TerminalInteractivePanel(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .onSizeChanged { size ->
+                            recordImeTransition(currentImeVisible, currentViewportHeightPx = size.height)
+                            outputViewportHeightPx = size.height
+                            if (!currentImeVisible || fullOutputViewportHeightPx.get() == 0) {
+                                fullOutputViewportHeightPx.set(size.height)
+                            }
+                            if (autoScroll && terminalNearBottom()) keepBottomAfterNextLayout.set(true)
+                            val measuredCols = (size.width / terminalCellWidthPx)
+                                .coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
+                            measuredTerminalColumns = measuredCols
+                            val cols = (forcedTerminalColumns ?: measuredCols)
+                                .coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
+                            val rows = (size.height / terminalCellHeightPx)
+                                .coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
+                            if (cols != terminalColumns) terminalColumns = cols
+                            if (rows != measuredTerminalRows.getAndSet(rows)) {
+                                val insideImeAnimationWindow = currentImeVisible || imeResizePending.get() ||
+                                    System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
+                                if (insideImeAnimationWindow) imeResizePending.set(true)
+                                scheduleStableTerminalRows(
+                                    expectedImeVisible = currentImeVisible,
+                                    debounce = insideImeAnimationWindow,
+                                )
+                            }
+                        }
                         .nestedScroll(fastFlingConnection)
                         .horizontalScroll(horizontalScroll, enabled = terminalPanMode || selectionMode)
                         // Keep a tiny manual viewport pan available in TOUCH/selection modes. In
@@ -1688,7 +1770,7 @@ private fun TerminalInteractivePanel(
                     }
                     Spacer(
                         modifier = Modifier.height(
-                            if (terminalEmulator.isAlternateScreen) terminalBottomRevealPadding else 8.dp
+                            8.dp
                         )
                     )
                 }
@@ -1799,6 +1881,18 @@ private fun TerminalInteractivePanel(
                 terminalSettingsDialog = null
             }
         )
+        "gridPrograms" -> TerminalGridProgramsDialog(
+            command = process.command,
+            value = settings.terminalFullGridCommands,
+            currentPreservesGrid = shouldPreserveFullTerminalGrid,
+            onDismiss = { terminalSettingsDialog = null },
+            onSave = { value ->
+                scope.launch {
+                    settingsStore.update { it.copy(terminalFullGridCommands = value) }
+                }
+                terminalSettingsDialog = null
+            },
+        )
         "fastFling" -> TerminalNumberSettingDialog(
             title = "连续快速滑动次数",
             value = fastFlingRequiredCount,
@@ -1863,6 +1957,7 @@ private fun TerminalStatusBar(
     maxScrollbackLines: Int,
     fastFlingRequiredCount: Int,
     customImeHeightDp: Int?,
+    preservesFullTerminalGrid: Boolean,
     fullscreen: Boolean,
     terminalMuted: Color,
     items: List<TerminalItemConfig>,
@@ -1877,6 +1972,7 @@ private fun TerminalStatusBar(
     onMaxScrollbackLinesClick: () -> Unit,
     onFastFlingRequiredCountClick: () -> Unit,
     onCustomImeHeightClick: () -> Unit,
+    onTerminalGridAlignmentClick: () -> Unit,
     onFullscreenToggle: () -> Unit,
     onCopy: () -> Unit,
     onPaste: () -> Unit,
@@ -1919,6 +2015,7 @@ private fun TerminalStatusBar(
                 "HIST" -> TerminalStatusKey(terminalScrollbackLabel(maxScrollbackLines), onLongClick = onEditItems, onClick = onMaxScrollbackLinesClick)
                 "JUMP" -> TerminalStatusKey("J${fastFlingRequiredCount}", onLongClick = onEditItems, onClick = onFastFlingRequiredCountClick)
                 "IME" -> TerminalStatusKey(terminalImeHeightLabel(customImeHeightDp), highlight = customImeHeightDp != null, onLongClick = onEditItems, onClick = onCustomImeHeightClick)
+                "GRID" -> TerminalStatusKey(terminalGridAlignmentLabel(preservesFullTerminalGrid), highlight = preservesFullTerminalGrid, onLongClick = onEditItems, onClick = onTerminalGridAlignmentClick)
                 "KEYS" -> TerminalStatusKey("KEYS", showExtraKeys, onLongClick = onEditItems) { onShowExtraKeysChange(!showExtraKeys) }
                 "TOUCH" -> TerminalStatusKey(if (terminalPanMode) "TOUCH" else "MOUSE", !terminalPanMode, onLongClick = onEditItems) { onTerminalPanModeChange(!terminalPanMode) }
                 "INPUT" -> TerminalStatusKey(if (showFullInputBar) "INPUT" else "HIDE", showFullInputBar, onLongClick = onEditItems) { onShowFullInputBarChange(!showFullInputBar) }
@@ -2243,6 +2340,43 @@ private fun TerminalNumberSettingDialog(
             TextButton(onClick = { parsed?.let(onSave) }, enabled = parsed != null) { Text("保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+@Composable
+private fun TerminalGridProgramsDialog(
+    command: String,
+    value: String,
+    currentPreservesGrid: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var input by remember(value) { mutableStateOf(value) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("完整终端网格程序") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "当前命令：${command.take(80)}\n当前使用${if (currentPreservesGrid) "完整网格" else "最后内容行"}对齐。只有此名单决定完整网格行为，可保持为空；每行一个程序名。",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    label = { Text("自定义程序名单") },
+                    placeholder = { Text("lazygit\nbtop\nyazi\nranger") },
+                    minLines = 5,
+                    maxLines = 10,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(input.replace("\r\n", "\n").replace('\r', '\n').trim()) }) {
+                Text("保存")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 

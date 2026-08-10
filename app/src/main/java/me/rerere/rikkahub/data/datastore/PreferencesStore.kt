@@ -169,6 +169,7 @@ class SettingsStore(
         val TERMINAL_STATUS_BAR_ITEMS = stringPreferencesKey("terminal_status_bar_items")
         val TERMINAL_EXTRA_KEY_ITEMS = stringPreferencesKey("terminal_extra_key_items")
         val TERMINAL_CUSTOM_TUI_COMMANDS = stringPreferencesKey("terminal_custom_tui_commands")
+        val TERMINAL_FULL_GRID_COMMANDS = stringPreferencesKey("terminal_full_grid_commands")
         val TERMINAL_COMMAND_PREFERENCES = stringPreferencesKey("terminal_command_preferences")
 
         // 提示词注入
@@ -300,6 +301,7 @@ class SettingsStore(
                 terminalStatusBarItems = preferences[TERMINAL_STATUS_BAR_ITEMS] ?: "",
                 terminalExtraKeyItems = preferences[TERMINAL_EXTRA_KEY_ITEMS] ?: "",
                 terminalCustomTuiCommands = preferences[TERMINAL_CUSTOM_TUI_COMMANDS] ?: "",
+                terminalFullGridCommands = preferences[TERMINAL_FULL_GRID_COMMANDS] ?: "",
                 terminalCommandPreferences = preferences[TERMINAL_COMMAND_PREFERENCES] ?: "",
                 backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
@@ -574,6 +576,10 @@ class SettingsStore(
             if (settings.terminalStatusBarItems.isBlank()) preferences.remove(TERMINAL_STATUS_BAR_ITEMS) else preferences[TERMINAL_STATUS_BAR_ITEMS] = settings.terminalStatusBarItems
             if (settings.terminalExtraKeyItems.isBlank()) preferences.remove(TERMINAL_EXTRA_KEY_ITEMS) else preferences[TERMINAL_EXTRA_KEY_ITEMS] = settings.terminalExtraKeyItems
             if (settings.terminalCustomTuiCommands.isBlank()) preferences.remove(TERMINAL_CUSTOM_TUI_COMMANDS) else preferences[TERMINAL_CUSTOM_TUI_COMMANDS] = settings.terminalCustomTuiCommands.replace("\r\n", "\n").replace("\r", "\n").trim()
+            preferences[TERMINAL_FULL_GRID_COMMANDS] = settings.terminalFullGridCommands
+                .replace("\r\n", "\n")
+                .replace("\r", "\n")
+                .trim()
             if (settings.terminalCommandPreferences.isBlank()) preferences.remove(TERMINAL_COMMAND_PREFERENCES) else preferences[TERMINAL_COMMAND_PREFERENCES] = settings.terminalCommandPreferences
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
@@ -735,6 +741,7 @@ data class Settings(
     val terminalStatusBarItems: String = "",
     val terminalExtraKeyItems: String = "",
     val terminalCustomTuiCommands: String = "",
+    val terminalFullGridCommands: String = "",
     val terminalCommandPreferences: String = "",
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,

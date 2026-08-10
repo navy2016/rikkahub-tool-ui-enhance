@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.data.container
 
+import me.rerere.rikkahub.ui.pages.container.terminalImeAnchorScrollTarget
+import me.rerere.rikkahub.ui.pages.container.terminalWasFollowingBeforeIme
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -57,14 +60,17 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("shouldAvoidTerminalIme"))
         assertTrue(processSessionSource.contains("TerminalImeViewportAnchor"))
         assertTrue(processSessionSource.contains("terminalImeAnchorScrollTarget"))
-        assertTrue(processSessionSource.contains("lastNonBlankRow = terminalContentBounds.lastNonBlankRow"))
+        assertTrue(processSessionSource.contains("val currentLastNonBlankRow by rememberUpdatedState(terminalContentBounds.lastNonBlankRow)"))
         assertTrue(processSessionSource.contains("viewportHeightPx = outputViewportHeightPx"))
         assertTrue(processSessionSource.contains("scrollTerminalContentBottomToIme()"))
         assertTrue(processSessionSource.contains("lastContentBottomPx - viewportHeightPx"))
-        assertTrue(processSessionSource.contains("if (terminalEmulator.isAlternateScreen)"))
-        assertTrue(processSessionSource.contains("Alternate-screen TUIs own the complete grid"))
-        assertTrue(processSessionSource.contains("normal shell transcripts", ignoreCase = true))
-        assertTrue(processSessionSource.contains("Input and extra-key bars\n    // are siblings of the output Box"))
+        assertTrue(processSessionSource.contains("isConfiguredTerminalCommand("))
+        assertTrue(processSessionSource.contains("settings.terminalFullGridCommands"))
+        assertTrue(processSessionSource.contains("if (shouldPreserveFullTerminalGrid)"))
+        assertTrue(processSessionSource.contains("terminalRenderedRows.size * terminalCellHeightPx + terminalTailPaddingPx"))
+        assertTrue(processSessionSource.contains("Full physical-grid anchoring is controlled only by the user-managed GRID list"))
+        assertTrue(processSessionSource.contains("All other commands anchor the last nonblank row, even on the alternate screen"))
+        assertTrue(processSessionSource.contains("Only the rendered terminal tail belongs to the scroll content. Input and extra-key bars"))
         assertTrue(processSessionSource.contains("shouldFollowTerminalBottom()"))
         assertTrue(processSessionSource.contains("imeViewportAnchor.getAndSet(null)?.let { anchor ->"))
         assertFalse(processSessionSource.contains("var terminalCellWidthPx by remember"))
@@ -111,7 +117,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("\"JUMP\""))
         assertTrue(processSessionSource.contains(".verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)"))
         assertTrue(processSessionSource.contains("if (!fastFlingEnabled) return Velocity.Zero"))
-        assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(outputScroll.maxValue)"))
+        assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(terminalViewportBottomScrollTarget())"))
         assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(0)"))
         assertTrue(processSessionSource.contains(".nestedScroll(fastFlingConnection)"))
     }
@@ -132,11 +138,61 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("customImeHeightDp = customImeHeightDp"))
         assertTrue(processSessionSource.contains("\"IME\" -> TerminalStatusKey"))
         assertTrue(processSessionSource.contains("TerminalImeHeightSettingDialog"))
-        assertTrue(processSessionSource.contains("terminalContentHeightPx > fullOutputViewportHeightPx - effectiveImeHeightPx"))
+        assertTrue(processSessionSource.contains("terminalContentHeightPx > outputViewportHeightPx"))
+        assertTrue(processSessionSource.contains("outputViewportHeightPx = outputViewportHeightPx"))
+        assertTrue(processSessionSource.contains("terminalWasFollowingBeforeIme("))
+        assertTrue(processSessionSource.contains("recordImeTransition(currentImeVisible, currentViewportHeightPx = size.height)"))
+        assertTrue(processSessionSource.contains("currentViewportHeightPx = snapshot.viewportHeightPx"))
+        assertTrue(processSessionSource.contains("anchor.copy(followBottom = true)"))
         assertTrue(processSessionSource.contains("if (!currentImeVisible || fullOutputViewportHeightPx.get() == 0)"))
-        assertTrue(processSessionSource.contains("if (imeVisible && autoScroll && shouldAvoidIme)"))
-        assertTrue(processSessionSource.contains("terminalTailPaddingPx"))
+        assertTrue(processSessionSource.contains("shouldAvoidIme || customImeRequiresExtraAvoidance"))
+        assertTrue(processSessionSource.contains("scheduleStableTerminalRows(expectedImeVisible = imeVisible)"))
+        assertTrue(processSessionSource.contains("expectedImeVisible = currentImeVisible"))
+        assertTrue(processSessionSource.contains("val target = terminalViewportBottomScrollTarget()"))
+        assertTrue(processSessionSource.contains("outputScroll.value >= target - thresholdPx"))
         assertFalse(processSessionSource.contains("contentRows * terminalCellHeightPx + terminalBottomRevealPadding"))
+    }
+
+    @Test
+    fun imeFollowStateUsesThePreImeViewportAndSemanticContentBottom() {
+        assertTrue(terminalWasFollowingBeforeIme(
+            scrollValuePx = 0,
+            currentBottomTargetPx = 400,
+            fullViewportHeightPx = 1000,
+            currentViewportHeightPx = 600,
+            thresholdPx = 20,
+        ))
+        assertTrue(terminalWasFollowingBeforeIme(
+            scrollValuePx = 300,
+            currentBottomTargetPx = 700,
+            fullViewportHeightPx = 1000,
+            currentViewportHeightPx = 600,
+            thresholdPx = 20,
+        ))
+        assertFalse(terminalWasFollowingBeforeIme(
+            scrollValuePx = 100,
+            currentBottomTargetPx = 900,
+            fullViewportHeightPx = 1000,
+            currentViewportHeightPx = 600,
+            thresholdPx = 20,
+        ))
+        assertEquals(108, terminalImeAnchorScrollTarget(
+            lastNonBlankRow = 34,
+            terminalCellHeightPx = 20,
+            viewportHeightPx = 600,
+            terminalTailPaddingPx = 8,
+            maxScrollPx = 400,
+        ))
+    }
+
+    @Test
+    fun fullGridAlignmentIsExposedAsAUserManagedIndependentList() {
+        assertTrue(processSessionSource.contains("\"GRID\" -> TerminalStatusKey"))
+        assertTrue(processSessionSource.contains("TerminalGridProgramsDialog"))
+        assertTrue(processSessionSource.contains("terminalFullGridCommands = value"))
+        assertTrue(processSessionSource.contains("TerminalActionPreset(\"GRID\", \"GRID/TAIL\")"))
+        assertFalse(processSessionSource.contains("terminalEmulator.isAlternateScreen ||"))
+        assertFalse(processSessionSource.contains("settings.terminalCustomTuiCommands,\n    )\n    val currentLastNonBlankRow"))
     }
 
     @Test
