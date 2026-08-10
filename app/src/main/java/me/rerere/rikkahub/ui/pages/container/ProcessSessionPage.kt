@@ -232,6 +232,33 @@ private data class TerminalImeViewportAnchor(
     val offsetPx: Int,
 )
 
+private data class TerminalImeViewportSnapshot(
+    val renderedRowCount: Int,
+    val lastNonBlankRow: Int?,
+    val viewportHeightPx: Int,
+    val maxScrollPx: Int,
+    val imeState: Pair<Boolean, Boolean>,
+)
+
+private data class TerminalScrollSnapshot(
+    val maxScrollPx: Int,
+    val renderedRowCount: Int,
+    val viewportHeightPx: Int,
+    val autoScroll: Boolean,
+)
+
+private fun terminalImeAnchorScrollTarget(
+    lastNonBlankRow: Int?,
+    terminalCellHeightPx: Int,
+    viewportHeightPx: Int,
+    terminalTailPaddingPx: Int,
+    maxScrollPx: Int,
+): Int {
+    if (lastNonBlankRow == null || viewportHeightPx <= 0) return 0
+    val lastContentBottomPx = (lastNonBlankRow + 1) * terminalCellHeightPx + terminalTailPaddingPx
+    return (lastContentBottomPx - viewportHeightPx).coerceIn(0, maxScrollPx)
+}
+
 private fun shouldAvoidTerminalIme(
     terminalContentHeightPx: Int,
     fullOutputViewportHeightPx: Int,
@@ -862,13 +889,18 @@ private fun TerminalInteractivePanel(
     val imeViewportAnchor = remember(processId) { AtomicReference<TerminalImeViewportAnchor?>(null) }
     val imeViewportRestoreJob = remember(processId) { AtomicReference<Job?>(null) }
     val fullOutputViewportHeightPx = remember(processId) { AtomicInteger(0) }
+    var outputViewportHeightPx by remember(processId) { mutableIntStateOf(0) }
     val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
     val currentImeVisible by rememberUpdatedState(imeVisible)
-    val terminalContentHeightPx = with(density) {
-        val bounds = terminalEmulator.contentBounds(includeScrollback = true)
-        val contentRows = bounds.lastNonBlankRow?.plus(1) ?: 0
-        contentRows * terminalCellHeightPx + terminalBottomRevealPadding.toPx().roundToInt()
+    val terminalContentBounds = terminalEmulator.contentBounds(includeScrollback = true)
+    // Only the rendered terminal tail belongs to the scroll content. Input and extra-key bars
+    // are siblings of the output Box and have already been removed from its weighted height.
+    val terminalTailPaddingPx = with(density) {
+        (if (terminalEmulator.isAlternateScreen) terminalBottomRevealPadding else 8.dp).roundToPx()
     }
+    val terminalContentHeightPx = terminalContentBounds.lastNonBlankRow?.let { lastRow ->
+        (lastRow + 1) * terminalCellHeightPx + terminalTailPaddingPx
+    } ?: 0
     val shouldAvoidIme = shouldAvoidTerminalIme(
         terminalContentHeightPx = terminalContentHeightPx,
         fullOutputViewportHeightPx = fullOutputViewportHeightPx.get(),
@@ -883,6 +915,20 @@ private fun TerminalInteractivePanel(
 
     fun terminalNearBottom(thresholdPx: Int = terminalCellHeightPx * 2): Boolean =
         outputScroll.maxValue <= thresholdPx || outputScroll.value >= outputScroll.maxValue - thresholdPx
+
+    suspend fun scrollTerminalContentBottomToIme() {
+        // maxValue targets the bottom of the entire terminal grid, including blank rows. For a
+        // short transcript this leaves a conspicuous gap above the IME. Anchor the last nonblank
+        // rendered row instead, while retaining maxValue as the physical scroll boundary.
+        val target = terminalImeAnchorScrollTarget(
+            lastNonBlankRow = terminalContentBounds.lastNonBlankRow,
+            terminalCellHeightPx = terminalCellHeightPx,
+            viewportHeightPx = outputViewportHeightPx,
+            terminalTailPaddingPx = terminalTailPaddingPx,
+            maxScrollPx = outputScroll.maxValue,
+        )
+        outputScroll.scrollTo(target)
+    }
 
     fun shouldFollowTerminalBottom(): Boolean =
         autoScroll && (imeViewportAnchor.get()?.followBottom != false)
@@ -1256,16 +1302,23 @@ private fun TerminalInteractivePanel(
         }
     }
 
-    // Re-evaluate after the output viewport has been measured. Directly targeting maxValue
-    // also handles maxValue changing from zero to positive when the IME first appears.
+    // Re-evaluate after the output viewport has been measured. The scroll target is the last
+    // nonblank rendered line, not maxValue: maxValue includes blank terminal-grid rows.
     LaunchedEffect(processId, outputScroll) {
         snapshotFlow {
-            Triple(terminalRenderedRows.size, outputScroll.maxValue, imeVisible to shouldAvoidIme)
-        }.distinctUntilChanged().collect { (_, _, imeState) ->
+            TerminalImeViewportSnapshot(
+                renderedRowCount = terminalRenderedRows.size,
+                lastNonBlankRow = terminalContentBounds.lastNonBlankRow,
+                viewportHeightPx = outputViewportHeightPx,
+                maxScrollPx = outputScroll.maxValue,
+                imeState = imeVisible to shouldAvoidIme,
+            )
+        }.distinctUntilChanged().collect { snapshot ->
+            val imeState = snapshot.imeState
             val anchor = imeViewportAnchor.get()
             if (!imeState.first || !imeState.second || !autoScroll || anchor?.followBottom != true || !anchor.shouldAvoidIme) return@collect
             withFrameNanos { }
-            if (currentImeVisible) runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+            if (currentImeVisible) runCatching { scrollTerminalContentBottomToIme() }
         }
     }
 
@@ -1345,12 +1398,24 @@ private fun TerminalInteractivePanel(
     }
 
     LaunchedEffect(processId, outputScroll) {
-        snapshotFlow { Triple(outputScroll.maxValue, terminalRenderedRows.size, autoScroll) }
-            .distinctUntilChanged()
-            .collect { (_, _, followBottom) ->
-                if (!followBottom || !shouldFollowTerminalBottom()) return@collect
+        snapshotFlow {
+            TerminalScrollSnapshot(
+                maxScrollPx = outputScroll.maxValue,
+                renderedRowCount = terminalRenderedRows.size,
+                viewportHeightPx = outputViewportHeightPx,
+                autoScroll = autoScroll,
+            )
+        }.distinctUntilChanged().collect { snapshot ->
+                if (!snapshot.autoScroll || !shouldFollowTerminalBottom()) return@collect
                 withFrameNanos { }
-                runCatching { outputScroll.scrollTo(outputScroll.maxValue) }
+                val imeAnchor = imeViewportAnchor.get()
+                runCatching {
+                    if (currentImeVisible && imeAnchor?.followBottom == true && imeAnchor.shouldAvoidIme) {
+                        scrollTerminalContentBottomToIme()
+                    } else {
+                        outputScroll.scrollTo(outputScroll.maxValue)
+                    }
+                }
             }
     }
 
@@ -1501,6 +1566,7 @@ private fun TerminalInteractivePanel(
                     .padding(horizontal = if (fullscreen) 4.dp else 6.dp, vertical = if (fullscreen) 3.dp else 5.dp)
                     .padding(bottom = imeOutputExtraPadding)
                     .onSizeChanged { size ->
+                        outputViewportHeightPx = size.height
                         if (!currentImeVisible || fullOutputViewportHeightPx.get() == 0) {
                             fullOutputViewportHeightPx.set(size.height)
                         }

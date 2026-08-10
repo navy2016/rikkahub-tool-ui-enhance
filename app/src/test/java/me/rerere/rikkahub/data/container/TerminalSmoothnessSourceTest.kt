@@ -55,8 +55,14 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("val imeInsets = WindowInsets.ime"))
         assertTrue(processSessionSource.contains("effectiveImeHeightPx"))
         assertTrue(processSessionSource.contains("shouldAvoidTerminalIme"))
-        assertTrue(processSessionSource.contains("snapshotFlow {\n            Triple(terminalRenderedRows.size, outputScroll.maxValue, imeVisible to shouldAvoidIme)"))
         assertTrue(processSessionSource.contains("TerminalImeViewportAnchor"))
+        assertTrue(processSessionSource.contains("terminalImeAnchorScrollTarget"))
+        assertTrue(processSessionSource.contains("lastNonBlankRow = terminalContentBounds.lastNonBlankRow"))
+        assertTrue(processSessionSource.contains("viewportHeightPx = outputViewportHeightPx"))
+        assertTrue(processSessionSource.contains("scrollTerminalContentBottomToIme()"))
+        assertTrue(processSessionSource.contains("lastContentBottomPx - viewportHeightPx"))
+        assertTrue(processSessionSource.contains("maxValue includes blank terminal-grid rows"))
+        assertTrue(processSessionSource.contains("Input and extra-key bars\n    // are siblings of the output Box"))
         assertTrue(processSessionSource.contains("shouldFollowTerminalBottom()"))
         assertTrue(processSessionSource.contains("imeViewportAnchor.getAndSet(null)?.let { anchor ->"))
         assertFalse(processSessionSource.contains("var terminalCellWidthPx by remember"))
@@ -127,6 +133,8 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("terminalContentHeightPx > fullOutputViewportHeightPx - effectiveImeHeightPx"))
         assertTrue(processSessionSource.contains("if (!currentImeVisible || fullOutputViewportHeightPx.get() == 0)"))
         assertTrue(processSessionSource.contains("if (imeVisible && autoScroll && shouldAvoidIme)"))
+        assertTrue(processSessionSource.contains("terminalTailPaddingPx"))
+        assertFalse(processSessionSource.contains("contentRows * terminalCellHeightPx + terminalBottomRevealPadding"))
     }
 
     @Test
