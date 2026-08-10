@@ -917,9 +917,13 @@ private fun TerminalInteractivePanel(
         outputScroll.maxValue <= thresholdPx || outputScroll.value >= outputScroll.maxValue - thresholdPx
 
     suspend fun scrollTerminalContentBottomToIme() {
-        // maxValue targets the bottom of the entire terminal grid, including blank rows. For a
-        // short transcript this leaves a conspicuous gap above the IME. Anchor the last nonblank
-        // rendered row instead, while retaining maxValue as the physical scroll boundary.
+        // Alternate-screen TUIs own the complete grid, including intentionally blank rows, so
+        // they continue to align the physical grid bottom. Normal shell transcripts instead
+        // anchor the last nonblank rendered row to avoid a large blank gap above the IME.
+        if (terminalEmulator.isAlternateScreen) {
+            outputScroll.scrollTo(outputScroll.maxValue)
+            return
+        }
         val target = terminalImeAnchorScrollTarget(
             lastNonBlankRow = terminalContentBounds.lastNonBlankRow,
             terminalCellHeightPx = terminalCellHeightPx,
