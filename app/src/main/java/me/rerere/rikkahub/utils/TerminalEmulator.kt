@@ -269,28 +269,38 @@ class TerminalEmulator(
     fun maxScrollbackLines(): Int = scrollbackLimit
 
     @Synchronized
-    fun resize(columns: Int, rows: Int) {
+    fun resize(columns: Int, rows: Int, preserveBottomRows: Boolean = false) {
         val newColumns = columns.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
         val newRows = rows.coerceIn(MIN_ROWS, MAX_ROWS)
         if (newColumns == this.columns && newRows == this.rows) return
 
+        val oldRows = this.rows
+        val preservedRowShift = if (preserveBottomRows) newRows - oldRows else 0
         this.columns = newColumns
         this.rows = newRows
         tabStops.removeIf { it >= newColumns }
         if (tabStops.isEmpty()) resetTabStops()
-        mainScreen.resizeScreen(newRows, newColumns)
-        altScreen.resizeScreen(newRows, newColumns)
+        mainScreen.resizeScreen(
+            newRows,
+            newColumns,
+            preserveBottom = preserveBottomRows && !alternateScreen,
+        )
+        altScreen.resizeScreen(
+            newRows,
+            newColumns,
+            preserveBottom = preserveBottomRows && alternateScreen,
+        )
         val resizedScrollback = scrollback.map { resizedLine(it, newColumns, defaultStyle) }
         scrollback.clear()
         resizedScrollback.takeLast(scrollbackLimit).forEach { scrollback.addLast(it) }
         scrollTop = 0
         scrollBottom = newRows - 1
-        cursorRow = cursorRow.coerceIn(0, newRows - 1)
+        cursorRow = (cursorRow + preservedRowShift).coerceIn(0, newRows - 1)
         cursorCol = cursorCol.coerceIn(0, newColumns - 1)
-        savedRow = savedRow.coerceIn(0, newRows - 1)
+        savedRow = (savedRow + preservedRowShift).coerceIn(0, newRows - 1)
         savedCol = savedCol.coerceIn(0, newColumns - 1)
         savedCursor = savedCursor.copy(
-            row = savedCursor.row.coerceIn(0, newRows - 1),
+            row = (savedCursor.row + preservedRowShift).coerceIn(0, newRows - 1),
             col = savedCursor.col.coerceIn(0, newColumns - 1),
             pendingWrap = false
         )
@@ -676,12 +686,22 @@ class TerminalEmulator(
         }
     }
 
-    private fun MutableList<Array<Cell>>.resizeScreen(newRows: Int, newColumns: Int) {
+    private fun MutableList<Array<Cell>>.resizeScreen(
+        newRows: Int,
+        newColumns: Int,
+        preserveBottom: Boolean = false,
+    ) {
         val old = toList()
         clear()
         val copyRows = min(old.size, newRows)
-        repeat(copyRows) { row -> add(resizedLine(old[row], newColumns, defaultStyle)) }
-        repeat(newRows - copyRows) { add(Array(newColumns) { Cell(style = defaultStyle) }) }
+        val sourceStart = if (preserveBottom) old.size - copyRows else 0
+        if (preserveBottom) {
+            repeat(newRows - copyRows) { add(Array(newColumns) { Cell(style = defaultStyle) }) }
+        }
+        repeat(copyRows) { row -> add(resizedLine(old[sourceStart + row], newColumns, defaultStyle)) }
+        if (!preserveBottom) {
+            repeat(newRows - copyRows) { add(Array(newColumns) { Cell(style = defaultStyle) }) }
+        }
     }
 
     private fun MutableList<Array<Cell>>.resetScreen() {

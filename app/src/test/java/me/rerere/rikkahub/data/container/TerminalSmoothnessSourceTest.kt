@@ -51,7 +51,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("TerminalScrollSnapshot("))
         assertFalse(processSessionSource.contains("LaunchedEffect(imeVisible, terminalRows, terminalRenderedRows.size, outputScroll.maxValue"))
         assertFalse(processSessionSource.contains("LaunchedEffect(processId, terminalRenderedRows.size, outputScroll.maxValue"))
-        assertTrue(processSessionSource.contains("terminalEmulator.resize(terminalColumns, terminalRows)"))
+        assertTrue(processSessionSource.contains("preserveBottomRows = currentPreserveFullTerminalGrid"))
         assertTrue(processSessionSource.contains("imeStableForSizeHint"))
         assertTrue(processSessionSource.contains("bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)"))
         assertTrue(processSessionSource.contains("val measuredCell = remember(terminalTextStyle, density)"))
@@ -74,6 +74,28 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("shouldFollowTerminalBottom()"))
         assertTrue(processSessionSource.contains("imeViewportAnchor.getAndSet(null)?.let { anchor ->"))
         assertFalse(processSessionSource.contains("var terminalCellWidthPx by remember"))
+    }
+
+    @Test
+    fun listAndFullscreenReuseOneTerminalAndListPreviewNeverResizesThePty() {
+        assertTrue(processSessionSource.contains("movableContentOf { placement: TerminalPanelPlacement"))
+        assertTrue(processSessionSource.contains("val terminalPanelContent = remember(activeInteractiveProcess?.processId)"))
+        assertTrue(processSessionSource.contains("if (currentFullscreen) {"))
+        assertTrue(processSessionSource.contains("LIST is a clipped preview of the live full-size grid"))
+        assertTrue(processSessionSource.contains("if (!currentFullscreen) return"))
+    }
+
+    @Test
+    fun gridRenderingReusesRowsAndProtectsTuiBottomChrome() {
+        assertTrue(processSessionSource.contains("class TerminalRenderedRowState"))
+        assertTrue(processSessionSource.contains("mutableStateListOf<TerminalRenderedRowState>()"))
+        assertTrue(processSessionSource.contains("Snapshot.withMutableSnapshot"))
+        assertTrue(processSessionSource.contains("if (rowState.text != next) rowState.text = next"))
+        assertTrue(processSessionSource.contains("TERMINAL_GRID_STABLE_BOTTOM_ROWS"))
+        assertTrue(processSessionSource.contains("TERMINAL_GRID_CLEAR_GRACE_MS"))
+        assertTrue(processSessionSource.contains("holdCompleteFrameForGrid"))
+        assertTrue(processSessionSource.contains("resizeAwaitingTuiRedraw.set(true)"))
+        assertFalse(processSessionSource.contains("terminalRenderedRows = terminalEmulator.renderRows()"))
     }
 
     @Test
@@ -144,7 +166,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("recordImeTransition(currentImeVisible, currentViewportHeightPx = size.height)"))
         assertTrue(processSessionSource.contains("currentViewportHeightPx = snapshot.viewportHeightPx"))
         assertTrue(processSessionSource.contains("anchor.copy(followBottom = true)"))
-        assertTrue(processSessionSource.contains("if (!currentImeVisible || fullOutputViewportHeightPx.get() == 0)"))
+        assertTrue(processSessionSource.contains("currentFullscreen && (!currentImeVisible || fullOutputViewportHeightPx.get() == 0)"))
         assertTrue(processSessionSource.contains("shouldAvoidIme || customImeRequiresExtraAvoidance"))
         assertTrue(processSessionSource.contains("scheduleStableTerminalRows(expectedImeVisible = imeVisible)"))
         assertTrue(processSessionSource.contains("expectedImeVisible = currentImeVisible"))
