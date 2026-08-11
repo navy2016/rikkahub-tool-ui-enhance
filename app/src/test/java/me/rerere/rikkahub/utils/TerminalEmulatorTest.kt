@@ -38,18 +38,18 @@ class TerminalEmulatorTest {
 
     @Test
     fun gridResizeCanPreserveTuiOwnedBottomRows() {
-        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
-        terminal.feed("\u001B[5;1Hinput-line\u001B[6;1Hstatus-line")
-
-        terminal.resize(columns = 20, rows = 4, preserveBottomRows = true)
-        var lines = terminal.plainText(includeScrollback = false).lines()
-        assertTrue(lines[2].startsWith("input-line"))
-        assertTrue(lines[3].startsWith("status-line"))
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 8)
+        terminal.feed("\u001B[7;1Hinput-line\u001B[8;1Hstatus-line")
 
         terminal.resize(columns = 20, rows = 6, preserveBottomRows = true)
-        lines = terminal.plainText(includeScrollback = false).lines()
+        var lines = terminal.plainText(includeScrollback = false).lines()
         assertTrue(lines[4].startsWith("input-line"))
         assertTrue(lines[5].startsWith("status-line"))
+
+        terminal.resize(columns = 20, rows = 8, preserveBottomRows = true)
+        lines = terminal.plainText(includeScrollback = false).lines()
+        assertTrue(lines[6].startsWith("input-line"))
+        assertTrue(lines[7].startsWith("status-line"))
     }
 
     @Test
