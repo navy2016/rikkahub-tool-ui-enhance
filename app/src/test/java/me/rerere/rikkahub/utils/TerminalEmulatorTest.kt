@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.utils
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +36,32 @@ class TerminalEmulatorTest {
         terminal.feed("abc")
         terminal.resize(25, 8)
         assertTrue(terminal.plainText(includeScrollback = false).lines().first().startsWith("abc"))
+    }
+
+    @Test
+    fun rowOnlyResizeDoesNotReallocateScrollbackLines() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 20)
+        terminal.feed((1..12).joinToString("\r\n") { "line$it" })
+        val historyBeforeResize = scrollbackLines(terminal)
+
+        terminal.resize(columns = 20, rows = 8)
+
+        val historyAfterResize = scrollbackLines(terminal)
+        assertEquals(historyBeforeResize.size, historyAfterResize.size)
+        historyBeforeResize.zip(historyAfterResize).forEach { (before, after) -> assertSame(before, after) }
+    }
+
+    @Test
+    fun columnResizeStillReallocatesScrollbackLines() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 20)
+        terminal.feed((1..12).joinToString("\r\n") { "line$it" })
+        val historyBeforeResize = scrollbackLines(terminal)
+
+        terminal.resize(columns = 25, rows = 6)
+
+        val historyAfterResize = scrollbackLines(terminal)
+        assertEquals(historyBeforeResize.size, historyAfterResize.size)
+        assertNotSame(historyBeforeResize.first(), historyAfterResize.first())
     }
 
     @Test
@@ -886,6 +914,12 @@ class TerminalEmulatorTest {
             "https://example.com",
             rows[1].text.getStringAnnotations("URL", 0, rows[1].text.length).first().item
         )
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun scrollbackLines(terminal: TerminalEmulator): List<Any> {
+        val field = TerminalEmulator::class.java.getDeclaredField("scrollback").apply { isAccessible = true }
+        return (field.get(terminal) as Iterable<Any>).toList()
     }
 
     @Test

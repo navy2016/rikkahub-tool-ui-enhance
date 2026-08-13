@@ -272,7 +272,8 @@ class TerminalEmulator(
     fun resize(columns: Int, rows: Int, preserveBottomRows: Boolean = false) {
         val newColumns = columns.coerceIn(MIN_COLUMNS, MAX_COLUMNS)
         val newRows = rows.coerceIn(MIN_ROWS, MAX_ROWS)
-        if (newColumns == this.columns && newRows == this.rows) return
+        val columnsChanged = newColumns != this.columns
+        if (!columnsChanged && newRows == this.rows) return
 
         val oldRows = this.rows
         val preservedRowShift = if (preserveBottomRows) newRows - oldRows else 0
@@ -290,9 +291,11 @@ class TerminalEmulator(
             newColumns,
             preserveBottom = preserveBottomRows && alternateScreen,
         )
-        val resizedScrollback = scrollback.map { resizedLine(it, newColumns, defaultStyle) }
-        scrollback.clear()
-        resizedScrollback.takeLast(scrollbackLimit).forEach { scrollback.addLast(it) }
+        if (columnsChanged) {
+            val resizedScrollback = scrollback.map { resizedLine(it, newColumns, defaultStyle) }
+            scrollback.clear()
+            resizedScrollback.takeLast(scrollbackLimit).forEach { scrollback.addLast(it) }
+        }
         scrollTop = 0
         scrollBottom = newRows - 1
         cursorRow = (cursorRow + preservedRowShift).coerceIn(0, newRows - 1)
