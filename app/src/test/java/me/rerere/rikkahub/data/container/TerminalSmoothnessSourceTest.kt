@@ -95,6 +95,12 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("TERMINAL_GRID_CLEAR_GRACE_MS"))
         assertTrue(processSessionSource.contains("holdCompleteFrameForGrid"))
         assertTrue(processSessionSource.contains("resizeAwaitingTuiRedraw.set(true)"))
+        assertTrue(processSessionSource.contains("val frame = terminalEmulator.renderFrame()"))
+        assertTrue(processSessionSource.contains("val rendered = frame.rows"))
+        assertTrue(processSessionSource.contains("val bounds = frame.contentBounds"))
+        assertTrue(processSessionSource.contains("val modeSummary = frame.modeSummary"))
+        assertFalse(processSessionSource.contains("val rendered = terminalEmulator.renderRows()"))
+        assertFalse(processSessionSource.contains("val bounds = terminalEmulator.contentBounds(includeScrollback = true)"))
         assertFalse(processSessionSource.contains("terminalRenderedRows = terminalEmulator.renderRows()"))
     }
 

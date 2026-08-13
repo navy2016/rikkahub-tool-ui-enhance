@@ -892,15 +892,16 @@ private fun TerminalInteractivePanel(
             "npm config set prefix /usr/local && npm config set cache /tmp/npm-cache && npm config set python /usr/bin/python3)"
     }
     var input by remember { mutableStateOf("") }
+    val initialTerminalRenderFrame = remember(processId) { terminalEmulator.renderFrame() }
     val terminalRenderedRows = remember(processId) {
         mutableStateListOf<TerminalRenderedRowState>().apply {
-            addAll(terminalEmulator.renderRows().map { TerminalRenderedRowState(it.text) })
+            addAll(initialTerminalRenderFrame.rows.map { TerminalRenderedRowState(it.text) })
         }
     }
     var terminalContentBounds by remember(processId) {
-        mutableStateOf(terminalEmulator.contentBounds(includeScrollback = true))
+        mutableStateOf(initialTerminalRenderFrame.contentBounds)
     }
-    var terminalModeSummary by remember { mutableStateOf(terminalEmulator.modeSummary()) }
+    var terminalModeSummary by remember { mutableStateOf(initialTerminalRenderFrame.modeSummary) }
     var terminalStatus by remember { mutableStateOf("就绪") }
     var autoScroll by remember(processId) { mutableStateOf(restoredViewportState?.autoScroll ?: savedPreference?.autoScroll ?: true) }
     var rawInputMode by remember(processId, settings.terminalCustomTuiCommands) { mutableStateOf(savedPreference?.rawInputMode ?: isTuiCommand(process.command, settings.terminalCustomTuiCommands)) }
@@ -1098,9 +1099,10 @@ private fun TerminalInteractivePanel(
     }
 
     fun renderTerminalFrame(forcePendingGridBlanks: Boolean = false) {
-        val rendered = terminalEmulator.renderRows()
-        val bounds = terminalEmulator.contentBounds(includeScrollback = true)
-        val modeSummary = terminalEmulator.modeSummary()
+        val frame = terminalEmulator.renderFrame()
+        val rendered = frame.rows
+        val bounds = frame.contentBounds
+        val modeSummary = frame.modeSummary
         val now = System.currentTimeMillis()
         var hasDeferredGridBlank = false
         Snapshot.withMutableSnapshot {

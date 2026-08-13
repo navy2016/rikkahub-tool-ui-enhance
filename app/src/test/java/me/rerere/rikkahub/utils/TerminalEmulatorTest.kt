@@ -916,11 +916,80 @@ class TerminalEmulatorTest {
         )
     }
 
+    @Test
+    fun renderFrameReusesArchivedRowsAndKeepsLiveRowsDynamic() {
+        val terminal = terminalWithScrollback()
+        val firstFrame = terminal.renderFrame()
+        val historyCount = firstFrame.rows.size - terminal.rows
+
+        val secondFrame = terminal.renderFrame()
+
+        assertTrue(historyCount > 0)
+        assertSame(firstFrame.rows.first(), secondFrame.rows.first())
+        assertNotSame(firstFrame.rows[historyCount], secondFrame.rows[historyCount])
+        assertEquals(terminal.render().text, secondFrame.rows.joinToString("\n") { it.text.text })
+        assertEquals(terminal.contentBounds(), secondFrame.contentBounds)
+        assertEquals(terminal.modeSummary(), secondFrame.modeSummary)
+    }
+
+    @Test
+    fun renderFrameInvalidatesArchivedRowsForGlobalStyleChanges() {
+        val terminal = terminalWithScrollback()
+        val original = terminal.renderFrame().rows.first()
+
+        terminal.feed("\u001B[?5h")
+        val reversed = terminal.renderFrame().rows.first()
+        terminal.feed("\u001B[?5l\u001B]10;rgb:ffff/0000/0000\u0007")
+        val defaultColorChanged = terminal.renderFrame().rows.first()
+        terminal.feed("\u001B]4;2;rgb:0000/ffff/0000\u0007")
+        val paletteChanged = terminal.renderFrame().rows.first()
+        terminal.feed("\u001B]104;2\u0007")
+        val paletteReset = terminal.renderFrame().rows.first()
+
+        assertNotSame(original, reversed)
+        assertNotSame(reversed, defaultColorChanged)
+        assertNotSame(defaultColorChanged, paletteChanged)
+        assertNotSame(paletteChanged, paletteReset)
+    }
+
+    @Test
+    fun renderFrameExcludesScrollbackOnAlternateScreen() {
+        val terminal = terminalWithScrollback()
+        val mainFrame = terminal.renderFrame()
+
+        terminal.feed("\u001B[?1049hALT")
+        val alternateFrame = terminal.renderFrame()
+
+        assertTrue(mainFrame.rows.size > terminal.rows)
+        assertEquals(terminal.rows, alternateFrame.rows.size)
+        assertTrue(alternateFrame.rows.first().text.text.startsWith("ALT"))
+        assertTrue(alternateFrame.modeSummary.contains("ALT"))
+    }
+
+    @Test
+    fun renderFramePublishesRowsBoundsAndModesTogether() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[3;4Hmiddle\u001B[6;1Hbottom\u001B[?5h")
+
+        val frame = terminal.renderFrame(includeScrollback = false)
+
+        assertEquals(6, frame.rows.size)
+        assertEquals(2, frame.contentBounds.firstNonBlankRow)
+        assertEquals(5, frame.contentBounds.lastNonBlankRow)
+        assertEquals(2, frame.contentBounds.nonBlankRowCount)
+        assertTrue(frame.modeSummary.contains("REVERSE-VIDEO"))
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun scrollbackLines(terminal: TerminalEmulator): List<Any> {
         val field = TerminalEmulator::class.java.getDeclaredField("scrollback").apply { isAccessible = true }
         return (field.get(terminal) as Iterable<Any>).toList()
     }
+
+    private fun terminalWithScrollback(): TerminalEmulator =
+        TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 20).apply {
+            feed((1..12).joinToString("\r\n") { "line$it" })
+        }
 
     @Test
     fun contentBoundsReportsNonBlankRowsWithoutPlainTextAllocation() {

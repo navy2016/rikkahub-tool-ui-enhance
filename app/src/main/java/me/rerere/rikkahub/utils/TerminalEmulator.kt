@@ -92,6 +92,20 @@ class TerminalEmulator(
     }
     data class RenderedRow(val text: AnnotatedString)
 
+    private class ScrollbackLine(
+        val cells: Array<Cell>,
+        val isNotBlank: Boolean,
+    ) {
+        var renderedAtStyleRevision: Long = Long.MIN_VALUE
+        var renderedRow: RenderedRow? = null
+    }
+
+    data class RenderFrame(
+        val rows: List<RenderedRow>,
+        val contentBounds: ContentBounds,
+        val modeSummary: String,
+    )
+
     data class ContentBounds(
         val firstNonBlankRow: Int?,
         val lastNonBlankRow: Int?,
@@ -187,7 +201,11 @@ class TerminalEmulator(
         .onUnmappableCharacter(CodingErrorAction.REPLACE)
     private var pendingUtf8 = ByteArray(0)
 
-    private val scrollback = ArrayDeque<Array<Cell>>()
+    // Archived rows are immutable until a column resize replaces them. Keeping their render
+    // cache with the row makes reuse explicit and prevents mutable live-screen rows from being
+    // cached without a content revision.
+    private val scrollback = ArrayDeque<ScrollbackLine>()
+    private var scrollbackRenderStyleRevision = 0L
     private val mainScreen = MutableList(rows) { blankLine() }
     private val altScreen = MutableList(rows) { blankLine() }
     private val screen: MutableList<Array<Cell>> get() = if (alternateScreen) altScreen else mainScreen
@@ -200,6 +218,7 @@ class TerminalEmulator(
     fun reset() {
         currentStyle = defaultStyle
         scrollback.clear()
+        scrollbackRenderStyleRevision = 0L
         mainScreen.resetScreen()
         altScreen.resetScreen()
         cursorRow = 0
@@ -292,7 +311,9 @@ class TerminalEmulator(
             preserveBottom = preserveBottomRows && alternateScreen,
         )
         if (columnsChanged) {
-            val resizedScrollback = scrollback.map { resizedLine(it, newColumns, defaultStyle) }
+            val resizedScrollback = scrollback.map {
+                newScrollbackLine(resizedLine(it.cells, newColumns, defaultStyle))
+            }
             scrollback.clear()
             resizedScrollback.takeLast(scrollbackLimit).forEach { scrollback.addLast(it) }
         }
@@ -322,7 +343,7 @@ class TerminalEmulator(
         resetDecoder()
         pendingUtf8 = ByteArray(0)
         cursorVisible = true
-        reverseVideo = false
+        setReverseVideo(false)
         wraparound = true
         pendingWrap = false
         originMode = false
@@ -621,7 +642,72 @@ class TerminalEmulator(
     fun isSynchronizedOutput(): Boolean = synchronizedOutput
 
     @Synchronized
-    fun modeSummary(): String = buildList {
+    fun modeSummary(): String = buildModeSummary()
+
+    @Synchronized
+    fun render(includeScrollback: Boolean = true): AnnotatedString = buildAnnotatedString {
+        appendRenderedRows(includeScrollback = includeScrollback, drawCursor = true)
+    }
+
+    /** Publishes terminal rows and their metadata from one synchronized emulator state. */
+    @Synchronized
+    fun renderFrame(includeScrollback: Boolean = true): RenderFrame {
+        val includeHistory = includeScrollback && !alternateScreen
+        val renderedRows = ArrayList<RenderedRow>(rows + if (includeHistory) scrollback.size else 0)
+        var rowIndex = 0
+        var firstNonBlankRow: Int? = null
+        var lastNonBlankRow: Int? = null
+        var nonBlankRowCount = 0
+
+        fun recordRow(isNotBlank: Boolean) {
+            if (isNotBlank) {
+                if (firstNonBlankRow == null) firstNonBlankRow = rowIndex
+                lastNonBlankRow = rowIndex
+                nonBlankRowCount++
+            }
+            rowIndex++
+        }
+
+        if (includeHistory) {
+            scrollback.forEach { line ->
+                renderedRows.add(renderScrollbackLine(line))
+                recordRow(line.isNotBlank)
+            }
+        }
+        screen.forEachIndexed { row, line ->
+            renderedRows.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }))
+            recordRow(line.isNotBlankLine())
+        }
+        return RenderFrame(
+            rows = renderedRows,
+            contentBounds = ContentBounds(firstNonBlankRow, lastNonBlankRow, nonBlankRowCount),
+            modeSummary = buildModeSummary(),
+        )
+    }
+
+    @Synchronized
+    fun renderRows(includeScrollback: Boolean = true): List<RenderedRow> = renderFrame(includeScrollback).rows
+
+    @Synchronized
+    fun contentBounds(includeScrollback: Boolean = true): ContentBounds {
+        var row = 0
+        var first: Int? = null
+        var last: Int? = null
+        var count = 0
+        fun visit(isNotBlank: Boolean) {
+            if (isNotBlank) {
+                if (first == null) first = row
+                last = row
+                count++
+            }
+            row++
+        }
+        if (includeScrollback && !alternateScreen) scrollback.forEach { visit(it.isNotBlank) }
+        screen.forEach { visit(it.isNotBlankLine()) }
+        return ContentBounds(first, last, count)
+    }
+
+    private fun buildModeSummary(): String = buildList {
         if (alternateScreen) add("ALT")
         if (reverseVideo) add("REVERSE-VIDEO")
         if (applicationCursorKeys) add("APP-CURSOR")
@@ -633,44 +719,6 @@ class TerminalEmulator(
         if (cursorShape != CursorShape.DEFAULT) add(cursorShape.name.replace('_', '-'))
         if (originMode) add("ORIGIN")
     }.joinToString(" · ")
-
-    @Synchronized
-    fun render(includeScrollback: Boolean = true): AnnotatedString = buildAnnotatedString {
-        appendRenderedRows(includeScrollback = includeScrollback, drawCursor = true)
-    }
-
-    @Synchronized
-    fun renderRows(includeScrollback: Boolean = true): List<RenderedRow> {
-        val result = ArrayList<RenderedRow>(rows + if (includeScrollback && !alternateScreen) scrollback.size else 0)
-        if (includeScrollback && !alternateScreen) {
-            scrollback.forEach { line ->
-                result.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, drawCursor = false) }))
-            }
-        }
-        screen.forEachIndexed { row, line ->
-            result.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }))
-        }
-        return result
-    }
-
-    @Synchronized
-    fun contentBounds(includeScrollback: Boolean = true): ContentBounds {
-        var row = 0
-        var first: Int? = null
-        var last: Int? = null
-        var count = 0
-        fun visit(line: Array<Cell>) {
-            if (line.isNotBlankLine()) {
-                if (first == null) first = row
-                last = row
-                count++
-            }
-            row++
-        }
-        if (includeScrollback && !alternateScreen) scrollback.forEach { visit(it) }
-        screen.forEach { visit(it) }
-        return ContentBounds(first, last, count)
-    }
 
     @Synchronized
     fun plainText(includeScrollback: Boolean = true): String = buildString {
@@ -719,7 +767,7 @@ class TerminalEmulator(
             if (appended) append('\n') else appended = true
             appendStyledLine(line, row, drawCursor && row != null)
         }
-        if (includeScrollback && !alternateScreen) scrollback.forEach { appendLine(it, null) }
+        if (includeScrollback && !alternateScreen) scrollback.forEach { appendLine(it.cells, null) }
         screen.forEachIndexed { row, line -> appendLine(line, row) }
     }
 
@@ -729,7 +777,7 @@ class TerminalEmulator(
             if (appended) append('\n') else appended = true
             appendPlainLine(line)
         }
-        if (includeScrollback && !alternateScreen) scrollback.forEach { appendLine(it) }
+        if (includeScrollback && !alternateScreen) scrollback.forEach { appendLine(it.cells) }
         screen.forEach { appendLine(it) }
     }
 
@@ -970,8 +1018,8 @@ class TerminalEmulator(
                 52 -> applyClipboardOsc(value)
                 104 -> resetPaletteOsc(value)
                 105, 106, 107 -> resetPaletteOsc(value)
-                110 -> defaultForeground = defaultStyle.fg
-                111 -> defaultBackground = Color(0xFF101010)
+                110 -> updateDefaultForeground(defaultStyle.fg)
+                111 -> updateDefaultBackground(Color(0xFF101010))
                 112 -> cursorColor = defaultStyle.fg
             }
         }
@@ -981,16 +1029,24 @@ class TerminalEmulator(
     }
 
     private fun resetPaletteOsc(value: String) {
-        if (value.isBlank()) {
+        val changed = if (value.isBlank()) {
+            val hadOverrides = paletteOverrides.isNotEmpty()
             paletteOverrides.clear()
-            return
+            hadOverrides
+        } else {
+            var removedOverride = false
+            value.split(';').mapNotNull { it.toIntOrNull() }.forEach {
+                if (paletteOverrides.remove(it.coerceIn(0, 255)) != null) removedOverride = true
+            }
+            removedOverride
         }
-        value.split(';').mapNotNull { it.toIntOrNull() }.forEach { paletteOverrides.remove(it.coerceIn(0, 255)) }
+        if (changed) invalidateScrollbackRendering()
     }
 
     private fun applyPaletteOsc(value: String) {
         val parts = value.split(';')
         var index = 0
+        var changed = false
         while (index + 1 < parts.size) {
             val colorIndex = parts[index].toIntOrNull()
             val spec = parts[index + 1]
@@ -998,11 +1054,17 @@ class TerminalEmulator(
                 if (spec == "?") {
                     pendingResponses.add("\u001B]4;${colorIndex};${colorToOscRgb(xterm256(colorIndex))}\u0007")
                 } else {
-                    parseOscColor(spec)?.let { paletteOverrides[colorIndex] = it }
+                    parseOscColor(spec)?.let { color ->
+                        if (paletteOverrides[colorIndex] != color) {
+                            paletteOverrides[colorIndex] = color
+                            changed = true
+                        }
+                    }
                 }
             }
             index += 2
         }
+        if (changed) invalidateScrollbackRendering()
     }
 
     private fun applyDynamicColorOsc(code: Int, value: String) {
@@ -1018,8 +1080,8 @@ class TerminalEmulator(
         }
         parseOscColor(value)?.let { color ->
             when (code) {
-                10 -> defaultForeground = color
-                11 -> defaultBackground = color
+                10 -> updateDefaultForeground(color)
+                11 -> updateDefaultBackground(color)
                 12 -> cursorColor = color
             }
         }
@@ -1437,7 +1499,8 @@ class TerminalEmulator(
     private fun scrollUp() {
         val removed = screen[scrollTop]
         if (!alternateScreen && scrollTop == 0) {
-            scrollback.addLast(Array(columns) { i -> removed[i].copy() })
+            val archivedCells = Array(columns) { i -> removed[i].copy() }
+            scrollback.addLast(newScrollbackLine(archivedCells))
             while (scrollback.size > scrollbackLimit) scrollback.removeFirst()
         }
         for (r in scrollTop until scrollBottom) {
@@ -1875,7 +1938,7 @@ class TerminalEmulator(
         params.forEach { code ->
             when (code) {
                 1 -> applicationCursorKeys = enabled
-                5 -> reverseVideo = enabled
+                5 -> setReverseVideo(enabled)
                 6 -> {
                     originMode = enabled
                     cursorRow = if (enabled) scrollTop else 0
@@ -2059,6 +2122,42 @@ class TerminalEmulator(
             else -> null
         } ?: return
         currentStyle = if (isFg) currentStyle.copy(fg = color) else currentStyle.copy(bg = color)
+    }
+
+    private fun newScrollbackLine(cells: Array<Cell>): ScrollbackLine = ScrollbackLine(
+        cells = cells,
+        isNotBlank = cells.isNotBlankLine(),
+    )
+
+    private fun renderScrollbackLine(line: ScrollbackLine): RenderedRow {
+        val cached = line.renderedRow
+        if (cached != null && line.renderedAtStyleRevision == scrollbackRenderStyleRevision) return cached
+        return RenderedRow(buildAnnotatedString { appendStyledLine(line.cells, drawCursor = false) }).also {
+            line.renderedRow = it
+            line.renderedAtStyleRevision = scrollbackRenderStyleRevision
+        }
+    }
+
+    private fun invalidateScrollbackRendering() {
+        scrollbackRenderStyleRevision++
+    }
+
+    private fun setReverseVideo(enabled: Boolean) {
+        if (reverseVideo == enabled) return
+        reverseVideo = enabled
+        invalidateScrollbackRendering()
+    }
+
+    private fun updateDefaultForeground(color: Color) {
+        if (defaultForeground == color) return
+        defaultForeground = color
+        invalidateScrollbackRendering()
+    }
+
+    private fun updateDefaultBackground(color: Color) {
+        if (defaultBackground == color) return
+        defaultBackground = color
+        invalidateScrollbackRendering()
     }
 
     private fun Style.toSpanStyle(): SpanStyle {
