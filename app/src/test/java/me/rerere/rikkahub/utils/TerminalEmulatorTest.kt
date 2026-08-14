@@ -81,8 +81,10 @@ class TerminalEmulatorTest {
         assertTrue(grownLines[0].startsWith("header"))
         assertTrue(grownLines[4].startsWith("input-line"))
         assertTrue(grownLines[5].startsWith("status-line"))
-        assertEquals("", grownLines[6])
-        assertEquals("", grownLines[7])
+        // The cursor is rendered in its preserved row; growth must append rows below it,
+        // never insert blank rows above the existing grid.
+        assertTrue(grownLines[6].isBlank())
+        assertTrue(grownLines[7].isBlank())
     }
 
     @Test
