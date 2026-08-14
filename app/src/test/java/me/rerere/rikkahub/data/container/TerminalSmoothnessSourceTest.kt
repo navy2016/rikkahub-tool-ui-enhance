@@ -36,14 +36,19 @@ class TerminalSmoothnessSourceTest {
     }
 
     @Test
-    fun imeResizeKeepsAStableFrameUntilTheTuiRedraws() {
+    fun imeUsesAVisualViewportWithoutResizingThePty() {
         assertTrue(processSessionSource.contains("WindowInsets.isImeVisible"))
         assertTrue(processSessionSource.contains("AtomicInteger(initialTerminalRows)"))
-        assertTrue(processSessionSource.contains("pendingImeRowResizeJob.getAndSet(null)?.cancel()"))
-        assertTrue(processSessionSource.contains("rows != measuredTerminalRows.getAndSet(rows)"))
-        assertTrue(processSessionSource.contains("imeResizePending.set(true)"))
-        assertTrue(processSessionSource.contains("delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)"))
-        assertTrue(processSessionSource.contains("imeDrivenRowsChanged = rowsChanged && !columnsChanged && imeResizePending.get()"))
+        assertTrue(processSessionSource.contains("val viewportRowResizeJob = remember(processId) { AtomicReference<Job?>(null) }"))
+        assertTrue(processSessionSource.contains("val firstMeasurement = !outputViewportMeasured.getAndSet(true)"))
+        assertTrue(processSessionSource.contains("delay(TERMINAL_PTY_RESIZE_DEBOUNCE_MS)"))
+        assertTrue(processSessionSource.contains("if (currentFullscreen && !transitionStillActive && stableRows != terminalRows)"))
+        assertTrue(processSessionSource.contains("The IME is a visual viewport overlay, not a terminal resize"))
+        assertTrue(processSessionSource.contains("currentActualImeHeightPx > 0"))
+        assertTrue(processSessionSource.contains("imeViewportAnchor.get() != null"))
+        assertFalse(processSessionSource.contains("pendingImeRowResizeJob"))
+        assertFalse(processSessionSource.contains("imeResizePending"))
+        assertFalse(processSessionSource.contains("imeDrivenRowsChanged"))
         assertTrue(processSessionSource.contains("renderPending.set(false)"))
         assertTrue(processSessionSource.contains("TERMINAL_RESIZE_RENDER_FALLBACK_MS"))
         assertTrue(processSessionSource.contains("resizeRenderFallbackJob.getAndSet(null)?.cancel()"))
@@ -53,7 +58,7 @@ class TerminalSmoothnessSourceTest {
         assertFalse(processSessionSource.contains("LaunchedEffect(processId, terminalRenderedRows.size, outputScroll.maxValue"))
         assertTrue(processSessionSource.contains("preserveBottomRows = currentPreserveFullTerminalGrid"))
         assertTrue(processSessionSource.contains("imeStableForSizeHint"))
-        assertTrue(processSessionSource.contains("bgManager.resizeInteractiveSession(processId, terminalColumns, terminalRows)"))
+        assertTrue(processSessionSource.contains("bgManager.resizeInteractiveSession("))
         assertTrue(processSessionSource.contains("val measuredCell = remember(terminalTextStyle, density)"))
         assertTrue(processSessionSource.contains("val imeInsets = WindowInsets.ime"))
         assertTrue(processSessionSource.contains("effectiveImeHeightPx"))
@@ -72,7 +77,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("All other commands anchor the last nonblank row, even on the alternate screen"))
         assertTrue(processSessionSource.contains("Only the rendered terminal tail belongs to the scroll content. Input and extra-key bars"))
         assertTrue(processSessionSource.contains("shouldFollowTerminalBottom()"))
-        assertTrue(processSessionSource.contains("imeViewportAnchor.getAndSet(null)?.let { anchor ->"))
+        assertTrue(processSessionSource.contains("Auto-follow is already updated from the live viewport on every layout"))
         assertFalse(processSessionSource.contains("var terminalCellWidthPx by remember"))
     }
 
@@ -152,7 +157,7 @@ class TerminalSmoothnessSourceTest {
 
     @Test
     fun outputPathRemainsImmediateAndUnbatched() {
-        assertTrue(processSessionSource.contains("terminalEmulator.feed(bytes)"))
+        assertTrue(backgroundProcessManagerSource.contains("record.terminalEmulator.feed(data)"))
         assertTrue(processSessionSource.contains("scheduleTerminalRender()"))
         assertFalse(processSessionSource.contains("TERMINAL_OUTPUT_BATCH_WINDOW_MS"))
         assertFalse(processSessionSource.contains("delay(8L)"))
@@ -172,10 +177,9 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("recordImeTransition(currentImeVisible, currentViewportHeightPx = size.height)"))
         assertTrue(processSessionSource.contains("currentViewportHeightPx = snapshot.viewportHeightPx"))
         assertTrue(processSessionSource.contains("anchor.copy(followBottom = true)"))
-        assertTrue(processSessionSource.contains("currentFullscreen && (!currentImeVisible || fullOutputViewportHeightPx.get() == 0)"))
+        assertTrue(processSessionSource.contains("currentFullscreen && (!imeTransitionActive || fullOutputViewportHeightPx.get() == 0)"))
         assertTrue(processSessionSource.contains("shouldAvoidIme || customImeRequiresExtraAvoidance"))
-        assertTrue(processSessionSource.contains("scheduleStableTerminalRows(expectedImeVisible = imeVisible)"))
-        assertTrue(processSessionSource.contains("expectedImeVisible = currentImeVisible"))
+        assertTrue(processSessionSource.contains("val transitionStillActive = currentImeVisible || currentActualImeHeightPx > 0"))
         assertTrue(processSessionSource.contains("val target = terminalViewportBottomScrollTarget()"))
         assertTrue(processSessionSource.contains("outputScroll.value >= target - thresholdPx"))
         assertFalse(processSessionSource.contains("contentRows * terminalCellHeightPx + terminalBottomRevealPadding"))
@@ -249,7 +253,19 @@ class TerminalSmoothnessSourceTest {
     }
 
     @Test
-    fun commandHistorySurvivesLeavingTerminalPage() {
+    fun terminalStateAndCommandHistorySurviveLeavingTerminalPage() {
+        assertTrue(backgroundProcessManagerSource.contains("val terminalEmulator: TerminalEmulator"))
+        assertTrue(backgroundProcessManagerSource.contains("getInteractiveTerminalEmulator"))
+        assertTrue(backgroundProcessManagerSource.contains("record.terminalEmulator.feed(data)"))
+        assertTrue(backgroundProcessManagerSource.contains("handleTerminalProtocolEvents(record)"))
+        assertTrue(backgroundProcessManagerSource.contains("preserveBottomRows = preserveBottomRows"))
+        assertTrue(backgroundProcessManagerSource.contains("MutableSharedFlow<ByteArray>(replay = 1"))
+        assertTrue(processSessionSource.contains("bgManager.getInteractiveTerminalEmulator(processId)"))
+        assertFalse(processSessionSource.contains("bgManager.readInteractiveBuffer(processId)"))
+        assertTrue(processSessionSource.contains("if (restored.autoScroll) Int.MAX_VALUE else restored.verticalOffsetPx"))
+        assertTrue(processSessionSource.contains("if (restored == null || restored.autoScroll)"))
+        assertTrue(processSessionSource.contains("val viewportInitialized = remember(processId) { AtomicBoolean(false) }"))
+        assertTrue(processSessionSource.contains("withFrameNanos { }\n        withFrameNanos { }"))
         assertTrue(backgroundProcessManagerSource.contains("rememberTerminalCommand"))
         assertTrue(backgroundProcessManagerSource.contains("getTerminalCommandHistory"))
         assertTrue(processSessionSource.contains("addAll(bgManager.getTerminalCommandHistory(processId))"))

@@ -295,7 +295,11 @@ class TerminalEmulator(
         if (!columnsChanged && newRows == this.rows) return
 
         val oldRows = this.rows
-        val preservedRowShift = if (preserveBottomRows) newRows - oldRows else 0
+        // Shrinking a full-screen TUI must retain its bottom-owned chrome until SIGWINCH is
+        // handled. Growing follows normal terminal semantics and keeps row 1 at row 1; inserting
+        // blank rows above the old grid makes a newly opened TUI appear vertically displaced.
+        val preserveBottomOnShrink = preserveBottomRows && newRows < oldRows
+        val preservedRowShift = if (preserveBottomOnShrink) newRows - oldRows else 0
         this.columns = newColumns
         this.rows = newRows
         tabStops.removeIf { it >= newColumns }
@@ -303,12 +307,12 @@ class TerminalEmulator(
         mainScreen.resizeScreen(
             newRows,
             newColumns,
-            preserveBottom = preserveBottomRows && !alternateScreen,
+            preserveBottom = preserveBottomOnShrink && !alternateScreen,
         )
         altScreen.resizeScreen(
             newRows,
             newColumns,
-            preserveBottom = preserveBottomRows && alternateScreen,
+            preserveBottom = preserveBottomOnShrink && alternateScreen,
         )
         if (columnsChanged) {
             val resizedScrollback = scrollback.map {

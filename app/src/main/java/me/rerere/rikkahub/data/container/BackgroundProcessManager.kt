@@ -1254,6 +1254,7 @@ class BackgroundProcessManager @Inject constructor(
         val ptyMode: PtyMode = PtyMode.COOKED,
         val outputFlow: MutableSharedFlow<ByteArray>,
         val outputBuffer: SessionOutputBuffer,
+        val terminalEmulator: TerminalEmulator,
         var columns: Int = 80,
         var rows: Int = 24,
         var stdoutJob: Job? = null,
@@ -1462,8 +1463,14 @@ class BackgroundProcessManager @Inject constructor(
             actualScriptTtyEnabled = !actualNativePtyEnabled && process !is NativePtyProcess && actualScriptTtyEnabled
             val actualTtyEnabled = actualNativePtyEnabled || actualScriptTtyEnabled
 
-            val outputFlow = MutableSharedFlow<ByteArray>(extraBufferCapacity = 128)
+            // The session owns the parsed terminal state so navigation never has to rebuild a
+            // live TUI by replaying geometry-dependent ANSI output at a different screen size.
+            val outputFlow = MutableSharedFlow<ByteArray>(replay = 1, extraBufferCapacity = 127)
             val outputBuffer = SessionOutputBuffer()
+            val terminalEmulator = TerminalEmulator(
+                initialColumns = initialColumns,
+                initialRows = initialRows,
+            )
 
             val record = InteractiveSessionRecord(
                 processId = processId,
@@ -1475,6 +1482,7 @@ class BackgroundProcessManager @Inject constructor(
                 ptyMode = if (actualTtyEnabled) effectivePtyMode else PtyMode.COOKED,
                 outputFlow = outputFlow,
                 outputBuffer = outputBuffer,
+                terminalEmulator = terminalEmulator,
                 tag = tag,
                 columns = initialColumns,
                 rows = initialRows
@@ -1484,19 +1492,13 @@ class BackgroundProcessManager @Inject constructor(
 
             record.stdoutJob = launchStreamReader(
                 inputStream = process.inputStream,
-                outputFlow = outputFlow,
-                buffer = outputBuffer
-            ) {
-                record.lastActivityAt = System.currentTimeMillis()
-            }
+                record = record,
+            )
 
             record.stderrJob = launchStreamReader(
                 inputStream = process.errorStream,
-                outputFlow = outputFlow,
-                buffer = outputBuffer
-            ) {
-                record.lastActivityAt = System.currentTimeMillis()
-            }
+                record = record,
+            )
 
             record.waiterJob = appScope.launch {
                 val code = try {
@@ -1654,6 +1656,10 @@ class BackgroundProcessManager @Inject constructor(
         return interactiveSessions[processId]?.outputBuffer?.snapshotAsString()
     }
 
+    fun getInteractiveTerminalEmulator(processId: String): TerminalEmulator? {
+        return interactiveSessions[processId]?.terminalEmulator
+    }
+
     fun readInteractiveOutput(
         processId: String,
         mode: String = "new",
@@ -1776,7 +1782,8 @@ class BackgroundProcessManager @Inject constructor(
     suspend fun resizeInteractiveSession(
         processId: String,
         columns: Int,
-        rows: Int
+        rows: Int,
+        preserveBottomRows: Boolean = false,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         val record = interactiveSessions[processId]
             ?: return@withContext Result.failure(
@@ -1787,6 +1794,11 @@ class BackgroundProcessManager @Inject constructor(
         if (record.columns == newColumns && record.rows == newRows) {
             return@withContext Result.success(Unit)
         }
+        record.terminalEmulator.resize(
+            columns = newColumns,
+            rows = newRows,
+            preserveBottomRows = preserveBottomRows,
+        )
         record.columns = newColumns
         record.rows = newRows
         record.lastActivityAt = System.currentTimeMillis()
@@ -1804,6 +1816,8 @@ class BackgroundProcessManager @Inject constructor(
         val tail = nativeProcess.drainAvailable(maxBytes)
         if (tail.isNotEmpty()) {
             record.outputBuffer.append(tail)
+            record.terminalEmulator.feed(tail)
+            handleTerminalProtocolEvents(record)
             record.outputFlow.emit(tail)
             record.lastActivityAt = System.currentTimeMillis()
         }
@@ -2454,11 +2468,24 @@ class BackgroundProcessManager @Inject constructor(
     /**
      * 读取交互流，按 byte chunk 处理
      */
+    private suspend fun handleTerminalProtocolEvents(record: InteractiveSessionRecord) {
+        val responses = record.terminalEmulator.drainResponses()
+        if (responses.isEmpty()) return
+        runCatching {
+            record.inputMutex.withLock {
+                responses.forEach { response ->
+                    record.process.outputStream.write(response.toByteArray(Charsets.UTF_8))
+                }
+                record.process.outputStream.flush()
+            }
+        }.onFailure { error ->
+            Log.w(TAG, "Unable to send terminal response for ${record.processId}", error)
+        }
+    }
+
     private fun launchStreamReader(
         inputStream: InputStream,
-        outputFlow: MutableSharedFlow<ByteArray>,
-        buffer: SessionOutputBuffer,
-        onChunk: () -> Unit = {}
+        record: InteractiveSessionRecord,
     ): Job = appScope.launch {
         try {
             val chunk = ByteArray(4096)
@@ -2468,9 +2495,11 @@ class BackgroundProcessManager @Inject constructor(
                 if (read == 0) continue
 
                 val data = chunk.copyOf(read)
-                buffer.append(data)
-                outputFlow.emit(data)
-                onChunk()
+                record.outputBuffer.append(data)
+                record.terminalEmulator.feed(data)
+                handleTerminalProtocolEvents(record)
+                record.outputFlow.emit(data)
+                record.lastActivityAt = System.currentTimeMillis()
             }
         } catch (_: Exception) {
         }
