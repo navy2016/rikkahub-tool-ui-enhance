@@ -103,7 +103,13 @@ class TerminalEmulator(
     data class RenderFrame(
         val rows: List<RenderedRow>,
         val contentBounds: ContentBounds,
+        val screenContentBounds: ContentBounds,
+        val screenStartRow: Int,
+        val cursorRow: Int,
+        val cursorVisible: Boolean,
+        val isAlternateScreen: Boolean,
         val modeSummary: String,
+        val revision: Long,
     )
 
     data class ContentBounds(
@@ -206,6 +212,7 @@ class TerminalEmulator(
     // cached without a content revision.
     private val scrollback = ArrayDeque<ScrollbackLine>()
     private var scrollbackRenderStyleRevision = 0L
+    private var stateRevision = 0L
     private val mainScreen = MutableList(rows) { blankLine() }
     private val altScreen = MutableList(rows) { blankLine() }
     private val screen: MutableList<Array<Cell>> get() = if (alternateScreen) altScreen else mainScreen
@@ -276,12 +283,16 @@ class TerminalEmulator(
         lineDrawing = false
         scrollTop = 0
         scrollBottom = rows - 1
+        stateRevision++
     }
 
     @Synchronized
     fun setMaxScrollbackLines(value: Int) {
-        scrollbackLimit = value.coerceIn(MIN_SCROLLBACK_LINES, MAX_SCROLLBACK_LINES)
+        val nextLimit = value.coerceIn(MIN_SCROLLBACK_LINES, MAX_SCROLLBACK_LINES)
+        if (nextLimit == scrollbackLimit) return
+        scrollbackLimit = nextLimit
         while (scrollback.size > scrollbackLimit) scrollback.removeFirst()
+        stateRevision++
     }
 
     @Synchronized
@@ -333,6 +344,7 @@ class TerminalEmulator(
             pendingWrap = false
         )
         pendingWrap = false
+        stateRevision++
     }
 
     @Synchronized
@@ -377,6 +389,7 @@ class TerminalEmulator(
         lineDrawing = false
         scrollTop = 0
         scrollBottom = rows - 1
+        stateRevision++
     }
 
     @Synchronized
@@ -418,6 +431,7 @@ class TerminalEmulator(
             }
             index += Character.charCount(codePoint)
         }
+        if (text.isNotEmpty()) stateRevision++
     }
 
     @Synchronized
@@ -649,6 +663,9 @@ class TerminalEmulator(
     fun modeSummary(): String = buildModeSummary()
 
     @Synchronized
+    fun revision(): Long = stateRevision
+
+    @Synchronized
     fun render(includeScrollback: Boolean = true): AnnotatedString = buildAnnotatedString {
         appendRenderedRows(includeScrollback = includeScrollback, drawCursor = true)
     }
@@ -658,10 +675,14 @@ class TerminalEmulator(
     fun renderFrame(includeScrollback: Boolean = true): RenderFrame {
         val includeHistory = includeScrollback && !alternateScreen
         val renderedRows = ArrayList<RenderedRow>(rows + if (includeHistory) scrollback.size else 0)
+        val screenStartRow = if (includeHistory) scrollback.size else 0
         var rowIndex = 0
         var firstNonBlankRow: Int? = null
         var lastNonBlankRow: Int? = null
         var nonBlankRowCount = 0
+        var firstNonBlankScreenRow: Int? = null
+        var lastNonBlankScreenRow: Int? = null
+        var nonBlankScreenRowCount = 0
 
         fun recordRow(isNotBlank: Boolean) {
             if (isNotBlank) {
@@ -679,13 +700,30 @@ class TerminalEmulator(
             }
         }
         screen.forEachIndexed { row, line ->
+            val isNotBlank = line.isNotBlankLine()
+            val isVisuallyOccupied = line.isVisuallyOccupiedLine()
             renderedRows.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }))
-            recordRow(line.isNotBlankLine())
+            recordRow(isNotBlank)
+            if (isVisuallyOccupied) {
+                if (firstNonBlankScreenRow == null) firstNonBlankScreenRow = row
+                lastNonBlankScreenRow = row
+                nonBlankScreenRowCount++
+            }
         }
         return RenderFrame(
             rows = renderedRows,
             contentBounds = ContentBounds(firstNonBlankRow, lastNonBlankRow, nonBlankRowCount),
+            screenContentBounds = ContentBounds(
+                firstNonBlankScreenRow,
+                lastNonBlankScreenRow,
+                nonBlankScreenRowCount,
+            ),
+            screenStartRow = screenStartRow,
+            cursorRow = cursorRow,
+            cursorVisible = cursorVisible,
+            isAlternateScreen = alternateScreen,
             modeSummary = buildModeSummary(),
+            revision = stateRevision,
         )
     }
 
@@ -815,6 +853,13 @@ class TerminalEmulator(
     private fun Array<Cell>.lastContentColumn(): Int = indexOfLast { !it.continuation && it.text != " " }.coerceAtLeast(0)
 
     private fun Array<Cell>.isNotBlankLine(): Boolean = any { !it.continuation && it.text.isNotBlank() }
+
+    private fun Array<Cell>.isVisuallyOccupiedLine(): Boolean = any { cell ->
+        !cell.continuation && (
+            cell.text.isNotBlank() || cell.style.bg != null || cell.style.inverse ||
+                cell.style.underline || cell.style.strike || cell.style.overline
+            )
+    }
 
     private fun isCursorAt(row: Int?, column: Int, drawCursor: Boolean): Boolean {
         return drawCursor && cursorVisible && row == cursorRow && column == cursorCol && column in 0 until columns

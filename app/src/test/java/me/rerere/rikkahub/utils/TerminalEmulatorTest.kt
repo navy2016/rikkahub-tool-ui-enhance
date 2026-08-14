@@ -968,9 +968,36 @@ class TerminalEmulatorTest {
         val alternateFrame = terminal.renderFrame()
 
         assertTrue(mainFrame.rows.size > terminal.rows)
+        assertEquals(mainFrame.rows.size - terminal.rows, mainFrame.screenStartRow)
         assertEquals(terminal.rows, alternateFrame.rows.size)
+        assertEquals(0, alternateFrame.screenStartRow)
+        assertTrue(alternateFrame.screenContentBounds.lastNonBlankRow != null)
+        assertTrue(alternateFrame.isAlternateScreen)
         assertTrue(alternateFrame.rows.first().text.text.startsWith("ALT"))
         assertTrue(alternateFrame.modeSummary.contains("ALT"))
+    }
+
+    @Test
+    fun renderFrameKeepsRevisionStableUntilTerminalStateChanges() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        val initial = terminal.renderFrame()
+        assertEquals(initial.revision, terminal.renderFrame().revision)
+
+        terminal.feed("line")
+        val changed = terminal.renderFrame()
+        assertTrue(changed.revision > initial.revision)
+        assertEquals(changed.revision, terminal.renderFrame().revision)
+    }
+
+    @Test
+    fun renderFrameTreatsStyledBlankTuiRowsAsVisibleScreenContent() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("\u001B[6;1H\u001B[44m                    \u001B[0m")
+
+        val frame = terminal.renderFrame(includeScrollback = false)
+
+        assertEquals(null, frame.contentBounds.lastNonBlankRow)
+        assertEquals(5, frame.screenContentBounds.lastNonBlankRow)
     }
 
     @Test
