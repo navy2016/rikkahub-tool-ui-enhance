@@ -140,6 +140,7 @@ import org.koin.compose.koinInject
 import android.view.MotionEvent
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import java.text.BreakIterator
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -1452,6 +1453,23 @@ private fun TerminalInteractivePanel(
         return true
     }
 
+    /** Splits a string into Unicode grapheme clusters (handles emoji, ZWJ, combining marks,
+     *  and supplementary-plane pairs) so IME deletion sends exactly one Backspace per guest. */
+    private fun graphemeClusters(text: String): List<String> {
+        if (text.isEmpty()) return emptyList()
+        val iterator = BreakIterator.getCharacterInstance()
+        iterator.setText(text)
+        val result = ArrayList<String>()
+        var start = iterator.first()
+        var end = iterator.next()
+        while (end != BreakIterator.DONE) {
+            result.add(text.substring(start, end))
+            start = end
+            end = iterator.next()
+        }
+        return result
+    }
+
     fun handleInputChange(value: String) {
         if (!rawInputMode) {
             input = value
@@ -1459,32 +1477,34 @@ private fun TerminalInteractivePanel(
         }
         val previous = input
         input = value
-        when {
-            value.length > previous.length && value.startsWith(previous) -> {
-                val delta = value.removePrefix(previous)
-                if (delta.isNotEmpty()) {
-                    if (delta.length > 1 || delta.contains('\n') || delta.contains('\r')) sendPastedText(delta) else {
-                        val cp = delta.codePointAt(0)
-                        sendRaw(terminalEmulator.sequenceForCodePoint(cp, alt = altLatch, ctrl = ctrlLatch).ifEmpty { delta })
-                        clearModifierLatches()
-                    }
-                }
+        val previousClusters = graphemeClusters(previous)
+        val valueClusters = graphemeClusters(value)
+        // Longest common grapheme prefix — not byte/surrogate-pair count.
+        var common = 0
+        while (common < previousClusters.size && common < valueClusters.size &&
+            previousClusters[common] == valueClusters[common]
+        ) {
+            common++
+        }
+        val removedCount = previousClusters.size - common
+        val addedClusters = valueClusters.drop(common)
+        // One Backspace per removed grapheme (emoji/ZWJ/supplementary chars count once).
+        if (removedCount > 0) {
+            repeat(removedCount) { sendPlainBackspace() }
+        }
+        if (addedClusters.isNotEmpty()) {
+            // Ordinary IME commit is plain text, not an explicit clipboard paste. Send it as
+            // raw UTF-8 without enabling bracketed paste unintentionally.
+            if (addedClusters.size == 1) {
+                val cluster = addedClusters.single()
+                // A single grapheme may be a supplementary-plane codepoint; send it as raw UTF-8
+                // rather than assume UTF-16 length semantics. sequenceForCodePoint handles CLI
+                // (e.g. Enter/Tab) mapping using the grapheme's first codepoint.
+                sendRaw(terminalEmulator.sequenceForCodePoint(cluster.codePointAt(0), alt = altLatch, ctrl = ctrlLatch).ifEmpty { cluster })
+            } else {
+                sendRaw(addedClusters.joinToString(""))
             }
-            previous.length > value.length && previous.startsWith(value) -> {
-                repeat(previous.length - value.length) { sendPlainBackspace() }
-            }
-            value != previous -> {
-                val common = previous.zip(value).takeWhile { it.first == it.second }.size
-                repeat(previous.length - common) { sendPlainBackspace() }
-                val delta = value.drop(common)
-                if (delta.isNotEmpty()) {
-                    if (delta.length > 1 || delta.contains('\n') || delta.contains('\r')) sendPastedText(delta) else {
-                        val cp = delta.codePointAt(0)
-                        sendRaw(terminalEmulator.sequenceForCodePoint(cp, alt = altLatch, ctrl = ctrlLatch).ifEmpty { delta })
-                        clearModifierLatches()
-                    }
-                }
-            }
+            clearModifierLatches()
         }
     }
 
@@ -2130,7 +2150,9 @@ private fun TerminalInteractivePanel(
                                 measuredTerminalColumns = measuredCols
                                 val cols = (forcedTerminalColumns ?: measuredCols)
                                     .coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
-                                val rows = (size.height / terminalCellHeightPx)
+                                // Reserve the status-bar strip so the physical grid still fits
+                                // below it without losing its bottom rows.
+                                val rows = ((size.height - terminalVisualTopPaddingPx) / terminalCellHeightPx)
                                     .coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
                                 if (cols != terminalColumns) terminalColumns = cols
                                 if (rows != measuredTerminalRows.getAndSet(rows)) {
