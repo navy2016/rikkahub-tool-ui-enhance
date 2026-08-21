@@ -177,7 +177,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("terminalContentHeightPx > outputViewportHeightPx"))
         assertTrue(processSessionSource.contains("outputViewportHeightPx = outputViewportHeightPx"))
         assertTrue(processSessionSource.contains("terminalWasFollowingBeforeIme("))
-        assertTrue(processSessionSource.contains("recordImeTransition(currentImeVisible, currentViewportHeightPx = size.height)"))
+        assertTrue(processSessionSource.contains("recordImeTransition(currentImeVisible, currentViewportHeightPx = viewportHeightPx)"))
         assertTrue(processSessionSource.contains("currentViewportHeightPx = snapshot.viewportHeightPx"))
         assertTrue(processSessionSource.contains("anchor.copy(followBottom = true)"))
         assertTrue(processSessionSource.contains("(!imeTransitionActive || fullOutputViewportHeightPx.get() == 0)"))
