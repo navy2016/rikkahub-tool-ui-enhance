@@ -33,6 +33,10 @@ class TerminalSmoothnessSourceTest {
         assertTrue(backgroundProcessManagerSource.contains("saveTerminalSandboxUiState"))
         assertTrue(processSessionSource.contains("bgManager.getTerminalViewportState(processId)"))
         assertTrue(processSessionSource.contains("saveTerminalViewport()"))
+        assertTrue(backgroundProcessManagerSource.contains("val viewportMode: ViewportMode"))
+        assertTrue(backgroundProcessManagerSource.contains("val anchorLineId: Long?"))
+        assertTrue(backgroundProcessManagerSource.contains("anchorCellHeightPx"))
+        assertTrue(processSessionSource.contains("anchorLineId = viewportAnchorLineId"))
         assertTrue(processSessionSource.contains("DisposableEffect(processId)"))
         assertTrue(processSessionSource.contains("bgManager.saveTerminalSandboxUiState(sandboxId, activeInteractiveId, terminalFullscreen)"))
     }
@@ -153,7 +157,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("\"JUMP\""))
         assertTrue(processSessionSource.contains(".verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)"))
         assertTrue(processSessionSource.contains("if (!fastFlingEnabled) return Velocity.Zero"))
-        assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(terminalViewportBottomScrollTarget())"))
+        assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(reduceTerminalViewport())"))
         assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(0)"))
         assertTrue(processSessionSource.contains(".nestedScroll(fastFlingConnection)"))
     }
@@ -191,8 +195,11 @@ class TerminalSmoothnessSourceTest {
     @Test
     fun tuiViewportUsesPhysicalScreenRowsInsteadOfTheApplicationStatusBar() {
         assertTrue(processSessionSource.contains("process.ptyMode.equals(\"raw\", ignoreCase = true)"))
-        assertTrue(processSessionSource.contains("if (snapshot.usesTuiViewport)"))
-        assertTrue(processSessionSource.contains("if (!snapshot.autoScroll)"))
+        assertTrue(processSessionSource.contains("fun reduceTerminalViewport(): Int"))
+        assertTrue(processSessionSource.contains("viewportMode == ViewportMode.LOCKED"))
+        assertTrue(processSessionSource.contains("captureLockedViewportAnchor()"))
+        assertFalse(processSessionSource.contains("pendingTuiCompensationPx"))
+        assertFalse(processSessionSource.contains("tuiScreenStartRowAnchor"))
         assertTrue(processSessionSource.contains("modifier = Modifier.zIndex(1f)"))
         assertTrue(processSessionSource.contains("Spacer(modifier = Modifier.height(terminalVisualTopPadding))"))
         assertFalse(processSessionSource.contains("LaunchedEffect(showStatusBar)"))
@@ -292,6 +299,18 @@ class TerminalSmoothnessSourceTest {
     }
 
     @Test
+    fun semanticViewportReducerOwnsTerminalScrollReconciliation() {
+        assertTrue(processSessionSource.contains("terminalViewportFrame = frame"))
+        assertTrue(processSessionSource.contains("ViewportInput("))
+        assertTrue(processSessionSource.contains("reduceViewport("))
+        assertTrue(processSessionSource.contains("captureViewportAnchor("))
+        assertTrue(processSessionSource.contains("ViewportMode.SCREEN"))
+        assertTrue(processSessionSource.contains("ViewportMode.LOCKED"))
+        assertFalse(processSessionSource.contains("pendingTuiCompensationPx"))
+        assertFalse(processSessionSource.contains("tuiScreenStartRowAnchor"))
+    }
+
+    @Test
     fun terminalStateAndCommandHistorySurviveLeavingTerminalPage() {
         assertTrue(backgroundProcessManagerSource.contains("val terminalEmulator: TerminalEmulator"))
         assertTrue(backgroundProcessManagerSource.contains("getInteractiveTerminalEmulator"))
@@ -302,7 +321,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("bgManager.getInteractiveTerminalEmulator(processId)"))
         assertFalse(processSessionSource.contains("bgManager.readInteractiveBuffer(processId)"))
         assertTrue(processSessionSource.contains("if (restored.autoScroll) Int.MAX_VALUE else restored.verticalOffsetPx"))
-        assertTrue(processSessionSource.contains("if (restored == null || restored.autoScroll)"))
+        assertTrue(processSessionSource.contains("if (restored != null && !restored.autoScroll)"))
         assertTrue(processSessionSource.contains("val viewportInitialized = remember(processId) { AtomicBoolean(false) }"))
         assertTrue(processSessionSource.contains("withFrameNanos { }\n        withFrameNanos { }"))
         assertTrue(backgroundProcessManagerSource.contains("rememberTerminalCommand"))

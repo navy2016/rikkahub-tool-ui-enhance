@@ -978,6 +978,52 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun renderFramePreservesScreenLineIdentityWhenRowsArchive() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 20)
+        val before = terminal.renderFrame()
+        val firstScreenId = before.screenLineIds.first()
+
+        terminal.feed((1..7).joinToString("\r\n") { "line$it" })
+        val after = terminal.renderFrame()
+
+        assertTrue(after.historyLineIds.contains(firstScreenId))
+        assertEquals(after.historyCount, after.historyLineIds.size)
+        assertEquals(terminal.rows, after.screenLineIds.size)
+    }
+
+    @Test
+    fun renderFrameKeepsLineIdsAcrossResizeAndChangesGenerationOnFullClear() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        val initial = terminal.renderFrame(includeScrollback = false)
+        val firstId = initial.screenLineIds.first()
+        val generation = initial.screenGeneration
+
+        terminal.resize(columns = 30, rows = 8)
+        val resized = terminal.renderFrame(includeScrollback = false)
+        terminal.feed("\u001B[2J")
+        val cleared = terminal.renderFrame(includeScrollback = false)
+
+        assertTrue(resized.screenLineIds.contains(firstId))
+        assertTrue(cleared.screenGeneration > generation)
+        assertTrue(cleared.screenLineIds.none { it == firstId })
+    }
+
+    @Test
+    fun alternateScreenClearUsesSeparateGenerationAndRestoresMainLineIds() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        val main = terminal.renderFrame()
+
+        terminal.feed("\u001B[?1049hALT")
+        val alternate = terminal.renderFrame()
+        terminal.feed("\u001B[?1049l")
+        val restored = terminal.renderFrame()
+
+        assertTrue(alternate.screenGeneration != main.screenGeneration)
+        assertEquals(main.screenLineIds, restored.screenLineIds)
+        assertEquals(main.screenGeneration, restored.screenGeneration)
+    }
+
+    @Test
     fun renderFrameKeepsRevisionStableUntilTerminalStateChanges() {
         val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
         val initial = terminal.renderFrame()

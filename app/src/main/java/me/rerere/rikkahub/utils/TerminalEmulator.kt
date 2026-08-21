@@ -115,10 +115,14 @@ class TerminalEmulator(
         val historyEndId: Long = 0,
         /** Number of history rows. */
         val historyCount: Int = 0,
+        /** Stable IDs of history rows in rendered order. IDs are not assumed to be contiguous. */
+        val historyLineIds: List<Long> = emptyList(),
         /** Number of history rows trimmed (purged) since the last frame. */
         val historyTrimmedCount: Int = 0,
         /** Stable (monotonic) IDs of each screen row. */
         val screenLineIds: List<Long> = emptyList(),
+        /** Identity of the active physical screen. A full clear/reset creates a new generation. */
+        val screenGeneration: Long = 0,
         val cursorRow: Int,
         val cursorVisible: Boolean,
         val isAlternateScreen: Boolean,
@@ -231,13 +235,22 @@ class TerminalEmulator(
     // cache with the row makes reuse explicit and prevents mutable live-screen rows from being
     // cached without a content revision.
     private var nextLineId = 1L
+    private var nextScreenGeneration = 1L
+    private var mainScreenGeneration = newScreenGeneration()
+    private var altScreenGeneration = newScreenGeneration()
     private var pendingHistoryTrimmedCount = 0L
     private val scrollback = ArrayDeque<ScrollbackLine>()
     private var scrollbackRenderStyleRevision = 0L
     private var stateRevision = 0L
     private val mainScreen = MutableList(rows) { blankLine() }
     private val altScreen = MutableList(rows) { blankLine() }
+    private val mainScreenLineIds = MutableList(rows) { newLineId() }
+    private val altScreenLineIds = MutableList(rows) { newLineId() }
     private val screen: MutableList<Array<Cell>> get() = if (alternateScreen) altScreen else mainScreen
+    private val activeScreenLineIds: MutableList<Long>
+        get() = if (alternateScreen) altScreenLineIds else mainScreenLineIds
+    private val activeScreenGeneration: Long
+        get() = if (alternateScreen) altScreenGeneration else mainScreenGeneration
 
     init {
         resetTabStops()
@@ -249,14 +262,15 @@ class TerminalEmulator(
         scrollback.clear()
         pendingHistoryTrimmedCount = 0L
         scrollbackRenderStyleRevision = 0L
-        mainScreen.resetScreen()
-        altScreen.resetScreen()
+        mainScreen.resetScreen(mainScreenLineIds)
+        altScreen.resetScreen(altScreenLineIds)
+        mainScreenGeneration = newScreenGeneration()
+        altScreenGeneration = newScreenGeneration()
         cursorRow = 0
         cursorCol = 0
         savedRow = 0
         savedCol = 0
         savedCursor = SavedCursor(0, 0, defaultStyle, false, false, false)
-        nextLineId = 1L
         altSaveMainCursor = null
         parserState = ParserState.NORMAL
         csiBuffer.clear()
@@ -374,13 +388,15 @@ class TerminalEmulator(
         tabStops.removeIf { it >= newColumns }
         if (tabStops.isEmpty()) resetTabStops()
         mainScreen.resizeScreen(
-            newRows,
-            newColumns,
+            lineIds = mainScreenLineIds,
+            newRows = newRows,
+            newColumns = newColumns,
             preserveBottom = preserveBottomOnShrink && !alternateScreen,
         )
         altScreen.resizeScreen(
-            newRows,
-            newColumns,
+            lineIds = altScreenLineIds,
+            newRows = newRows,
+            newColumns = newColumns,
             preserveBottom = preserveBottomOnShrink && alternateScreen,
         )
         if (columnsChanged) {
@@ -785,6 +801,7 @@ class TerminalEmulator(
 
         val historyStartId = if (includeHistory && scrollback.isNotEmpty()) scrollback.first().id else 0L
         val historyEndId = if (includeHistory && scrollback.isNotEmpty()) scrollback.last().id else 0L
+        val historyLineIds = if (includeHistory) scrollback.map { it.id } else emptyList()
         val trimmedSinceLast = if (includeHistory) {
             pendingHistoryTrimmedCount.also { pendingHistoryTrimmedCount = 0L }
         } else {
@@ -797,12 +814,11 @@ class TerminalEmulator(
                 recordRow(line.isNotBlank)
             }
         }
-        val screenLineIds = ArrayList<Long>(rows)
+        val screenLineIds = activeScreenLineIds.toList()
         screen.forEachIndexed { row, line ->
             val isNotBlank = line.isNotBlankLine()
             val isVisuallyOccupied = line.isVisuallyOccupiedLine()
             renderedRows.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }))
-            screenLineIds.add(if (includeHistory) (historyEndId + row + 1) else (row + 1).toLong())
             recordRow(isNotBlank)
             if (isVisuallyOccupied) {
                 if (firstNonBlankScreenRow == null) firstNonBlankScreenRow = row
@@ -822,8 +838,10 @@ class TerminalEmulator(
             historyStartId = historyStartId,
             historyEndId = historyEndId,
             historyCount = if (includeHistory) scrollback.size else 0,
+            historyLineIds = historyLineIds,
             historyTrimmedCount = trimmedSinceLast.toInt(),
             screenLineIds = screenLineIds,
+            screenGeneration = activeScreenGeneration,
             cursorRow = cursorRow,
             cursorVisible = cursorVisible,
             isAlternateScreen = alternateScreen,
@@ -885,28 +903,53 @@ class TerminalEmulator(
     }
 
     private fun MutableList<Array<Cell>>.resizeScreen(
+        lineIds: MutableList<Long>,
         newRows: Int,
         newColumns: Int,
         preserveBottom: Boolean = false,
     ) {
         val old = toList()
+        val oldLineIds = lineIds.toList()
         clear()
+        lineIds.clear()
         val copyRows = min(old.size, newRows)
         val sourceStart = if (preserveBottom) old.size - copyRows else 0
         if (preserveBottom) {
-            repeat(newRows - copyRows) { add(Array(newColumns) { Cell(style = defaultStyle) }) }
+            repeat(newRows - copyRows) {
+                add(Array(newColumns) { Cell(style = defaultStyle) })
+                lineIds.add(newLineId())
+            }
         }
-        repeat(copyRows) { row -> add(resizedLine(old[sourceStart + row], newColumns, defaultStyle)) }
+        repeat(copyRows) { row ->
+            add(resizedLine(old[sourceStart + row], newColumns, defaultStyle))
+            lineIds.add(oldLineIds[sourceStart + row])
+        }
         if (!preserveBottom) {
-            repeat(newRows - copyRows) { add(Array(newColumns) { Cell(style = defaultStyle) }) }
+            repeat(newRows - copyRows) {
+                add(Array(newColumns) { Cell(style = defaultStyle) })
+                lineIds.add(newLineId())
+            }
         }
     }
 
-    private fun MutableList<Array<Cell>>.resetScreen() {
+    private fun MutableList<Array<Cell>>.resetScreen(lineIds: MutableList<Long>) {
         clear()
-        repeat(rows) { add(blankLine()) }
+        lineIds.clear()
+        repeat(rows) {
+            add(blankLine())
+            lineIds.add(newLineId())
+        }
     }
 
+
+    private fun invalidateActiveScreenLineIds() {
+        activeScreenLineIds.indices.forEach { index -> activeScreenLineIds[index] = newLineId() }
+        if (alternateScreen) {
+            altScreenGeneration = newScreenGeneration()
+        } else {
+            mainScreenGeneration = newScreenGeneration()
+        }
+    }
 
     private fun AnnotatedString.Builder.appendRenderedRows(includeScrollback: Boolean, drawCursor: Boolean) {
         var appended = false
@@ -1657,9 +1700,10 @@ class TerminalEmulator(
 
     private fun scrollUp() {
         val removed = screen[scrollTop]
+        val removedLineId = activeScreenLineIds[scrollTop]
         if (!alternateScreen && scrollTop == 0) {
             val archivedCells = Array(columns) { i -> removed[i].copy() }
-            scrollback.addLast(newScrollbackLine(archivedCells))
+            scrollback.addLast(newScrollbackLine(removedLineId, archivedCells))
             while (scrollback.size > scrollbackLimit) {
                 scrollback.removeFirst()
                 pendingHistoryTrimmedCount++
@@ -1667,15 +1711,19 @@ class TerminalEmulator(
         }
         for (r in scrollTop until scrollBottom) {
             screen[r] = screen[r + 1]
+            activeScreenLineIds[r] = activeScreenLineIds[r + 1]
         }
         screen[scrollBottom] = blankLine()
+        activeScreenLineIds[scrollBottom] = newLineId()
     }
 
     private fun scrollDown() {
         for (r in scrollBottom downTo scrollTop + 1) {
             screen[r] = screen[r - 1]
+            activeScreenLineIds[r] = activeScreenLineIds[r - 1]
         }
         screen[scrollTop] = blankLine()
+        activeScreenLineIds[scrollTop] = newLineId()
     }
 
     private fun eraseDisplay(mode: Int, selective: Boolean = false) {
@@ -1691,6 +1739,7 @@ class TerminalEmulator(
             }
             2 -> {
                 for (r in 0 until rows) eraseLineRange(r, 0, columns - 1, selective)
+                if (!selective) invalidateActiveScreenLineIds()
                 cursorRow = 0
                 cursorCol = 0
             }
@@ -1876,8 +1925,10 @@ class TerminalEmulator(
         if (cursorRow !in scrollTop..scrollBottom) return
         for (r in scrollBottom downTo cursorRow + 1) {
             screen[r] = screen[r - 1]
+            activeScreenLineIds[r] = activeScreenLineIds[r - 1]
         }
         screen[cursorRow] = blankLine()
+        activeScreenLineIds[cursorRow] = newLineId()
     }
 
     private fun deleteLine() {
@@ -1885,8 +1936,10 @@ class TerminalEmulator(
         if (cursorRow !in scrollTop..scrollBottom) return
         for (r in cursorRow until scrollBottom) {
             screen[r] = screen[r + 1]
+            activeScreenLineIds[r] = activeScreenLineIds[r + 1]
         }
         screen[scrollBottom] = blankLine()
+        activeScreenLineIds[scrollBottom] = newLineId()
     }
 
     private fun scrollLeft(count: Int) {
@@ -2181,7 +2234,10 @@ class TerminalEmulator(
             altSaveMainCursor = SavedCursor(cursorRow, cursorCol, currentStyle, originMode, lineDrawing, pendingWrap)
             cursorSaveMode = true
             alternateScreen = true
-            if (clear) altScreen.resetScreen()
+            if (clear) {
+                altScreen.resetScreen(altScreenLineIds)
+                altScreenGeneration = newScreenGeneration()
+            }
             cursorRow = 0
             cursorCol = 0
             pendingWrap = false
@@ -2303,8 +2359,12 @@ class TerminalEmulator(
         currentStyle = if (isFg) currentStyle.copy(fg = color) else currentStyle.copy(bg = color)
     }
 
-    private fun newScrollbackLine(cells: Array<Cell>): ScrollbackLine = ScrollbackLine(
-        id = nextLineId++,
+    private fun newLineId(): Long = nextLineId++
+
+    private fun newScreenGeneration(): Long = nextScreenGeneration++
+
+    private fun newScrollbackLine(id: Long, cells: Array<Cell>): ScrollbackLine = ScrollbackLine(
+        id = id,
         cells = cells,
         isNotBlank = cells.isNotBlankLine(),
     )

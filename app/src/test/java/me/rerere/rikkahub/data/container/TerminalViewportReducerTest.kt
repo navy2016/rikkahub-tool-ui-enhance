@@ -15,7 +15,9 @@ class TerminalViewportReducerTest {
         historyCount: Int = 0,
         historyStartId: Long = 0,
         historyEndId: Long = 0,
+        historyLineIds: List<Long> = emptyList(),
         screenLineIds: List<Long> = listOf(1, 2, 3, 4, 5),
+        screenGeneration: Long = 1,
         historyTrimmedCount: Int = 0,
     ): TerminalEmulator.RenderFrame = TerminalEmulator.RenderFrame(
         rows = emptyList(),
@@ -25,8 +27,10 @@ class TerminalViewportReducerTest {
         historyStartId = historyStartId,
         historyEndId = historyEndId,
         historyCount = historyCount,
+        historyLineIds = historyLineIds,
         historyTrimmedCount = historyTrimmedCount,
         screenLineIds = screenLineIds,
+        screenGeneration = screenGeneration,
         cursorRow = 2,
         cursorVisible = true,
         isAlternateScreen = false,
@@ -197,6 +201,89 @@ class TerminalViewportReducerTest {
         )
         val ids = buildLineIdsFromFrame(frame, 8)
         assertEquals(listOf(10L, 11L, 12L, 100L, 101L, 102L, 103L, 104L), ids)
+    }
+
+    @Test
+    fun buildLineIdsUsesPublishedNonContiguousHistoryIds() {
+        val frame = emptyFrame(
+            historyCount = 3,
+            historyStartId = 10,
+            historyEndId = 30,
+            historyLineIds = listOf(10, 21, 30),
+            screenLineIds = listOf(40, 41),
+        )
+
+        assertEquals(listOf(10L, 21L, 30L, 40L, 41L), buildLineIdsFromFrame(frame, 5))
+    }
+
+    @Test
+    fun captureAnchorMarksScreenRowsWithFrameGeneration() {
+        val frame = emptyFrame(
+            historyCount = 2,
+            historyLineIds = listOf(10, 21),
+            screenLineIds = listOf(30, 31, 32),
+            screenGeneration = 7,
+        )
+
+        val historyAnchor = captureViewportAnchor(frame, 5, scrollPx = 20, cellHeightPx = 20)
+        val screenAnchor = captureViewportAnchor(frame, 5, scrollPx = 50, cellHeightPx = 20)
+
+        assertEquals(21L, historyAnchor?.lineId)
+        assertEquals(null, historyAnchor?.screenGeneration)
+        assertEquals(30L, screenAnchor?.lineId)
+        assertEquals(7L, screenAnchor?.screenGeneration)
+        assertEquals(10, screenAnchor?.intraOffsetPx)
+    }
+
+    @Test
+    fun lockedScreenAnchorFallsBackWhenGenerationChanges() {
+        val input = ViewportInput(
+            mode = ViewportMode.LOCKED,
+            anchorLineId = 30,
+            anchorScreenGeneration = 1,
+            maxScrollPx = maxScrollPx,
+            tailScrollPx = 750,
+        )
+        val frame = emptyFrame(screenLineIds = listOf(30, 31, 32), screenGeneration = 2)
+
+        val output = reduceViewport(input, frame, 3)
+
+        assertEquals(ViewportMode.TAIL, output.mode)
+        assertEquals(750, output.targetScrollPx)
+        assertEquals(true, output.anchorTrimmed)
+    }
+
+    @Test
+    fun archivedScreenAnchorSurvivesLaterScreenGenerationChanges() {
+        val input = ViewportInput(
+            mode = ViewportMode.LOCKED,
+            anchorLineId = 30,
+            anchorScreenGeneration = 1,
+            maxScrollPx = maxScrollPx,
+        )
+        val frame = emptyFrame(
+            historyCount = 1,
+            historyLineIds = listOf(30),
+            screenLineIds = listOf(40, 41),
+            screenGeneration = 2,
+        )
+
+        val output = reduceViewport(input, frame, 3)
+
+        assertEquals(ViewportMode.LOCKED, output.mode)
+        assertEquals(0, output.targetScrollPx)
+        assertEquals(null, output.anchorScreenGeneration)
+    }
+
+    @Test
+    fun tailUsesSemanticTargetInsteadOfContainerMaximum() {
+        val input = ViewportInput(
+            mode = ViewportMode.TAIL,
+            maxScrollPx = maxScrollPx,
+            tailScrollPx = 640,
+        )
+
+        assertEquals(640, reduceViewport(input, emptyFrame(), 5).targetScrollPx)
     }
 
     @Test

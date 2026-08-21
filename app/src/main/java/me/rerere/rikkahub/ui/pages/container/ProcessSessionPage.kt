@@ -121,6 +121,10 @@ import me.rerere.rikkahub.data.container.BackgroundProcessInfo
 import me.rerere.rikkahub.data.container.BackgroundProcessManager
 import me.rerere.rikkahub.data.container.isConfiguredTerminalCommand
 import me.rerere.rikkahub.data.container.isTuiCommand
+import me.rerere.rikkahub.data.container.ViewportInput
+import me.rerere.rikkahub.data.container.ViewportMode
+import me.rerere.rikkahub.data.container.captureViewportAnchor
+import me.rerere.rikkahub.data.container.reduceViewport
 import me.rerere.rikkahub.data.container.ControlInput
 import me.rerere.rikkahub.data.container.ProcessStatus
 import me.rerere.rikkahub.data.container.PRootManager
@@ -267,11 +271,17 @@ private data class TerminalImeViewportSnapshot(
 private data class TerminalScrollSnapshot(
     val maxScrollPx: Int,
     val renderedRowCount: Int,
-    val screenStartRow: Int,
     val viewportHeightPx: Int,
     val autoScroll: Boolean,
     val usesTuiViewport: Boolean,
-    val pendingTuiCompensationPx: Int,
+    val mode: ViewportMode,
+    val anchorLineId: Long?,
+    val anchorIntraOffsetPx: Int,
+    val anchorScreenGeneration: Long?,
+    val cellHeightPx: Int,
+    val imeAnchorRevision: Int,
+    val frameRevision: Long,
+    val screenGeneration: Long,
 )
 
 @Stable
@@ -955,6 +965,9 @@ private fun TerminalInteractivePanel(
     var terminalFrameRevision by remember(processId) {
         mutableLongStateOf(initialTerminalRenderFrame.revision)
     }
+    var terminalViewportFrame by remember(processId) {
+        mutableStateOf(initialTerminalRenderFrame)
+    }
     var terminalModeSummary by remember { mutableStateOf(initialTerminalRenderFrame.modeSummary) }
     var terminalStatus by remember { mutableStateOf("就绪") }
     var autoScroll by remember(processId) { mutableStateOf(restoredViewportState?.autoScroll ?: savedPreference?.autoScroll ?: true) }
@@ -1029,10 +1042,21 @@ private fun TerminalInteractivePanel(
     var outputViewportHeightPx by remember(processId) { mutableIntStateOf(0) }
     val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
     val activeTerminalMousePosition = remember(processId) { AtomicReference<MouseEvent?>(null) }
-    val tuiScreenStartRowAnchor = remember(processId) {
-        AtomicInteger(initialTerminalRenderFrame.screenStartRow)
+    var viewportMode by remember(processId) {
+        mutableStateOf(
+            restoredViewportState?.viewportMode ?: if (autoScroll) ViewportMode.TAIL else ViewportMode.LOCKED
+        )
     }
-    var pendingTuiCompensationPx by remember(processId) { mutableIntStateOf(0) }
+    var viewportAnchorLineId by remember(processId) { mutableStateOf(restoredViewportState?.anchorLineId) }
+    var viewportAnchorIntraOffsetPx by remember(processId) {
+        mutableIntStateOf(restoredViewportState?.anchorIntraOffsetPx ?: 0)
+    }
+    var viewportAnchorCellHeightPx by remember(processId) {
+        mutableIntStateOf(restoredViewportState?.anchorCellHeightPx ?: terminalCellHeightPx)
+    }
+    var viewportAnchorScreenGeneration by remember(processId) {
+        mutableStateOf(restoredViewportState?.anchorScreenGeneration)
+    }
     val currentImeVisible by rememberUpdatedState(imeVisible)
     val currentActualImeHeightPx by rememberUpdatedState(actualImeHeightPx)
     val currentFullscreen by rememberUpdatedState(fullscreen)
@@ -1142,6 +1166,76 @@ private fun TerminalInteractivePanel(
         outputScroll.scrollTo(terminalImeScrollTarget(anchor))
     }
 
+    fun captureLockedViewportAnchor(scrollPx: Int = outputScroll.value) {
+        captureViewportAnchor(
+            frame = terminalViewportFrame,
+            renderedRows = terminalRenderedRows.size,
+            scrollPx = scrollPx,
+            cellHeightPx = terminalCellHeightPx,
+        )?.let { anchor ->
+            viewportAnchorLineId = anchor.lineId
+            viewportAnchorIntraOffsetPx = anchor.intraOffsetPx
+            viewportAnchorCellHeightPx = terminalCellHeightPx
+            viewportAnchorScreenGeneration = anchor.screenGeneration
+        }
+    }
+
+    fun setViewportFollow(enabled: Boolean) {
+        autoScroll = enabled
+        if (enabled) {
+            viewportMode = if (currentUsesTuiViewport) ViewportMode.SCREEN else ViewportMode.TAIL
+            viewportAnchorLineId = null
+            viewportAnchorIntraOffsetPx = 0
+            viewportAnchorCellHeightPx = terminalCellHeightPx
+            viewportAnchorScreenGeneration = null
+        } else {
+            captureLockedViewportAnchor()
+            viewportMode = ViewportMode.LOCKED
+        }
+    }
+
+    fun reduceTerminalViewport(): Int {
+        val mode = when {
+            viewportMode == ViewportMode.LOCKED -> ViewportMode.LOCKED
+            currentUsesTuiViewport -> ViewportMode.SCREEN
+            else -> ViewportMode.TAIL
+        }
+        val scaledAnchorIntraOffsetPx = if (viewportAnchorCellHeightPx > 0 &&
+            viewportAnchorCellHeightPx != terminalCellHeightPx
+        ) {
+            ((viewportAnchorIntraOffsetPx.toLong() * terminalCellHeightPx +
+                viewportAnchorCellHeightPx / 2) / viewportAnchorCellHeightPx)
+                .toInt()
+                .coerceIn(0, terminalCellHeightPx - 1)
+        } else {
+            viewportAnchorIntraOffsetPx
+        }
+        val output = reduceViewport(
+            input = ViewportInput(
+                mode = mode,
+                anchorLineId = viewportAnchorLineId,
+                anchorIntraOffsetPx = scaledAnchorIntraOffsetPx,
+                anchorScreenGeneration = viewportAnchorScreenGeneration,
+                currentScrollPx = outputScroll.value,
+                maxScrollPx = outputScroll.maxValue,
+                viewportHeightPx = outputViewportHeightPx,
+                cellHeightPx = terminalCellHeightPx,
+                tailScrollPx = terminalImeScrollTarget(imeViewportAnchor.get()),
+                screenScrollPx = terminalImeScrollTarget(imeViewportAnchor.get()),
+                fallbackMode = if (currentUsesTuiViewport) ViewportMode.SCREEN else ViewportMode.TAIL,
+            ),
+            frame = terminalViewportFrame,
+            renderedRows = terminalRenderedRows.size,
+        )
+        viewportMode = output.mode
+        viewportAnchorLineId = output.anchorLineId
+        viewportAnchorIntraOffsetPx = output.anchorIntraOffsetPx
+        viewportAnchorCellHeightPx = terminalCellHeightPx
+        viewportAnchorScreenGeneration = output.anchorScreenGeneration
+        autoScroll = output.mode != ViewportMode.LOCKED
+        return output.targetScrollPx
+    }
+
     fun shouldFollowTerminalBottom(): Boolean =
         currentFullscreen && autoScroll && !currentUsesTuiViewport && (imeViewportAnchor.get()?.followBottom != false)
 
@@ -1182,7 +1276,12 @@ private fun TerminalInteractivePanel(
             verticalOffsetPx = outputScroll.value,
             horizontalOffsetPx = horizontalScroll.value,
             autoScroll = autoScroll,
-            atBottom = terminalNearBottom()
+            atBottom = terminalNearBottom(),
+            viewportMode = viewportMode,
+            anchorLineId = viewportAnchorLineId,
+            anchorIntraOffsetPx = viewportAnchorIntraOffsetPx,
+            anchorCellHeightPx = viewportAnchorCellHeightPx,
+            anchorScreenGeneration = viewportAnchorScreenGeneration,
         )
     }
 
@@ -1202,8 +1301,6 @@ private fun TerminalInteractivePanel(
         val rendered = frame.rows
         val bounds = frame.contentBounds
         val now = System.currentTimeMillis()
-        val previousScreenStartRow = tuiScreenStartRowAnchor.getAndSet(frame.screenStartRow)
-        val screenStartDeltaRows = frame.screenStartRow - previousScreenStartRow
         val usesTuiViewport = commandIsTui || frame.isAlternateScreen || currentPreserveFullTerminalGrid
         var hasDeferredGridBlank = false
         Snapshot.withMutableSnapshot {
@@ -1243,26 +1340,11 @@ private fun TerminalInteractivePanel(
             )
             terminalFrameIsAlternateScreen = frame.isAlternateScreen
             terminalFrameRevision = frame.revision
+            terminalViewportFrame = frame
             terminalModeSummary = frame.modeSummary
         }
         resizeAwaitingTuiRedraw.set(false)
         lastRenderAt.set(now)
-        if (usesTuiViewport && !currentImeVisible) {
-            if (autoScroll) {
-                // TAIL mode: bottom-follow. Keep the prior screen-start-row delta compensation.
-                if (screenStartDeltaRows != 0) {
-                    pendingTuiCompensationPx += screenStartDeltaRows * terminalCellHeightPx
-                }
-            } else {
-                // LOCKED mode (user scrolled up from the bottom): use the precise trimmed-row count
-                // from RenderFrame metadata. When scrollback rows are trimmed from the top, the
-                // anchored content moves up by exactly that many rows; compensate so the locked
-                // viewport stays put. (screenStartDeltaRows cannot distinguish trim from append.)
-                if (frame.historyTrimmedCount > 0) {
-                    pendingTuiCompensationPx -= frame.historyTrimmedCount * terminalCellHeightPx
-                }
-            }
-        }
         if (hasDeferredGridBlank) {
             gridBlankCommitJob.getAndSet(null)?.cancel()
             gridBlankCommitJob.set(scope.launch {
@@ -1546,9 +1628,12 @@ private fun TerminalInteractivePanel(
         withFrameNanos { }
         withFrameNanos { }
         if (anchor.autoScroll) {
+            setViewportFollow(true)
             runCatching { scrollTerminalContentBottomToIme() }
         } else {
             runCatching { outputScroll.scrollTo(anchor.verticalOffsetPx.coerceIn(0, outputScroll.maxValue)) }
+            captureLockedViewportAnchor()
+            viewportMode = ViewportMode.LOCKED
         }
         runCatching { horizontalScroll.scrollTo(anchor.horizontalOffsetPx.coerceIn(0, horizontalScroll.maxValue)) }
     }
@@ -1559,7 +1644,11 @@ private fun TerminalInteractivePanel(
             .collect { (scrolling, value, _) ->
                 if (!scrolling) return@collect
                 val nearBottom = value >= terminalViewportBottomScrollTarget() - terminalCellHeightPx * 2
-                if (autoScroll != nearBottom) autoScroll = nearBottom
+                when {
+                    nearBottom && !autoScroll -> setViewportFollow(true)
+                    !nearBottom && autoScroll -> setViewportFollow(false)
+                    !nearBottom -> captureLockedViewportAnchor()
+                }
             }
     }
 
@@ -1782,10 +1871,16 @@ private fun TerminalInteractivePanel(
         withFrameNanos { }
         withFrameNanos { }
         val restored = restoredViewportState
-        if (restored == null || restored.autoScroll) {
-            if (autoScroll) runCatching { scrollTerminalContentBottomToIme() }
-        } else {
+        if (restored != null && !restored.autoScroll) {
             runCatching { outputScroll.scrollTo(restored.verticalOffsetPx.coerceIn(0, outputScroll.maxValue)) }
+            if (restored.anchorLineId == null) captureLockedViewportAnchor()
+            viewportMode = ViewportMode.LOCKED
+        } else if (autoScroll) {
+            setViewportFollow(true)
+            runCatching { scrollTerminalContentBottomToIme() }
+        } else {
+            captureLockedViewportAnchor()
+            viewportMode = ViewportMode.LOCKED
         }
         restored?.let {
             runCatching { horizontalScroll.scrollTo(it.horizontalOffsetPx.coerceIn(0, horizontalScroll.maxValue)) }
@@ -1809,7 +1904,6 @@ private fun TerminalInteractivePanel(
             resizeRenderFallbackJob.getAndSet(null)?.cancel()
             gridBlankCommitJob.getAndSet(null)?.cancel()
             imeViewportRestoreJob.getAndSet(null)?.cancel()
-            pendingTuiCompensationPx = 0
             placementViewportAnchor.set(null)
             rawInputChannel.close()
             rawMouseChannel.close()
@@ -1822,57 +1916,32 @@ private fun TerminalInteractivePanel(
             TerminalScrollSnapshot(
                 maxScrollPx = outputScroll.maxValue,
                 renderedRowCount = terminalRenderedRows.size,
-                screenStartRow = terminalScreenStartRow,
                 viewportHeightPx = outputViewportHeightPx,
                 autoScroll = autoScroll,
                 usesTuiViewport = currentUsesTuiViewport,
-                pendingTuiCompensationPx = pendingTuiCompensationPx,
+                mode = viewportMode,
+                anchorLineId = viewportAnchorLineId,
+                anchorIntraOffsetPx = viewportAnchorIntraOffsetPx,
+                anchorScreenGeneration = viewportAnchorScreenGeneration,
+                cellHeightPx = terminalCellHeightPx,
+                imeAnchorRevision = imeViewportAnchorRevision,
+                frameRevision = terminalViewportFrame.revision,
+                screenGeneration = terminalViewportFrame.screenGeneration,
             )
         }.distinctUntilChanged().collect { snapshot ->
-                // Apply accumulated compensation regardless of autoScroll mode so a LOCKED (manual)
-                // history-trim compensation also takes effect, while TAIL screen-start compensation
-                // continues to maintain bottom alignment.
-                val compensation = pendingTuiCompensationPx
-                pendingTuiCompensationPx = 0
-                if (compensation != 0) {
-                    val desired = outputScroll.value + compensation
-                    val target = desired.coerceIn(0, outputScroll.maxValue)
-                    if (target != outputScroll.value) {
-                        withFrameNanos { }
-                        runCatching { outputScroll.scrollTo(target) }
-                        if (compensation > 0 && target != desired) {
-                            pendingTuiCompensationPx += desired - target
-                        }
-                    }
-                }
-                // If not auto-following (LOCKED mode), do not drive automatic bottom alignment.
-                if (!snapshot.autoScroll) return@collect
-                if (snapshot.usesTuiViewport) {
-                    val imeAnchor = imeViewportAnchor.get()
-                    if (imeAnchor?.followBottom == true) {
-                        withFrameNanos { }
-                        runCatching {
-                            val target = if (currentImeVisible && !imeAnchor.shouldAvoidIme) {
-                                imeAnchor.offsetPx.coerceIn(0, outputScroll.maxValue)
-                            } else {
-                                terminalImeScrollTarget(imeAnchor)
-                            }
-                            outputScroll.scrollTo(target)
-                        }
-                    }
-                    return@collect
-                }
-                if (!shouldFollowTerminalBottom()) return@collect
-                withFrameNanos { }
-                val imeAnchor = imeViewportAnchor.get()
-                runCatching {
-                    if (currentImeVisible && imeAnchor?.followBottom == true && !currentShouldAvoidIme) {
-                        outputScroll.scrollTo(imeAnchor.offsetPx.coerceIn(0, outputScroll.maxValue))
-                    } else {
-                        scrollTerminalContentBottomToIme()
-                    }
-                }
+            if (snapshot.renderedRowCount <= 0 || snapshot.viewportHeightPx <= 0) return@collect
+            if (!viewportInitialized.get() && viewportMode == ViewportMode.LOCKED && viewportAnchorLineId == null) return@collect
+            withFrameNanos { }
+            val target = reduceTerminalViewport()
+            if (target != outputScroll.value) {
+                runCatching { outputScroll.scrollTo(target.coerceIn(0, outputScroll.maxValue)) }
             }
+            if (viewportMode == ViewportMode.LOCKED) return@collect
+            val imeAnchor = imeViewportAnchor.get()
+            if (currentImeVisible && imeAnchor?.followBottom == true && !currentShouldAvoidIme) {
+                runCatching { outputScroll.scrollTo(imeAnchor.offsetPx.coerceIn(0, outputScroll.maxValue)) }
+            }
+        }
     }
 
     LaunchedEffect(processId) {
@@ -1917,14 +1986,15 @@ private fun TerminalInteractivePanel(
                 var consumed = false
                 if (direction > 0) {
                     if (terminalViewportBottomScrollTarget() - outputScroll.value > TERMINAL_EDGE_THRESHOLD_PX) {
-                        autoScroll = true
-                        outputScroll.animateScrollTo(terminalViewportBottomScrollTarget())
+                        setViewportFollow(true)
+                        outputScroll.animateScrollTo(reduceTerminalViewport())
                         saveTerminalViewport()
                         consumed = true
                     }
                 } else {
                     if (outputScroll.value > TERMINAL_EDGE_THRESHOLD_PX) {
-                        autoScroll = false
+                        setViewportFollow(false)
+                        captureLockedViewportAnchor(scrollPx = 0)
                         outputScroll.animateScrollTo(0)
                         saveTerminalViewport()
                         consumed = true
@@ -1988,7 +2058,7 @@ private fun TerminalInteractivePanel(
                         markTerminalPreferencesDirty()
                     },
                     onAutoScrollChange = {
-                        autoScroll = it
+                        setViewportFollow(it)
                         markTerminalPreferencesDirty()
                     },
                     onShowExtraKeysChange = {
