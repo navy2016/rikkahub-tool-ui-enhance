@@ -2117,13 +2117,19 @@ private fun TerminalInteractivePanel(
                     modifier = Modifier
                         .fillMaxSize()
                         .onSizeChanged { size ->
-                            recordImeTransition(currentImeVisible, currentViewportHeightPx = size.height)
-                            outputViewportHeightPx = size.height
+                            // outputViewportHeightPx is the grid-usable viewport height, i.e. the
+                            // measured column height minus the reserved status-bar strip. This keeps
+                            // the auto-scroll bottom anchor and shouldAvoidIme consistent with the
+                            // PTY rows computation (which also subtracts the strip), so the last rows
+                            // are never pushed below the visible/IME area when the status bar is shown.
+                            val viewportHeightPx = (size.height - terminalVisualTopPaddingPx).coerceAtLeast(0)
+                            recordImeTransition(currentImeVisible, currentViewportHeightPx = viewportHeightPx)
+                            outputViewportHeightPx = viewportHeightPx
                             val imeTransitionActive = currentImeVisible || currentActualImeHeightPx > 0 ||
                                 imeViewportAnchor.get() != null ||
                                 System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
                             if (currentFullscreen && (!imeTransitionActive || fullOutputViewportHeightPx.get() == 0)) {
-                                fullOutputViewportHeightPx.set(size.height)
+                                fullOutputViewportHeightPx.set(viewportHeightPx)
                             }
                             // LIST is a clipped preview of the live full-size grid. It must never
                             // resize the emulator/PTY or send SIGWINCH merely because the card is
@@ -2163,13 +2169,21 @@ private fun TerminalInteractivePanel(
                             }
                         }
                         .nestedScroll(fastFlingConnection)
-                        .horizontalScroll(horizontalScroll, enabled = terminalPanMode || selectionMode)
-                        // Keep a tiny manual viewport pan available in TOUCH/selection modes. In
-                        // MOUSE mode, do not let Compose scroll gestures compete with xterm mouse
-                        // events intended for the TUI.
-                        .verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)
                 ) {
+                    // Status-bar strip is a fixed (non-scrollable) top strip so it never participates
+                    // in scroll-coordinate math; only the grid below it scrolls. This keeps the
+                    // auto-scroll bottom anchor and grid rows consistent.
                     Spacer(modifier = Modifier.height(terminalVisualTopPadding))
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .horizontalScroll(horizontalScroll, enabled = terminalPanMode || selectionMode)
+                            // Keep a tiny manual viewport pan available in TOUCH/selection modes. In
+                            // MOUSE mode, do not let Compose scroll gestures compete with xterm mouse
+                            // events intended for the TUI.
+                            .verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)
+                    ) {
                     val terminalContent: @Composable () -> Unit = {
                         if (terminalRenderedRows.isEmpty()) {
                             Text(
@@ -2199,6 +2213,7 @@ private fun TerminalInteractivePanel(
                             8.dp
                         )
                     )
+                    }
                 }
             }
             }
