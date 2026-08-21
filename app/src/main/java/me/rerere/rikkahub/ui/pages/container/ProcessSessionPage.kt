@@ -1247,8 +1247,21 @@ private fun TerminalInteractivePanel(
         }
         resizeAwaitingTuiRedraw.set(false)
         lastRenderAt.set(now)
-        if (usesTuiViewport && autoScroll && screenStartDeltaRows != 0 && !currentImeVisible) {
-            pendingTuiCompensationPx += screenStartDeltaRows * terminalCellHeightPx
+        if (usesTuiViewport && !currentImeVisible) {
+            if (autoScroll) {
+                // TAIL mode: bottom-follow. Keep the prior screen-start-row delta compensation.
+                if (screenStartDeltaRows != 0) {
+                    pendingTuiCompensationPx += screenStartDeltaRows * terminalCellHeightPx
+                }
+            } else {
+                // LOCKED mode (user scrolled up from the bottom): use the precise trimmed-row count
+                // from RenderFrame metadata. When scrollback rows are trimmed from the top, the
+                // anchored content moves up by exactly that many rows; compensate so the locked
+                // viewport stays put. (screenStartDeltaRows cannot distinguish trim from append.)
+                if (frame.historyTrimmedCount > 0) {
+                    pendingTuiCompensationPx -= frame.historyTrimmedCount * terminalCellHeightPx
+                }
+            }
         }
         if (hasDeferredGridBlank) {
             gridBlankCommitJob.getAndSet(null)?.cancel()
@@ -1816,33 +1829,35 @@ private fun TerminalInteractivePanel(
                 pendingTuiCompensationPx = pendingTuiCompensationPx,
             )
         }.distinctUntilChanged().collect { snapshot ->
-                if (!snapshot.autoScroll) {
-                    pendingTuiCompensationPx = 0
-                    return@collect
+                // Apply accumulated compensation regardless of autoScroll mode so a LOCKED (manual)
+                // history-trim compensation also takes effect, while TAIL screen-start compensation
+                // continues to maintain bottom alignment.
+                val compensation = pendingTuiCompensationPx
+                pendingTuiCompensationPx = 0
+                if (compensation != 0) {
+                    val desired = outputScroll.value + compensation
+                    val target = desired.coerceIn(0, outputScroll.maxValue)
+                    if (target != outputScroll.value) {
+                        withFrameNanos { }
+                        runCatching { outputScroll.scrollTo(target) }
+                        if (compensation > 0 && target != desired) {
+                            pendingTuiCompensationPx += desired - target
+                        }
+                    }
                 }
+                // If not auto-following (LOCKED mode), do not drive automatic bottom alignment.
+                if (!snapshot.autoScroll) return@collect
                 if (snapshot.usesTuiViewport) {
-                    val compensation = pendingTuiCompensationPx
-                    pendingTuiCompensationPx = 0
                     val imeAnchor = imeViewportAnchor.get()
-                    if (compensation != 0 || imeAnchor?.followBottom == true) {
+                    if (imeAnchor?.followBottom == true) {
                         withFrameNanos { }
                         runCatching {
-                            if (compensation != 0) {
-                                val desired = outputScroll.value + compensation
-                                val target = desired.coerceIn(0, outputScroll.maxValue)
-                                outputScroll.scrollTo(target)
-                                if (compensation > 0 && target != desired) {
-                                    pendingTuiCompensationPx += desired - target
-                                }
+                            val target = if (currentImeVisible && !imeAnchor.shouldAvoidIme) {
+                                imeAnchor.offsetPx.coerceIn(0, outputScroll.maxValue)
+                            } else {
+                                terminalImeScrollTarget(imeAnchor)
                             }
-                            if (imeAnchor?.followBottom == true) {
-                                val target = if (currentImeVisible && !imeAnchor.shouldAvoidIme) {
-                                    imeAnchor.offsetPx.coerceIn(0, outputScroll.maxValue)
-                                } else {
-                                    terminalImeScrollTarget(imeAnchor)
-                                }
-                                outputScroll.scrollTo(target)
-                            }
+                            outputScroll.scrollTo(target)
                         }
                     }
                     return@collect
