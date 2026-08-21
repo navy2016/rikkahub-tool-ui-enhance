@@ -2,7 +2,7 @@ name: Release Build
 
 on:
   push:
-    branches: [ feat_epub, master, main, 'feature/interactive-session', 'fix/container-terminal-lifecycle' ]
+    branches: [ feat_epub, master, main, 'feature/interactive-session', 'fix/container-terminal-lifecycle', 'fix/terminal-experience-regressions', 'fix/terminal-session-state-and-viewport' ]
   workflow_dispatch:
     inputs:
       build_type:

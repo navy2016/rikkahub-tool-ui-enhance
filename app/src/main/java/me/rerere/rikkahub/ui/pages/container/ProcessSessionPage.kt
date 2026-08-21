@@ -1005,6 +1005,7 @@ private fun TerminalInteractivePanel(
     }
     var editingTerminalItems by remember { mutableStateOf<String?>(null) }
     val rawInputChannel = remember(processId) { Channel<String>(Channel.UNLIMITED) }
+    val rawMouseChannel = remember(processId) { Channel<ByteArray>(Channel.UNLIMITED) }
     val renderPending = remember(processId) { AtomicBoolean(false) }
     val renderJob = remember(processId) { AtomicReference<Job?>(null) }
     val resizeRenderFallbackJob = remember(processId) { AtomicReference<Job?>(null) }
@@ -1026,6 +1027,7 @@ private fun TerminalInteractivePanel(
     val fullOutputViewportHeightPx = remember(processId) { AtomicInteger(0) }
     var outputViewportHeightPx by remember(processId) { mutableIntStateOf(0) }
     val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
+    val activeTerminalMousePosition = remember(processId) { AtomicReference<MouseEvent?>(null) }
     val tuiScreenStartRowAnchor = remember(processId) {
         AtomicInteger(initialTerminalRenderFrame.screenStartRow)
     }
@@ -1349,6 +1351,11 @@ private fun TerminalInteractivePanel(
         if (!rawInputChannel.trySend(sequence).isSuccess) terminalStatus = "发送失败"
     }
 
+    fun sendRawMouseBytes(bytes: ByteArray) {
+        if (bytes.isEmpty()) return
+        if (!rawMouseChannel.trySend(bytes).isSuccess) terminalStatus = "发送失败"
+    }
+
     fun clearModifierLatches() {
         ctrlLatch = false
         altLatch = false
@@ -1487,13 +1494,23 @@ private fun TerminalInteractivePanel(
     }
 
     fun clearLocalTerminal() {
-        terminalEmulator.reset()
+        // Non-destructive clear: only blank the rendered history. Must NOT reset the emulator,
+        // which would wipe alternate-screen, mouse, bracketed-paste, application-key, saved-cursor,
+        // title, palette, and focus-reporting protocol state.
+        terminalEmulator.clearScrollbackOnly()
         renderTerminalFrame()
     }
 
     LaunchedEffect(processId, rawInputChannel) {
         for (sequence in rawInputChannel) {
             val result = bgManager.sendInput(processId, sequence, appendNewline = false)
+            result.exceptionOrNull()?.let { terminalStatus = it.message ?: "发送失败" }
+        }
+    }
+
+    LaunchedEffect(processId, rawMouseChannel) {
+        for (bytes in rawMouseChannel) {
+            val result = bgManager.sendBytes(processId, bytes)
             result.exceptionOrNull()?.let { terminalStatus = it.message ?: "发送失败" }
         }
     }
@@ -1783,6 +1800,7 @@ private fun TerminalInteractivePanel(
             pendingTuiCompensationPx = 0
             placementViewportAnchor.set(null)
             rawInputChannel.close()
+            rawMouseChannel.close()
             if (viewportInitialized.get()) saveTerminalViewport()
         }
     }
@@ -2024,8 +2042,8 @@ private fun TerminalInteractivePanel(
                         }
                         val absoluteY = event.y - terminalVisualTopPaddingPx +
                             outputScroll.value - screenOriginPx
-                        val col = (absoluteX.toInt() / terminalCellWidthPx).coerceIn(0, terminalColumns - 1)
-                        val row = (absoluteY.toInt() / terminalCellHeightPx).coerceIn(0, terminalRows - 1)
+                        val rawCol = absoluteX.toInt() / terminalCellWidthPx
+                        val rawRow = absoluteY.toInt() / terminalCellHeightPx
                         val activeButton = activeTerminalMouseButton.get()
                         val eventType = when (event.actionMasked) {
                             MotionEvent.ACTION_DOWN -> MouseEventType.PRESS
@@ -2037,6 +2055,31 @@ private fun TerminalInteractivePanel(
                             MotionEvent.ACTION_SCROLL -> MouseEventType.WHEEL
                             else -> return@pointerInteropFilter false
                         }
+                        // Reject events outside the visible physical grid instead of coercing them
+                        // into the first/last cell (status bar, scrollback history, or padding must
+                        // never be emitted as a TUI cell press).
+                        val inGrid = rawCol in 0 until terminalColumns && rawRow in 0 until terminalRows
+                        if (!inGrid) {
+                            // End any active mouse capture with a release at the last valid cell.
+                            if (eventType == MouseEventType.RELEASE && activeButton != null) {
+                                val last = activeTerminalMousePosition.get()
+                                if (last != null) {
+                                    val releaseSequence = terminalEmulator.sequenceForMouse(
+                                        last.copy(type = MouseEventType.RELEASE, button = activeButton ?: MouseButton.LEFT)
+                                    )
+                                    if (releaseSequence != null) sendRawMouseBytes(releaseSequence)
+                                }
+                                activeTerminalMouseButton.set(null)
+                                activeTerminalMousePosition.set(null)
+                                return@pointerInteropFilter true
+                            }
+                            return@pointerInteropFilter eventType != MouseEventType.PRESS
+                        }
+                        val col = rawCol
+                        val row = rawRow
+                        // Real pixel position within the terminal screen for SGR-Pixels.
+                        val pixelX = absoluteX.toInt()
+                        val pixelY = absoluteY.toInt()
                         val pressedButton = when {
                             event.buttonState and MotionEvent.BUTTON_SECONDARY != 0 || event.actionButton == MotionEvent.BUTTON_SECONDARY -> MouseButton.RIGHT
                             event.buttonState and MotionEvent.BUTTON_TERTIARY != 0 || event.actionButton == MotionEvent.BUTTON_TERTIARY -> MouseButton.MIDDLE
@@ -2049,10 +2092,25 @@ private fun TerminalInteractivePanel(
                             else -> pressedButton
                         }
                         val hadActivePress = activeButton != null
-                        val sequence = terminalEmulator.sequenceForMouse(MouseEvent(row = row, column = col, button = button, type = eventType))
-                        if (eventType == MouseEventType.PRESS && sequence != null) activeTerminalMouseButton.set(button)
-                        if (eventType == MouseEventType.RELEASE) activeTerminalMouseButton.set(null)
-                        if (sequence != null) sendRaw(sequence)
+                        val mouseEvent = MouseEvent(
+                            row = row,
+                            column = col,
+                            button = button,
+                            type = eventType,
+                            pixelX = pixelX,
+                            pixelY = pixelY,
+                        )
+                        val sequence = terminalEmulator.sequenceForMouse(mouseEvent)
+                        if (eventType == MouseEventType.PRESS && sequence != null) {
+                            activeTerminalMouseButton.set(button)
+                            activeTerminalMousePosition.set(mouseEvent)
+                        }
+                        if (eventType == MouseEventType.DRAG && sequence != null) activeTerminalMousePosition.set(mouseEvent)
+                        if (eventType == MouseEventType.RELEASE) {
+                            activeTerminalMouseButton.set(null)
+                            activeTerminalMousePosition.set(null)
+                        }
+                        if (sequence != null) sendRawMouseBytes(sequence)
                         sequence != null || hadActivePress
                     })
             ) {

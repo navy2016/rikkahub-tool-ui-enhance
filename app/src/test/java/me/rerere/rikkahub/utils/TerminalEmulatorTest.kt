@@ -137,7 +137,7 @@ class TerminalEmulatorTest {
                 type = TerminalEmulator.MouseEventType.PRESS
             )
         )
-        assertEquals("[<0;3;2M", sequence)
+        assertEquals("[<0;3;2M", sequence!!.toString(Charsets.US_ASCII))
     }
 
 
@@ -177,7 +177,7 @@ class TerminalEmulatorTest {
                 type = TerminalEmulator.MouseEventType.WHEEL
             )
         )
-        assertEquals("[<65;1;1M", wheel)
+        assertEquals("[<65;1;1M", wheel!!.toString(Charsets.US_ASCII))
     }
 
     @Test
@@ -202,7 +202,7 @@ class TerminalEmulatorTest {
                 column = 1,
                 button = TerminalEmulator.MouseButton.LEFT,
                 type = TerminalEmulator.MouseEventType.PRESS
-            ))
+            ))!!.toString(Charsets.US_ASCII)
         )
         assertEquals(
             "\u001B[<32;6;2M",
@@ -211,7 +211,7 @@ class TerminalEmulatorTest {
                 column = 5,
                 button = TerminalEmulator.MouseButton.LEFT,
                 type = TerminalEmulator.MouseEventType.DRAG
-            ))
+            ))!!.toString(Charsets.US_ASCII)
         )
         assertEquals(
             "\u001B[<0;6;2m",
@@ -220,7 +220,7 @@ class TerminalEmulatorTest {
                 column = 5,
                 button = TerminalEmulator.MouseButton.LEFT,
                 type = TerminalEmulator.MouseEventType.RELEASE
-            ))
+            ))!!.toString(Charsets.US_ASCII)
         )
         assertEquals(
             "\u001B[<0;6;2m",
@@ -229,7 +229,7 @@ class TerminalEmulatorTest {
                 column = 5,
                 button = TerminalEmulator.MouseButton.RELEASE,
                 type = TerminalEmulator.MouseEventType.RELEASE
-            ))
+            ))!!.toString(Charsets.US_ASCII)
         )
     }
 
@@ -247,7 +247,7 @@ class TerminalEmulatorTest {
                     button = TerminalEmulator.MouseButton.RIGHT,
                     type = TerminalEmulator.MouseEventType.PRESS
                 )
-            )
+            )!!.toString(Charsets.ISO_8859_1)
         )
         assertEquals(
             null,
@@ -272,7 +272,7 @@ class TerminalEmulatorTest {
                     button = TerminalEmulator.MouseButton.LEFT,
                     type = TerminalEmulator.MouseEventType.PRESS
                 )
-            )
+            )!!.toString(Charsets.US_ASCII)
         )
     }
 
@@ -671,7 +671,7 @@ class TerminalEmulatorTest {
         assertEquals(listOf("\u001B[?1016;1\$y"), terminal.drainResponses())
         assertEquals(
             "\u001B[<0;15;29M",
-            terminal.sequenceForMouse(TerminalEmulator.MouseEvent(row = 2, column = 2))
+            terminal.sequenceForMouse(TerminalEmulator.MouseEvent(row = 2, column = 2))!!.toString(Charsets.US_ASCII)
         )
         assertTrue(terminal.mouseModeSummary().contains("SGR-PIXELS"))
         terminal.feed("\u001B[?1016l\u001B[?1016\$p")
@@ -857,13 +857,13 @@ class TerminalEmulatorTest {
         assertEquals(null, terminal.sequenceForMouse(wheelDown))
 
         terminal.feed("[?1049h[?1007h")
-        assertEquals("[B", terminal.sequenceForMouse(wheelDown))
+        assertEquals("[B", terminal.sequenceForMouse(wheelDown)!!.toString(Charsets.UTF_8))
 
         terminal.feed("[?1h")
-        assertEquals("OB", terminal.sequenceForMouse(wheelDown))
+        assertEquals("OB", terminal.sequenceForMouse(wheelDown)!!.toString(Charsets.UTF_8))
 
         terminal.feed("[?1000h[?1006h")
-        assertEquals("[<65;1;1M", terminal.sequenceForMouse(wheelDown))
+        assertEquals("[<65;1;1M", terminal.sequenceForMouse(wheelDown)!!.toString(Charsets.US_ASCII))
     }
 
 

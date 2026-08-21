@@ -77,7 +77,10 @@ class TerminalEmulator(
         val type: MouseEventType = MouseEventType.PRESS,
         val shift: Boolean = false,
         val alt: Boolean = false,
-        val ctrl: Boolean = false
+        val ctrl: Boolean = false,
+        /** Zero-based physical pixel position inside the terminal screen, used for SGR-Pixels. */
+        val pixelX: Int? = null,
+        val pixelY: Int? = null
     )
 
     private enum class MouseProtocol { DEFAULT, UTF8, SGR, SGR_PIXELS, URXVT }
@@ -151,6 +154,12 @@ class TerminalEmulator(
     private var savedRow = 0
     private var savedCol = 0
     private var savedCursor = SavedCursor(0, 0, defaultStyle, false, false, false)
+    // Main-screen cursor saved by DEC 1049 when entering alternate screen. This must be
+    // separate from DEC 7 / CSI s so writes inside the alternate screen do not overwrite the
+    // main-screen position that 1049 later restores.
+    private var altSaveMainCursor: SavedCursor? = null
+    private var cellPixelWidth = 7
+    private var cellPixelHeight = 14
     private var parserState = ParserState.NORMAL
     private var csiBuffer = StringBuilder()
     private var oscBuffer = StringBuilder()
@@ -233,6 +242,7 @@ class TerminalEmulator(
         savedRow = 0
         savedCol = 0
         savedCursor = SavedCursor(0, 0, defaultStyle, false, false, false)
+        altSaveMainCursor = null
         parserState = ParserState.NORMAL
         csiBuffer.clear()
         oscBuffer.clear()
@@ -244,6 +254,8 @@ class TerminalEmulator(
         defaultForeground = Color(0xFF00E676)
         defaultBackground = Color(0xFF101010)
         cursorColor = Color(0xFF00E676)
+        cellPixelWidth = 7
+        cellPixelHeight = 14
         resetDecoder()
         pendingUtf8 = ByteArray(0)
         cursorVisible = true
@@ -283,6 +295,33 @@ class TerminalEmulator(
         lineDrawing = false
         scrollTop = 0
         scrollBottom = rows - 1
+        stateRevision++
+    }
+
+    /**
+     * Clears rendered scrollback history without touching terminal protocol state
+     * (alternate screen, mouse tracking, bracketed paste, application keys, saved
+     * cursors, title, palette, or focus reporting). This is distinct from a hard reset.
+     */
+    @Synchronized
+    fun clearScrollbackOnly() {
+        if (scrollback.isEmpty()) return
+        scrollback.clear()
+        scrollbackRenderStyleRevision = 0L
+        stateRevision++
+    }
+
+    /** Reports the live cell size in pixels, used for SGR-Pixels and CSI 14/15/16t. */
+    @Synchronized
+    fun cellPixelSize(): Pair<Int, Int> = cellPixelWidth to cellPixelHeight
+
+    @Synchronized
+    fun setCellPixelSize(widthPx: Int, heightPx: Int) {
+        val nextW = widthPx.coerceAtLeast(1)
+        val nextH = heightPx.coerceAtLeast(1)
+        if (nextW == cellPixelWidth && nextH == cellPixelHeight) return
+        cellPixelWidth = nextW
+        cellPixelHeight = nextH
         stateRevision++
     }
 
@@ -336,13 +375,23 @@ class TerminalEmulator(
         scrollBottom = newRows - 1
         cursorRow = (cursorRow + preservedRowShift).coerceIn(0, newRows - 1)
         cursorCol = cursorCol.coerceIn(0, newColumns - 1)
-        savedRow = (savedRow + preservedRowShift).coerceIn(0, newRows - 1)
-        savedCol = savedCol.coerceIn(0, newColumns - 1)
-        savedCursor = savedCursor.copy(
-            row = (savedCursor.row + preservedRowShift).coerceIn(0, newRows - 1),
-            col = savedCursor.col.coerceIn(0, newColumns - 1),
+        // Only the active screen receives the bottom-preserved shift. The DEC 1049 saved
+        // main cursor must never be shifted by an alternate-screen resize.
+        val activeSaved = savedCursor
+        savedCursor = activeSaved.copy(
+            row = (activeSaved.row + preservedRowShift).coerceIn(0, newRows - 1),
+            col = activeSaved.col.coerceIn(0, newColumns - 1),
             pendingWrap = false
         )
+        savedRow = savedCursor.row
+        savedCol = savedCursor.col
+        altSaveMainCursor?.let {
+            altSaveMainCursor = it.copy(
+                row = it.row.coerceIn(0, newRows - 1),
+                col = it.col.coerceIn(0, newColumns - 1),
+                pendingWrap = false
+            )
+        }
         pendingWrap = false
         stateRevision++
     }
@@ -594,15 +643,18 @@ class TerminalEmulator(
     }
 
     @Synchronized
-    fun sequenceForMouse(event: MouseEvent): String? {
-        if (mouseTrackingMode == MouseTrackingMode.OFF) return alternateScrollSequence(event)
+    fun sequenceForMouse(event: MouseEvent): ByteArray? {
+        // Out-of-bounds cells are rejected rather than coerced into the grid so clicks on
+        // status bars, scrollback history, or padding never produce a fake grid cell.
+        if (event.column < 0 || event.column >= columns || event.row < 0 || event.row >= rows) return null
+        if (mouseTrackingMode == MouseTrackingMode.OFF) return alternateScrollSequenceKeyCodes(event)
         if (event.type == MouseEventType.MOVE && mouseTrackingMode != MouseTrackingMode.ANY_EVENT) return null
         if (event.type == MouseEventType.DRAG && mouseTrackingMode !in setOf(MouseTrackingMode.BUTTON_EVENT, MouseTrackingMode.ANY_EVENT)) return null
         if (event.type == MouseEventType.RELEASE && mouseTrackingMode == MouseTrackingMode.X10) return null
-        val col = (event.column + 1).coerceIn(1, columns)
-        val row = (event.row + 1).coerceIn(1, rows)
-        val pixelCol = (event.column * 7 + 1).coerceAtLeast(1)
-        val pixelRow = (event.row * 14 + 1).coerceAtLeast(1)
+        val col = event.column + 1
+        val row = event.row + 1
+        val pixelCol = ((event.pixelX ?: (event.column * cellPixelWidth + 1)).coerceAtLeast(1))
+        val pixelRow = ((event.pixelY ?: (event.row * cellPixelHeight + 1)).coerceAtLeast(1))
         var code = when (event.button) {
             MouseButton.LEFT -> 0
             MouseButton.MIDDLE -> 1
@@ -625,25 +677,33 @@ class TerminalEmulator(
         if (event.alt) code += 8
         if (event.ctrl) code += 16
         return when (mouseProtocol) {
-            MouseProtocol.SGR -> "\u001B[<${code};${col};${row}${if (event.type == MouseEventType.RELEASE) 'm' else 'M'}"
-            MouseProtocol.SGR_PIXELS -> "\u001B[<${code};${pixelCol};${pixelRow}${if (event.type == MouseEventType.RELEASE) 'm' else 'M'}"
-            MouseProtocol.URXVT -> "\u001B[${code + 32};${col};${row}M"
-            else -> buildString {
-                append("\u001B[M")
-                append((32 + code).coerceIn(32, 255).toChar())
-                append((32 + col).coerceIn(32, 255).toChar())
-                append((32 + row).coerceIn(32, 255).toChar())
-            }
+            MouseProtocol.SGR -> "\u001B[<${code};${col};${row}${if (event.type == MouseEventType.RELEASE) 'm' else 'M'}".toByteArray(Charsets.US_ASCII)
+            MouseProtocol.SGR_PIXELS -> "\u001B[<${code};${pixelCol};${pixelRow}${if (event.type == MouseEventType.RELEASE) 'm' else 'M'}".toByteArray(Charsets.US_ASCII)
+            MouseProtocol.URXVT -> "\u001B[${code + 32};${col};${row}M".toByteArray(Charsets.US_ASCII)
+            else -> legacyMouseBytes(code, col, row)
         }
     }
 
-    private fun alternateScrollSequence(event: MouseEvent): String? {
+    private fun legacyMouseBytes(code: Int, col: Int, row: Int): ByteArray {
+        // Default mouse protocol (mode 1000/1002/1003, protocol 1005-off) encodes fields as raw
+        // byte values. Emit exactly these bytes instead of a String so values above ASCII cannot
+        // be re-encoded as UTF-8 and corrupt the terminal sequence.
+        return byteArrayOf(
+            0x1B, 'M'.code.toByte(),
+            (32 + code).toByte(),
+            (32 + col).toByte(),
+            (32 + row).toByte()
+        )
+    }
+
+    /** Alternate-scroll wheel maps to cursor key sequences (still ASCII/keyboard emulation). */
+    private fun alternateScrollSequenceKeyCodes(event: MouseEvent): ByteArray? {
         if (!alternateScreen || !alternateScroll || event.type != MouseEventType.WHEEL) return null
         return when (event.button) {
-            MouseButton.WHEEL_UP -> sequenceFor(Key.UP)
-            MouseButton.WHEEL_DOWN -> sequenceFor(Key.DOWN)
-            MouseButton.WHEEL_LEFT -> sequenceFor(Key.LEFT)
-            MouseButton.WHEEL_RIGHT -> sequenceFor(Key.RIGHT)
+            MouseButton.WHEEL_UP -> sequenceFor(Key.UP).toByteArray(Charsets.UTF_8)
+            MouseButton.WHEEL_DOWN -> sequenceFor(Key.DOWN).toByteArray(Charsets.UTF_8)
+            MouseButton.WHEEL_LEFT -> sequenceFor(Key.LEFT).toByteArray(Charsets.UTF_8)
+            MouseButton.WHEEL_RIGHT -> sequenceFor(Key.RIGHT).toByteArray(Charsets.UTF_8)
             else -> null
         }
     }
@@ -850,16 +910,21 @@ class TerminalEmulator(
         }
     }
 
-    private fun Array<Cell>.lastContentColumn(): Int = indexOfLast { !it.continuation && it.text != " " }.coerceAtLeast(0)
+    /** A cell is visibly occupied when it is a real, non-continuation cell carrying either
+     *  printable text or styled attributes (background, inverse, underline, strike, overline).
+     *  Plain blank/space cells are not occupied. This keeps styled blank rows (e.g. TUI bottom
+     *  chrome) visible in bounds while ordinary trailing whitespace stays hidden. */
+    private fun Array<Cell>.isVisuallyOccupiedCell(): Boolean {
+        if (continuation) return false
+        return text.isNotBlank() || style.bg != null || style.inverse ||
+            style.underline || style.strike || style.overline
+    }
+
+    private fun Array<Cell>.lastContentColumn(): Int = indexOfLast { it.isVisuallyOccupiedCell() }.coerceAtLeast(0)
 
     private fun Array<Cell>.isNotBlankLine(): Boolean = any { !it.continuation && it.text.isNotBlank() }
 
-    private fun Array<Cell>.isVisuallyOccupiedLine(): Boolean = any { cell ->
-        !cell.continuation && (
-            cell.text.isNotBlank() || cell.style.bg != null || cell.style.inverse ||
-                cell.style.underline || cell.style.strike || cell.style.overline
-            )
-    }
+    private fun Array<Cell>.isVisuallyOccupiedLine(): Boolean = any { it.isVisuallyOccupiedCell() }
 
     private fun isCursorAt(row: Int?, column: Int, drawCursor: Boolean): Boolean {
         return drawCursor && cursorVisible && row == cursorRow && column == cursorCol && column in 0 until columns
@@ -1939,9 +2004,9 @@ class TerminalEmulator(
         when (seq.paramZero(0)) {
             11 -> pendingResponses.add("\u001B[1t")
             13 -> pendingResponses.add("\u001B[3;0;0t")
-            14 -> pendingResponses.add("\u001B[4;${rows * 14};${columns * 7}t")
-            15 -> pendingResponses.add("\u001B[5;${rows * 14};${columns * 7}t")
-            16 -> pendingResponses.add("\u001B[6;14;7t")
+            14 -> pendingResponses.add("\u001B[4;${rows * cellPixelHeight};${columns * cellPixelWidth}t")
+            15 -> pendingResponses.add("\u001B[5;${rows * cellPixelHeight};${columns * cellPixelWidth}t")
+            16 -> pendingResponses.add("\u001B[6;${cellPixelHeight};${cellPixelWidth}t")
             18 -> pendingResponses.add("\u001B[8;${rows};${columns}t")
             19 -> pendingResponses.add("\u001B[9;${rows};${columns}t")
             20 -> pendingResponses.add("\u001B]L;${iconTitle.ifEmpty { title }}\u001B\\")
@@ -2000,7 +2065,9 @@ class TerminalEmulator(
                 }
                 12 -> Unit
                 25 -> cursorVisible = enabled
-                47, 1047, 1049 -> setAlternateScreen(enabled, clear = code == 1049)
+                47 -> setAlternateScreen(enabled, clear = false)
+                1047 -> setAlternateScreen(enabled, clear = false)
+                1049 -> setAlternateScreen(enabled, clear = true)
                 9 -> setMouseMode(if (enabled) MouseTrackingMode.X10 else MouseTrackingMode.OFF)
                 1000 -> setMouseMode(if (enabled) MouseTrackingMode.NORMAL else MouseTrackingMode.OFF)
                 1002 -> setMouseMode(if (enabled) MouseTrackingMode.BUTTON_EVENT else MouseTrackingMode.OFF)
@@ -2057,7 +2124,10 @@ class TerminalEmulator(
     private fun setAlternateScreen(enabled: Boolean, clear: Boolean) {
         if (enabled == alternateScreen) return
         if (enabled) {
-            saveCursor()
+            // Save the main-screen cursor state into a dedicated 1049 slot so that DEC 7 / CSI s
+            // inside the alternate screen (which use saveCursor()/restoreCursor()) do not
+            // overwrite the position that 1049 later restores.
+            altSaveMainCursor = SavedCursor(cursorRow, cursorCol, currentStyle, originMode, lineDrawing, pendingWrap)
             cursorSaveMode = true
             alternateScreen = true
             if (clear) altScreen.resetScreen()
@@ -2066,7 +2136,16 @@ class TerminalEmulator(
             pendingWrap = false
         } else {
             alternateScreen = false
-            restoreCursor()
+            // Restore the main-screen cursor from the 1049-saved slot, not from the
+            // screen-local savedCursor which may have been overwritten by ESC 7.
+            val restored = altSaveMainCursor ?: savedCursor
+            cursorRow = restored.row.coerceIn(0, rows - 1)
+            cursorCol = restored.col.coerceIn(0, columns - 1)
+            currentStyle = restored.style
+            originMode = restored.originMode
+            lineDrawing = restored.lineDrawing
+            pendingWrap = restored.pendingWrap
+            altSaveMainCursor = null
             cursorSaveMode = false
         }
         parserState = ParserState.NORMAL

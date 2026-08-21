@@ -6,6 +6,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.onClosed
+import kotlinx.coroutines.channels.trySend
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -1242,6 +1245,15 @@ class BackgroundProcessManager @Inject constructor(
     )
 
     /**
+     * Serialized write requests to a session's stdin. The input actor is the single writer to the
+     * process stdin so user/UI input, AI tool input, and terminal protocol responses are emitted in
+     * submission order rather than racing on a mutex.
+     */
+    private sealed interface SessionWrite {
+        data class Bytes(val value: ByteArray) : SessionWrite
+    }
+
+    /**
      * 交互式 session 运行态记录
      */
     private data class InteractiveSessionRecord(
@@ -1260,6 +1272,8 @@ class BackgroundProcessManager @Inject constructor(
         var stdoutJob: Job? = null,
         var stderrJob: Job? = null,
         var waiterJob: Job? = null,
+        var inputActorJob: Job? = null,
+        val inputChannel: Channel<SessionWrite> = Channel(Channel.UNLIMITED),
         val inputMutex: Mutex = Mutex(),
         val createdAt: Long = System.currentTimeMillis(),
         var startedAt: Long? = System.currentTimeMillis(),
@@ -1490,6 +1504,8 @@ class BackgroundProcessManager @Inject constructor(
 
             interactiveSessions[processId] = record
 
+            record.inputActorJob = launchSessionInputActor(record)
+
             record.stdoutJob = launchStreamReader(
                 inputStream = process.inputStream,
                 record = record,
@@ -1600,16 +1616,37 @@ class BackgroundProcessManager @Inject constructor(
             } else {
                 input.toByteArray(Charsets.UTF_8)
             }
-            record.inputMutex.withLock {
-                record.process.outputStream.write(bytes)
-                record.process.outputStream.flush()
-                record.lastActivityAt = System.currentTimeMillis()
+            if (!record.inputChannel.trySend(SessionWrite.Bytes(bytes)).isSuccess) {
+                return@withContext Result.failure(
+                    IllegalStateException("Interactive session is closing: $processId")
+                )
             }
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error sending input to session: $processId", e)
             Result.failure(e)
         }
+    }
+
+    /**
+     * 向交互式 session 发送已编码的原始字节（不追加换行）。用于鼠标协议等必须保持
+     * 精确字节语义的输入，避免先编码成 String 再转 UTF-8 破坏高位字节。
+     */
+    suspend fun sendBytes(
+        processId: String,
+        bytes: ByteArray
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val record = interactiveSessions[processId]
+            ?: return@withContext Result.failure(
+                IllegalStateException("Interactive session not found: $processId")
+            )
+        if (bytes.isEmpty()) return@withContext Result.success(Unit)
+        if (!record.inputChannel.trySend(SessionWrite.Bytes(bytes)).isSuccess) {
+            return@withContext Result.failure(
+                IllegalStateException("Interactive session is closing: $processId")
+            )
+        }
+        Result.success(Unit)
     }
 
     /**
@@ -1630,10 +1667,10 @@ class BackgroundProcessManager @Inject constructor(
             } else {
                 controlInputBytes(control)
             }
-            record.inputMutex.withLock {
-                record.process.outputStream.write(bytes)
-                record.process.outputStream.flush()
-                record.lastActivityAt = System.currentTimeMillis()
+            if (!record.inputChannel.trySend(SessionWrite.Bytes(bytes)).isSuccess) {
+                return@withContext Result.failure(
+                    IllegalStateException("Interactive session is closing: $processId")
+                )
             }
             Result.success(Unit)
         } catch (e: Exception) {
@@ -1794,6 +1831,24 @@ class BackgroundProcessManager @Inject constructor(
         if (record.columns == newColumns && record.rows == newRows) {
             return@withContext Result.success(Unit)
         }
+        // Resize is transactional: the backend must be (a) applied at the kernel, or (b) an
+        // explicitly best-effort script/pipe path. Only then may the emulator and record
+        // dimensions be updated. A failing native ioctl leaves all state unchanged.
+        val backendOk = when {
+            record.nativePtyEnabled && record.process is NativePtyProcess ->
+                record.process.resize(newColumns, newRows)
+            record.ttyEnabled -> {
+                // script(1) backend has no reliable winsize ioctl; send SIGWINCH as best effort.
+                prootManager.signalProcessTree(record.process, "WINCH")
+                true
+            }
+            else -> true // pipe: logical-only resize, no kernel state to commit.
+        }
+        if (!backendOk) {
+            return@withContext Result.failure(
+                IllegalStateException("Failed to apply PTY resize to $processId")
+            )
+        }
         record.terminalEmulator.resize(
             columns = newColumns,
             rows = newRows,
@@ -1802,11 +1857,6 @@ class BackgroundProcessManager @Inject constructor(
         record.columns = newColumns
         record.rows = newRows
         record.lastActivityAt = System.currentTimeMillis()
-        if (record.nativePtyEnabled && record.process is NativePtyProcess) {
-            record.process.resize(newColumns, newRows)
-        } else if (record.ttyEnabled) {
-            prootManager.signalProcessTree(record.process, "WINCH")
-        }
         refreshProcessStates()
         Result.success(Unit)
     }
@@ -1858,6 +1908,8 @@ class BackgroundProcessManager @Inject constructor(
             record.stdoutJob?.cancel()
             record.stderrJob?.cancel()
             record.waiterJob?.cancel()
+            record.inputActorJob?.cancel()
+            record.inputChannel.close()
 
             refreshProcessStates()
 
@@ -2123,6 +2175,8 @@ class BackgroundProcessManager @Inject constructor(
             interactive.stdoutJob?.cancel()
             interactive.stderrJob?.cancel()
             interactive.waiterJob?.cancel()
+            interactive.inputActorJob?.cancel()
+            interactive.inputChannel.close()
             interactiveSessions.remove(processId)
             interactiveReadOffsets.remove(processId)
             terminalViewportStates.remove(processId)
@@ -2185,6 +2239,8 @@ class BackgroundProcessManager @Inject constructor(
                     record.stdoutJob?.cancel()
                     record.stderrJob?.cancel()
                     record.waiterJob?.cancel()
+                    record.inputActorJob?.cancel()
+                    record.inputChannel.close()
                 }
                 interactiveSessions.remove(processId)
                 interactiveReadOffsets.remove(processId)
@@ -2234,6 +2290,8 @@ class BackgroundProcessManager @Inject constructor(
                 interactiveSessions[processId]?.stdoutJob?.cancel()
                 interactiveSessions[processId]?.stderrJob?.cancel()
                 interactiveSessions[processId]?.waiterJob?.cancel()
+                interactiveSessions[processId]?.inputActorJob?.cancel()
+                interactiveSessions[processId]?.inputChannel?.close()
                 interactiveSessions.remove(processId)
                 interactiveReadOffsets.remove(processId)
                 terminalViewportStates.remove(processId)
@@ -2321,6 +2379,8 @@ class BackgroundProcessManager @Inject constructor(
             record.stdoutJob?.cancel()
             record.stderrJob?.cancel()
             record.waiterJob?.cancel()
+            record.inputActorJob?.cancel()
+            record.inputChannel.close()
         }
 
         processes.clear()
@@ -2471,15 +2531,25 @@ class BackgroundProcessManager @Inject constructor(
     private suspend fun handleTerminalProtocolEvents(record: InteractiveSessionRecord) {
         val responses = record.terminalEmulator.drainResponses()
         if (responses.isEmpty()) return
-        runCatching {
-            record.inputMutex.withLock {
-                responses.forEach { response ->
-                    record.process.outputStream.write(response.toByteArray(Charsets.UTF_8))
+        // Responses join the same serialized input stream as user/UI/AI writes so their
+        // relative order with respect to queued input is preserved.
+        responses.forEach { response ->
+            record.inputChannel.trySend(SessionWrite.Bytes(response.toByteArray(Charsets.UTF_8)))
+        }
+    }
+
+    private fun launchSessionInputActor(record: InteractiveSessionRecord): Job = appScope.launch {
+        for (write in record.inputChannel) {
+            val bytes = (write as? SessionWrite.Bytes)?.value ?: continue
+            runCatching {
+                record.inputMutex.withLock {
+                    record.process.outputStream.write(bytes)
+                    record.process.outputStream.flush()
+                    record.lastActivityAt = System.currentTimeMillis()
                 }
-                record.process.outputStream.flush()
+            }.onFailure { error ->
+                Log.w(TAG, "Unable to write to session ${record.processId}: ${error.message}")
             }
-        }.onFailure { error ->
-            Log.w(TAG, "Unable to send terminal response for ${record.processId}", error)
         }
     }
 

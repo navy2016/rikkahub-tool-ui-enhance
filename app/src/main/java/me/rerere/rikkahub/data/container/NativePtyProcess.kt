@@ -158,9 +158,8 @@ class NativePtyProcess internal constructor(
         return NativePtyBridge.isProcessAlive(childPid)
     }
 
-    fun resize(columns: Int, rows: Int) {
-        NativePtyBridge.resize(masterFd, columns, rows)
-    }
+    /** @return true when the kernel winsize was applied, false on ioctl failure. */
+    fun resize(columns: Int, rows: Int): Boolean = NativePtyBridge.resize(masterFd, columns, rows) == 0
 
     fun pidOrNull(): Int = childPid
 
