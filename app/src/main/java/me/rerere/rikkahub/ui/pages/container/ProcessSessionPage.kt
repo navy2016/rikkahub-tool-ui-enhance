@@ -1453,22 +1453,6 @@ private fun TerminalInteractivePanel(
         return true
     }
 
-    /** Splits a string into Unicode grapheme clusters (handles emoji, ZWJ, combining marks,
-     *  and supplementary-plane pairs) so IME deletion sends exactly one Backspace per guest. */
-    private fun graphemeClusters(text: String): List<String> {
-        if (text.isEmpty()) return emptyList()
-        val iterator = BreakIterator.getCharacterInstance()
-        iterator.setText(text)
-        val result = ArrayList<String>()
-        var start = iterator.first()
-        var end = iterator.next()
-        while (end != BreakIterator.DONE) {
-            result.add(text.substring(start, end))
-            start = end
-            end = iterator.next()
-        }
-        return result
-    }
 
     fun handleInputChange(value: String) {
         if (!rawInputMode) {
@@ -3195,4 +3179,21 @@ private fun formatDuration(durationMs: Long): String {
         minutes > 0 -> "${minutes}m ${seconds}s"
         else -> "${seconds}s"
     }
+}
+
+/** Splits a string into Unicode grapheme clusters (handles emoji, ZWJ, combining marks,
+ *  and supplementary-plane pairs) so IME deletion sends exactly one Backspace per glyph. */
+private fun graphemeClusters(text: String): List<String> {
+    if (text.isEmpty()) return emptyList()
+    val iterator = BreakIterator.getCharacterInstance()
+    iterator.setText(text)
+    val result = ArrayList<String>()
+    var start = iterator.first()
+    var end = iterator.next()
+    while (end != BreakIterator.DONE) {
+        result.add(text.substring(start, end))
+        start = end
+        end = iterator.next()
+    }
+    return result
 }
