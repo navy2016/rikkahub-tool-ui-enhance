@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.container
 
+import me.rerere.rikkahub.utils.TerminalEmulator
+
 /**
  * Semantic viewport modes for the terminal reducer.
  * Replaces the boolean autoScroll + fragile pixel-based compensation with an
