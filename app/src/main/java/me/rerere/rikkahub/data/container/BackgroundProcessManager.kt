@@ -134,6 +134,30 @@ internal fun renderInteractiveTerminalSnapshot(
     val screenLines = terminal.plainText(includeScrollback = false)
         .lines()
         .map { it.trimEnd() }
+    return buildSnapshotFromLines(screenLines, safeRows, safeColumns, terminal)
+}
+
+/**
+ * Generates a full terminal snapshot from the live session emulator, avoiding buffer replay.
+ * Uses non-consuming peek methods for responses/clipboard so the session's pending queues
+ * are not consumed by a read-only snapshot.
+ */
+internal fun renderLiveTerminalSnapshot(terminal: TerminalEmulator): InteractiveTerminalSnapshot {
+    val columns = terminal.columns
+    val rows = terminal.rows
+    val screenLines = terminal.plainText(includeScrollback = false)
+        .lines()
+        .map { it.trimEnd() }
+    return buildSnapshotFromLines(screenLines, rows, columns, terminal, live = true)
+}
+
+private fun buildSnapshotFromLines(
+    screenLines: List<String>,
+    safeRows: Int,
+    safeColumns: Int,
+    terminal: TerminalEmulator,
+    live: Boolean = false
+): InteractiveTerminalSnapshot {
     val screen = screenLines.joinToString("\n")
     val edgeBandSize = safeRows.coerceAtMost(3)
     val topLinesStartRow = 1
@@ -277,6 +301,12 @@ internal fun renderInteractiveTerminalSnapshot(
     val cursorVisibleContentLine = cursorVisibleContentRow?.let { row ->
         visibleContentLines.getOrNull(row - 1)
     }
+    // Use non-consuming peek for live snapshots to avoid consuming the session's pending queues.
+    val (responses, clipboardRequests) = if (live) {
+        terminal.pendingResponsesView() to terminal.pendingClipboardRequestsView()
+    } else {
+        terminal.drainResponses() to terminal.drainClipboardRequests()
+    }
     return InteractiveTerminalSnapshot(
         screen = screen,
         screenLines = screenLines,
@@ -359,8 +389,8 @@ internal fun renderInteractiveTerminalSnapshot(
         cursorShape = terminal.cursorShape().name,
         cursorVisible = terminal.isCursorVisible(),
         workingDirectoryUri = terminal.workingDirectoryUri,
-        responses = terminal.drainResponses(),
-        clipboardRequests = terminal.drainClipboardRequests()
+        responses = responses,
+        clipboardRequests = clipboardRequests
     )
 }
 
@@ -1717,11 +1747,11 @@ class BackgroundProcessManager @Inject constructor(
     }
 
     private fun BufferRead.withTerminalSnapshot(record: InteractiveSessionRecord): BufferRead {
-        val snapshot = renderInteractiveTerminalSnapshot(
-            bytes = record.outputBuffer.snapshot(),
-            columns = record.columns,
-            rows = record.rows
-        )
+        // Read the live session emulator's current decoded state instead of replaying the
+        // (possibly truncated) output buffer. This gives the AI an accurate, dimension- and
+        // protocol-state-consistent view of the running terminal. renderLiveTerminalSnapshot
+        // uses non-consuming peek for responses/clipboard so it never drains session queues.
+        val snapshot = renderLiveTerminalSnapshot(record.terminalEmulator)
         return copy(
             terminalScreen = snapshot.screen,
             terminalScreenLines = snapshot.screenLines,

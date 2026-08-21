@@ -1076,16 +1076,11 @@ private fun TerminalInteractivePanel(
         imeVisible = imeVisible,
         outputViewportHeightPx = outputViewportHeightPx,
     )
-    val statusPlacementViewportHeightPx = outputViewportHeightPx.takeIf { it > 0 }
-        ?: terminalRows * terminalCellHeightPx
-    val terminalVisualTopPaddingPx = if (
-        showStatusBar &&
-        terminalContentHeightPx + terminalAppStatusBarHeightPx <= statusPlacementViewportHeightPx
-    ) {
-        terminalAppStatusBarHeightPx
-    } else {
-        0
-    }
+    // The status bar is a floating overlay (zIndex above the terminal). Reserve its full strip
+    // whenever it is visible so terminal content is never hidden underneath it, for both short
+    // transcript output and full-height TUI/physical-grid content. (Previously the strip was only
+    // reserved when the content was short, allowing the overlay to cover TUI top rows.)
+    val terminalVisualTopPaddingPx = if (showStatusBar) terminalAppStatusBarHeightPx else 0
     val terminalVisualTopPadding = with(density) { terminalVisualTopPaddingPx.toDp() }
     val currentShouldAvoidIme by rememberUpdatedState(shouldAvoidIme)
     val customImeRequiresExtraAvoidance = customImeHeightDp != null &&

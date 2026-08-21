@@ -499,6 +499,14 @@ class TerminalEmulator(
         return result
     }
 
+    /** Non-consuming view of pending protocol responses (for AI/live snapshot reads). */
+    @Synchronized
+    fun pendingResponsesView(): List<String> = pendingResponses.toList()
+
+    /** Non-consuming view of pending clipboard requests (for AI/live snapshot reads). */
+    @Synchronized
+    fun pendingClipboardRequestsView(): List<String> = clipboardRequests.toList()
+
     @Synchronized
     fun cursorShape(): CursorShape = cursorShape
 
