@@ -7,6 +7,7 @@ on:
       - fix/container-terminal-lifecycle
       - fix/terminal-experience-regressions
       - fix/terminal-session-state-and-viewport
+      - fix/terminal-viewport-semantic-reducer
       - main
       - master
     paths:
