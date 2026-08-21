@@ -914,7 +914,7 @@ class TerminalEmulator(
      *  printable text or styled attributes (background, inverse, underline, strike, overline).
      *  Plain blank/space cells are not occupied. This keeps styled blank rows (e.g. TUI bottom
      *  chrome) visible in bounds while ordinary trailing whitespace stays hidden. */
-    private fun Array<Cell>.isVisuallyOccupiedCell(): Boolean {
+    private fun Cell.isVisuallyOccupiedCell(): Boolean {
         if (continuation) return false
         return text.isNotBlank() || style.bg != null || style.inverse ||
             style.underline || style.strike || style.overline
