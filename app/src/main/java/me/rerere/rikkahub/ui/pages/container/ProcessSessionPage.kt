@@ -276,7 +276,7 @@ private data class TerminalScrollSnapshot(
     val usesTuiViewport: Boolean,
     val mode: ViewportMode,
     val anchorLineId: Long?,
-    val anchorIntraOffsetPx: Int,
+    val anchorClippedTopPx: Int,
     val anchorScreenGeneration: Long?,
     val cellHeightPx: Int,
     val imeAnchorRevision: Int,
@@ -1048,8 +1048,8 @@ private fun TerminalInteractivePanel(
         )
     }
     var viewportAnchorLineId by remember(processId) { mutableStateOf(restoredViewportState?.anchorLineId) }
-    var viewportAnchorIntraOffsetPx by remember(processId) {
-        mutableIntStateOf(restoredViewportState?.anchorIntraOffsetPx ?: 0)
+    var viewportAnchorClippedTopPx by remember(processId) {
+        mutableIntStateOf(restoredViewportState?.anchorClippedTopPx ?: 0)
     }
     var viewportAnchorCellHeightPx by remember(processId) {
         mutableIntStateOf(restoredViewportState?.anchorCellHeightPx ?: terminalCellHeightPx)
@@ -1174,7 +1174,7 @@ private fun TerminalInteractivePanel(
             cellHeightPx = terminalCellHeightPx,
         )?.let { anchor ->
             viewportAnchorLineId = anchor.lineId
-            viewportAnchorIntraOffsetPx = anchor.intraOffsetPx
+            viewportAnchorClippedTopPx = anchor.clippedTopPx
             viewportAnchorCellHeightPx = terminalCellHeightPx
             viewportAnchorScreenGeneration = anchor.screenGeneration
         }
@@ -1185,7 +1185,7 @@ private fun TerminalInteractivePanel(
         if (enabled) {
             viewportMode = if (currentUsesTuiViewport) ViewportMode.SCREEN else ViewportMode.TAIL
             viewportAnchorLineId = null
-            viewportAnchorIntraOffsetPx = 0
+            viewportAnchorClippedTopPx = 0
             viewportAnchorCellHeightPx = terminalCellHeightPx
             viewportAnchorScreenGeneration = null
         } else {
@@ -1200,21 +1200,21 @@ private fun TerminalInteractivePanel(
             currentUsesTuiViewport -> ViewportMode.SCREEN
             else -> ViewportMode.TAIL
         }
-        val scaledAnchorIntraOffsetPx = if (viewportAnchorCellHeightPx > 0 &&
+        val scaledAnchorClippedTopPx = if (viewportAnchorCellHeightPx > 0 &&
             viewportAnchorCellHeightPx != terminalCellHeightPx
         ) {
-            ((viewportAnchorIntraOffsetPx.toLong() * terminalCellHeightPx +
+            ((viewportAnchorClippedTopPx.toLong() * terminalCellHeightPx +
                 viewportAnchorCellHeightPx / 2) / viewportAnchorCellHeightPx)
                 .toInt()
                 .coerceIn(0, terminalCellHeightPx - 1)
         } else {
-            viewportAnchorIntraOffsetPx
+            viewportAnchorClippedTopPx
         }
         val output = reduceViewport(
             input = ViewportInput(
                 mode = mode,
                 anchorLineId = viewportAnchorLineId,
-                anchorIntraOffsetPx = scaledAnchorIntraOffsetPx,
+                anchorClippedTopPx = scaledAnchorClippedTopPx,
                 anchorScreenGeneration = viewportAnchorScreenGeneration,
                 currentScrollPx = outputScroll.value,
                 maxScrollPx = outputScroll.maxValue,
@@ -1229,7 +1229,7 @@ private fun TerminalInteractivePanel(
         )
         viewportMode = output.mode
         viewportAnchorLineId = output.anchorLineId
-        viewportAnchorIntraOffsetPx = output.anchorIntraOffsetPx
+        viewportAnchorClippedTopPx = output.anchorClippedTopPx
         viewportAnchorCellHeightPx = terminalCellHeightPx
         viewportAnchorScreenGeneration = output.anchorScreenGeneration
         autoScroll = output.mode != ViewportMode.LOCKED
@@ -1279,7 +1279,7 @@ private fun TerminalInteractivePanel(
             atBottom = terminalNearBottom(),
             viewportMode = viewportMode,
             anchorLineId = viewportAnchorLineId,
-            anchorIntraOffsetPx = viewportAnchorIntraOffsetPx,
+            anchorClippedTopPx = viewportAnchorClippedTopPx,
             anchorCellHeightPx = viewportAnchorCellHeightPx,
             anchorScreenGeneration = viewportAnchorScreenGeneration,
         )
@@ -1921,7 +1921,7 @@ private fun TerminalInteractivePanel(
                 usesTuiViewport = currentUsesTuiViewport,
                 mode = viewportMode,
                 anchorLineId = viewportAnchorLineId,
-                anchorIntraOffsetPx = viewportAnchorIntraOffsetPx,
+                anchorClippedTopPx = viewportAnchorClippedTopPx,
                 anchorScreenGeneration = viewportAnchorScreenGeneration,
                 cellHeightPx = terminalCellHeightPx,
                 imeAnchorRevision = imeViewportAnchorRevision,

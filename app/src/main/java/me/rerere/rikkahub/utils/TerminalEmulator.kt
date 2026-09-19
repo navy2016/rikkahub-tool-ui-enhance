@@ -117,8 +117,6 @@ class TerminalEmulator(
         val historyCount: Int = 0,
         /** Stable IDs of history rows in rendered order. IDs are not assumed to be contiguous. */
         val historyLineIds: List<Long> = emptyList(),
-        /** Number of history rows trimmed (purged) since the last frame. */
-        val historyTrimmedCount: Int = 0,
         /** Stable (monotonic) IDs of each screen row. */
         val screenLineIds: List<Long> = emptyList(),
         /** Identity of the active physical screen. A full clear/reset creates a new generation. */
@@ -238,7 +236,6 @@ class TerminalEmulator(
     private var nextScreenGeneration = 1L
     private var mainScreenGeneration = newScreenGeneration()
     private var altScreenGeneration = newScreenGeneration()
-    private var pendingHistoryTrimmedCount = 0L
     private val scrollback = ArrayDeque<ScrollbackLine>()
     private var scrollbackRenderStyleRevision = 0L
     private var stateRevision = 0L
@@ -260,7 +257,6 @@ class TerminalEmulator(
     fun reset() {
         currentStyle = defaultStyle
         scrollback.clear()
-        pendingHistoryTrimmedCount = 0L
         scrollbackRenderStyleRevision = 0L
         mainScreen.resetScreen(mainScreenLineIds)
         altScreen.resetScreen(altScreenLineIds)
@@ -335,7 +331,6 @@ class TerminalEmulator(
     @Synchronized
     fun clearScrollbackOnly() {
         if (scrollback.isEmpty()) return
-        pendingHistoryTrimmedCount += scrollback.size
         scrollback.clear()
         scrollbackRenderStyleRevision = 0L
         stateRevision++
@@ -362,7 +357,6 @@ class TerminalEmulator(
         scrollbackLimit = nextLimit
         while (scrollback.size > scrollbackLimit) {
             scrollback.removeFirst()
-            pendingHistoryTrimmedCount++
         }
         stateRevision++
     }
@@ -405,8 +399,6 @@ class TerminalEmulator(
                 newScrollbackLinePreservingId(line.id, resizedLine(line.cells, newColumns, defaultStyle))
             }
             scrollback.clear()
-            val trimmed = (resizedScrollback.size - scrollbackLimit).coerceAtLeast(0)
-            pendingHistoryTrimmedCount += trimmed
             resizedScrollback.takeLast(scrollbackLimit).forEach { scrollback.addLast(it) }
         }
         scrollTop = 0
@@ -802,12 +794,6 @@ class TerminalEmulator(
         val historyStartId = if (includeHistory && scrollback.isNotEmpty()) scrollback.first().id else 0L
         val historyEndId = if (includeHistory && scrollback.isNotEmpty()) scrollback.last().id else 0L
         val historyLineIds = if (includeHistory) scrollback.map { it.id } else emptyList()
-        val trimmedSinceLast = if (includeHistory) {
-            pendingHistoryTrimmedCount.also { pendingHistoryTrimmedCount = 0L }
-        } else {
-            pendingHistoryTrimmedCount = 0L
-            0L
-        }
         if (includeHistory) {
             scrollback.forEach { line ->
                 renderedRows.add(renderScrollbackLine(line))
@@ -839,7 +825,6 @@ class TerminalEmulator(
             historyEndId = historyEndId,
             historyCount = if (includeHistory) scrollback.size else 0,
             historyLineIds = historyLineIds,
-            historyTrimmedCount = trimmedSinceLast.toInt(),
             screenLineIds = screenLineIds,
             screenGeneration = activeScreenGeneration,
             cursorRow = cursorRow,
@@ -1706,7 +1691,6 @@ class TerminalEmulator(
             scrollback.addLast(newScrollbackLine(removedLineId, archivedCells))
             while (scrollback.size > scrollbackLimit) {
                 scrollback.removeFirst()
-                pendingHistoryTrimmedCount++
             }
         }
         for (r in scrollTop until scrollBottom) {
@@ -1744,7 +1728,6 @@ class TerminalEmulator(
                 cursorCol = 0
             }
             3 -> if (!selective) {
-                pendingHistoryTrimmedCount += scrollback.size
                 scrollback.clear()
             }
         }

@@ -31,9 +31,9 @@ data class ViewportInput(
     val mode: ViewportMode,
     /** For LOCKED mode: the stable line ID to anchor on. */
     val anchorLineId: Long? = null,
-    /** For LOCKED mode: how many pixels from the viewport top the anchored
-     *  line should be positioned at. */
-    val anchorIntraOffsetPx: Int = 0,
+    /** For LOCKED mode: how many pixels at the top of the anchored line are
+     *  clipped above the viewport. */
+    val anchorClippedTopPx: Int = 0,
     /** Generation of the physical screen that owned this anchor when it was captured. */
     val anchorScreenGeneration: Long? = null,
     /** Scroll offset reported by the scrollable container (px). */
@@ -55,7 +55,7 @@ data class ViewportInput(
 data class ViewportOutput(
     val mode: ViewportMode,
     val anchorLineId: Long? = null,
-    val anchorIntraOffsetPx: Int = 0,
+    val anchorClippedTopPx: Int = 0,
     val anchorScreenGeneration: Long? = null,
     /** The scroll offset the UI should apply. */
     val targetScrollPx: Int,
@@ -66,7 +66,7 @@ data class ViewportOutput(
 /** A stable row anchor captured from the current scroll position. */
 data class ViewportAnchor(
     val lineId: Long,
-    val intraOffsetPx: Int,
+    val clippedTopPx: Int,
     /** Non-null only when [lineId] belongs to the active physical screen. */
     val screenGeneration: Long?,
 )
@@ -136,13 +136,14 @@ fun reduceViewport(
                 // A full clear or alternate-screen reset replaced this physical screen.
                 fallback()
             } else {
-                // Position the anchor row at anchorIntraOffsetPx from the viewport top.
-                val target = (anchorRowIndex * input.cellHeightPx - input.anchorIntraOffsetPx)
+                // anchorClippedTopPx is the amount of the row clipped above the viewport.
+                // Restoring the same visual position therefore adds it to the row top.
+                val target = (anchorRowIndex * input.cellHeightPx + input.anchorClippedTopPx)
                     .coerceIn(0, maxScroll)
                 ViewportOutput(
                     mode = ViewportMode.LOCKED,
                     anchorLineId = anchorId,
-                    anchorIntraOffsetPx = input.anchorIntraOffsetPx,
+                    anchorClippedTopPx = input.anchorClippedTopPx,
                     anchorScreenGeneration = if (anchorIsScreenRow) input.anchorScreenGeneration else null,
                     targetScrollPx = target,
                 )
@@ -153,35 +154,32 @@ fun reduceViewport(
 
 /**
  * Builds a list of stable line IDs for each rendered row (history + screen).
- * The returned list size may be less than [renderedRows] if the frame's
- * metadata is incomplete (e.g. history without IDs — treated as a fallback).
+ * Returns an empty list if the frame's stable-ID metadata is incomplete.
  */
 internal fun buildLineIdsFromFrame(
     frame: TerminalEmulator.RenderFrame,
     renderedRows: Int,
 ): List<Long> {
-    val ids = ArrayList<Long>(renderedRows)
-    // History rows
+    if (renderedRows <= 0) return emptyList()
+
     val historyCount = frame.historyCount
-    val historyIds = frame.historyLineIds
-    if (historyIds.isNotEmpty()) {
-        for (i in 0 until historyIds.size.coerceAtMost(renderedRows)) {
-            ids.add(historyIds[i])
-        }
-    } else {
-        val historyStartId = frame.historyStartId
-        if (historyCount > 0 && historyStartId > 0) {
-            for (i in 0 until historyCount.coerceAtMost(renderedRows)) {
-                ids.add(historyStartId + i)
-            }
-        }
+    if (historyCount < 0 || historyCount > renderedRows) return emptyList()
+
+    // Stable IDs are the source of truth. The range endpoints are diagnostic metadata only:
+    // IDs may be non-contiguous after resize, clear, or alternate-screen transitions.
+    val historyIds = when {
+        historyCount == 0 -> emptyList()
+        frame.historyLineIds.size == historyCount -> frame.historyLineIds
+        else -> return emptyList()
     }
-    // Screen rows
-    val screenIds = frame.screenLineIds
-    for (i in 0 until screenIds.size.coerceAtMost(renderedRows - ids.size)) {
-        ids.add(screenIds[i])
+
+    val screenRows = renderedRows - historyCount
+    if (frame.screenLineIds.size < screenRows) return emptyList()
+
+    return buildList(renderedRows) {
+        addAll(historyIds)
+        addAll(frame.screenLineIds.take(screenRows))
     }
-    return ids
 }
 
 /** Captures the stable row visible at the top edge of a manually positioned viewport. */
@@ -196,10 +194,10 @@ internal fun captureViewportAnchor(
     if (lineIds.isEmpty()) return null
     val row = (scrollPx.coerceAtLeast(0) / cellHeightPx).coerceIn(0, lineIds.lastIndex)
     val lineId = lineIds.getOrNull(row) ?: return null
-    val intraOffset = scrollPx.coerceAtLeast(0) % cellHeightPx
+    val clippedTopPx = scrollPx.coerceAtLeast(0) % cellHeightPx
     return ViewportAnchor(
         lineId = lineId,
-        intraOffsetPx = intraOffset,
+        clippedTopPx = clippedTopPx,
         screenGeneration = if (row >= frame.historyCount) frame.screenGeneration else null,
     )
 }

@@ -401,7 +401,7 @@ data class TerminalViewportState(
     val atBottom: Boolean = true,
     val viewportMode: ViewportMode = ViewportMode.TAIL,
     val anchorLineId: Long? = null,
-    val anchorIntraOffsetPx: Int = 0,
+    val anchorClippedTopPx: Int = 0,
     val anchorCellHeightPx: Int = 0,
     val anchorScreenGeneration: Long? = null,
     val updatedAt: Long = System.currentTimeMillis()
@@ -2111,7 +2111,7 @@ class BackgroundProcessManager @Inject constructor(
         atBottom: Boolean,
         viewportMode: ViewportMode = if (autoScroll) ViewportMode.TAIL else ViewportMode.LOCKED,
         anchorLineId: Long? = null,
-        anchorIntraOffsetPx: Int = 0,
+        anchorClippedTopPx: Int = 0,
         anchorCellHeightPx: Int = 0,
         anchorScreenGeneration: Long? = null,
     ) {
@@ -2122,7 +2122,7 @@ class BackgroundProcessManager @Inject constructor(
             atBottom = atBottom,
             viewportMode = viewportMode,
             anchorLineId = anchorLineId,
-            anchorIntraOffsetPx = anchorIntraOffsetPx.coerceAtLeast(0),
+            anchorClippedTopPx = anchorClippedTopPx.coerceAtLeast(0),
             anchorCellHeightPx = anchorCellHeightPx.coerceAtLeast(0),
             anchorScreenGeneration = anchorScreenGeneration,
             updatedAt = System.currentTimeMillis()

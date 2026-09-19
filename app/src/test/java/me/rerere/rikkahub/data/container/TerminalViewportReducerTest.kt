@@ -18,7 +18,6 @@ class TerminalViewportReducerTest {
         historyLineIds: List<Long> = emptyList(),
         screenLineIds: List<Long> = listOf(1, 2, 3, 4, 5),
         screenGeneration: Long = 1,
-        historyTrimmedCount: Int = 0,
     ): TerminalEmulator.RenderFrame = TerminalEmulator.RenderFrame(
         rows = emptyList(),
         contentBounds = TerminalEmulator.ContentBounds(0, 4, 5),
@@ -28,7 +27,6 @@ class TerminalViewportReducerTest {
         historyEndId = historyEndId,
         historyCount = historyCount,
         historyLineIds = historyLineIds,
-        historyTrimmedCount = historyTrimmedCount,
         screenLineIds = screenLineIds,
         screenGeneration = screenGeneration,
         cursorRow = 2,
@@ -56,15 +54,20 @@ class TerminalViewportReducerTest {
     }
 
     @Test
-    fun tailIgnoresHistoryTrimmed() {
+    fun tailIgnoresHistoryMetadataChanges() {
         val input = ViewportInput(
             mode = ViewportMode.TAIL,
             maxScrollPx = maxScrollPx,
             viewportHeightPx = viewportHeightPx,
             cellHeightPx = cellHeightPx,
         )
-        // Frame with history trimmed
-        val frame = emptyFrame(historyTrimmedCount = 5, historyCount = 10, historyStartId = 100, historyEndId = 109)
+        // TAIL does not depend on history row identity metadata.
+        val frame = emptyFrame(
+            historyCount = 10,
+            historyStartId = 100,
+            historyEndId = 109,
+            historyLineIds = (100L..109L).toList(),
+        )
         val output = reduceViewport(input, frame, 15)
         assertEquals(maxScrollPx, output.targetScrollPx)
     }
@@ -107,7 +110,7 @@ class TerminalViewportReducerTest {
         val input = ViewportInput(
             mode = ViewportMode.LOCKED,
             anchorLineId = 5,
-            anchorIntraOffsetPx = 0,
+            anchorClippedTopPx = 0,
             maxScrollPx = maxScrollPx,
             viewportHeightPx = viewportHeightPx,
             cellHeightPx = cellHeightPx,
@@ -121,19 +124,50 @@ class TerminalViewportReducerTest {
     }
 
     @Test
-    fun lockedWithIntraOffset() {
+    fun lockedRestoresClippedTopOffset() {
         val input = ViewportInput(
             mode = ViewportMode.LOCKED,
             anchorLineId = 3,
-            anchorIntraOffsetPx = 10,
+            anchorClippedTopPx = 10,
             maxScrollPx = maxScrollPx,
             viewportHeightPx = viewportHeightPx,
             cellHeightPx = cellHeightPx,
         )
-        // anchorId=3 → row index 2 → 2*20 - 10 = 30px
+        // anchorId=3 → row index 2; 10px of the row is clipped above the viewport,
+        // so the original scroll position is 2*20 + 10 = 50px.
         val frame = emptyFrame(screenLineIds = listOf(1, 2, 3, 4, 5))
         val output = reduceViewport(input, frame, 5)
-        assertEquals(30, output.targetScrollPx)
+        assertEquals(50, output.targetScrollPx)
+    }
+
+    @Test
+    fun capturedAnchorRoundTripsToOriginalScrollPosition() {
+        val frame = emptyFrame(
+            historyCount = 2,
+            historyLineIds = listOf(10, 20),
+            screenLineIds = listOf(30, 40, 50),
+            screenGeneration = 7,
+        )
+        val scrollPx = 73
+        val anchor = requireNotNull(
+            captureViewportAnchor(frame, renderedRows = 5, scrollPx = scrollPx, cellHeightPx = cellHeightPx)
+        )
+
+        val output = reduceViewport(
+            input = ViewportInput(
+                mode = ViewportMode.LOCKED,
+                anchorLineId = anchor.lineId,
+                anchorClippedTopPx = anchor.clippedTopPx,
+                anchorScreenGeneration = anchor.screenGeneration,
+                maxScrollPx = maxScrollPx,
+                cellHeightPx = cellHeightPx,
+            ),
+            frame = frame,
+            renderedRows = 5,
+        )
+
+        assertEquals(ViewportMode.LOCKED, output.mode)
+        assertEquals(scrollPx, output.targetScrollPx)
     }
 
     @Test
@@ -197,10 +231,24 @@ class TerminalViewportReducerTest {
             historyCount = 3,
             historyStartId = 10,
             historyEndId = 12,
+            historyLineIds = listOf(10, 11, 12),
             screenLineIds = listOf(100, 101, 102, 103, 104),
         )
         val ids = buildLineIdsFromFrame(frame, 8)
         assertEquals(listOf(10L, 11L, 12L, 100L, 101L, 102L, 103L, 104L), ids)
+    }
+
+    @Test
+    fun buildLineIdsRejectsIncompleteHistoryMetadata() {
+        val frame = emptyFrame(
+            historyCount = 3,
+            historyStartId = 10,
+            historyEndId = 12,
+            screenLineIds = listOf(100, 101, 102),
+        )
+
+        // Never synthesize history IDs from a range: doing so can bind an anchor to the wrong row.
+        assertEquals(emptyList<Long>(), buildLineIdsFromFrame(frame, 6))
     }
 
     @Test
@@ -232,7 +280,7 @@ class TerminalViewportReducerTest {
         assertEquals(null, historyAnchor?.screenGeneration)
         assertEquals(30L, screenAnchor?.lineId)
         assertEquals(7L, screenAnchor?.screenGeneration)
-        assertEquals(10, screenAnchor?.intraOffsetPx)
+        assertEquals(10, screenAnchor?.clippedTopPx)
     }
 
     @Test
@@ -304,6 +352,7 @@ class TerminalViewportReducerTest {
             historyCount = 2,
             historyStartId = 5,
             historyEndId = 6,
+            historyLineIds = listOf(5, 6),
             screenLineIds = emptyList(),
         )
         val ids = buildLineIdsFromFrame(frame, 2)
