@@ -22,6 +22,21 @@ enum class ViewportMode {
     LOCKED
 }
 
+enum class ViewportScrollOrigin(val isUserInput: Boolean) {
+    USER_DRAG(true),
+    USER_FLING(true),
+    REDUCER(false),
+    RESTORE(false),
+    IME(false),
+    RESIZE(false),
+    JUMP(false),
+}
+
+internal fun shouldUpdateViewportFromScroll(
+    isScrollInProgress: Boolean,
+    origin: ViewportScrollOrigin?,
+): Boolean = isScrollInProgress && origin?.isUserInput == true
+
 /**
  * Pure reducer input: the previous viewport state and the new terminal frame.
  * Produces a new viewport state and a target scroll offset (in pixels) that
@@ -36,6 +51,8 @@ data class ViewportInput(
     val anchorClippedTopPx: Int = 0,
     /** Generation of the physical screen that owned this anchor when it was captured. */
     val anchorScreenGeneration: Long? = null,
+    /** Generation of scrollback history that owned a history anchor. */
+    val anchorHistoryGeneration: Long? = null,
     /** Scroll offset reported by the scrollable container (px). */
     val currentScrollPx: Int = 0,
     /** Maximum scroll value (px). */
@@ -57,9 +74,10 @@ data class ViewportOutput(
     val anchorLineId: Long? = null,
     val anchorClippedTopPx: Int = 0,
     val anchorScreenGeneration: Long? = null,
+    val anchorHistoryGeneration: Long? = null,
     /** The scroll offset the UI should apply. */
     val targetScrollPx: Int,
-    /** Whether the anchor line was trimmed and mode needs fallback. */
+    /** Whether the original anchor disappeared, with either replacement or fallback applied. */
     val anchorTrimmed: Boolean = false,
 )
 
@@ -69,6 +87,8 @@ data class ViewportAnchor(
     val clippedTopPx: Int,
     /** Non-null only when [lineId] belongs to the active physical screen. */
     val screenGeneration: Long?,
+    /** Non-null only when [lineId] belongs to scrollback history. */
+    val historyGeneration: Long?,
 )
 
 /**
@@ -125,28 +145,58 @@ fun reduceViewport(
             val anchorId = input.anchorLineId ?: run {
                 return fallback()
             }
-            // Find the rendered row index for anchorId
             val anchorRowIndex = renderedLineIds.indexOf(anchorId)
             val anchorIsScreenRow = anchorRowIndex >= frame.historyCount
-            if (anchorRowIndex < 0) {
-                fallback()
-            } else if (anchorIsScreenRow && input.anchorScreenGeneration != null &&
-                input.anchorScreenGeneration != frame.screenGeneration
-            ) {
-                // A full clear or alternate-screen reset replaced this physical screen.
-                fallback()
-            } else {
-                // anchorClippedTopPx is the amount of the row clipped above the viewport.
-                // Restoring the same visual position therefore adds it to the row top.
-                val target = (anchorRowIndex * input.cellHeightPx + input.anchorClippedTopPx)
-                    .coerceIn(0, maxScroll)
-                ViewportOutput(
-                    mode = ViewportMode.LOCKED,
-                    anchorLineId = anchorId,
-                    anchorClippedTopPx = input.anchorClippedTopPx,
-                    anchorScreenGeneration = if (anchorIsScreenRow) input.anchorScreenGeneration else null,
-                    targetScrollPx = target,
-                )
+            val historyGenerationChanged = input.anchorScreenGeneration == null &&
+                input.anchorHistoryGeneration != null &&
+                input.anchorHistoryGeneration != frame.historyGeneration
+
+            when {
+                anchorRowIndex >= 0 && anchorIsScreenRow && input.anchorScreenGeneration != null &&
+                    input.anchorScreenGeneration != frame.screenGeneration -> {
+                    // A full clear or alternate-screen reset replaced this physical screen.
+                    fallback()
+                }
+
+                anchorRowIndex >= 0 && !anchorIsScreenRow && historyGenerationChanged -> {
+                    // The entire scrollback was cleared; a numerically similar ID is unrelated.
+                    fallback()
+                }
+
+                anchorRowIndex >= 0 -> {
+                    val target = (anchorRowIndex * input.cellHeightPx + input.anchorClippedTopPx)
+                        .coerceIn(0, maxScroll)
+                    ViewportOutput(
+                        mode = ViewportMode.LOCKED,
+                        anchorLineId = anchorId,
+                        anchorClippedTopPx = input.anchorClippedTopPx,
+                        anchorScreenGeneration = if (anchorIsScreenRow) input.anchorScreenGeneration else null,
+                        anchorHistoryGeneration = if (anchorIsScreenRow) null else frame.historyGeneration,
+                        targetScrollPx = target,
+                    )
+                }
+
+                input.anchorScreenGeneration != null || historyGenerationChanged || renderedLineIds.isEmpty() -> {
+                    fallback()
+                }
+
+                else -> {
+                    // A normal scrollback-limit trim removes rows from the head. Keep LOCKED mode
+                    // on the closest surviving history row instead of jumping to the live tail.
+                    val replacementId = nearestHistoryLineId(frame.historyLineIds, anchorId)
+                        ?: return fallback()
+                    val replacementRowIndex = frame.historyLineIds.indexOf(replacementId)
+                    val target = (replacementRowIndex * input.cellHeightPx + input.anchorClippedTopPx)
+                        .coerceIn(0, maxScroll)
+                    ViewportOutput(
+                        mode = ViewportMode.LOCKED,
+                        anchorLineId = replacementId,
+                        anchorClippedTopPx = input.anchorClippedTopPx,
+                        anchorHistoryGeneration = frame.historyGeneration,
+                        targetScrollPx = target,
+                        anchorTrimmed = true,
+                    )
+                }
             }
         }
     }
@@ -182,6 +232,11 @@ internal fun buildLineIdsFromFrame(
     }
 }
 
+internal fun nearestHistoryLineId(historyLineIds: List<Long>, anchorLineId: Long): Long? =
+    historyLineIds.minByOrNull { lineId ->
+        if (lineId >= anchorLineId) lineId - anchorLineId else anchorLineId - lineId
+    }
+
 /** Captures the stable row visible at the top edge of a manually positioned viewport. */
 internal fun captureViewportAnchor(
     frame: TerminalEmulator.RenderFrame,
@@ -199,5 +254,6 @@ internal fun captureViewportAnchor(
         lineId = lineId,
         clippedTopPx = clippedTopPx,
         screenGeneration = if (row >= frame.historyCount) frame.screenGeneration else null,
+        historyGeneration = if (row < frame.historyCount) frame.historyGeneration else null,
     )
 }

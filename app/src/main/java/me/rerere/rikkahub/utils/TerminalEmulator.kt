@@ -117,6 +117,8 @@ class TerminalEmulator(
         val historyCount: Int = 0,
         /** Stable IDs of history rows in rendered order. IDs are not assumed to be contiguous. */
         val historyLineIds: List<Long> = emptyList(),
+        /** Changes only when the entire scrollback history is explicitly cleared or reset. */
+        val historyGeneration: Long = 0,
         /** Stable (monotonic) IDs of each screen row. */
         val screenLineIds: List<Long> = emptyList(),
         /** Identity of the active physical screen. A full clear/reset creates a new generation. */
@@ -234,6 +236,8 @@ class TerminalEmulator(
     // cached without a content revision.
     private var nextLineId = 1L
     private var nextScreenGeneration = 1L
+    private var nextHistoryGeneration = 1L
+    private var historyGeneration = newHistoryGeneration()
     private var mainScreenGeneration = newScreenGeneration()
     private var altScreenGeneration = newScreenGeneration()
     private val scrollback = ArrayDeque<ScrollbackLine>()
@@ -257,6 +261,7 @@ class TerminalEmulator(
     fun reset() {
         currentStyle = defaultStyle
         scrollback.clear()
+        historyGeneration = newHistoryGeneration()
         scrollbackRenderStyleRevision = 0L
         mainScreen.resetScreen(mainScreenLineIds)
         altScreen.resetScreen(altScreenLineIds)
@@ -332,6 +337,7 @@ class TerminalEmulator(
     fun clearScrollbackOnly() {
         if (scrollback.isEmpty()) return
         scrollback.clear()
+        historyGeneration = newHistoryGeneration()
         scrollbackRenderStyleRevision = 0L
         stateRevision++
     }
@@ -825,6 +831,7 @@ class TerminalEmulator(
             historyEndId = historyEndId,
             historyCount = if (includeHistory) scrollback.size else 0,
             historyLineIds = historyLineIds,
+            historyGeneration = historyGeneration,
             screenLineIds = screenLineIds,
             screenGeneration = activeScreenGeneration,
             cursorRow = cursorRow,
@@ -1728,7 +1735,10 @@ class TerminalEmulator(
                 cursorCol = 0
             }
             3 -> if (!selective) {
-                scrollback.clear()
+                if (scrollback.isNotEmpty()) {
+                    scrollback.clear()
+                    historyGeneration = newHistoryGeneration()
+                }
             }
         }
     }
@@ -2345,6 +2355,8 @@ class TerminalEmulator(
     private fun newLineId(): Long = nextLineId++
 
     private fun newScreenGeneration(): Long = nextScreenGeneration++
+
+    private fun newHistoryGeneration(): Long = nextHistoryGeneration++
 
     private fun newScrollbackLine(id: Long, cells: Array<Cell>): ScrollbackLine = ScrollbackLine(
         id = id,

@@ -935,11 +935,31 @@ class TerminalEmulatorTest {
         assertSame(firstFrame.rows.first(), secondFrame.rows.first())
         assertNotSame(firstFrame.rows[historyCount], secondFrame.rows[historyCount])
         assertEquals(firstFrame.historyLineIds, secondFrame.historyLineIds)
+        assertEquals(firstFrame.historyGeneration, secondFrame.historyGeneration)
         assertEquals(firstFrame.screenLineIds, secondFrame.screenLineIds)
         assertEquals(firstFrame.screenGeneration, secondFrame.screenGeneration)
         assertEquals(terminal.render().text, secondFrame.rows.joinToString("\n") { it.text.text })
         assertEquals(terminal.contentBounds(), secondFrame.contentBounds)
         assertEquals(terminal.modeSummary(), secondFrame.modeSummary)
+    }
+
+    @Test
+    fun historyGenerationChangesOnlyWhenEntireScrollbackIsCleared() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 100)
+        terminal.feed((1..120).joinToString("\r\n") { "line$it" })
+        val beforeTrim = terminal.renderFrame()
+
+        terminal.feed((121..140).joinToString("\r\n", prefix = "\r\n") { "line$it" })
+        val afterTrim = terminal.renderFrame()
+        terminal.clearScrollbackOnly()
+        val cleared = terminal.renderFrame()
+
+        assertEquals(100, beforeTrim.historyCount)
+        assertEquals(100, afterTrim.historyCount)
+        assertTrue(beforeTrim.historyLineIds.first() != afterTrim.historyLineIds.first())
+        assertEquals(beforeTrim.historyGeneration, afterTrim.historyGeneration)
+        assertTrue(cleared.historyGeneration > afterTrim.historyGeneration)
+        assertTrue(cleared.historyLineIds.isEmpty())
     }
 
     @Test

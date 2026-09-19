@@ -16,6 +16,7 @@ class TerminalViewportReducerTest {
         historyStartId: Long = 0,
         historyEndId: Long = 0,
         historyLineIds: List<Long> = emptyList(),
+        historyGeneration: Long = 1,
         screenLineIds: List<Long> = listOf(1, 2, 3, 4, 5),
         screenGeneration: Long = 1,
     ): TerminalEmulator.RenderFrame = TerminalEmulator.RenderFrame(
@@ -27,6 +28,7 @@ class TerminalViewportReducerTest {
         historyEndId = historyEndId,
         historyCount = historyCount,
         historyLineIds = historyLineIds,
+        historyGeneration = historyGeneration,
         screenLineIds = screenLineIds,
         screenGeneration = screenGeneration,
         cursorRow = 2,
@@ -159,6 +161,7 @@ class TerminalViewportReducerTest {
                 anchorLineId = anchor.lineId,
                 anchorClippedTopPx = anchor.clippedTopPx,
                 anchorScreenGeneration = anchor.screenGeneration,
+                anchorHistoryGeneration = anchor.historyGeneration,
                 maxScrollPx = maxScrollPx,
                 cellHeightPx = cellHeightPx,
             ),
@@ -187,24 +190,54 @@ class TerminalViewportReducerTest {
     }
 
     @Test
-    fun lockedAnchorHistoryTrimmedFallsBackToTail() {
+    fun lockedHistoryAnchorTrimmedMovesToClosestSurvivingHistoryLine() {
         val input = ViewportInput(
             mode = ViewportMode.LOCKED,
-            anchorLineId = 50, // in history, but history trimmed
+            anchorLineId = 50,
+            anchorHistoryGeneration = 3,
+            anchorClippedTopPx = 7,
             maxScrollPx = maxScrollPx,
             viewportHeightPx = viewportHeightPx,
             cellHeightPx = cellHeightPx,
         )
-        // Frame: history from 100 to 109 (10 rows), screen 201..205
-        // anchorId=50 not in range
         val frame = emptyFrame(
             historyCount = 10,
             historyStartId = 100,
             historyEndId = 109,
+            historyLineIds = (100L..109L).toList(),
+            historyGeneration = 3,
             screenLineIds = listOf(201, 202, 203, 204, 205),
         )
+
         val output = reduceViewport(input, frame, 15)
+
+        assertEquals(ViewportMode.LOCKED, output.mode)
+        assertEquals(100L, output.anchorLineId)
+        assertEquals(3L, output.anchorHistoryGeneration)
+        assertEquals(7, output.targetScrollPx)
+        assertEquals(true, output.anchorTrimmed)
+    }
+
+    @Test
+    fun lockedHistoryAnchorFallsBackAfterEntireHistoryWasCleared() {
+        val input = ViewportInput(
+            mode = ViewportMode.LOCKED,
+            anchorLineId = 50,
+            anchorHistoryGeneration = 3,
+            maxScrollPx = maxScrollPx,
+            tailScrollPx = 750,
+        )
+        val frame = emptyFrame(
+            historyCount = 2,
+            historyLineIds = listOf(100, 101),
+            historyGeneration = 4,
+            screenLineIds = listOf(201, 202, 203),
+        )
+
+        val output = reduceViewport(input, frame, 5)
+
         assertEquals(ViewportMode.TAIL, output.mode)
+        assertEquals(750, output.targetScrollPx)
         assertEquals(true, output.anchorTrimmed)
     }
 
@@ -278,8 +311,10 @@ class TerminalViewportReducerTest {
 
         assertEquals(21L, historyAnchor?.lineId)
         assertEquals(null, historyAnchor?.screenGeneration)
+        assertEquals(1L, historyAnchor?.historyGeneration)
         assertEquals(30L, screenAnchor?.lineId)
         assertEquals(7L, screenAnchor?.screenGeneration)
+        assertEquals(null, screenAnchor?.historyGeneration)
         assertEquals(10, screenAnchor?.clippedTopPx)
     }
 
@@ -321,6 +356,28 @@ class TerminalViewportReducerTest {
         assertEquals(ViewportMode.LOCKED, output.mode)
         assertEquals(0, output.targetScrollPx)
         assertEquals(null, output.anchorScreenGeneration)
+        assertEquals(frame.historyGeneration, output.anchorHistoryGeneration)
+    }
+
+    @Test
+    fun nearestHistoryLineUsesStableIdDistance() {
+        assertEquals(21L, nearestHistoryLineId(listOf(10, 21, 40), 20))
+        assertEquals(40L, nearestHistoryLineId(listOf(10, 21, 40), 39))
+        assertEquals(10L, nearestHistoryLineId(listOf(10, 21, 40), 1))
+        assertEquals(null, nearestHistoryLineId(emptyList(), 20))
+    }
+
+    @Test
+    fun onlyUserScrollOriginsCanChangeViewportMode() {
+        assertEquals(true, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.USER_DRAG))
+        assertEquals(true, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.USER_FLING))
+        assertEquals(false, shouldUpdateViewportFromScroll(false, ViewportScrollOrigin.USER_DRAG))
+        assertEquals(false, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.REDUCER))
+        assertEquals(false, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.RESTORE))
+        assertEquals(false, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.IME))
+        assertEquals(false, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.RESIZE))
+        assertEquals(false, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.JUMP))
+        assertEquals(false, shouldUpdateViewportFromScroll(true, null))
     }
 
     @Test

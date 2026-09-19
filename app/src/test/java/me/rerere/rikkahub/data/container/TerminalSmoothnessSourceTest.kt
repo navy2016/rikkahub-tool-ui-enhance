@@ -36,6 +36,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(backgroundProcessManagerSource.contains("val viewportMode: ViewportMode"))
         assertTrue(backgroundProcessManagerSource.contains("val anchorLineId: Long?"))
         assertTrue(backgroundProcessManagerSource.contains("anchorCellHeightPx"))
+        assertTrue(backgroundProcessManagerSource.contains("anchorHistoryGeneration"))
         assertTrue(processSessionSource.contains("anchorLineId = viewportAnchorLineId"))
         assertTrue(processSessionSource.contains("DisposableEffect(processId)"))
         assertTrue(processSessionSource.contains("bgManager.saveTerminalSandboxUiState(sandboxId, activeInteractiveId, terminalFullscreen)"))
@@ -74,7 +75,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("val currentLastNonBlankRow by rememberUpdatedState(terminalContentBounds.lastNonBlankRow)"))
         assertTrue(processSessionSource.contains("val currentActiveScreenBottomRow by rememberUpdatedState(terminalActiveScreenBottomRow)"))
         assertTrue(processSessionSource.contains("viewportHeightPx = outputViewportHeightPx"))
-        assertTrue(processSessionSource.contains("scrollTerminalContentBottomToIme()"))
+        assertTrue(processSessionSource.contains("scrollTerminalContentBottomToIme("))
         assertTrue(processSessionSource.contains("lastContentBottomPx - viewportHeightPx"))
         assertTrue(processSessionSource.contains("isConfiguredTerminalCommand("))
         assertTrue(processSessionSource.contains("settings.terminalFullGridCommands"))
@@ -157,9 +158,30 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("\"JUMP\""))
         assertTrue(processSessionSource.contains(".verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)"))
         assertTrue(processSessionSource.contains("if (!fastFlingEnabled) return Velocity.Zero"))
-        assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(reduceTerminalViewport())"))
-        assertTrue(processSessionSource.contains("outputScroll.animateScrollTo(0)"))
+        assertTrue(processSessionSource.contains(
+            "scrollTerminalTo(reduceTerminalViewport(), ViewportScrollOrigin.JUMP, animated = true)"
+        ))
+        assertTrue(processSessionSource.contains(
+            "scrollTerminalTo(0, ViewportScrollOrigin.JUMP, animated = true)"
+        ))
         assertTrue(processSessionSource.contains(".nestedScroll(fastFlingConnection)"))
+    }
+
+    @Test
+    fun onlyUserScrollInputCanChangeSemanticViewportMode() {
+        assertTrue(processSessionSource.contains("TerminalUserScrollSnapshot("))
+        assertTrue(processSessionSource.contains("shouldUpdateViewportFromScroll("))
+        assertTrue(processSessionSource.contains("source == NestedScrollSource.UserInput"))
+        assertTrue(processSessionSource.contains("ViewportScrollOrigin.USER_DRAG"))
+        assertTrue(processSessionSource.contains("ViewportScrollOrigin.USER_FLING"))
+        assertTrue(processSessionSource.contains("ViewportScrollOrigin.REDUCER"))
+        assertTrue(processSessionSource.contains("ViewportScrollOrigin.RESTORE"))
+        assertTrue(processSessionSource.contains("ViewportScrollOrigin.IME"))
+        assertTrue(processSessionSource.contains("ViewportScrollOrigin.RESIZE"))
+        assertTrue(processSessionSource.contains("ViewportScrollOrigin.JUMP"))
+        assertFalse(processSessionSource.contains(
+            "snapshotFlow { Triple(outputScroll.isScrollInProgress, outputScroll.value, outputScroll.maxValue) }"
+        ))
     }
 
     @Test
