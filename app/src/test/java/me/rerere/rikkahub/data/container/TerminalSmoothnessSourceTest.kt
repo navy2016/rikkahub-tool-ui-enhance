@@ -102,6 +102,16 @@ class TerminalSmoothnessSourceTest {
     }
 
     @Test
+    fun renderedRowsFollowStableIdsWhenScrollbackIsTrimmed() {
+        assertTrue(processSessionSource.contains("val lineId: Long"))
+        assertTrue(processSessionSource.contains("buildLineIdsFromFrame(frame, rendered.size)"))
+        assertTrue(processSessionSource.contains("existing[nextLineIds[index]]"))
+        assertTrue(processSessionSource.contains("terminalRenderedRows.indices.any"))
+        assertTrue(processSessionSource.contains("key(row.lineId)"))
+        assertFalse(processSessionSource.contains("TerminalRenderedRowState(it.text)"))
+    }
+
+    @Test
     fun gridRenderingReusesRowsAndProtectsTuiBottomChrome() {
         assertTrue(processSessionSource.contains("class TerminalRenderedRowState"))
         assertTrue(processSessionSource.contains("mutableStateListOf<TerminalRenderedRowState>()"))

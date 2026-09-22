@@ -56,6 +56,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -131,6 +132,7 @@ import me.rerere.rikkahub.data.container.isConfiguredTerminalCommand
 import me.rerere.rikkahub.data.container.isTuiCommand
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
+import me.rerere.rikkahub.data.container.buildLineIdsFromFrame
 import me.rerere.rikkahub.data.container.terminalEffectiveScreenBottomRow
 import me.rerere.rikkahub.data.container.ViewportScrollOrigin
 import me.rerere.rikkahub.data.container.ControlInput
@@ -260,7 +262,10 @@ private data class TerminalViewportRenderSnapshot(
 )
 
 @Stable
-private class TerminalRenderedRowState(initialText: AnnotatedString) {
+private class TerminalRenderedRowState(
+    val lineId: Long,
+    initialText: AnnotatedString,
+) {
     var text by mutableStateOf(initialText)
     var pendingBlankSinceMs: Long = 0L
 }
@@ -863,7 +868,16 @@ private fun TerminalInteractivePanel(
     val initialTerminalRenderFrame = remember(processId) { terminalEmulator.renderFrame() }
     val terminalRenderedRows = remember(processId) {
         mutableStateListOf<TerminalRenderedRowState>().apply {
-            addAll(initialTerminalRenderFrame.rows.map { TerminalRenderedRowState(it.text) })
+            val initialLineIds = buildLineIdsFromFrame(
+                initialTerminalRenderFrame,
+                initialTerminalRenderFrame.rows.size,
+            )
+            addAll(initialTerminalRenderFrame.rows.mapIndexed { index, row ->
+                TerminalRenderedRowState(
+                    lineId = initialLineIds.getOrNull(index) ?: Long.MIN_VALUE + index,
+                    initialText = row.text,
+                )
+            })
         }
     }
     var terminalContentBounds by remember(processId) {
@@ -1082,9 +1096,24 @@ private fun TerminalInteractivePanel(
         val usesTuiViewport = commandIsTui || frame.isAlternateScreen || currentPreserveFullTerminalGrid
         var hasDeferredGridBlank = false
         Snapshot.withMutableSnapshot {
-            val sharedCount = minOf(terminalRenderedRows.size, rendered.size)
+            val nextLineIds = buildLineIdsFromFrame(frame, rendered.size).ifEmpty {
+                rendered.indices.map { index -> Long.MIN_VALUE + index }
+            }
+            val idsChanged = terminalRenderedRows.size != rendered.size ||
+                terminalRenderedRows.indices.any { terminalRenderedRows[it].lineId != nextLineIds[it] }
+            if (idsChanged) {
+                // Scrollback trim shifts every positional row. Reuse state by stable ID so a row's
+                // pending blank grace period and Compose slot follow the row, not its old index.
+                val existing = terminalRenderedRows.associateBy { it.lineId }
+                terminalRenderedRows.clear()
+                rendered.forEachIndexed { index, row ->
+                    terminalRenderedRows.add(
+                        existing[nextLineIds[index]] ?: TerminalRenderedRowState(nextLineIds[index], row.text)
+                    )
+                }
+            }
             val stableGridStart = (rendered.size - TERMINAL_GRID_STABLE_BOTTOM_ROWS).coerceAtLeast(0)
-            for (index in 0 until sharedCount) {
+            for (index in rendered.indices) {
                 val rowState = terminalRenderedRows[index]
                 val next = rendered[index].text
                 val deferTransientGridClear = usesTuiViewport &&
@@ -1102,12 +1131,6 @@ private fun TerminalInteractivePanel(
                 }
                 if (rowState.text != next) rowState.text = next
                 rowState.pendingBlankSinceMs = 0L
-            }
-            while (terminalRenderedRows.size > rendered.size) {
-                terminalRenderedRows.removeAt(terminalRenderedRows.lastIndex)
-            }
-            for (index in sharedCount until rendered.size) {
-                terminalRenderedRows.add(TerminalRenderedRowState(rendered[index].text))
             }
             terminalContentBounds = bounds
             terminalScreenStartRow = frame.screenStartRow
@@ -1958,10 +1981,12 @@ private fun TerminalInteractivePanel(
                             )
                         } else {
                             terminalRenderedRows.forEach { row ->
-                                TerminalRenderedRow(
-                                    state = row,
-                                    style = terminalTextStyle,
-                                )
+                                key(row.lineId) {
+                                    TerminalRenderedRow(
+                                        state = row,
+                                        style = terminalTextStyle,
+                                    )
+                                }
                             }
                         }
                     }
