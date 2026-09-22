@@ -6,7 +6,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.gestures.ScrollableDefaults
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -113,7 +116,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -123,12 +129,10 @@ import me.rerere.rikkahub.data.container.BackgroundProcessInfo
 import me.rerere.rikkahub.data.container.BackgroundProcessManager
 import me.rerere.rikkahub.data.container.isConfiguredTerminalCommand
 import me.rerere.rikkahub.data.container.isTuiCommand
-import me.rerere.rikkahub.data.container.ViewportInput
-import me.rerere.rikkahub.data.container.ViewportMode
+import me.rerere.rikkahub.data.container.TerminalViewportController
+import me.rerere.rikkahub.data.container.TerminalViewportMetrics
+import me.rerere.rikkahub.data.container.terminalEffectiveScreenBottomRow
 import me.rerere.rikkahub.data.container.ViewportScrollOrigin
-import me.rerere.rikkahub.data.container.captureViewportAnchor
-import me.rerere.rikkahub.data.container.reduceViewport
-import me.rerere.rikkahub.data.container.shouldUpdateViewportFromScroll
 import me.rerere.rikkahub.data.container.ControlInput
 import me.rerere.rikkahub.data.container.ProcessStatus
 import me.rerere.rikkahub.data.container.PRootManager
@@ -249,54 +253,10 @@ private data class TerminalPanelPlacement(
     val modifier: Modifier,
 )
 
-private data class TerminalImeViewportAnchor(
-    val followBottom: Boolean,
-    val shouldAvoidIme: Boolean,
-    val offsetPx: Int,
-    val tuiContentBottomRow: Int?,
-)
-
-private data class TerminalPlacementViewportAnchor(
-    val verticalOffsetPx: Int,
-    val horizontalOffsetPx: Int,
-    val autoScroll: Boolean,
-    val atBottom: Boolean,
-)
-
-private data class TerminalImeViewportSnapshot(
-    val renderedRowCount: Int,
-    val lastNonBlankRow: Int?,
-    val viewportHeightPx: Int,
-    val bottomTargetPx: Int,
-    val imeState: Pair<Boolean, Boolean>,
-    val anchorRevision: Int,
-)
-
-private class TerminalScrollOperation(val origin: ViewportScrollOrigin)
-
-private data class TerminalUserScrollSnapshot(
-    val isScrollInProgress: Boolean,
-    val value: Int,
-    val maxValue: Int,
-    val operation: TerminalScrollOperation?,
-)
-
-private data class TerminalScrollSnapshot(
-    val maxScrollPx: Int,
-    val renderedRowCount: Int,
-    val viewportHeightPx: Int,
-    val autoScroll: Boolean,
-    val usesTuiViewport: Boolean,
-    val mode: ViewportMode,
-    val anchorLineId: Long?,
-    val anchorClippedTopPx: Int,
-    val anchorScreenGeneration: Long?,
-    val anchorHistoryGeneration: Long?,
-    val cellHeightPx: Int,
-    val imeAnchorRevision: Int,
+private data class TerminalViewportRenderSnapshot(
     val frameRevision: Long,
-    val screenGeneration: Long,
-    val historyGeneration: Long,
+    val renderedRowCount: Int,
+    val metrics: TerminalViewportMetrics,
 )
 
 @Stable
@@ -316,59 +276,6 @@ private fun TerminalRenderedRow(
         softWrap = false,
         maxLines = 1,
     )
-}
-
-internal fun terminalImeAnchorScrollTarget(
-    lastNonBlankRow: Int?,
-    terminalCellHeightPx: Int,
-    viewportHeightPx: Int,
-    terminalTailPaddingPx: Int,
-    maxScrollPx: Int,
-): Int {
-    if (lastNonBlankRow == null || viewportHeightPx <= 0) return 0
-    val lastContentBottomPx = (lastNonBlankRow + 1) * terminalCellHeightPx + terminalTailPaddingPx
-    return (lastContentBottomPx - viewportHeightPx).coerceIn(0, maxScrollPx)
-}
-
-internal fun terminalTuiViewportScrollTarget(
-    screenStartRow: Int,
-    lastActiveScreenRow: Int?,
-    terminalCellHeightPx: Int,
-    viewportHeightPx: Int,
-    terminalTailPaddingPx: Int,
-    maxScrollPx: Int,
-): Int {
-    val screenStartPx = screenStartRow * terminalCellHeightPx
-    if (lastActiveScreenRow == null || viewportHeightPx <= 0) {
-        return screenStartPx.coerceIn(0, maxScrollPx)
-    }
-    val activeBottomPx = screenStartPx +
-        (lastActiveScreenRow + 1) * terminalCellHeightPx + terminalTailPaddingPx
-    return maxOf(screenStartPx, activeBottomPx - viewportHeightPx).coerceIn(0, maxScrollPx)
-}
-
-internal fun terminalEffectiveScreenBottomRow(
-    screenContentBounds: TerminalEmulator.ContentBounds,
-    cursorRow: Int,
-    cursorVisible: Boolean,
-): Int? = listOfNotNull(
-    screenContentBounds.lastNonBlankRow,
-    cursorRow.takeIf { cursorVisible },
-).maxOrNull()
-
-internal fun terminalWasFollowingBeforeIme(
-    scrollValuePx: Int,
-    currentBottomTargetPx: Int,
-    fullViewportHeightPx: Int,
-    currentViewportHeightPx: Int,
-    thresholdPx: Int,
-): Boolean {
-    if (fullViewportHeightPx <= 0 || currentViewportHeightPx <= 0) {
-        return scrollValuePx >= currentBottomTargetPx - thresholdPx
-    }
-    val viewportShrinkPx = (fullViewportHeightPx - currentViewportHeightPx).coerceAtLeast(0)
-    val preImeBottomTargetPx = (currentBottomTargetPx - viewportShrinkPx).coerceAtLeast(0)
-    return scrollValuePx >= preImeBottomTargetPx - thresholdPx
 }
 
 private fun shouldAvoidTerminalIme(
@@ -985,7 +892,11 @@ private fun TerminalInteractivePanel(
     }
     var terminalModeSummary by remember { mutableStateOf(initialTerminalRenderFrame.modeSummary) }
     var terminalStatus by remember { mutableStateOf("就绪") }
-    var autoScroll by remember(processId) { mutableStateOf(restoredViewportState?.autoScroll ?: savedPreference?.autoScroll ?: true) }
+    val viewportController = remember(processId) {
+        TerminalViewportController(restoredViewportState, followInitially = savedPreference?.autoScroll ?: true)
+    }
+    val viewportState by viewportController.state.collectAsStateWithLifecycle()
+    val autoScroll = viewportState.autoScroll
     var rawInputMode by remember(processId, settings.terminalCustomTuiCommands) { mutableStateOf(savedPreference?.rawInputMode ?: isTuiCommand(process.command, settings.terminalCustomTuiCommands)) }
     var showExtraKeys by remember(processId) { mutableStateOf(savedPreference?.showExtraKeys ?: !fullscreen) }
     var selectionMode by remember { mutableStateOf(false) }
@@ -1018,6 +929,7 @@ private fun TerminalInteractivePanel(
         .roundToInt()
         .coerceAtLeast(measuredCell.size.height)
         .coerceAtLeast(1)
+    val currentTerminalCellHeightPx by rememberUpdatedState(terminalCellHeightPx)
     val actualImeHeightPx = imeInsets.getBottom(density)
     val effectiveImeHeightPx = with(density) {
         (customImeHeightDp?.dp ?: actualImeHeightPx.toDp()).roundToPx()
@@ -1047,35 +959,11 @@ private fun TerminalInteractivePanel(
     val lastImeTransitionAt = remember(processId) { AtomicLong(0L) }
     val lastAppliedTerminalColumns = remember(processId) { AtomicInteger(initialTerminalColumns) }
     val lastAppliedTerminalRows = remember(processId) { AtomicInteger(initialTerminalRows) }
-    val imeViewportAnchor = remember(processId) { AtomicReference<TerminalImeViewportAnchor?>(null) }
-    var imeViewportAnchorRevision by remember(processId) { mutableIntStateOf(0) }
-    val imeViewportRestoreJob = remember(processId) { AtomicReference<Job?>(null) }
-    val placementViewportAnchor = remember(processId) {
-        AtomicReference<TerminalPlacementViewportAnchor?>(null)
-    }
+    val placementHorizontalOffset = remember(processId) { AtomicReference<Int?>(null) }
     val fullOutputViewportHeightPx = remember(processId) { AtomicInteger(0) }
     var outputViewportHeightPx by remember(processId) { mutableIntStateOf(0) }
     val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
     val activeTerminalMousePosition = remember(processId) { AtomicReference<MouseEvent?>(null) }
-    var terminalScrollOperation by remember(processId) { mutableStateOf<TerminalScrollOperation?>(null) }
-    var viewportMode by remember(processId) {
-        mutableStateOf(
-            restoredViewportState?.viewportMode ?: if (autoScroll) ViewportMode.TAIL else ViewportMode.LOCKED
-        )
-    }
-    var viewportAnchorLineId by remember(processId) { mutableStateOf(restoredViewportState?.anchorLineId) }
-    var viewportAnchorClippedTopPx by remember(processId) {
-        mutableIntStateOf(restoredViewportState?.anchorClippedTopPx ?: 0)
-    }
-    var viewportAnchorCellHeightPx by remember(processId) {
-        mutableIntStateOf(restoredViewportState?.anchorCellHeightPx ?: terminalCellHeightPx)
-    }
-    var viewportAnchorScreenGeneration by remember(processId) {
-        mutableStateOf(restoredViewportState?.anchorScreenGeneration)
-    }
-    var viewportAnchorHistoryGeneration by remember(processId) {
-        mutableStateOf(restoredViewportState?.anchorHistoryGeneration)
-    }
     val currentImeVisible by rememberUpdatedState(imeVisible)
     val currentActualImeHeightPx by rememberUpdatedState(actualImeHeightPx)
     val currentFullscreen by rememberUpdatedState(fullscreen)
@@ -1136,198 +1024,42 @@ private fun TerminalInteractivePanel(
         with(density) { (effectiveImeHeightPx - actualImeHeightPx).coerceAtLeast(0).toDp() }
     } else 0.dp
 
-    fun terminalViewportBottomScrollTarget(): Int {
-        if (currentUsesTuiViewport) {
-            return terminalTuiViewportScrollTarget(
-                screenStartRow = currentScreenStartRow,
-                lastActiveScreenRow = if (currentPreservePhysicalGrid) terminalRows - 1 else currentActiveScreenBottomRow,
-                terminalCellHeightPx = terminalCellHeightPx,
-                viewportHeightPx = outputViewportHeightPx,
-                terminalTailPaddingPx = currentTerminalTailPaddingPx,
-                maxScrollPx = outputScroll.maxValue,
-            )
-        }
-        return terminalImeAnchorScrollTarget(
-            lastNonBlankRow = currentLastNonBlankRow,
-            terminalCellHeightPx = terminalCellHeightPx,
-            viewportHeightPx = outputViewportHeightPx,
-            terminalTailPaddingPx = currentTerminalTailPaddingPx,
-            maxScrollPx = outputScroll.maxValue,
-        )
-    }
-
-    fun terminalNearBottom(thresholdPx: Int = terminalCellHeightPx * 2): Boolean {
-        val target = terminalViewportBottomScrollTarget()
-        return outputScroll.value >= target - thresholdPx
-    }
-
-    fun terminalImeScrollTarget(anchor: TerminalImeViewportAnchor?): Int {
-        if (!currentUsesTuiViewport) return terminalViewportBottomScrollTarget()
-        val stableBottomRow = if (currentPreservePhysicalGrid) {
-            terminalRows - 1
-        } else {
-            listOfNotNull(
-                anchor?.tuiContentBottomRow,
-                currentActiveScreenBottomRow,
-            ).maxOrNull()
-        }
-        return terminalTuiViewportScrollTarget(
-            screenStartRow = currentScreenStartRow,
-            lastActiveScreenRow = stableBottomRow,
-            terminalCellHeightPx = terminalCellHeightPx,
-            viewportHeightPx = outputViewportHeightPx,
-            terminalTailPaddingPx = currentTerminalTailPaddingPx,
-            maxScrollPx = outputScroll.maxValue,
-        )
-    }
-
-    suspend fun scrollTerminalTo(
-        targetPx: Int,
-        origin: ViewportScrollOrigin,
-        animated: Boolean = false,
-    ) {
-        val operation = TerminalScrollOperation(origin)
-        terminalScrollOperation = operation
-        try {
-            val target = targetPx.coerceIn(0, outputScroll.maxValue)
-            if (animated) outputScroll.animateScrollTo(target) else outputScroll.scrollTo(target)
-        } finally {
-            // Keep the origin visible through the snapshotFlow delivery for the final scroll value.
-            scope.launch {
-                withFrameNanos { }
-                if (terminalScrollOperation === operation) terminalScrollOperation = null
-            }
-        }
-    }
-
-    suspend fun scrollTerminalContentBottomToIme(
-        anchor: TerminalImeViewportAnchor? = imeViewportAnchor.get(),
-        origin: ViewportScrollOrigin = ViewportScrollOrigin.REDUCER,
-    ) {
-        scrollTerminalTo(terminalImeScrollTarget(anchor), origin)
-    }
-
-    fun captureLockedViewportAnchor(scrollPx: Int = outputScroll.value) {
-        captureViewportAnchor(
-            frame = terminalViewportFrame,
-            renderedRows = terminalRenderedRows.size,
-            scrollPx = scrollPx,
-            cellHeightPx = terminalCellHeightPx,
-        )?.let { anchor ->
-            viewportAnchorLineId = anchor.lineId
-            viewportAnchorClippedTopPx = anchor.clippedTopPx
-            viewportAnchorCellHeightPx = terminalCellHeightPx
-            viewportAnchorScreenGeneration = anchor.screenGeneration
-            viewportAnchorHistoryGeneration = anchor.historyGeneration
-        }
-    }
+    fun viewportMetrics() = TerminalViewportMetrics(
+        maxScrollPx = outputScroll.maxValue,
+        viewportHeightPx = outputViewportHeightPx,
+        cellHeightPx = currentTerminalCellHeightPx,
+        tailPaddingPx = currentTerminalTailPaddingPx,
+        usesTuiViewport = currentUsesTuiViewport,
+        preservePhysicalGrid = currentPreservePhysicalGrid,
+        imeVisible = currentImeVisible && currentFullscreen,
+        avoidIme = currentShouldAvoidIme,
+    )
 
     fun setViewportFollow(enabled: Boolean) {
-        autoScroll = enabled
-        if (enabled) {
-            viewportMode = if (currentUsesTuiViewport) ViewportMode.SCREEN else ViewportMode.TAIL
-            viewportAnchorLineId = null
-            viewportAnchorClippedTopPx = 0
-            viewportAnchorCellHeightPx = terminalCellHeightPx
-            viewportAnchorScreenGeneration = null
-            viewportAnchorHistoryGeneration = null
-        } else {
-            captureLockedViewportAnchor()
-            viewportMode = ViewportMode.LOCKED
-        }
+        viewportController.setFollow(enabled, outputScroll.value)
     }
 
-    fun reduceTerminalViewport(): Int {
-        val mode = when {
-            viewportMode == ViewportMode.LOCKED -> ViewportMode.LOCKED
-            currentUsesTuiViewport -> ViewportMode.SCREEN
-            else -> ViewportMode.TAIL
+    fun recordImeTransition(visible: Boolean) {
+        if (lastObservedImeVisible.getAndSet(visible) != visible) {
+            lastImeTransitionAt.set(System.currentTimeMillis())
         }
-        val scaledAnchorClippedTopPx = if (viewportAnchorCellHeightPx > 0 &&
-            viewportAnchorCellHeightPx != terminalCellHeightPx
-        ) {
-            ((viewportAnchorClippedTopPx.toLong() * terminalCellHeightPx +
-                viewportAnchorCellHeightPx / 2) / viewportAnchorCellHeightPx)
-                .toInt()
-                .coerceIn(0, terminalCellHeightPx - 1)
-        } else {
-            viewportAnchorClippedTopPx
-        }
-        val output = reduceViewport(
-            input = ViewportInput(
-                mode = mode,
-                anchorLineId = viewportAnchorLineId,
-                anchorClippedTopPx = scaledAnchorClippedTopPx,
-                anchorScreenGeneration = viewportAnchorScreenGeneration,
-                anchorHistoryGeneration = viewportAnchorHistoryGeneration,
-                currentScrollPx = outputScroll.value,
-                maxScrollPx = outputScroll.maxValue,
-                viewportHeightPx = outputViewportHeightPx,
-                cellHeightPx = terminalCellHeightPx,
-                tailScrollPx = terminalImeScrollTarget(imeViewportAnchor.get()),
-                screenScrollPx = terminalImeScrollTarget(imeViewportAnchor.get()),
-                fallbackMode = if (currentUsesTuiViewport) ViewportMode.SCREEN else ViewportMode.TAIL,
-            ),
-            frame = terminalViewportFrame,
-            renderedRows = terminalRenderedRows.size,
-        )
-        viewportMode = output.mode
-        viewportAnchorLineId = output.anchorLineId
-        viewportAnchorClippedTopPx = output.anchorClippedTopPx
-        viewportAnchorCellHeightPx = terminalCellHeightPx
-        viewportAnchorScreenGeneration = output.anchorScreenGeneration
-        viewportAnchorHistoryGeneration = output.anchorHistoryGeneration
-        autoScroll = output.mode != ViewportMode.LOCKED
-        return output.targetScrollPx
-    }
-
-    fun shouldFollowTerminalBottom(): Boolean =
-        currentFullscreen && autoScroll && !currentUsesTuiViewport && (imeViewportAnchor.get()?.followBottom != false)
-
-    fun recordImeTransition(
-        visible: Boolean,
-        currentViewportHeightPx: Int = outputViewportHeightPx,
-    ): Boolean {
-        if (lastObservedImeVisible.getAndSet(visible) == visible) return false
-        lastImeTransitionAt.set(System.currentTimeMillis())
-        if (visible) {
-            // IME visibility commonly flips before WindowInsets.ime and the output viewport have
-            // reached their final values. Capture only the pre-animation follow state here; the
-            // measured viewport decides shouldAvoidIme after layout.
-            val followBottom = autoScroll && terminalWasFollowingBeforeIme(
-                scrollValuePx = outputScroll.value,
-                currentBottomTargetPx = terminalViewportBottomScrollTarget(),
-                fullViewportHeightPx = fullOutputViewportHeightPx.get(),
-                currentViewportHeightPx = currentViewportHeightPx,
-                thresholdPx = terminalCellHeightPx * 2,
-            )
-            imeViewportAnchor.set(TerminalImeViewportAnchor(
-                followBottom = followBottom,
-                shouldAvoidIme = false,
-                offsetPx = outputScroll.value,
-                tuiContentBottomRow = if (currentUsesTuiViewport) {
-                    if (currentPreservePhysicalGrid) terminalRows - 1 else currentActiveScreenBottomRow
-                } else null,
-            ))
-            imeViewportAnchorRevision++
-        }
-        return true
     }
 
     fun saveTerminalViewport() {
-        if (!currentFullscreen) return
+        val state = viewportController.state.value
+        if (!currentFullscreen || !state.initialized) return
         bgManager.saveTerminalViewportState(
             processId = processId,
             verticalOffsetPx = outputScroll.value,
             horizontalOffsetPx = horizontalScroll.value,
-            autoScroll = autoScroll,
-            atBottom = terminalNearBottom(),
-            viewportMode = viewportMode,
-            anchorLineId = viewportAnchorLineId,
-            anchorClippedTopPx = viewportAnchorClippedTopPx,
-            anchorCellHeightPx = viewportAnchorCellHeightPx,
-            anchorScreenGeneration = viewportAnchorScreenGeneration,
-            anchorHistoryGeneration = viewportAnchorHistoryGeneration,
+            autoScroll = state.autoScroll,
+            atBottom = viewportController.isNearBottom(outputScroll.value),
+            viewportMode = state.mode,
+            anchorLineId = state.anchor?.lineId,
+            anchorClippedTopPx = state.anchor?.clippedTopPx ?: 0,
+            anchorCellHeightPx = state.anchorCellHeightPx,
+            anchorScreenGeneration = state.anchor?.screenGeneration,
+            anchorHistoryGeneration = state.anchor?.historyGeneration,
         )
     }
 
@@ -1424,10 +1156,6 @@ private fun TerminalInteractivePanel(
                     }
                 }
                 renderTerminalFrame()
-                if (shouldFollowTerminalBottom()) {
-                    withFrameNanos { }
-                    runCatching { scrollTerminalContentBottomToIme(origin = ViewportScrollOrigin.REDUCER) }
-                }
             }
         })
     }
@@ -1655,61 +1383,32 @@ private fun TerminalInteractivePanel(
         }
     }
 
+    // FULL and LIST share the same semantic viewport. Only horizontal placement needs a pixel restore.
     DisposableEffect(fullscreen) {
         onDispose {
-            if (fullscreen) {
-                placementViewportAnchor.set(TerminalPlacementViewportAnchor(
-                    verticalOffsetPx = outputScroll.value,
-                    horizontalOffsetPx = horizontalScroll.value,
-                    autoScroll = autoScroll,
-                    atBottom = terminalNearBottom(),
-                ))
-            }
+            if (fullscreen) placementHorizontalOffset.set(horizontalScroll.value)
         }
     }
-
     LaunchedEffect(fullscreen) {
         if (!fullscreen) return@LaunchedEffect
-        val anchor = placementViewportAnchor.getAndSet(null) ?: return@LaunchedEffect
+        val offset = placementHorizontalOffset.getAndSet(null) ?: return@LaunchedEffect
         withFrameNanos { }
-        withFrameNanos { }
-        if (anchor.autoScroll) {
-            setViewportFollow(true)
-            runCatching { scrollTerminalContentBottomToIme(origin = ViewportScrollOrigin.RESTORE) }
-        } else {
-            runCatching { scrollTerminalTo(anchor.verticalOffsetPx, ViewportScrollOrigin.RESTORE) }
-            captureLockedViewportAnchor()
-            viewportMode = ViewportMode.LOCKED
-        }
-        runCatching { horizontalScroll.scrollTo(anchor.horizontalOffsetPx.coerceIn(0, horizontalScroll.maxValue)) }
+        horizontalScroll.scrollTo(offset.coerceIn(0, horizontalScroll.maxValue))
     }
 
-    LaunchedEffect(processId, outputScroll) {
-        snapshotFlow {
-            TerminalUserScrollSnapshot(
-                isScrollInProgress = outputScroll.isScrollInProgress,
-                value = outputScroll.value,
-                maxValue = outputScroll.maxValue,
-                operation = terminalScrollOperation,
-            )
-        }.distinctUntilChanged().collect { snapshot ->
-            val operation = snapshot.operation
-            if (!shouldUpdateViewportFromScroll(snapshot.isScrollInProgress, operation?.origin)) {
-                if (!snapshot.isScrollInProgress && operation?.origin?.isUserInput == true) {
-                    scope.launch {
-                        withFrameNanos { }
-                        if (!outputScroll.isScrollInProgress && terminalScrollOperation === operation) {
-                            terminalScrollOperation = null
-                        }
-                    }
+    val isViewportDragged by outputScroll.interactionSource.collectIsDraggedAsState()
+    LaunchedEffect(processId, outputScroll, viewportController) {
+        // Drag cancellation and wheel input don't always have a fling. Wait for both the pointer
+        // interaction and ScrollState to become idle; never classify a pixel change as user input.
+        combine(
+            snapshotFlow { isViewportDragged || outputScroll.isScrollInProgress },
+            viewportController.state.map { it.gesture }.distinctUntilChanged(),
+        ) { busy, gesture -> busy to gesture }.collectLatest { (busy, gesture) ->
+            if (!busy && gesture?.origin == ViewportScrollOrigin.USER_DRAG) {
+                withFrameNanos { }
+                if (!isViewportDragged && !outputScroll.isScrollInProgress) {
+                    viewportController.endUserScroll(gesture.id)
                 }
-                return@collect
-            }
-            val nearBottom = snapshot.value >= terminalViewportBottomScrollTarget() - terminalCellHeightPx * 2
-            when {
-                nearBottom && !autoScroll -> setViewportFollow(true)
-                !nearBottom && autoScroll -> setViewportFollow(false)
-                !nearBottom -> captureLockedViewportAnchor()
             }
         }
     }
@@ -1763,96 +1462,8 @@ private fun TerminalInteractivePanel(
         if (cols != terminalColumns) terminalColumns = cols
     }
 
-    LaunchedEffect(imeVisible, effectiveImeHeightPx) {
+    LaunchedEffect(imeVisible) {
         recordImeTransition(imeVisible)
-        if (!imeVisible) {
-            // Let the inset and weighted terminal viewport settle before restoring its anchor.
-            imeViewportRestoreJob.getAndSet(null)?.cancel()
-            imeViewportRestoreJob.set(scope.launch {
-                delay(TERMINAL_IME_RESIZE_DEBOUNCE_MS)
-                if (!currentImeVisible) {
-                    withFrameNanos { }
-                    imeViewportAnchor.getAndSet(null)?.let { anchor ->
-                        // Auto-follow is already updated from the live viewport on every layout
-                        // frame. Re-applying it here caused the visible late IME-end jump.
-                        if (!anchor.followBottom || !autoScroll) {
-                            runCatching { scrollTerminalTo(anchor.offsetPx, ViewportScrollOrigin.IME) }
-                        }
-                    }
-                }
-            })
-        }
-    }
-
-    // Re-evaluate after the output viewport has been measured. The scroll target is the last
-    // nonblank rendered line, not maxValue: maxValue includes blank terminal-grid rows.
-    LaunchedEffect(processId, outputScroll) {
-        snapshotFlow {
-            TerminalImeViewportSnapshot(
-                renderedRowCount = terminalRenderedRows.size,
-                lastNonBlankRow = currentLastNonBlankRow,
-                viewportHeightPx = outputViewportHeightPx,
-                bottomTargetPx = terminalViewportBottomScrollTarget(),
-                imeState = currentImeVisible to currentShouldAvoidIme,
-                anchorRevision = imeViewportAnchorRevision,
-            )
-        }.distinctUntilChanged().collect { snapshot ->
-            val imeState = snapshot.imeState
-            var anchor = imeViewportAnchor.get() ?: return@collect
-            if (!currentFullscreen || !imeState.first || !autoScroll) return@collect
-            if (!anchor.followBottom) {
-                val measuredFollowBottom = terminalWasFollowingBeforeIme(
-                    scrollValuePx = anchor.offsetPx,
-                    currentBottomTargetPx = snapshot.bottomTargetPx,
-                    fullViewportHeightPx = fullOutputViewportHeightPx.get(),
-                    currentViewportHeightPx = snapshot.viewportHeightPx,
-                    thresholdPx = terminalCellHeightPx * 2,
-                )
-                if (measuredFollowBottom) {
-                    val corrected = anchor.copy(followBottom = true)
-                    if (imeViewportAnchor.compareAndSet(anchor, corrected)) {
-                        anchor = corrected
-                        imeViewportAnchorRevision++
-                    } else {
-                        anchor = imeViewportAnchor.get() ?: return@collect
-                    }
-                }
-            }
-            if (!anchor.followBottom) return@collect
-            if (currentUsesTuiViewport) {
-                val stableBottomRow = listOfNotNull(
-                    anchor.tuiContentBottomRow,
-                    currentActiveScreenBottomRow,
-                ).maxOrNull()
-                if (anchor.tuiContentBottomRow != stableBottomRow) {
-                    val updated = anchor.copy(tuiContentBottomRow = stableBottomRow)
-                    if (imeViewportAnchor.compareAndSet(anchor, updated)) {
-                        anchor = updated
-                        imeViewportAnchorRevision++
-                    } else {
-                        anchor = imeViewportAnchor.get() ?: return@collect
-                    }
-                }
-            }
-            val avoidIme = imeState.second
-            if (anchor.shouldAvoidIme != avoidIme) {
-                val updated = anchor.copy(shouldAvoidIme = avoidIme)
-                if (imeViewportAnchor.compareAndSet(anchor, updated)) {
-                    anchor = updated
-                    imeViewportAnchorRevision++
-                } else {
-                    anchor = imeViewportAnchor.get() ?: return@collect
-                }
-            }
-            withFrameNanos { }
-            if (currentImeVisible) runCatching {
-                if (avoidIme) {
-                    scrollTerminalContentBottomToIme(anchor, ViewportScrollOrigin.IME)
-                } else {
-                    scrollTerminalTo(anchor.offsetPx, ViewportScrollOrigin.IME)
-                }
-            }
-        }
     }
 
     LaunchedEffect(processId, terminalColumns, terminalRows) {
@@ -1860,7 +1471,6 @@ private fun TerminalInteractivePanel(
         val rowsChanged = terminalRows != lastAppliedTerminalRows.get()
         if (!columnsChanged && !rowsChanged) return@LaunchedEffect
 
-        val wasNearBottom = terminalNearBottom()
         val holdCompleteFrameForGrid = currentUsesTuiViewport && (columnsChanged || rowsChanged)
         if (holdCompleteFrameForGrid) {
             // Keep the old complete physical grid until output settles after SIGWINCH. Publishing
@@ -1892,10 +1502,6 @@ private fun TerminalInteractivePanel(
                 delay(TERMINAL_RESIZE_RENDER_FALLBACK_MS)
                 if (resizeAwaitingTuiRedraw.getAndSet(false)) {
                     renderTerminalFrame()
-                    if (shouldFollowTerminalBottom() && wasNearBottom) {
-                        withFrameNanos { }
-                        runCatching { scrollTerminalContentBottomToIme(origin = ViewportScrollOrigin.RESIZE) }
-                    }
                 }
             })
             bgManager.resizeInteractiveSession(
@@ -1917,46 +1523,21 @@ private fun TerminalInteractivePanel(
             )
             if (sessionTerminalEmulator != null) renderTerminalFrame()
         }
-        if (shouldFollowTerminalBottom() && wasNearBottom) {
-            withFrameNanos { }
-            runCatching { scrollTerminalContentBottomToIme(origin = ViewportScrollOrigin.RESIZE) }
-        }
     }
 
-    val viewportInitialized = remember(processId) { AtomicBoolean(false) }
     LaunchedEffect(processId, restoredViewportState) {
-        snapshotFlow {
-            Triple(outputViewportHeightPx, terminalRenderedRows.size, outputScroll.maxValue)
-        }.first { (viewportHeight, renderedRows, _) -> viewportHeight > 0 && renderedRows > 0 }
-        // ScrollState.maxValue is committed after content measurement. Wait for the complete
-        // placement before applying a semantic bottom anchor or a saved manual offset.
+        snapshotFlow { outputViewportHeightPx }.first { it > 0 }
         withFrameNanos { }
-        withFrameNanos { }
-        val restored = restoredViewportState
-        if (restored != null && !restored.autoScroll) {
-            runCatching { scrollTerminalTo(restored.verticalOffsetPx, ViewportScrollOrigin.RESTORE) }
-            if (restored.anchorLineId == null) captureLockedViewportAnchor()
-            viewportMode = ViewportMode.LOCKED
-        } else if (autoScroll) {
-            setViewportFollow(true)
-            runCatching { scrollTerminalContentBottomToIme(origin = ViewportScrollOrigin.RESTORE) }
-        } else {
-            captureLockedViewportAnchor()
-            viewportMode = ViewportMode.LOCKED
+        restoredViewportState?.let {
+            horizontalScroll.scrollTo(it.horizontalOffsetPx.coerceIn(0, horizontalScroll.maxValue))
         }
-        restored?.let {
-            runCatching { horizontalScroll.scrollTo(it.horizontalOffsetPx.coerceIn(0, horizontalScroll.maxValue)) }
-        }
-        viewportInitialized.set(true)
-        saveTerminalViewport()
     }
 
-    LaunchedEffect(processId, outputScroll, horizontalScroll) {
-        snapshotFlow { Triple(outputScroll.value, horizontalScroll.value, autoScroll) }
-            .distinctUntilChanged()
-            .collect {
-                if (viewportInitialized.get()) saveTerminalViewport()
-            }
+    LaunchedEffect(processId, outputScroll, horizontalScroll, viewportController) {
+        combine(
+            snapshotFlow { outputScroll.value to horizontalScroll.value },
+            viewportController.state,
+        ) { _, state -> state }.collect { saveTerminalViewport() }
     }
 
     DisposableEffect(processId) {
@@ -1965,45 +1546,41 @@ private fun TerminalInteractivePanel(
             renderJob.getAndSet(null)?.cancel()
             resizeRenderFallbackJob.getAndSet(null)?.cancel()
             gridBlankCommitJob.getAndSet(null)?.cancel()
-            imeViewportRestoreJob.getAndSet(null)?.cancel()
-            placementViewportAnchor.set(null)
+            placementHorizontalOffset.set(null)
             rawInputChannel.close()
             rawMouseChannel.close()
-            if (viewportInitialized.get()) saveTerminalViewport()
+            saveTerminalViewport()
         }
     }
 
-    LaunchedEffect(processId, outputScroll) {
+    LaunchedEffect(processId, outputScroll, viewportController) {
         snapshotFlow {
-            TerminalScrollSnapshot(
-                maxScrollPx = outputScroll.maxValue,
-                renderedRowCount = terminalRenderedRows.size,
-                viewportHeightPx = outputViewportHeightPx,
-                autoScroll = autoScroll,
-                usesTuiViewport = currentUsesTuiViewport,
-                mode = viewportMode,
-                anchorLineId = viewportAnchorLineId,
-                anchorClippedTopPx = viewportAnchorClippedTopPx,
-                anchorScreenGeneration = viewportAnchorScreenGeneration,
-                anchorHistoryGeneration = viewportAnchorHistoryGeneration,
-                cellHeightPx = terminalCellHeightPx,
-                imeAnchorRevision = imeViewportAnchorRevision,
-                frameRevision = terminalViewportFrame.revision,
-                screenGeneration = terminalViewportFrame.screenGeneration,
-                historyGeneration = terminalViewportFrame.historyGeneration,
-            )
-        }.distinctUntilChanged().collect { snapshot ->
-            if (snapshot.renderedRowCount <= 0 || snapshot.viewportHeightPx <= 0) return@collect
-            if (!viewportInitialized.get() && viewportMode == ViewportMode.LOCKED && viewportAnchorLineId == null) return@collect
+            TerminalViewportRenderSnapshot(terminalViewportFrame.revision, terminalRenderedRows.size, viewportMetrics())
+        }.collect {
+            // Wait at most one frame, without restarting the wait for every output/IME update.
+            // Read the latest complete frame and measurements when the wait finishes.
             withFrameNanos { }
-            val target = reduceTerminalViewport()
-            if (target != outputScroll.value) {
-                runCatching { scrollTerminalTo(target, ViewportScrollOrigin.REDUCER) }
-            }
-            if (viewportMode == ViewportMode.LOCKED) return@collect
-            val imeAnchor = imeViewportAnchor.get()
-            if (currentImeVisible && imeAnchor?.followBottom == true && !currentShouldAvoidIme) {
-                runCatching { scrollTerminalTo(imeAnchor.offsetPx, ViewportScrollOrigin.IME) }
+            viewportController.updateViewport(
+                frame = terminalViewportFrame,
+                renderedRows = terminalRenderedRows.size,
+                metrics = viewportMetrics(),
+                currentScrollPx = outputScroll.value,
+            )
+        }
+    }
+
+    LaunchedEffect(processId, outputScroll, viewportController) {
+        // The sole vertical ScrollState writer. A newer effect or user gesture cancels the old one.
+        viewportController.state.map { it.scrollEffect }.distinctUntilChanged().collectLatest { effect ->
+            if (effect == null) return@collectLatest
+            var completed = false
+            try {
+                if (!viewportController.isCurrent(effect)) return@collectLatest
+                val target = effect.targetScrollPx.coerceIn(0, outputScroll.maxValue)
+                if (effect.animated) outputScroll.animateScrollTo(target) else outputScroll.scrollTo(target)
+                completed = true
+            } finally {
+                viewportController.scrollFinished(effect.id, outputScroll.value, completed)
             }
         }
     }
@@ -2025,6 +1602,22 @@ private fun TerminalInteractivePanel(
         }
     }
 
+    val defaultFlingBehavior = ScrollableDefaults.flingBehavior()
+    val viewportFlingBehavior = remember(viewportController, outputScroll, defaultFlingBehavior) {
+        object : FlingBehavior {
+            override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
+                // A fast-fling jump consumes all velocity in onPreFling; don't cancel that jump.
+                if (initialVelocity == 0f) return 0f
+                val token = viewportController.beginUserScroll(ViewportScrollOrigin.USER_FLING, outputScroll.value)
+                try {
+                    return with(defaultFlingBehavior) { this@performFling.performFling(initialVelocity) }
+                } finally {
+                    viewportController.endUserScroll(token)
+                }
+            }
+        }
+    }
+
     var lastFastFlingDirection by remember(processId) { mutableIntStateOf(0) }
     var lastFastFlingAt by remember(processId) { mutableLongStateOf(0L) }
     var fastFlingCount by remember(processId) { mutableIntStateOf(0) }
@@ -2033,18 +1626,29 @@ private fun TerminalInteractivePanel(
         terminalPanMode,
         selectionMode,
         fastFlingRequiredCount,
-        terminalCellHeightPx,
+        viewportController,
     ) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 if (source == NestedScrollSource.UserInput && available.y != 0f) {
-                    terminalScrollOperation = TerminalScrollOperation(ViewportScrollOrigin.USER_DRAG)
+                    viewportController.beginUserScroll(ViewportScrollOrigin.USER_DRAG, outputScroll.value)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                // Capture after consumption, including the final delta. Layout clamps and our own
+                // programmatic animations never pass this user-input gate.
+                val gesture = viewportController.state.value.gesture
+                val userDelta = source == NestedScrollSource.UserInput ||
+                    (source == NestedScrollSource.SideEffect && gesture?.origin == ViewportScrollOrigin.USER_FLING)
+                if (consumed.y != 0f && userDelta && gesture != null) {
+                    viewportController.userScrolled(gesture.id, outputScroll.value)
                 }
                 return Offset.Zero
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                terminalScrollOperation = TerminalScrollOperation(ViewportScrollOrigin.USER_FLING)
                 val fastFlingEnabled = terminalPanMode && !selectionMode
                 if (!fastFlingEnabled) return Velocity.Zero
                 if (abs(available.y) < TERMINAL_FAST_FLING_VELOCITY_PX) return Velocity.Zero
@@ -2063,32 +1667,17 @@ private fun TerminalInteractivePanel(
                 fastFlingCount = 0
                 var consumed = false
                 if (direction > 0) {
-                    if (terminalViewportBottomScrollTarget() - outputScroll.value > TERMINAL_EDGE_THRESHOLD_PX) {
-                        setViewportFollow(true)
-                        scrollTerminalTo(reduceTerminalViewport(), ViewportScrollOrigin.JUMP, animated = true)
-                        saveTerminalViewport()
+                    if (!viewportController.isNearBottom(outputScroll.value)) {
+                        viewportController.jumpToBottom(outputScroll.value)
                         consumed = true
                     }
                 } else {
                     if (outputScroll.value > TERMINAL_EDGE_THRESHOLD_PX) {
-                        setViewportFollow(false)
-                        captureLockedViewportAnchor(scrollPx = 0)
-                        scrollTerminalTo(0, ViewportScrollOrigin.JUMP, animated = true)
-                        saveTerminalViewport()
+                        viewportController.jumpToTop(outputScroll.value)
                         consumed = true
                     }
                 }
                 return if (consumed) available else Velocity.Zero
-            }
-
-            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                val operation = terminalScrollOperation
-                if (operation?.origin == ViewportScrollOrigin.USER_FLING &&
-                    terminalScrollOperation === operation
-                ) {
-                    terminalScrollOperation = null
-                }
-                return Velocity.Zero
             }
         }
     }
@@ -2296,10 +1885,9 @@ private fun TerminalInteractivePanel(
                             // PTY rows computation (which also subtracts the strip), so the last rows
                             // are never pushed below the visible/IME area when the status bar is shown.
                             val viewportHeightPx = (size.height - terminalVisualTopPaddingPx).coerceAtLeast(0)
-                            recordImeTransition(currentImeVisible, currentViewportHeightPx = viewportHeightPx)
+                            recordImeTransition(currentImeVisible)
                             outputViewportHeightPx = viewportHeightPx
                             val imeTransitionActive = currentImeVisible || currentActualImeHeightPx > 0 ||
-                                imeViewportAnchor.get() != null ||
                                 System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
                             if (currentFullscreen && (!imeTransitionActive || fullOutputViewportHeightPx.get() == 0)) {
                                 fullOutputViewportHeightPx.set(viewportHeightPx)
@@ -2327,7 +1915,6 @@ private fun TerminalInteractivePanel(
                                         viewportRowResizeJob.set(scope.launch {
                                             delay(TERMINAL_PTY_RESIZE_DEBOUNCE_MS)
                                             val transitionStillActive = currentImeVisible || currentActualImeHeightPx > 0 ||
-                                                imeViewportAnchor.get() != null ||
                                                 System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
                                             val stableRows = measuredTerminalRows.get()
                                             if (currentFullscreen && !transitionStillActive && stableRows != terminalRows) {
@@ -2355,7 +1942,11 @@ private fun TerminalInteractivePanel(
                             // Keep a tiny manual viewport pan available in TOUCH/selection modes. In
                             // MOUSE mode, do not let Compose scroll gestures compete with xterm mouse
                             // events intended for the TUI.
-                            .verticalScroll(outputScroll, enabled = terminalPanMode || selectionMode)
+                            .verticalScroll(
+                                outputScroll,
+                                enabled = terminalPanMode || selectionMode,
+                                flingBehavior = viewportFlingBehavior,
+                            )
                     ) {
                     val terminalContent: @Composable () -> Unit = {
                         if (terminalRenderedRows.isEmpty()) {

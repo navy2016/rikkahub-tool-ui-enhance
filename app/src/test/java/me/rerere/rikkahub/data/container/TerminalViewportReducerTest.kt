@@ -368,19 +368,6 @@ class TerminalViewportReducerTest {
     }
 
     @Test
-    fun onlyUserScrollOriginsCanChangeViewportMode() {
-        assertEquals(true, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.USER_DRAG))
-        assertEquals(true, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.USER_FLING))
-        assertEquals(false, shouldUpdateViewportFromScroll(false, ViewportScrollOrigin.USER_DRAG))
-        assertEquals(false, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.REDUCER))
-        assertEquals(false, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.RESTORE))
-        assertEquals(false, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.IME))
-        assertEquals(false, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.RESIZE))
-        assertEquals(false, shouldUpdateViewportFromScroll(true, ViewportScrollOrigin.JUMP))
-        assertEquals(false, shouldUpdateViewportFromScroll(true, null))
-    }
-
-    @Test
     fun tailUsesSemanticTargetInsteadOfContainerMaximum() {
         val input = ViewportInput(
             mode = ViewportMode.TAIL,

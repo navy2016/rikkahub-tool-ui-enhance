@@ -137,6 +137,7 @@ jobs:
               --tests me.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest \
               --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest \
               --tests me.rerere.rikkahub.data.container.TerminalViewportReducerTest \
+              --tests me.rerere.rikkahub.data.container.TerminalViewportControllerTest \
               --stacktrace; then
               exit 0
             fi

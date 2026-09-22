@@ -32,11 +32,6 @@ enum class ViewportScrollOrigin(val isUserInput: Boolean) {
     JUMP(false),
 }
 
-internal fun shouldUpdateViewportFromScroll(
-    isScrollInProgress: Boolean,
-    origin: ViewportScrollOrigin?,
-): Boolean = isScrollInProgress && origin?.isUserInput == true
-
 /**
  * Pure reducer input: the previous viewport state and the new terminal frame.
  * Produces a new viewport state and a target scroll offset (in pixels) that
@@ -104,7 +99,6 @@ fun reduceViewport(
     frame: TerminalEmulator.RenderFrame,
     renderedRows: Int,
 ): ViewportOutput {
-    val renderedLineIds = buildLineIdsFromFrame(frame, renderedRows)
     val maxScroll = input.maxScrollPx
 
     fun fallback(trimmed: Boolean = true): ViewportOutput {
@@ -142,6 +136,7 @@ fun reduceViewport(
         }
 
         ViewportMode.LOCKED -> {
+            val renderedLineIds = buildLineIdsFromFrame(frame, renderedRows)
             val anchorId = input.anchorLineId ?: run {
                 return fallback()
             }
