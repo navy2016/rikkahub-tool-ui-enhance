@@ -8,6 +8,7 @@ kotlin = "2.3.10"
 coreKtx = "1.18.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
+androidxTestRunner = "1.7.0"
 espressoCore = "3.7.0"
 commons-text = "1.15.0"
 lifecycleRuntimeKtx = "2.10.0"
@@ -77,6 +78,7 @@ jlatexmath-font-greek = { module = "com.github.rikkahub.jlatexmath-android:jlate
 jlatexmath-font-cyrillic = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath-font-cyrillic", version.ref = "jlatexmath" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
+androidx-test-runner = { module = "androidx.test:runner", version.ref = "androidxTestRunner" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycleRuntimeKtx" }
