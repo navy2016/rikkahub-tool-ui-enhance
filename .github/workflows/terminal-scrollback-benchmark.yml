@@ -37,10 +37,25 @@ jobs:
       - name: Test fixtures and build isolated benchmark APKs
         run: |
           chmod +x gradlew
+          mkdir -p artifacts/terminal-scrollback
+          set +e
           ./gradlew -PterminalBenchmarks=true \
             :benchmarks:terminal-target:testBenchmarkUnitTest \
             :benchmarks:terminal-target:assembleBenchmark \
-            :benchmarks:terminal-macrobenchmark:assembleBenchmark --stacktrace
+            :benchmarks:terminal-macrobenchmark:assembleBenchmark --stacktrace \
+            2>&1 | tee artifacts/terminal-scrollback/build.log
+          result=${PIPESTATUS[0]}
+          if [ "$result" != 0 ]; then
+            python3 - <<'PYERROR'
+          from pathlib import Path
+          text = Path("artifacts/terminal-scrollback/build.log").read_text()
+          errors = "\n".join(line for line in text.splitlines() if line.startswith("e:"))
+          reason = text.split("* What went wrong:")[-1].split("* Try:")[0]
+          message = (errors + "\n" + reason)[:6000]
+          print("::error title=Benchmark build failed::" + message.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))
+          PYERROR
+            exit "$result"
+          fi
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -68,6 +83,11 @@ jobs:
             --sha "$GITHUB_SHA" --environment ci-emulator --require-complete \
             --output artifacts/terminal-scrollback/summary.md
           cat artifacts/terminal-scrollback/summary.md >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PYSUMMARY'
+          from pathlib import Path
+          text = Path("artifacts/terminal-scrollback/summary.md").read_text()
+          print("::notice title=Terminal rendering measurements::" + text.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))
+          PYSUMMARY
       - name: Upload raw data, traces, logs and APKs
         if: always()
         uses: actions/upload-artifact@v4
