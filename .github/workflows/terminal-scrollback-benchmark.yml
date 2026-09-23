@@ -11,6 +11,8 @@ on:
     branches: [fix/terminal-viewport-semantic-reducer]
     paths:
       - 'benchmarks/**'
+      - '!benchmarks/results/**'
+      - '!benchmarks/README.md'
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportReducer.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt'

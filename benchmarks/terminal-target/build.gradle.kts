@@ -75,7 +75,11 @@ android {
     buildFeatures { compose = true }
 }
 androidComponents {
-    beforeVariants { it.enable = it.buildType == "benchmark" }
+    beforeVariants {
+        it.enable = it.buildType == "benchmark"
+        // AGP 9 enables host tests only for the tested build type (debug) by default.
+        it.enableUnitTest = it.buildType == "benchmark"
+    }
     onVariants { variant ->
         variant.sources.java?.addGeneratedSourceDirectory(syncTerminalSources) { it.outputDirectory }
         variant.sources.res?.addGeneratedSourceDirectory(syncTerminalResources) { it.outputDirectory }

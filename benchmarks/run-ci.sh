@@ -8,7 +8,28 @@ iterations="${TERMINAL_BENCHMARK_ITERATIONS:-3}"
 }
 output=artifacts/terminal-scrollback
 mkdir -p "$output"
-trap 'adb logcat -d > "$output/logcat.txt"; adb shell dumpsys meminfo me.rerere.rikkahub.terminalbenchmark > "$output/meminfo.txt" || true' EXIT
+collect_diagnostics() {
+  result=$?
+  adb logcat -d > "$output/logcat.txt" || true
+  adb shell dumpsys meminfo me.rerere.rikkahub.terminalbenchmark > "$output/meminfo.txt" || true
+  if [ "$result" != 0 ]; then
+    python3 - <<'PYERROR'
+from pathlib import Path
+import xml.etree.ElementTree as ET
+messages = []
+for path in Path("benchmarks/terminal-macrobenchmark/build/outputs").rglob("TEST-*.xml"):
+    for failure in ET.parse(path).getroot().iter("failure"):
+        messages.append((failure.get("message", "") + "\n" + (failure.text or ""))[:2000])
+lines = Path("artifacts/terminal-scrollback/logcat.txt").read_text().splitlines()
+for index, line in enumerate(lines):
+    if "FATAL EXCEPTION" in line:
+        messages.append("\n".join(lines[index:index + 28]))
+message = "\n\n".join(messages)[:6000] or "See instrumentation reports and logcat in the artifact"
+print("::error title=Benchmark instrumentation failed::" + message.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))
+PYERROR
+  fi
+}
+trap collect_diagnostics EXIT
 adb logcat -c
 {
   printf 'sha=%s\niterations=%s\nenvironment=ci-emulator\n' "${GITHUB_SHA:-unknown}" "$iterations"
