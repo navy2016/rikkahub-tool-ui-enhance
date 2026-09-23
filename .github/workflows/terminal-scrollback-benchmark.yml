@@ -1,0 +1,82 @@
+name: Terminal Scrollback Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: 'Measured repetitions per size/scenario (1-50)'
+        default: '3'
+        required: true
+  push:
+    branches: [fix/terminal-viewport-semantic-reducer]
+    paths:
+      - 'benchmarks/**'
+      - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportReducer.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt'
+      - '.github/workflows/terminal-scrollback-benchmark.yml'
+      - 'settings.gradle.kts'
+      - 'gradle/libs.versions.toml'
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TERMINAL_BENCHMARK_ITERATIONS: ${{ inputs.iterations || '3' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test fixtures and build isolated benchmark APKs
+        run: |
+          chmod +x gradlew
+          ./gradlew -PterminalBenchmarks=true \
+            :benchmarks:terminal-target:testBenchmarkUnitTest \
+            :benchmarks:terminal-target:assembleBenchmark \
+            :benchmarks:terminal-macrobenchmark:assembleBenchmark --stacktrace
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Measure 1k / 5k / 10k on one emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: default
+          profile: Nexus 6
+          cores: 2
+          ram-size: 4096M
+          heap-size: 768M
+          disable-animations: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash benchmarks/run-ci.sh
+      - name: Summarize and validate measurements
+        if: always()
+        run: |
+          python3 -m unittest discover -s benchmarks -p 'test_*.py'
+          python3 benchmarks/summarize.py benchmarks/terminal-macrobenchmark/build/outputs \
+            --sha "$GITHUB_SHA" --environment ci-emulator --require-complete \
+            --output artifacts/terminal-scrollback/summary.md
+          cat artifacts/terminal-scrollback/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload raw data, traces, logs and APKs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-scrollback-benchmark-${{ github.sha }}
+          path: |
+            artifacts/terminal-scrollback/**
+            benchmarks/terminal-target/build/outputs/apk/benchmark/**
+            benchmarks/terminal-target/build/test-results/**
+            benchmarks/terminal-macrobenchmark/build/outputs/**
+            benchmarks/terminal-macrobenchmark/build/reports/**
+          retention-days: 14

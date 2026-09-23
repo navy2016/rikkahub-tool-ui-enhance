@@ -41,3 +41,9 @@ include(":common")
 include(":document")
 include(":web")
 
+
+// Isolated, opt-in rendering benchmarks; never part of normal APK/release builds.
+if (providers.gradleProperty("terminalBenchmarks").orNull == "true") {
+    include(":benchmarks:terminal-target")
+    include(":benchmarks:terminal-macrobenchmark")
+}

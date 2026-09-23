@@ -54,9 +54,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -97,7 +95,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -132,7 +129,6 @@ import me.rerere.rikkahub.data.container.isConfiguredTerminalCommand
 import me.rerere.rikkahub.data.container.isTuiCommand
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
-import me.rerere.rikkahub.data.container.buildLineIdsFromFrame
 import me.rerere.rikkahub.data.container.terminalEffectiveScreenBottomRow
 import me.rerere.rikkahub.data.container.ViewportScrollOrigin
 import me.rerere.rikkahub.data.container.ControlInput
@@ -170,8 +166,6 @@ private const val TERMINAL_PTY_RESIZE_DEBOUNCE_MS = 160L
 private const val TERMINAL_IME_RESIZE_DEBOUNCE_MS = 120L
 private const val TERMINAL_RESIZE_RENDER_FALLBACK_MS = 180L
 private const val TERMINAL_RESIZE_REDRAW_SETTLE_MS = 32L
-private const val TERMINAL_GRID_CLEAR_GRACE_MS = 50L
-private const val TERMINAL_GRID_STABLE_BOTTOM_ROWS = 8
 private const val TERMINAL_FAST_FLING_VELOCITY_PX = 3500f
 private const val TERMINAL_FAST_FLING_WINDOW_MS = 700L
 private const val TERMINAL_EDGE_THRESHOLD_PX = 80
@@ -260,28 +254,6 @@ private data class TerminalViewportRenderSnapshot(
     val renderedRowCount: Int,
     val metrics: TerminalViewportMetrics,
 )
-
-@Stable
-private class TerminalRenderedRowState(
-    val lineId: Long,
-    initialText: AnnotatedString,
-) {
-    var text by mutableStateOf(initialText)
-    var pendingBlankSinceMs: Long = 0L
-}
-
-@Composable
-private fun TerminalRenderedRow(
-    state: TerminalRenderedRowState,
-    style: TextStyle,
-) {
-    Text(
-        text = state.text,
-        style = style,
-        softWrap = false,
-        maxLines = 1,
-    )
-}
 
 private fun shouldAvoidTerminalIme(
     terminalContentHeightPx: Int,
@@ -867,18 +839,7 @@ private fun TerminalInteractivePanel(
     var input by remember { mutableStateOf("") }
     val initialTerminalRenderFrame = remember(processId) { terminalEmulator.renderFrame() }
     val terminalRenderedRows = remember(processId) {
-        mutableStateListOf<TerminalRenderedRowState>().apply {
-            val initialLineIds = buildLineIdsFromFrame(
-                initialTerminalRenderFrame,
-                initialTerminalRenderFrame.rows.size,
-            )
-            addAll(initialTerminalRenderFrame.rows.mapIndexed { index, row ->
-                TerminalRenderedRowState(
-                    lineId = initialLineIds.getOrNull(index) ?: Long.MIN_VALUE + index,
-                    initialText = row.text,
-                )
-            })
-        }
+        createTerminalRenderedRows(initialTerminalRenderFrame)
     }
     var terminalContentBounds by remember(processId) {
         mutableStateOf(initialTerminalRenderFrame.contentBounds)
@@ -1090,48 +1051,18 @@ private fun TerminalInteractivePanel(
         if (!forcePendingGridBlanks && terminalEmulator.revision() == terminalFrameRevision) return
         val frame = terminalEmulator.renderFrame()
         if (!forcePendingGridBlanks && frame.revision == terminalFrameRevision) return
-        val rendered = frame.rows
         val bounds = frame.contentBounds
         val now = System.currentTimeMillis()
         val usesTuiViewport = commandIsTui || frame.isAlternateScreen || currentPreserveFullTerminalGrid
         var hasDeferredGridBlank = false
         Snapshot.withMutableSnapshot {
-            val nextLineIds = buildLineIdsFromFrame(frame, rendered.size).ifEmpty {
-                rendered.indices.map { index -> Long.MIN_VALUE + index }
-            }
-            val idsChanged = terminalRenderedRows.size != rendered.size ||
-                terminalRenderedRows.indices.any { terminalRenderedRows[it].lineId != nextLineIds[it] }
-            if (idsChanged) {
-                // Scrollback trim shifts every positional row. Reuse state by stable ID so a row's
-                // pending blank grace period and Compose slot follow the row, not its old index.
-                val existing = terminalRenderedRows.associateBy { it.lineId }
-                terminalRenderedRows.clear()
-                rendered.forEachIndexed { index, row ->
-                    terminalRenderedRows.add(
-                        existing[nextLineIds[index]] ?: TerminalRenderedRowState(nextLineIds[index], row.text)
-                    )
-                }
-            }
-            val stableGridStart = (rendered.size - TERMINAL_GRID_STABLE_BOTTOM_ROWS).coerceAtLeast(0)
-            for (index in rendered.indices) {
-                val rowState = terminalRenderedRows[index]
-                val next = rendered[index].text
-                val deferTransientGridClear = usesTuiViewport &&
-                    index >= stableGridStart &&
-                    rowState.text.text.isNotBlank() &&
-                    next.text.isBlank()
-                if (deferTransientGridClear && !forcePendingGridBlanks) {
-                    if (rowState.pendingBlankSinceMs == 0L) rowState.pendingBlankSinceMs = now
-                    if (now - rowState.pendingBlankSinceMs < TERMINAL_GRID_CLEAR_GRACE_MS) {
-                        hasDeferredGridBlank = true
-                        continue
-                    }
-                } else if (!next.text.isBlank()) {
-                    rowState.pendingBlankSinceMs = 0L
-                }
-                if (rowState.text != next) rowState.text = next
-                rowState.pendingBlankSinceMs = 0L
-            }
+            hasDeferredGridBlank = synchronizeTerminalRenderedRows(
+                terminalRenderedRows,
+                frame,
+                usesTuiViewport = usesTuiViewport,
+                forcePendingGridBlanks = forcePendingGridBlanks,
+                nowMs = now,
+            )
             terminalContentBounds = bounds
             terminalScreenStartRow = frame.screenStartRow
             terminalActiveScreenBottomRow = terminalEffectiveScreenBottomRow(
@@ -1972,23 +1903,7 @@ private fun TerminalInteractivePanel(
                             )
                     ) {
                     val terminalContent: @Composable () -> Unit = {
-                        if (terminalRenderedRows.isEmpty()) {
-                            Text(
-                                text = "等待输出...",
-                                style = terminalTextStyle,
-                                softWrap = false,
-                                maxLines = 1
-                            )
-                        } else {
-                            terminalRenderedRows.forEach { row ->
-                                key(row.lineId) {
-                                    TerminalRenderedRow(
-                                        state = row,
-                                        style = terminalTextStyle,
-                                    )
-                                }
-                            }
-                        }
+                        TerminalRenderedRows(terminalRenderedRows, terminalTextStyle)
                     }
                     if (selectionMode) {
                         SelectionContainer {

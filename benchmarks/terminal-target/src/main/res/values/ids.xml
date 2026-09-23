@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <item type="id" name="benchmark_status" />
+  <item type="id" name="benchmark_mount" />
+  <item type="id" name="benchmark_run" />
+</resources>

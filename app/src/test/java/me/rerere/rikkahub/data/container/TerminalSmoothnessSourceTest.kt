@@ -11,6 +11,10 @@ class TerminalSmoothnessSourceTest {
         File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt"),
         File("src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt")
     ).first { it.isFile }.readText()
+    private val renderedRowsSource = listOf(
+        File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt"),
+        File("src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt"),
+    ).first { it.isFile }.readText()
     private val chatPageSource = listOf(
         File("app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt"),
         File("src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt")
@@ -103,27 +107,30 @@ class TerminalSmoothnessSourceTest {
 
     @Test
     fun renderedRowsFollowStableIdsWhenScrollbackIsTrimmed() {
-        assertTrue(processSessionSource.contains("val lineId: Long"))
-        assertTrue(processSessionSource.contains("buildLineIdsFromFrame(frame, rendered.size)"))
-        assertTrue(processSessionSource.contains("existing[nextLineIds[index]]"))
-        assertTrue(processSessionSource.contains("terminalRenderedRows.indices.any"))
-        assertTrue(processSessionSource.contains("key(row.lineId)"))
-        assertFalse(processSessionSource.contains("TerminalRenderedRowState(it.text)"))
+        assertTrue(processSessionSource.contains("createTerminalRenderedRows(initialTerminalRenderFrame)"))
+        assertTrue(processSessionSource.contains("synchronizeTerminalRenderedRows("))
+        assertTrue(processSessionSource.contains("TerminalRenderedRows(terminalRenderedRows, terminalTextStyle)"))
+        assertTrue(renderedRowsSource.contains("val lineId: Long"))
+        assertTrue(renderedRowsSource.contains("buildLineIdsFromFrame(frame, rendered.size)"))
+        assertTrue(renderedRowsSource.contains("existing[nextLineIds[index]]"))
+        assertTrue(renderedRowsSource.contains("terminalRenderedRows.indices.any"))
+        assertTrue(renderedRowsSource.contains("key(row.lineId)"))
+        assertFalse(renderedRowsSource.contains("TerminalRenderedRowState(it.text)"))
     }
 
     @Test
     fun gridRenderingReusesRowsAndProtectsTuiBottomChrome() {
-        assertTrue(processSessionSource.contains("class TerminalRenderedRowState"))
-        assertTrue(processSessionSource.contains("mutableStateListOf<TerminalRenderedRowState>()"))
+        assertTrue(renderedRowsSource.contains("class TerminalRenderedRowState"))
+        assertTrue(renderedRowsSource.contains("mutableStateListOf<TerminalRenderedRowState>()"))
         assertTrue(processSessionSource.contains("Snapshot.withMutableSnapshot"))
-        assertTrue(processSessionSource.contains("if (rowState.text != next) rowState.text = next"))
-        assertTrue(processSessionSource.contains("TERMINAL_GRID_STABLE_BOTTOM_ROWS"))
+        assertTrue(renderedRowsSource.contains("if (rowState.text != next) rowState.text = next"))
+        assertTrue(renderedRowsSource.contains("TERMINAL_GRID_STABLE_BOTTOM_ROWS"))
         assertTrue(processSessionSource.contains("TERMINAL_GRID_CLEAR_GRACE_MS"))
         assertTrue(processSessionSource.contains("holdCompleteFrameForGrid"))
         assertTrue(processSessionSource.contains("resizeAwaitingTuiRedraw.set(true)"))
         assertTrue(processSessionSource.contains("val frame = terminalEmulator.renderFrame()"))
         assertTrue(processSessionSource.contains("if (!forcePendingGridBlanks && frame.revision == terminalFrameRevision) return"))
-        assertTrue(processSessionSource.contains("val rendered = frame.rows"))
+        assertTrue(renderedRowsSource.contains("val rendered = frame.rows"))
         assertTrue(processSessionSource.contains("val bounds = frame.contentBounds"))
         assertTrue(processSessionSource.contains("terminalModeSummary = frame.modeSummary"))
         assertTrue(processSessionSource.contains("terminalScreenStartRow = frame.screenStartRow"))
