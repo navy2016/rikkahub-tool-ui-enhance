@@ -2,6 +2,7 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.FileSystemOperations
 import org.gradle.api.provider.ListProperty
 import javax.inject.Inject
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
@@ -52,6 +53,7 @@ android {
     // The shared Type.kt refers to the production R namespace. The installable app ID is separate.
     namespace = "me.rerere.rikkahub"
     compileSdk = 36
+    testBuildType = "benchmark" // AGP 9 enables host tests for this build type by default.
     defaultConfig {
         applicationId = "me.rerere.rikkahub.terminalbenchmark"
         minSdk = 29
@@ -75,11 +77,7 @@ android {
     buildFeatures { compose = true }
 }
 androidComponents {
-    beforeVariants {
-        it.enable = it.buildType == "benchmark"
-        // AGP 9 enables host tests only for the tested build type (debug) by default.
-        it.enableUnitTest = it.buildType == "benchmark"
-    }
+    beforeVariants { it.enable = it.buildType == "benchmark" }
     onVariants { variant ->
         variant.sources.java?.addGeneratedSourceDirectory(syncTerminalSources) { it.outputDirectory }
         variant.sources.res?.addGeneratedSourceDirectory(syncTerminalResources) { it.outputDirectory }
@@ -88,6 +86,8 @@ androidComponents {
 composeCompiler {
     stabilityConfigurationFiles.add(rootProject.layout.projectDirectory.file("app/compose_compiler_config.conf"))
 }
+
+kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 
 dependencies {
     implementation(platform(libs.androidx.compose.bom))

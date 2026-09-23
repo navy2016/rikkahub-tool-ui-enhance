@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.test)
 }
@@ -26,6 +28,8 @@ android {
 androidComponents {
     beforeVariants { it.enable = it.buildType == "benchmark" }
 }
+kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
+
 dependencies {
     implementation(libs.androidx.junit)
     implementation(libs.androidx.uiautomator)
