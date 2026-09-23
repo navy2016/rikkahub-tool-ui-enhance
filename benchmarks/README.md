@@ -99,5 +99,13 @@ row-sync traces and memory together, then reproduce on a representative physical
   intact; rerun the existing viewport event-sequence tests and this same benchmark.
 - Do not merge a lazy migration based solely on emulator timings or on a JVM `renderFrame` microbenchmark.
 
-Measured reports belong in `results/` with the measured commit/workflow ID and explicit environment.
-Until a run completes, there are no fabricated or estimated “baseline” numbers in this directory.
+## Recorded baselines
+
+- [2026-09-23: eager Column, 1k / 5k / 10k](results/2026-09-23-da85ea9-ci-emulator.md)
+  — measured commit `da85ea9`, API 34 CI emulator, 3 repetitions for each of 15 cases;
+  benchmark and terminal regression workflows both passed on that SHA.
+
+This baseline shows particularly poor scaling for append/trim, while the 24-row alternate-screen
+control stays roughly flat. The next experiment is a **benchmark-only, ordinary-history LazyColumn
+A/B candidate**, not a production viewport migration. No lazy-renderer speedup has been measured yet.
+The report includes limitations, raw-artifact provenance and the integration checks required later.
