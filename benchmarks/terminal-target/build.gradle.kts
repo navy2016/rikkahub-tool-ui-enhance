@@ -1,3 +1,8 @@
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.FileSystemOperations
+import org.gradle.api.provider.ListProperty
+import javax.inject.Inject
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -5,20 +10,42 @@ plugins {
 
 // Compile the real production renderer, not a benchmark-only reimplementation. Generated copies
 // live only in build/ so changes to the production files automatically invalidate this task.
-val terminalSources = layout.buildDirectory.dir("generated/terminalSources")
-val terminalResources = layout.buildDirectory.dir("generated/terminalResources")
-val syncTerminalSources by tasks.registering(Sync::class) {
-    from(rootProject.file("app/src/main/java")) {
-        include("me/rerere/rikkahub/utils/TerminalEmulator.kt")
-        include("me/rerere/rikkahub/data/container/TerminalViewportReducer.kt")
-        include("me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt")
-        include("me/rerere/rikkahub/ui/theme/Type.kt")
+abstract class SyncTerminalFiles @Inject constructor(
+    private val fileOperations: FileSystemOperations,
+) : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceDirectory: DirectoryProperty
+
+    @get:Input
+    abstract val includedPaths: ListProperty<String>
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun sync() {
+        fileOperations.sync {
+            from(sourceDirectory) { include(includedPaths.get()) }
+            into(outputDirectory)
+        }
     }
-    into(terminalSources)
 }
-val syncTerminalResources by tasks.registering(Sync::class) {
-    from(rootProject.file("app/src/main/res")) { include("font/jetbrains_mono.ttf") }
-    into(terminalResources)
+
+val syncTerminalSources by tasks.registering(SyncTerminalFiles::class) {
+    sourceDirectory.set(rootProject.layout.projectDirectory.dir("app/src/main/java"))
+    includedPaths.set(listOf(
+        "me/rerere/rikkahub/utils/TerminalEmulator.kt",
+        "me/rerere/rikkahub/data/container/TerminalViewportReducer.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt",
+        "me/rerere/rikkahub/ui/theme/Type.kt",
+    ))
+    outputDirectory.set(layout.buildDirectory.dir("generated/terminalSources"))
+}
+val syncTerminalResources by tasks.registering(SyncTerminalFiles::class) {
+    sourceDirectory.set(rootProject.layout.projectDirectory.dir("app/src/main/res"))
+    includedPaths.set(listOf("font/jetbrains_mono.ttf"))
+    outputDirectory.set(layout.buildDirectory.dir("generated/terminalResources"))
 }
 
 android {
@@ -46,15 +73,14 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
-    sourceSets.getByName("main") {
-        java.srcDir(terminalSources)
-        res.srcDir(terminalResources)
-    }
 }
 androidComponents {
     beforeVariants { it.enable = it.buildType == "benchmark" }
+    onVariants { variant ->
+        variant.sources.java?.addGeneratedSourceDirectory(syncTerminalSources) { it.outputDirectory }
+        variant.sources.res?.addGeneratedSourceDirectory(syncTerminalResources) { it.outputDirectory }
+    }
 }
-tasks.named("preBuild") { dependsOn(syncTerminalSources, syncTerminalResources) }
 composeCompiler {
     stabilityConfigurationFiles.add(rootProject.layout.projectDirectory.file("app/compose_compiler_config.conf"))
 }
