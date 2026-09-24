@@ -82,6 +82,11 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         settle()
         compose.runOnIdle {
             assertEquals(1, viewport.jumps.size)
+            assertEquals(ViewportGestureFixture.HISTORY_ROWS + ViewportGestureFixture.SCREEN_ROWS,
+                viewport.currentPx() / ViewportGestureFixture.ROW_HEIGHT)
+        }
+        settle()
+        compose.runOnIdle {
             assertTrue(viewport.diagnostics(), viewport.isAtBottom())
             assertEquals(ViewportMode.TAIL, viewport.controller.state.value.mode)
             assertEquals(1, viewport.composedScreens)
@@ -99,6 +104,10 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         settle()
         compose.runOnIdle {
             assertEquals(1, viewport.jumps.size)
+            assertEquals(0, viewport.currentPx())
+        }
+        settle()
+        compose.runOnIdle {
             assertTrue(viewport.diagnostics(), viewport.isAtTop())
             assertEquals(ViewportMode.LOCKED, viewport.controller.state.value.mode)
             assertEquals(viewport.frame.historyLineIds.first(), viewport.controller.state.value.anchor?.lineId)
@@ -118,8 +127,11 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         settle()
         compose.runOnIdle {
             assertEquals(1, viewport.jumps.size)
-            assertTrue(viewport.diagnostics(), viewport.isAtBottom())
+            assertEquals(ViewportGestureFixture.HISTORY_ROWS + ViewportGestureFixture.SCREEN_ROWS,
+                viewport.currentPx() / ViewportGestureFixture.ROW_HEIGHT)
         }
+        settle()
+        compose.runOnIdle { assertTrue(viewport.diagnostics(), viewport.isAtBottom()) }
     }
 
     @Test

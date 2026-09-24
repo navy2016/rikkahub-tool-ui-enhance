@@ -1495,17 +1495,13 @@ private fun TerminalInteractivePanel(
 
     LaunchedEffect(processId, outputScroll, viewportController) {
         // The sole vertical ScrollState writer. A newer effect or user gesture cancels the old one.
-        viewportController.state.map { it.scrollEffect }.distinctUntilChanged().collectLatest { effect ->
-            if (effect == null) return@collectLatest
-            var completed = false
-            try {
-                if (!viewportController.isCurrent(effect)) return@collectLatest
-                val target = effect.targetScrollPx.coerceIn(0, outputScroll.maxValue)
-                if (effect.animated) outputScroll.animateScrollTo(target) else outputScroll.scrollTo(target)
-                completed = true
-            } finally {
-                viewportController.scrollFinished(effect.id, outputScroll.value, completed)
-            }
+        runTerminalViewportScrollEffects(
+            controller = viewportController,
+            currentScrollPx = { outputScroll.value },
+            maxScrollPx = { outputScroll.maxValue },
+            isScrollInProgress = { outputScroll.isScrollInProgress },
+        ) { effect, target ->
+            if (effect.animated) outputScroll.animateScrollTo(target) else outputScroll.scrollTo(target)
         }
     }
 

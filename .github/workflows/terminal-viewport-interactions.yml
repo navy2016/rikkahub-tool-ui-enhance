@@ -5,7 +5,7 @@ on:
   push:
     branches: [fix/terminal-viewport-semantic-reducer]
     paths:
-      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportGestures.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewport*.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewport*.kt'

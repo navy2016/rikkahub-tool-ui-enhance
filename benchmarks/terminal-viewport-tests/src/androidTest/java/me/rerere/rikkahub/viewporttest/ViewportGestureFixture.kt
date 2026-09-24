@@ -37,9 +37,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
@@ -50,6 +47,7 @@ import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.TerminalViewportGestureConfig
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.rememberTerminalViewportGestures
+import me.rerere.rikkahub.ui.pages.container.runTerminalViewportScrollEffects
 import me.rerere.rikkahub.ui.pages.container.synchronizeTerminalRenderedRows
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.TerminalEmulator
@@ -161,9 +159,14 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
             }
         }
         LaunchedEffect(this) {
-            controller.state.map { it.scrollEffect }.distinctUntilChanged().collectLatest { effect ->
-                if (effect == null || !controller.isCurrent(effect)) return@collectLatest
-                var completed = false
+            runTerminalViewportScrollEffects(
+                controller = controller,
+                currentScrollPx = { currentPx() },
+                maxScrollPx = { maximumPx() },
+                isScrollInProgress = {
+                    if (lazyHistory) lazyScroll.isScrollInProgress else eagerScroll.isScrollInProgress
+                },
+            ) { effect, targetPx ->
                 effects += effect
                 effectEvents += "start $effect at ${currentPx()}"
                 activeWriters++
@@ -178,15 +181,13 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
                             }
                         }
                     }
-                    applyScrollEffect(effect)
-                    completed = true
+                    applyScrollEffect(effect, targetPx)
                     effectEvents += "completed ${effect.id} at ${currentPx()}"
                 } catch (error: CancellationException) {
                     effectEvents += "cancelled ${effect.id}: ${error.javaClass.simpleName}: ${error.message}"
                     throw error
                 } finally {
                     activeWriters--
-                    controller.scrollFinished(effect.id, currentPx(), completed)
                 }
             }
         }
@@ -261,8 +262,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
         }
     }
 
-    private suspend fun applyScrollEffect(effect: TerminalViewportScrollEffect) {
-        val targetPx = effect.targetScrollPx.coerceIn(0, maximumPx())
+    private suspend fun applyScrollEffect(effect: TerminalViewportScrollEffect, targetPx: Int) {
         if (lazyHistory) {
             val index = if (targetPx < HISTORY_ROWS * ROW_HEIGHT) targetPx / ROW_HEIGHT else HISTORY_ROWS
             val offset = targetPx - index * ROW_HEIGHT

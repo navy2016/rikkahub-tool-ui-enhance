@@ -37,6 +37,10 @@ class TerminalSmoothnessSourceTest {
         File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportGestures.kt"),
         File("src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportGestures.kt"),
     ).first { it.isFile }.readText()
+    private val scrollEffectsSource = listOf(
+        File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportScrollEffects.kt"),
+        File("src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportScrollEffects.kt"),
+    ).first { it.isFile }.readText()
     private val fastFlingSource = listOf(
         File("app/src/main/java/me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt"),
         File("src/main/java/me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt"),
@@ -212,9 +216,12 @@ class TerminalSmoothnessSourceTest {
 
     @Test
     fun controllerIsTheOnlyVerticalScrollOwnerAndCapturesConsumedUserDeltas() {
-        assertTrue(processSessionSource.contains("viewportController.state.map { it.scrollEffect }"))
-        assertTrue(processSessionSource.contains("viewportController.isCurrent(effect)"))
-        assertTrue(processSessionSource.contains("viewportController.scrollFinished(effect.id"))
+        assertEquals(1, Regex("runTerminalViewportScrollEffects").findAll(processSessionSource).count())
+        assertTrue(scrollEffectsSource.contains("controller.state.map { it.scrollEffect }"))
+        assertTrue(scrollEffectsSource.contains("controller.isCurrent(effect)"))
+        assertTrue(scrollEffectsSource.contains("controller.scrollFinished(effect.id"))
+        assertTrue(scrollEffectsSource.contains("snapshotFlow { isScrollInProgress() }.first { !it }"))
+        assertTrue(processSessionSource.contains("maxScrollPx = { outputScroll.maxValue }"))
         assertTrue(gestureSource.contains("override fun onPostScroll("))
         assertTrue(gestureSource.contains("consumed.y != 0f && userDelta"))
         assertTrue(gestureSource.contains("source == NestedScrollSource.UserInput"))
