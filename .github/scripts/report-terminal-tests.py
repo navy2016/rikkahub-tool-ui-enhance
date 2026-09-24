@@ -8,12 +8,18 @@ import xml.etree.ElementTree as ET
 parser = argparse.ArgumentParser()
 parser.add_argument("root", type=Path)
 parser.add_argument("--require-suite", action="append", default=[])
+parser.add_argument("--require-case-group", action="append", default=[], metavar="NAME_TOKEN:COUNT")
 args = parser.parse_args()
 counts = Counter()
+cases = set()
 failures = []
 for path in sorted(args.root.rglob("TEST-*.xml")):
     for case in ET.parse(path).getroot().iter("testcase"):
         suite = case.get("classname", "unknown")
+        key = (suite, case.get("name", ""))
+        if key in cases:
+            failures.append(f"Duplicate JUnit case: {key}")
+        cases.add(key)
         counts[suite] += 1
         for tag in ("failure", "error", "skipped"):
             result = case.find(tag)
@@ -22,6 +28,12 @@ for path in sorted(args.root.rglob("TEST-*.xml")):
 for suite in args.require_suite:
     if not counts[suite]:
         failures.append(f"Required suite missing: {suite}")
+
+for group in args.require_case_group:
+    token, _, expected = group.rpartition(":")
+    actual = sum(token in name for _, name in cases)
+    if not token or actual != int(expected):
+        failures.append(f"Expected {expected} cases containing '{token}', found {actual}")
 
 
 def annotation(level, title, text):

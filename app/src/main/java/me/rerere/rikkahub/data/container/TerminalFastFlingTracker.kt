@@ -18,6 +18,12 @@ internal class TerminalFastFlingTracker {
     private var lastAtMs = 0L
     private var count = 0
 
+    fun reset() {
+        lastDirection = null
+        lastAtMs = 0L
+        count = 0
+    }
+
     fun onFling(
         velocityX: Float,
         velocityY: Float,

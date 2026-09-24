@@ -81,6 +81,15 @@ class TerminalFastFlingTest {
         assertEquals(TerminalJumpEdge.BOTTOM, tracker.fling(1_000))
     }
 
+    @Test
+    fun confirmingTheJumpCountSettingResetsAnyPartialSequence() {
+        val tracker = TerminalFastFlingTracker()
+        assertNull(tracker.fling(1_000))
+        tracker.reset()
+        assertNull(tracker.fling(1_100))
+        assertEquals(TerminalJumpEdge.BOTTOM, tracker.fling(1_200))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun zeroRequiredCountIsNotASupportedSetting() {
         TerminalFastFlingTracker().fling(1_000, required = 0)

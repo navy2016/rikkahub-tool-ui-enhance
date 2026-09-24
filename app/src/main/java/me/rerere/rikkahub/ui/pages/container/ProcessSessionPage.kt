@@ -1950,7 +1950,7 @@ private fun TerminalInteractivePanel(
             onDismiss = { terminalSettingsDialog = null },
             onSave = {
                 fastFlingRequiredCount = it
-                fastFlingCount = 0
+                viewportGestures.resetFastFling()
                 markTerminalPreferencesDirty()
                 terminalSettingsDialog = null
             }

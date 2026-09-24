@@ -1,0 +1,246 @@
+package me.rerere.rikkahub.viewporttest
+
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.swipeWithVelocity
+import me.rerere.rikkahub.data.container.ViewportMode
+import me.rerere.rikkahub.data.container.ViewportScrollOrigin
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.junit.runners.Parameterized
+
+/** Pointer-injection correctness tests, NOT performance samples or a complete lazy integration test. */
+@RunWith(Parameterized::class)
+class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) {
+    companion object {
+        @JvmStatic
+        @Parameterized.Parameters(name = "lazyHistory={0}")
+        fun renderers() = listOf(arrayOf(false), arrayOf(true))
+    }
+
+    @get:Rule
+    val compose = createComposeRule()
+    private lateinit var viewport: ViewportGestureFixture
+
+    @Before
+    fun mountAtTheMiddleOfHistory() {
+        viewport = ViewportGestureFixture(lazyHistory)
+        compose.setContent { viewport.Content() }
+        settle()
+        compose.runOnIdle {
+            assertTrue(viewport.controller.state.value.initialized)
+            assertEquals(ViewportGestureFixture.INITIAL_PX, viewport.currentPx())
+            assertFalse(viewport.isAtTop())
+            assertFalse(viewport.isAtBottom())
+        }
+    }
+
+    private fun settle() {
+        compose.waitForIdle()
+        compose.mainClock.advanceTimeBy(64)
+        compose.waitForIdle()
+    }
+
+    private fun fastSwipe(towardBottom: Boolean) {
+        compose.runOnIdle { viewport.inputTimeMs += 100 }
+        val node = compose.onNodeWithTag(ViewportGestureFixture.OUTPUT_TAG)
+        val size = node.fetchSemanticsNode().size
+        val top = Offset(size.width / 2f, size.height * 0.15f)
+        val bottom = Offset(size.width / 2f, size.height * 0.85f)
+        node.performTouchInput {
+            swipeWithVelocity(
+                start = if (towardBottom) bottom else top,
+                end = if (towardBottom) top else bottom,
+                endVelocity = 6_000f,
+            )
+        }
+    }
+
+    private fun assertNoJump() {
+        settle()
+        compose.runOnIdle {
+            assertTrue(viewport.jumps.isEmpty())
+            assertFalse(viewport.isAtTop())
+            assertFalse(viewport.isAtBottom())
+        }
+    }
+
+    @Test
+    fun consecutiveUpwardSwipesJumpToActualBottomAndKeepTheScreenWhole() {
+        fastSwipe(towardBottom = true)
+        assertNoJump()
+        fastSwipe(towardBottom = true)
+        settle()
+        compose.runOnIdle {
+            assertEquals(1, viewport.jumps.size)
+            assertTrue(viewport.isAtBottom())
+            assertEquals(ViewportMode.TAIL, viewport.controller.state.value.mode)
+            assertEquals(1, viewport.composedScreens)
+            assertEquals(1, viewport.maximumWriters)
+            assertEquals(0, viewport.activeWriters)
+            if (lazyHistory) assertTrue(viewport.composedHistory < ViewportGestureFixture.HISTORY_ROWS)
+        }
+    }
+
+    @Test
+    fun consecutiveDownwardSwipesJumpToActualTopAndStayLocked() {
+        fastSwipe(towardBottom = false)
+        assertNoJump()
+        fastSwipe(towardBottom = false)
+        settle()
+        compose.runOnIdle {
+            assertEquals(1, viewport.jumps.size)
+            assertTrue(viewport.isAtTop())
+            assertEquals(ViewportMode.LOCKED, viewport.controller.state.value.mode)
+            assertEquals(viewport.frame.historyLineIds.first(), viewport.controller.state.value.anchor?.lineId)
+            assertEquals(1, viewport.maximumWriters)
+            assertEquals(0, viewport.activeWriters)
+        }
+    }
+
+    @Test
+    fun configuredThreeSwipesDoNotTriggerOnTheSecondSwipe() {
+        compose.runOnIdle { viewport.config = viewport.config.copy(fastFlingRequiredCount = 3) }
+        repeat(2) {
+            fastSwipe(towardBottom = true)
+            assertNoJump()
+        }
+        fastSwipe(towardBottom = true)
+        settle()
+        compose.runOnIdle {
+            assertEquals(1, viewport.jumps.size)
+            assertTrue(viewport.isAtBottom())
+        }
+    }
+
+    @Test
+    fun slowSwipesPanWithoutTriggeringFastJump() {
+        val node = compose.onNodeWithTag(ViewportGestureFixture.OUTPUT_TAG)
+        val size = node.fetchSemanticsNode().size
+        repeat(2) {
+            compose.runOnIdle { viewport.inputTimeMs += 100 }
+            node.performTouchInput {
+                swipe(Offset(size.width / 2f, size.height * 0.8f), Offset(size.width / 2f, size.height * 0.2f), 600)
+            }
+        }
+        assertNoJump()
+        compose.runOnIdle { assertTrue(viewport.currentPx() > ViewportGestureFixture.INITIAL_PX) }
+    }
+
+    @Test
+    fun selectionModeKeepsPanButDisablesFastJump() {
+        compose.runOnIdle { viewport.config = viewport.config.copy(selectionMode = true) }
+        repeat(2) { fastSwipe(towardBottom = true) }
+        assertNoJump()
+        compose.runOnIdle { assertTrue(viewport.currentPx() > ViewportGestureFixture.INITIAL_PX) }
+    }
+
+    @Test
+    fun mouseModeDoesNotLetComposePanOrFastJump() {
+        compose.runOnIdle { viewport.config = viewport.config.copy(panEnabled = false) }
+        repeat(2) { fastSwipe(towardBottom = true) }
+        assertNoJump()
+        compose.runOnIdle { assertEquals(ViewportGestureFixture.INITIAL_PX, viewport.currentPx()) }
+    }
+
+    @Test
+    fun horizontalSwipesStillPanHorizontallyWithoutTriggeringVerticalJump() {
+        val node = compose.onNodeWithTag(ViewportGestureFixture.OUTPUT_TAG)
+        val size = node.fetchSemanticsNode().size
+        repeat(2) {
+            compose.runOnIdle { viewport.inputTimeMs += 100 }
+            node.performTouchInput {
+                swipeWithVelocity(
+                    Offset(size.width * 0.8f, size.height / 2f), Offset(size.width * 0.2f, size.height / 2f),
+                    endVelocity = 6_000f,
+                )
+            }
+        }
+        assertNoJump()
+        compose.runOnIdle {
+            assertEquals(ViewportGestureFixture.INITIAL_PX, viewport.currentPx())
+            assertTrue(viewport.horizontalScroll.value > 0)
+        }
+    }
+
+    @Test
+    fun thirtyAppendsAndTrimsDuringBottomJumpCannotLeaveTheTailBehind() {
+        compose.runOnIdle { viewport.emitOutputDuringNextJump = true }
+        repeat(2) { fastSwipe(towardBottom = true) }
+        settle()
+        compose.runOnIdle {
+            assertEquals(30, viewport.emittedUpdates)
+            assertEquals(1, viewport.jumps.size)
+            assertTrue(viewport.isAtBottom())
+            assertEquals(ViewportMode.TAIL, viewport.controller.state.value.mode)
+            assertEquals(1, viewport.composedScreens)
+            assertEquals(1, viewport.maximumWriters)
+            assertEquals(0, viewport.activeWriters)
+        }
+    }
+
+    @Test
+    fun thirtyAppendsAndTrimsDuringTopJumpNeverReenableFollow() {
+        compose.runOnIdle { viewport.emitOutputDuringNextJump = true }
+        repeat(2) { fastSwipe(towardBottom = false) }
+        settle()
+        compose.runOnIdle {
+            assertEquals(30, viewport.emittedUpdates)
+            assertEquals(1, viewport.jumps.size)
+            assertTrue(viewport.isAtTop())
+            assertEquals(ViewportMode.LOCKED, viewport.controller.state.value.mode)
+            assertEquals(viewport.frame.historyLineIds.first(), viewport.controller.state.value.anchor?.lineId)
+            assertEquals(1, viewport.maximumWriters)
+        }
+    }
+
+    @Test
+    fun aNewPointerDragInterruptsJumpAndOldCompletionCannotResumeFollow() {
+        compose.runOnIdle { viewport.config = viewport.config.copy(fastFlingRequiredCount = 1) }
+        compose.mainClock.autoAdvance = false
+        try {
+            fastSwipe(towardBottom = true)
+            compose.mainClock.advanceTimeBy(32)
+            compose.runOnIdle {
+                assertEquals(1, viewport.jumps.size)
+                assertTrue(viewport.controller.isCurrent(viewport.jumps.single()))
+            }
+            val node = compose.onNodeWithTag(ViewportGestureFixture.OUTPUT_TAG)
+            val size = node.fetchSemanticsNode().size
+            node.performTouchInput {
+                down(Offset(size.width / 2f, size.height * 0.15f))
+                repeat(3) { moveBy(Offset(0f, 100f), delayMillis = 32) }
+            }
+            compose.mainClock.advanceTimeBy(32)
+            compose.runOnIdle {
+                assertFalse(viewport.controller.isCurrent(viewport.jumps.single()))
+                assertEquals(ViewportScrollOrigin.USER_DRAG, viewport.controller.state.value.gesture?.origin)
+                assertEquals(ViewportMode.LOCKED, viewport.controller.state.value.mode)
+            }
+            node.performTouchInput {
+                advanceEventTime(500) // Release without creating another high-velocity fling.
+                up()
+            }
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+        settle()
+        compose.runOnIdle {
+            assertEquals(1, viewport.jumps.size)
+            assertNull(viewport.controller.state.value.gesture)
+            assertEquals(ViewportMode.LOCKED, viewport.controller.state.value.mode)
+            assertFalse(viewport.isAtBottom())
+            assertEquals(1, viewport.maximumWriters)
+            assertEquals(0, viewport.activeWriters)
+        }
+    }
+}

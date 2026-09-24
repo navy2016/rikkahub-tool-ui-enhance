@@ -47,3 +47,8 @@ if (providers.gradleProperty("terminalBenchmarks").orNull == "true") {
     include(":benchmarks:terminal-target")
     include(":benchmarks:terminal-macrobenchmark")
 }
+
+// Correctness/gesture fixture only. Never packaged in normal debug or release APKs.
+if (providers.gradleProperty("terminalViewportTests").orNull == "true") {
+    include(":benchmarks:terminal-viewport-tests")
+}

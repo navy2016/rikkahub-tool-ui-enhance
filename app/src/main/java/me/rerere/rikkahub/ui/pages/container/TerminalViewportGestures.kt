@@ -38,6 +38,7 @@ internal data class TerminalViewportGestureConfig(
 internal class TerminalViewportGestures(
     val connection: NestedScrollConnection,
     val flingBehavior: FlingBehavior,
+    val resetFastFling: () -> Unit,
 )
 
 /**
@@ -83,7 +84,9 @@ internal fun rememberTerminalViewportGestures(
             }
         }
     }
-    return remember(connection, flingBehavior) { TerminalViewportGestures(connection, flingBehavior) }
+    return remember(connection, flingBehavior, tracker) {
+        TerminalViewportGestures(connection, flingBehavior, resetFastFling = { tracker.reset() })
+    }
 }
 
 internal class TerminalViewportNestedScrollConnection(

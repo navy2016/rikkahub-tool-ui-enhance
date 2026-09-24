@@ -198,6 +198,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(fastFlingSource.contains("if (count < requiredCount) return null"))
         assertTrue(processSessionSource.contains("fastFlingRequiredCount: Int = 2"))
         assertTrue(processSessionSource.contains("TerminalNumberSettingDialog"))
+        assertTrue(processSessionSource.contains("viewportGestures.resetFastFling()"))
         assertTrue(processSessionSource.contains("\"HIST\""))
         assertTrue(processSessionSource.contains("\"JUMP\""))
         assertTrue(processSessionSource.contains("enabled = terminalPanMode || selectionMode,"))
