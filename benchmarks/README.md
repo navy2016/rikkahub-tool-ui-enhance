@@ -33,7 +33,7 @@ Normal builds do not include either benchmark module unless `-PterminalBenchmark
 | `initialCompose` | Cold `renderFrame`, row-state creation, eager composition/layout/draw. Async mount→draw trace ends after two real draw callbacks. Not app launch time or GPU presentation time. |
 | `historyScroll` | Pan six viewport heights away from the tail and back, two identical 1-second linear `ScrollableState.animateScrollBy` animations in both arms. Fixed distance/time, not gesture/fling physics. |
 | `activeRowUpdate` | Rewrite the last active line 30 times; all stable IDs and history remain unchanged. |
-| `appendAndTrim` | Append one line 30 times at the history cap; oldest rows trim, surviving stable IDs/states move. Already at the tail; extent remains constant. |
+| `appendAndTrim` | Append one line 30 times at the history cap; oldest rows trim and surviving stable IDs/states move. Both arms must remain at the newly measured tail. |
 | `alternateScreenUpdate` | Preload the same history, enter alternate screen, update the last line 30 times. Only 24 physical rows render; **both arms use the original eager backend** and the history stays hidden. |
 
 Updates target 33ms intervals and await a draw for every operation. If rendering is slow, duration grows
@@ -97,7 +97,8 @@ and suite in the AndroidX JSON payload; the summarizer checks SHA and suite rath
 
 ## Run
 
-The **Terminal Scrollback Benchmark** Actions workflow builds and measures on one API 34 x86_64 emulator
+The **Terminal Scrollback Benchmark** Actions workflow has a 90-minute job budget and measures on one
+API 34 x86_64 emulator
 (Nexus 6 profile, 2 cores, 4GiB RAM, 768MiB heap, SwiftShader). CI runs three repetitions per case by default.
 It suppresses **only** AndroidX's `EMULATOR` warning, not debuggable/profileable failures. CI first runs a
 1k/one-repeat preflight of all output-update scenarios in both arms. Only if it passes does the full

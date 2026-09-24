@@ -30,7 +30,7 @@ class TerminalScrollbackBenchmark(
     companion object {
         private const val PACKAGE = "me.rerere.rikkahub.terminalbenchmark"
         private const val ACTIVITY = "me.rerere.rikkahub.benchmark.TerminalBenchmarkActivity"
-        private const val TIMEOUT_MS = 180_000L
+        private const val TIMEOUT_MS = 600_000L
 
         @JvmStatic
         @Parameterized.Parameters(name = "history={0,number,#},scenario={1},renderer={2}")

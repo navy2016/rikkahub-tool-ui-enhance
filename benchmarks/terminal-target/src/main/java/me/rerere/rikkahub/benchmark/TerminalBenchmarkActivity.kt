@@ -216,7 +216,8 @@ class TerminalBenchmarkActivity : ComponentActivity() {
             "activeRowUpdate", "appendAndTrim", "alternateScreenUpdate" -> {
                 repeat(TerminalBenchmarkWorkload.UPDATE_COUNT) { index ->
                     val deadline = SystemClock.uptimeMillis() + TerminalBenchmarkWorkload.UPDATE_INTERVAL_MS
-                    val line = TerminalBenchmarkWorkload.line(historyRows + TerminalBenchmarkWorkload.SCREEN_ROWS + index)
+                    val lineIndex = historyRows + TerminalBenchmarkWorkload.SCREEN_ROWS + index
+                    val line = TerminalBenchmarkWorkload.line(lineIndex)
                     traced("Terminal.feed") {
                         terminal.feed(if (scenario == "appendAndTrim") "\r\n$line" else "\r\u001b[2K$line")
                     }
