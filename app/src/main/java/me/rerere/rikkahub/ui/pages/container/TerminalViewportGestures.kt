@@ -54,7 +54,8 @@ internal fun rememberTerminalViewportGestures(
     interactionSource: InteractionSource,
     currentScrollPx: () -> Int,
     isScrollInProgress: () -> Boolean,
-    nowMs: () -> Long = { SystemClock.uptimeMillis() },
+    // Elapsed realtime is monotonic and includes sleep; a screen-off interval must expire a streak.
+    nowMs: () -> Long = { SystemClock.elapsedRealtime() },
 ): TerminalViewportGestures {
     val latestScrollPx by rememberUpdatedState(currentScrollPx)
     val latestBusy by rememberUpdatedState(isScrollInProgress)

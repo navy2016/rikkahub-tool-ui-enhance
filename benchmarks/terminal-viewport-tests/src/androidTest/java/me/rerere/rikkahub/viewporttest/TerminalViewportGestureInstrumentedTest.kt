@@ -82,7 +82,7 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         settle()
         compose.runOnIdle {
             assertEquals(1, viewport.jumps.size)
-            assertTrue(viewport.isAtBottom())
+            assertTrue(viewport.diagnostics(), viewport.isAtBottom())
             assertEquals(ViewportMode.TAIL, viewport.controller.state.value.mode)
             assertEquals(1, viewport.composedScreens)
             assertEquals(1, viewport.maximumWriters)
@@ -99,7 +99,7 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         settle()
         compose.runOnIdle {
             assertEquals(1, viewport.jumps.size)
-            assertTrue(viewport.isAtTop())
+            assertTrue(viewport.diagnostics(), viewport.isAtTop())
             assertEquals(ViewportMode.LOCKED, viewport.controller.state.value.mode)
             assertEquals(viewport.frame.historyLineIds.first(), viewport.controller.state.value.anchor?.lineId)
             assertEquals(1, viewport.maximumWriters)
@@ -118,7 +118,7 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         settle()
         compose.runOnIdle {
             assertEquals(1, viewport.jumps.size)
-            assertTrue(viewport.isAtBottom())
+            assertTrue(viewport.diagnostics(), viewport.isAtBottom())
         }
     }
 
@@ -180,7 +180,7 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         compose.runOnIdle {
             assertEquals(30, viewport.emittedUpdates)
             assertEquals(1, viewport.jumps.size)
-            assertTrue(viewport.isAtBottom())
+            assertTrue(viewport.diagnostics(), viewport.isAtBottom())
             assertEquals(ViewportMode.TAIL, viewport.controller.state.value.mode)
             assertEquals(1, viewport.composedScreens)
             assertEquals(1, viewport.maximumWriters)
@@ -196,7 +196,7 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         compose.runOnIdle {
             assertEquals(30, viewport.emittedUpdates)
             assertEquals(1, viewport.jumps.size)
-            assertTrue(viewport.isAtTop())
+            assertTrue(viewport.diagnostics(), viewport.isAtTop())
             assertEquals(ViewportMode.LOCKED, viewport.controller.state.value.mode)
             assertEquals(viewport.frame.historyLineIds.first(), viewport.controller.state.value.anchor?.lineId)
             assertEquals(1, viewport.maximumWriters)
@@ -212,7 +212,7 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
             compose.mainClock.advanceTimeBy(32)
             compose.runOnIdle {
                 assertEquals(1, viewport.jumps.size)
-                assertTrue(viewport.controller.isCurrent(viewport.jumps.single()))
+                assertTrue(viewport.diagnostics(), viewport.controller.isCurrent(viewport.jumps.single()))
             }
             val node = compose.onNodeWithTag(ViewportGestureFixture.OUTPUT_TAG)
             val size = node.fetchSemanticsNode().size

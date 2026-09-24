@@ -36,6 +36,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -87,6 +88,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     var emittedUpdates = 0
         private set
     private val effects = mutableListOf<TerminalViewportScrollEffect>()
+    private val effectEvents = mutableListOf<String>()
     val jumps: List<TerminalViewportScrollEffect> get() = effects.filter { it.origin == ViewportScrollOrigin.JUMP }
     var activeWriters = 0
         private set
@@ -121,6 +123,11 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
             it.key == TAIL_KEY && it.offset + it.size <= lazyScroll.layoutInfo.viewportEndOffset
         }
     } else eagerScroll.maxValue != Int.MAX_VALUE && eagerScroll.value == eagerScroll.maxValue
+
+    fun diagnostics(): String = "lazy=$lazyHistory px=${currentPx()} max=${maximumPx()} " +
+        "busy=${if (lazyHistory) lazyScroll.isScrollInProgress else eagerScroll.isScrollInProgress} " +
+        "first=${lazyScroll.firstVisibleItemIndex}:${lazyScroll.firstVisibleItemScrollOffset} " +
+        "state=${controller.state.value} events=${effectEvents.takeLast(8)}"
 
     private fun metrics() = TerminalViewportMetrics(maximumPx(), viewportHeight, ROW_HEIGHT, TAIL_HEIGHT)
 
@@ -158,6 +165,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
                 if (effect == null || !controller.isCurrent(effect)) return@collectLatest
                 var completed = false
                 effects += effect
+                effectEvents += "start $effect at ${currentPx()}"
                 activeWriters++
                 maximumWriters = maxOf(maximumWriters, activeWriters)
                 try {
@@ -172,6 +180,10 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
                     }
                     applyScrollEffect(effect)
                     completed = true
+                    effectEvents += "completed ${effect.id} at ${currentPx()}"
+                } catch (error: CancellationException) {
+                    effectEvents += "cancelled ${effect.id}: ${error.javaClass.simpleName}: ${error.message}"
+                    throw error
                 } finally {
                     activeWriters--
                     controller.scrollFinished(effect.id, currentPx(), completed)
