@@ -2,9 +2,9 @@
 
 ## Scope
 
-Measure **1,000 / 5,000 / 10,000 history rows + 24 active rows** before choosing a lazy history renderer.
-This step does **not** migrate history to `LazyColumn`, change the viewport reducer/controller, or change
-TUI physical-grid semantics.
+Compare eager `Column` against a **benchmark-only, history-only `LazyColumn`** at
+**1,000 / 5,000 / 10,000 history rows + 24 active rows**. This step does **not** change the production
+terminal, viewport reducer/controller, or TUI physical-grid semantics.
 
 The opt-in `terminal-target` APK compiles the production `TerminalEmulator`, stable-ID helper,
 `TerminalRenderedRows` and font sources via Gradle `Sync` tasks. Generated copies are only in `build/`;
@@ -21,6 +21,8 @@ Normal builds do not include either benchmark module unless `-PterminalBenchmark
 - 80 physical columns, 24 active rows, JetBrains Mono 14sp, no font padding, 8dp tail padding.
 - Deterministic unique lines with ANSI colors/bold and mixed ASCII/CJK, narrower than 80 cells.
 - A fresh process/emulator model per measured iteration; shell-like fixture seeding is **outside** timing.
+- Both renderer arms are compiled into one APK and run on one device in adjacent size/scenario pairs.
+  Eager/lazy order alternates between pairs. Each arm has the same repetition count.
 - Native control/status views above the terminal. Accessibility traversal of the Compose subtree is
   disabled only in the fixture to avoid timing a 10k-node UiAutomator tree walk; Text/layout/draw remain.
 - First composition measures the **cold** `renderFrame` cache. Other scenarios mount first, outside the
@@ -29,14 +31,40 @@ Normal builds do not include either benchmark module unless `-PterminalBenchmark
 | Scenario | Measured work |
 | --- | --- |
 | `initialCompose` | Cold `renderFrame`, row-state creation, eager composition/layout/draw. Async mount→draw trace ends after two real draw callbacks. Not app launch time or GPU presentation time. |
-| `historyScroll` | Pan six viewport heights away from the tail and back, two 1-second linear `ScrollState` animations. Fixed distance/time, not gesture/fling physics. |
+| `historyScroll` | Pan six viewport heights away from the tail and back, two identical 1-second linear `ScrollableState.animateScrollBy` animations in both arms. Fixed distance/time, not gesture/fling physics. |
 | `activeRowUpdate` | Rewrite the last active line 30 times; all stable IDs and history remain unchanged. |
 | `appendAndTrim` | Append one line 30 times at the history cap; oldest rows trim, surviving stable IDs/states move. Already at the tail; extent remains constant. |
-| `alternateScreenUpdate` | Preload the same history, enter alternate screen, update the last line 30 times. Only 24 physical rows render; the history stays hidden. |
+| `alternateScreenUpdate` | Preload the same history, enter alternate screen, update the last line 30 times. Only 24 physical rows render; **both arms use the original eager backend** and the history stays hidden. |
 
 Updates target 33ms intervals and await a draw for every operation. If rendering is slow, duration grows
 rather than silently coalescing/dropping benchmark updates. This is an isolated renderer throughput test,
 **not** an end-to-end measurement of the production output scheduler/controller/IME/selection behavior.
+
+## Candidate and correctness guards
+
+`TerminalBenchmarkViewport` exists only in the opt-in benchmark target. The `eager` arm uses the existing
+shared production row loop. The `lazyHistory` arm uses:
+
+1. One history item per stable `lineId`, reusing the **same** production row/Text helper.
+2. **One** `Column` item containing all active-screen rows, not 24 independently lazy items.
+3. A separate 8dp tail item, so seeking the final item clamps to the actual bottom even if the active
+   screen is taller than the viewport.
+
+The LazyColumn is height-bounded and is not nested in a verticalScroll. Alternate screen, configured
+TUI commands and full-grid mode all fall back to the eager backend; host tests cover these gates.
+The candidate still pays for the same full emulator snapshot and O(history) row-state synchronization.
+
+After every append, the candidate calls `requestScrollToItem(tailItemIndex)` **before the next draw**.
+Without this, LazyColumn's stable-key anchoring could keep an old history row visible, move the changing
+screen offscreen, and produce a false speedup. Runtime checks verify the actual tail position after
+mount, every output update, and the return pan. Candidate checks also require the tail and active-screen
+item to be visible, exactly one active-grid composition, and fewer history compositions than the whole
+history. Composition counters are non-observable; they do not drive recomposition.
+
+A/B collection has **30 cases** (3 sizes × 5 scenarios × 2 arms). The summary must reject a missing arm,
+mismatched repetitions, or missing follow-tail requests. Fixture assertion failures are surfaced to the
+test driver rather than reported as successful timing samples. These guards are **not** production
+viewport or text-selection acceptance tests.
 
 ## Collected data
 
@@ -47,20 +75,25 @@ AndroidX Macrobenchmark JSON + Perfetto traces, with:
 - `Terminal.renderFrame` / `Terminal.rowSync`: sums and call counts; the summary divides each iteration's
   sum by its count before taking the median. Row synchronization includes snapshot application, but
   **not** asynchronous Compose layout/draw. `Terminal.feed` is also traced for inspection.
-- `Terminal.measure` / `Terminal.draw` trace sections and `rowSyncMaxMs` for diagnosis in raw data.
+- `Terminal.measure` / `Terminal.draw` per-call durations, `rowSyncMaxMs`, frame counts and
+  `Terminal.followTail` request counts/durations; the report includes a separate trace-phase table.
+- `Terminal.lazyHistoryCompositions` counters in traces for retained (including prefetched) history
+  compositions, not a claim that every retained row is currently visible.
 - `MemoryUsageMetric(Max)`: sampled memory counters. RSS anonymous is not total RSS/PSS; heap counters
   can be absent if no GC sampling occurred. Missing measurements are shown as `—`, never as zero.
 - Git SHA, production-source/font SHA-256, Android/device context, viewport size/density, heap limit,
   iteration count, logcat, test reports and both benchmark APKs.
 
-The summary fails on incomplete size/scenario matrices, missing frame samples, or missing/incorrect
-render/sync trace counts. A test with no trace data is not a successful performance measurement.
+The summary fails on incomplete size/scenario/renderer matrices, missing frame samples, different result
+documents/devices, or missing/incorrect render/sync/follow-tail trace counts. CI embeds source SHA, run ID
+and suite in the AndroidX JSON payload; the summarizer checks SHA and suite rather than just relabeling data. A test with no trace data is not a successful performance measurement.
 
 ## Run
 
 The **Terminal Scrollback Benchmark** Actions workflow builds and measures on one API 34 x86_64 emulator
 (Nexus 6 profile, 2 cores, 4GiB RAM, 768MiB heap, SwiftShader). CI runs three repetitions per case by default.
-It suppresses **only** AndroidX's `EMULATOR` warning, not debuggable/profileable failures.
+It suppresses **only** AndroidX's `EMULATOR` warning, not debuggable/profileable failures. Both arms run in
+one instrumentation invocation; do not merge separate runs to manufacture a paired comparison.
 
 To run on a dedicated, authorized physical test device from a normal Android SDK development host:
 
@@ -72,13 +105,14 @@ To run on a dedicated, authorized physical test device from a normal Android SDK
   -Pandroid.testInstrumentationRunnerArguments.terminalIterations=5
 
 python3 benchmarks/summarize.py benchmarks/terminal-macrobenchmark/build/outputs \
-  --sha "$(git rev-parse HEAD)" --environment physical-device --require-complete \
+  --sha "$(git rev-parse HEAD)" --environment physical-device --suite ab --require-complete \
   --output /tmp/terminal-scrollback-summary.md
 ```
 
 Do not pass `suppressErrors=EMULATOR` for a physical-device acceptance run. Keep device, OS, font,
 orientation, display refresh rate, build variant, thermal state and workload constant for before/after
 comparisons. Do not combine artifacts from different devices/runs in one summary input directory.
+To re-summarize the archived eager-only format, use `--suite baseline` instead.
 
 Python report checks (no Gradle/APK build required):
 
@@ -106,6 +140,8 @@ row-sync traces and memory together, then reproduce on a representative physical
   benchmark and terminal regression workflows both passed on that SHA.
 
 This baseline shows particularly poor scaling for append/trim, while the 24-row alternate-screen
-control stays roughly flat. The next experiment is a **benchmark-only, ordinary-history LazyColumn
-A/B candidate**, not a production viewport migration. No lazy-renderer speedup has been measured yet.
-The report includes limitations, raw-artifact provenance and the integration checks required later.
+control stays roughly flat. The current experiment adds the **benchmark-only, ordinary-history
+LazyColumn A/B candidate**, not a production viewport migration. Compare arms within the new run:
+shared scrolling animations and validation probes have changed since that earlier baseline. Do not
+use separate hosts/runs to claim a speedup. Until the A/B workflow completes, no candidate performance
+numbers are available. The baseline report includes integration checks required before production use.

@@ -14,12 +14,11 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.gestures.ScrollableState
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,9 +34,9 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -45,12 +44,12 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRowState
-import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.synchronizeTerminalRenderedRows
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.TerminalEmulator
 import kotlin.coroutines.resume
+import kotlin.math.abs
 
 /**
  * An isolated renderer harness, not a replacement terminal or a viewport-controller benchmark.
@@ -64,6 +63,12 @@ class TerminalBenchmarkActivity : ComponentActivity() {
     private var rows by mutableStateOf<SnapshotStateList<TerminalRenderedRowState>?>(null)
     private val verticalScroll = ScrollState(Int.MAX_VALUE)
     private val horizontalScroll = ScrollState(0)
+    private lateinit var lazyScroll: LazyListState
+    private var layoutState by mutableStateOf<TerminalBenchmarkLayout?>(null)
+    private val compositionStats = LazyCompositionStats()
+    private var renderer = BenchmarkRenderer.EAGER
+    private var configuredTui = false
+    private var preserveFullGrid = false
     private var busy = true
     private var historyRows = 0
     private var scenario = ""
@@ -72,6 +77,11 @@ class TerminalBenchmarkActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         historyRows = intent.getIntExtra("history_rows", 1_000)
         scenario = intent.getStringExtra("scenario") ?: "initialCompose"
+        renderer = BenchmarkRenderer.fromWireName(intent.getStringExtra("renderer") ?: "eager")
+        configuredTui = intent.getBooleanExtra("configured_tui", false)
+        preserveFullGrid = intent.getBooleanExtra("preserve_full_grid", false)
+        // The last, small tail item clamps to the true bottom even if the grid exceeds the viewport.
+        lazyScroll = LazyListState(firstVisibleItemIndex = historyRows + 1)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             fitsSystemWindows = true
@@ -97,7 +107,8 @@ class TerminalBenchmarkActivity : ComponentActivity() {
             setContent {
                 MaterialTheme {
                     val rendered = rows
-                    if (rendered != null) {
+                    val currentLayout = layoutState
+                    if (rendered != null && currentLayout != null) {
                         val style = TextStyle(
                             color = Color(0xFF00E676),
                             fontFamily = JetbrainsMono,
@@ -109,8 +120,15 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                                 trim = LineHeightStyle.Trim.Both,
                             ),
                         )
-                        Column(
-                            Modifier.fillMaxSize()
+                        TerminalBenchmarkViewport(
+                            rows = rendered,
+                            layout = currentLayout,
+                            style = style,
+                            verticalScroll = verticalScroll,
+                            horizontalScroll = horizontalScroll,
+                            lazyScroll = lazyScroll,
+                            stats = compositionStats,
+                            modifier = Modifier.fillMaxSize()
                                 .background(Color.Black)
                                 .layout { measurable, constraints ->
                                     traced("Terminal.measure") {
@@ -119,12 +137,7 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                                     }
                                 }
                                 .drawWithContent { traced("Terminal.draw") { drawContent() } }
-                                .horizontalScroll(horizontalScroll)
-                                .verticalScroll(verticalScroll)
-                        ) {
-                            TerminalRenderedRows(rendered, style)
-                            Spacer(Modifier.height(8.dp))
-                        }
+                        )
                     }
                 }
             }
@@ -146,11 +159,19 @@ class TerminalBenchmarkActivity : ComponentActivity() {
         if (busy) return
         busy = true
         status.text = "running"
-        // animateScrollTo needs a frame clock, not just Dispatchers.Main.
+        // Scroll animations need a frame clock, not just Dispatchers.Main.
         lifecycleScope.launch(AndroidUiDispatcher.Main) {
-            operation()
-            busy = false
-            status.text = completedStatus
+            try {
+                operation()
+                status.text = completedStatus
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                android.util.Log.e("TerminalBenchmark", "Fixture validation failed", error)
+                status.text = "failed:${error.javaClass.simpleName}: ${error.message}"
+            } finally {
+                busy = false
+            }
         }
     }
 
@@ -163,11 +184,15 @@ class TerminalBenchmarkActivity : ComponentActivity() {
             check(frame.historyCount == expectedHistory)
             check(frame.rows.size == expectedHistory + TerminalBenchmarkWorkload.SCREEN_ROWS)
             traced("Terminal.rowSync") {
-                Snapshot.withMutableSnapshot { rows = createTerminalRenderedRows(frame) }
+                Snapshot.withMutableSnapshot {
+                    rows = createTerminalRenderedRows(frame)
+                    layoutState = layoutFor(frame)
+                }
             }
             // Complete on actual draw callbacks, not a fixed sleep or merely a state assignment.
             output.awaitNextDraw()
             output.awaitNextDraw()
+            verifyTail()
         } finally {
             Trace.endAsyncSection("Terminal.mountToDraw", 1)
         }
@@ -175,13 +200,18 @@ class TerminalBenchmarkActivity : ComponentActivity() {
 
     private suspend fun runWorkload() {
         check(rows != null)
+        verifyTail()
         when (scenario) {
             "historyScroll" -> {
-                // Fixed distance/time independent of history length; same two animations at each size.
-                val destination = (verticalScroll.maxValue - output.height * 6).coerceAtLeast(0)
-                verticalScroll.animateScrollTo(destination, tween(1_000, easing = LinearEasing))
-                verticalScroll.animateScrollTo(verticalScroll.maxValue, tween(1_000, easing = LinearEasing))
+                // Identical ScrollableState animation and physical distance in BOTH arms.
+                val scroll: ScrollableState = if (layoutState!!.useLazyHistory) lazyScroll else verticalScroll
+                val distance = (output.height * 6).toFloat()
+                val consumed = scroll.animateScrollBy(-distance, tween(1_000, easing = LinearEasing))
+                check(abs(consumed + distance) <= 1f) { "History pan did not cover six viewports" }
+                scroll.animateScrollBy(-consumed, tween(1_000, easing = LinearEasing))
+                scroll.scrollBy(1f) // Clamp sub-pixel rounding at the tail equally for both backends.
                 output.awaitNextDraw()
+                verifyTail()
             }
             "activeRowUpdate", "appendAndTrim", "alternateScreenUpdate" -> {
                 repeat(TerminalBenchmarkWorkload.UPDATE_COUNT) { index ->
@@ -196,18 +226,50 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                             synchronizeTerminalRenderedRows(
                                 rows!!,
                                 frame,
-                                usesTuiViewport = frame.isAlternateScreen,
+                                usesTuiViewport = frame.isAlternateScreen || configuredTui || preserveFullGrid,
                                 nowMs = SystemClock.uptimeMillis(),
                             )
+                            layoutState = layoutFor(frame)
                         }
                     }
-                    // At the capped history length the scroll extent is constant. Tail remains at
-                    // the same pixel offset; no alternate viewport implementation is needed here.
+                    if (scenario == "appendAndTrim" && layoutState!!.useLazyHistory) {
+                        traced("Terminal.followTail") {
+                            // Stable-key anchoring otherwise keeps the old first visible history row,
+                            // hiding the changing last screen row and producing a false speedup.
+                            lazyScroll.requestScrollToItem(layoutState!!.tailItemIndex)
+                        }
+                    }
                     output.awaitNextDraw()
+                    verifyTail()
                     delay((deadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
                 }
             }
             else -> error("Unknown workload: $scenario")
+        }
+    }
+
+    private fun layoutFor(frame: TerminalEmulator.RenderFrame) = TerminalBenchmarkLayout.fromFrame(
+        frame, renderer, configuredTui, preserveFullGrid,
+    )
+
+    private fun verifyTail() {
+        val current = checkNotNull(layoutState)
+        check(current.screenRows == TerminalBenchmarkWorkload.SCREEN_ROWS)
+        if (!current.useLazyHistory) {
+            check(verticalScroll.value == verticalScroll.maxValue) { "Eager viewport left the tail" }
+            check(compositionStats.historyRows == 0 && compositionStats.activeGrids == 0)
+            return
+        }
+        check(!lazyScroll.canScrollForward) { "Lazy viewport left the tail" }
+        val info = lazyScroll.layoutInfo
+        check(info.totalItemsCount == current.lazyItemCount)
+        check(info.visibleItemsInfo.any { it.key == TerminalBenchmarkLayout.TAIL_KEY })
+        check(info.visibleItemsInfo.any { it.key == TerminalBenchmarkLayout.ACTIVE_SCREEN_KEY })
+        check(compositionStats.activeGrids == 1) { "The active screen must remain one complete physical grid" }
+        if (current.historyRows > 0) {
+            check(compositionStats.historyRows in 0 until current.historyRows) {
+                "The candidate unexpectedly composed all history rows"
+            }
         }
     }
 }

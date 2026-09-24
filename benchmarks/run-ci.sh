@@ -32,7 +32,7 @@ PYERROR
 trap collect_diagnostics EXIT
 adb logcat -c
 {
-  printf 'sha=%s\niterations=%s\nenvironment=ci-emulator\n' "${GITHUB_SHA:-unknown}" "$iterations"
+  printf 'sha=%s\niterations=%s\nenvironment=ci-emulator\nsuite=ab\n' "${GITHUB_SHA:-unknown}" "$iterations"
   adb shell getprop ro.build.fingerprint
   adb shell wm size
   adb shell wm density
@@ -42,5 +42,8 @@ adb logcat -c
 ./gradlew -PterminalBenchmarks=true :benchmarks:terminal-macrobenchmark:connectedBenchmarkAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.benchmark.TerminalScrollbackBenchmark \
   -Pandroid.testInstrumentationRunnerArguments.terminalIterations="$iterations" \
+  -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.payload.sourceSha="${GITHUB_SHA:-unknown}" \
+  -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.payload.runId="${GITHUB_RUN_ID:-unknown}" \
+  -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.payload.suite=ab \
   -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR \
   --stacktrace

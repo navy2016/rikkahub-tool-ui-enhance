@@ -17,40 +17,46 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
+import java.util.regex.Pattern
 
 @LargeTest
 @OptIn(ExperimentalMetricApi::class)
 @RunWith(Parameterized::class)
-class TerminalScrollbackBenchmark(private val historyRows: Int) {
+class TerminalScrollbackBenchmark(
+    private val historyRows: Int,
+    private val scenario: String,
+    private val renderer: String,
+) {
     companion object {
         private const val PACKAGE = "me.rerere.rikkahub.terminalbenchmark"
         private const val ACTIVITY = "me.rerere.rikkahub.benchmark.TerminalBenchmarkActivity"
         private const val TIMEOUT_MS = 180_000L
 
         @JvmStatic
-        @Parameterized.Parameters(name = "history={0,number,#}")
-        fun parameters() = listOf(arrayOf(1_000), arrayOf(5_000), arrayOf(10_000))
+        @Parameterized.Parameters(name = "history={0,number,#},scenario={1},renderer={2}")
+        fun parameters(): List<Array<Any>> = buildList {
+            val scenarios = listOf(
+                "initialCompose", "historyScroll", "activeRowUpdate", "appendAndTrim", "alternateScreenUpdate",
+            )
+            listOf(1_000, 5_000, 10_000).forEachIndexed { sizeIndex, size ->
+                scenarios.forEachIndexed { scenarioIndex, scenario ->
+                    // Adjacent A/B cases on ONE device/APK; alternate order to reduce fixed-order bias.
+                    val renderers = if ((sizeIndex + scenarioIndex) % 2 == 0) {
+                        listOf("eager", "lazyHistory")
+                    } else {
+                        listOf("lazyHistory", "eager")
+                    }
+                    renderers.forEach { renderer -> add(arrayOf(size, scenario, renderer)) }
+                }
+            }
+        }
     }
 
     @get:Rule
     val benchmark = MacrobenchmarkRule()
 
     @Test
-    fun initialCompose() = measure("initialCompose")
-
-    @Test
-    fun historyScroll() = measure("historyScroll")
-
-    @Test
-    fun activeRowUpdate() = measure("activeRowUpdate")
-
-    @Test
-    fun appendAndTrim() = measure("appendAndTrim")
-
-    @Test
-    fun alternateScreenUpdate() = measure("alternateScreenUpdate")
-
-    private fun measure(scenario: String) {
+    fun render() {
         val iterations = InstrumentationRegistry.getArguments().getString("terminalIterations")?.toInt() ?: 5
         require(iterations in 1..50)
         val metrics = buildList {
@@ -58,6 +64,7 @@ class TerminalScrollbackBenchmark(private val historyRows: Int) {
             add(MemoryUsageMetric(MemoryUsageMetric.Mode.Max))
             add(TraceSectionMetric("Terminal.measure", label = "measure"))
             add(TraceSectionMetric("Terminal.draw", label = "draw"))
+            add(TraceSectionMetric("Terminal.followTail", label = "followTail"))
             if (scenario == "initialCompose") {
                 add(TraceSectionMetric("Terminal.mountToDraw", TraceSectionMetric.Mode.First, "mountToDraw"))
             }
@@ -79,6 +86,7 @@ class TerminalScrollbackBenchmark(private val historyRows: Int) {
                     component = ComponentName(PACKAGE, ACTIVITY)
                     putExtra("history_rows", historyRows)
                     putExtra("scenario", scenario)
+                    putExtra("renderer", renderer)
                 })
                 device.awaitStatus("prepared")
                 if (scenario != "initialCompose") {
@@ -100,8 +108,12 @@ class TerminalScrollbackBenchmark(private val historyRows: Int) {
     }
 
     private fun UiDevice.awaitStatus(text: String) {
-        check(wait(Until.hasObject(By.res(PACKAGE, "benchmark_status").text(text)), TIMEOUT_MS)) {
-            "Renderer did not reach '$text' (history=$historyRows); inspect logcat for crash/OOM"
+        val expectedOrFailed = Pattern.compile(Pattern.quote(text) + "|failed:.*", Pattern.DOTALL)
+        val status = checkNotNull(wait(
+            Until.findObject(By.res(PACKAGE, "benchmark_status").text(expectedOrFailed)), TIMEOUT_MS,
+        )) { "Renderer did not reach '$text' (history=$historyRows, scenario=$scenario, renderer=$renderer)" }
+        check(status.text == text) {
+            "Fixture failed (history=$historyRows, scenario=$scenario, renderer=$renderer): ${status.text}"
         }
     }
 }
