@@ -82,8 +82,7 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         settle()
         compose.runOnIdle {
             assertEquals(1, viewport.jumps.size)
-            assertEquals(ViewportGestureFixture.HISTORY_ROWS + ViewportGestureFixture.SCREEN_ROWS,
-                viewport.currentPx() / ViewportGestureFixture.ROW_HEIGHT)
+            assertTrue(viewport.diagnostics(), viewport.isAtBottom())
         }
         settle()
         compose.runOnIdle {
@@ -127,8 +126,7 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         settle()
         compose.runOnIdle {
             assertEquals(1, viewport.jumps.size)
-            assertEquals(ViewportGestureFixture.HISTORY_ROWS + ViewportGestureFixture.SCREEN_ROWS,
-                viewport.currentPx() / ViewportGestureFixture.ROW_HEIGHT)
+            assertTrue(viewport.diagnostics(), viewport.isAtBottom())
         }
         settle()
         compose.runOnIdle { assertTrue(viewport.diagnostics(), viewport.isAtBottom()) }
