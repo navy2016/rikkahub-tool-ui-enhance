@@ -156,5 +156,7 @@ This baseline shows particularly poor scaling for append/trim, while the 24-row 
 control stays roughly flat. The current experiment adds the **benchmark-only, ordinary-history
 LazyColumn A/B candidate**, not a production viewport migration. Compare arms within the new run:
 shared scrolling animations and validation probes have changed since that earlier baseline. Do not
-use separate hosts/runs to claim a speedup. Until the A/B workflow completes, no candidate performance
-numbers are available. The baseline report includes integration checks required before production use.
+use separate hosts/runs to claim a speedup. The [2026-09-24 A/B report](results/2026-09-24-36d9d56-lazy-history-ab-ci-emulator.md)
+records the complete 30-case matrix and paired ratios. Results support continuing an isolated
+ordinary-history production-integration prototype; they do **not** justify default rollout without
+viewport/controller integration tests and representative physical-device measurements.
