@@ -6,10 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.FlingBehavior
-import androidx.compose.foundation.gestures.ScrollScope
-import androidx.compose.foundation.gestures.ScrollableDefaults
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -72,7 +68,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -86,8 +81,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
@@ -105,7 +98,6 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -130,7 +122,6 @@ import me.rerere.rikkahub.data.container.isTuiCommand
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.terminalEffectiveScreenBottomRow
-import me.rerere.rikkahub.data.container.ViewportScrollOrigin
 import me.rerere.rikkahub.data.container.ControlInput
 import me.rerere.rikkahub.data.container.ProcessStatus
 import me.rerere.rikkahub.data.container.PRootManager
@@ -148,7 +139,6 @@ import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.compose.koinInject
 import android.view.MotionEvent
-import kotlin.math.abs
 import kotlin.math.roundToInt
 import java.text.BreakIterator
 import java.util.concurrent.TimeUnit
@@ -166,9 +156,6 @@ private const val TERMINAL_PTY_RESIZE_DEBOUNCE_MS = 160L
 private const val TERMINAL_IME_RESIZE_DEBOUNCE_MS = 120L
 private const val TERMINAL_RESIZE_RENDER_FALLBACK_MS = 180L
 private const val TERMINAL_RESIZE_REDRAW_SETTLE_MS = 32L
-private const val TERMINAL_FAST_FLING_VELOCITY_PX = 3500f
-private const val TERMINAL_FAST_FLING_WINDOW_MS = 700L
-private const val TERMINAL_EDGE_THRESHOLD_PX = 80
 private const val TERMINAL_UI_MIN_SCROLLBACK_LINES = 100
 private const val TERMINAL_IME_HEIGHT_MIN_DP = 80
 private const val TERMINAL_IME_HEIGHT_MAX_DP = 800
@@ -1350,23 +1337,6 @@ private fun TerminalInteractivePanel(
         horizontalScroll.scrollTo(offset.coerceIn(0, horizontalScroll.maxValue))
     }
 
-    val isViewportDragged by outputScroll.interactionSource.collectIsDraggedAsState()
-    LaunchedEffect(processId, outputScroll, viewportController) {
-        // Drag cancellation and wheel input don't always have a fling. Wait for both the pointer
-        // interaction and ScrollState to become idle; never classify a pixel change as user input.
-        combine(
-            snapshotFlow { isViewportDragged || outputScroll.isScrollInProgress },
-            viewportController.state.map { it.gesture }.distinctUntilChanged(),
-        ) { busy, gesture -> busy to gesture }.collectLatest { (busy, gesture) ->
-            if (!busy && gesture?.origin == ViewportScrollOrigin.USER_DRAG) {
-                withFrameNanos { }
-                if (!isViewportDragged && !outputScroll.isScrollInProgress) {
-                    viewportController.endUserScroll(gesture.id)
-                }
-            }
-        }
-    }
-
     // Persist only explicit terminal-control changes. Scroll position is deliberately session-local.
     LaunchedEffect(
         processId,
@@ -1556,85 +1526,16 @@ private fun TerminalInteractivePanel(
         }
     }
 
-    val defaultFlingBehavior = ScrollableDefaults.flingBehavior()
-    val viewportFlingBehavior = remember(viewportController, outputScroll, defaultFlingBehavior) {
-        object : FlingBehavior {
-            override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
-                // A fast-fling jump consumes all velocity in onPreFling; don't cancel that jump.
-                if (initialVelocity == 0f) return 0f
-                val token = viewportController.beginUserScroll(ViewportScrollOrigin.USER_FLING, outputScroll.value)
-                try {
-                    return with(defaultFlingBehavior) { this@performFling.performFling(initialVelocity) }
-                } finally {
-                    viewportController.endUserScroll(token)
-                }
-            }
-        }
-    }
-
-    var lastFastFlingDirection by remember(processId) { mutableIntStateOf(0) }
-    var lastFastFlingAt by remember(processId) { mutableLongStateOf(0L) }
-    var fastFlingCount by remember(processId) { mutableIntStateOf(0) }
-    val fastFlingConnection = remember(
-        processId,
-        terminalPanMode,
-        selectionMode,
-        fastFlingRequiredCount,
-        viewportController,
-    ) {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                if (source == NestedScrollSource.UserInput && available.y != 0f) {
-                    viewportController.beginUserScroll(ViewportScrollOrigin.USER_DRAG, outputScroll.value)
-                }
-                return Offset.Zero
-            }
-
-            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                // Capture after consumption, including the final delta. Layout clamps and our own
-                // programmatic animations never pass this user-input gate.
-                val gesture = viewportController.state.value.gesture
-                val userDelta = source == NestedScrollSource.UserInput ||
-                    (source == NestedScrollSource.SideEffect && gesture?.origin == ViewportScrollOrigin.USER_FLING)
-                if (consumed.y != 0f && userDelta && gesture != null) {
-                    viewportController.userScrolled(gesture.id, outputScroll.value)
-                }
-                return Offset.Zero
-            }
-
-            override suspend fun onPreFling(available: Velocity): Velocity {
-                val fastFlingEnabled = terminalPanMode && !selectionMode
-                if (!fastFlingEnabled) return Velocity.Zero
-                if (abs(available.y) < TERMINAL_FAST_FLING_VELOCITY_PX) return Velocity.Zero
-                if (abs(available.x) > abs(available.y) * 0.8f) return Velocity.Zero
-                val direction = if (available.y < 0f) 1 else -1
-                val now = System.currentTimeMillis()
-                fastFlingCount = if (direction == lastFastFlingDirection && now - lastFastFlingAt <= TERMINAL_FAST_FLING_WINDOW_MS) {
-                    fastFlingCount + 1
-                } else {
-                    1
-                }
-                lastFastFlingDirection = direction
-                lastFastFlingAt = now
-                if (fastFlingCount < fastFlingRequiredCount) return Velocity.Zero
-
-                fastFlingCount = 0
-                var consumed = false
-                if (direction > 0) {
-                    if (!viewportController.isNearBottom(outputScroll.value)) {
-                        viewportController.jumpToBottom(outputScroll.value)
-                        consumed = true
-                    }
-                } else {
-                    if (outputScroll.value > TERMINAL_EDGE_THRESHOLD_PX) {
-                        viewportController.jumpToTop(outputScroll.value)
-                        consumed = true
-                    }
-                }
-                return if (consumed) available else Velocity.Zero
-            }
-        }
-    }
+    val viewportGestures = rememberTerminalViewportGestures(
+        sessionKey = processId,
+        controller = viewportController,
+        config = TerminalViewportGestureConfig(terminalPanMode, selectionMode, fastFlingRequiredCount),
+        interactionSource = outputScroll.interactionSource,
+        currentScrollPx = { outputScroll.value },
+        isScrollInProgress = { outputScroll.isScrollInProgress },
+    )
+    val viewportFlingBehavior = viewportGestures.flingBehavior
+    val fastFlingConnection = viewportGestures.connection
 
     Surface(
         modifier = modifier,
