@@ -54,9 +54,13 @@ The LazyColumn is height-bounded and is not nested in a verticalScroll. Alternat
 TUI commands and full-grid mode all fall back to the eager backend; host tests cover these gates.
 The candidate still pays for the same full emulator snapshot and O(history) row-state synchronization.
 
-After every append, the candidate calls `requestScrollToItem(tailItemIndex)` **before the next draw**.
-Without this, LazyColumn's stable-key anchoring could keep an old history row visible, move the changing
-screen offscreen, and produce a false speedup. Runtime checks verify the actual tail position after
+After every ordinary update, the candidate calls `requestScrollToItem(tailItemIndex)` **before the next
+draw**. Both stable-key movement during trim and changed row metrics during a styled/CJK rewrite can
+move the tail. The eager arm checks the measured range after layout, scrolls to the new maximum if
+necessary, and awaits the corrected draw. This cost remains inside the measured window and has its
+own `Terminal.eagerTailCorrection` trace. We do not change the mixed-style workload or relax assertions
+to hide drift. Without correct tail-follow, an old row could remain visible while the changing screen
+moves partly offscreen, producing a false speedup. Runtime checks verify the actual tail position after
 mount, every output update, and the return pan. Candidate checks also require the tail and active-screen
 item to be visible, exactly one active-grid composition, and fewer history compositions than the whole
 history. Composition counters are non-observable; they do not drive recomposition.
@@ -77,6 +81,9 @@ AndroidX Macrobenchmark JSON + Perfetto traces, with:
   **not** asynchronous Compose layout/draw. `Terminal.feed` is also traced for inspection.
 - `Terminal.measure` / `Terminal.draw` per-call durations, `rowSyncMaxMs`, frame counts and
   `Terminal.followTail` request counts/durations; the report includes a separate trace-phase table.
+  The root-measure trace can include LazyColumn's on-demand subcomposition; it is **not** an isolated
+  pure-layout timer comparable to eager composition. Neither trace covers every recomposition,
+  placement, prefetch, scheduling or GC cost.
 - `Terminal.lazyHistoryCompositions` counters in traces for retained (including prefetched) history
   compositions, not a claim that every retained row is currently visible.
 - `MemoryUsageMetric(Max)`: sampled memory counters. RSS anonymous is not total RSS/PSS; heap counters
@@ -92,8 +99,11 @@ and suite in the AndroidX JSON payload; the summarizer checks SHA and suite rath
 
 The **Terminal Scrollback Benchmark** Actions workflow builds and measures on one API 34 x86_64 emulator
 (Nexus 6 profile, 2 cores, 4GiB RAM, 768MiB heap, SwiftShader). CI runs three repetitions per case by default.
-It suppresses **only** AndroidX's `EMULATOR` warning, not debuggable/profileable failures. Both arms run in
-one instrumentation invocation; do not merge separate runs to manufacture a paired comparison.
+It suppresses **only** AndroidX's `EMULATOR` warning, not debuggable/profileable failures. CI first runs a
+1k/one-repeat preflight of all output-update scenarios in both arms. Only if it passes does the full
+matrix run in a fresh instrumentation invocation. Preflight output is archived separately and never
+included in the A/B summary. Both measured arms run in one invocation; do not merge separate runs to
+manufacture a paired comparison.
 
 To run on a dedicated, authorized physical test device from a normal Android SDK development host:
 
@@ -112,7 +122,9 @@ python3 benchmarks/summarize.py benchmarks/terminal-macrobenchmark/build/outputs
 Do not pass `suppressErrors=EMULATOR` for a physical-device acceptance run. Keep device, OS, font,
 orientation, display refresh rate, build variant, thermal state and workload constant for before/after
 comparisons. Do not combine artifacts from different devices/runs in one summary input directory.
-To re-summarize the archived eager-only format, use `--suite baseline` instead.
+To re-summarize the archived eager-only format, use `--suite baseline` instead and supply the original
+measured commit as `--sha`, not the current checkout's HEAD. Legacy JSON without a source-SHA payload
+cannot independently verify a manually supplied commit label.
 
 Python report checks (no Gradle/APK build required):
 

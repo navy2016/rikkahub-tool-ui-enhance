@@ -232,14 +232,25 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                             layoutState = layoutFor(frame)
                         }
                     }
-                    if (scenario == "appendAndTrim" && layoutState!!.useLazyHistory) {
+                    if (layoutState!!.useLazyHistory) {
                         traced("Terminal.followTail") {
-                            // Stable-key anchoring otherwise keeps the old first visible history row,
-                            // hiding the changing last screen row and producing a false speedup.
+                            // Both key movement AND styled/CJK row metric changes can move the tail.
+                            // Pin the new tail during the next lazy measure, not the old history key.
                             lazyScroll.requestScrollToItem(layoutState!!.tailItemIndex)
                         }
                     }
                     output.awaitNextDraw()
+                    if (!layoutState!!.useLazyHistory && verticalScroll.value != verticalScroll.maxValue) {
+                        // The eager range is only known after layout. Do not assume a styled line
+                        // rewrite has the same measured height, or relax the tail assertion.
+                        Trace.beginAsyncSection("Terminal.eagerTailCorrection", 2)
+                        try {
+                            verticalScroll.scrollTo(verticalScroll.maxValue)
+                        } finally {
+                            Trace.endAsyncSection("Terminal.eagerTailCorrection", 2)
+                        }
+                        output.awaitNextDraw()
+                    }
                     verifyTail()
                     delay((deadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
                 }
@@ -256,11 +267,16 @@ class TerminalBenchmarkActivity : ComponentActivity() {
         val current = checkNotNull(layoutState)
         check(current.screenRows == TerminalBenchmarkWorkload.SCREEN_ROWS)
         if (!current.useLazyHistory) {
-            check(verticalScroll.value == verticalScroll.maxValue) { "Eager viewport left the tail" }
+            check(verticalScroll.value == verticalScroll.maxValue) {
+                "Eager viewport left the tail: value=${verticalScroll.value}, max=${verticalScroll.maxValue}"
+            }
             check(compositionStats.historyRows == 0 && compositionStats.activeGrids == 0)
             return
         }
-        check(!lazyScroll.canScrollForward) { "Lazy viewport left the tail" }
+        check(!lazyScroll.canScrollForward) {
+            "Lazy viewport left the tail: index=${lazyScroll.firstVisibleItemIndex}, " +
+                "offset=${lazyScroll.firstVisibleItemScrollOffset}"
+        }
         val info = lazyScroll.layoutInfo
         check(info.totalItemsCount == current.lazyItemCount)
         check(info.visibleItemsInfo.any { it.key == TerminalBenchmarkLayout.TAIL_KEY })

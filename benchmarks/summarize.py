@@ -112,9 +112,9 @@ def validate_complete(results, suite="baseline"):
                         or any(total <= 0 for total in sums)):
                     raise ValueError(f"Missing/incomplete {prefix} traces for {key}")
         if suite == "ab":
-            # Prove the lazy append workload requested follow-tail for EVERY update. Otherwise
-            # stable-key anchoring can leave the changing screen offscreen and fake an improvement.
-            expected_count = 30 if key[1:] == ("appendAndTrim", "lazyHistory") else 0
+            # Pin every ordinary lazy update: both key movement and styled-line height changes
+            # can leave the changing screen offscreen. Alternate/full-grid controls stay eager.
+            expected_count = 30 if key[2] == "lazyHistory" and key[1] in ("activeRowUpdate", "appendAndTrim") else 0
             counts = single_runs(result, "followTailCount")
             if len(counts) != iterations or any(count != expected_count for count in counts):
                 raise ValueError(f"Incorrect follow-tail trace count for {key}")
@@ -169,7 +169,7 @@ def render_summary(results, context, sha, environment):
         "- No shell/PTY startup, viewport controller, IME, text selection or app-wide startup in this harness.",
         "- Missing metrics are `—`, never zero. Times are ms; RSS anon is MiB (not total/PSS).", "",
         "| History | Scenario | Renderer | Repeats | Mount→draw | renderFrame/op | row sync/op | CPU frame p50 | CPU frame p95 | Overrun p95 | Overrun frames % | RSS anon max¹ |",
-        "| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for (size, scenario, renderer), result in ordered_results(results):
         rss = median(result, "memoryRssAnonMaxKb")
@@ -197,7 +197,9 @@ def render_summary(results, context, sha, environment):
     if is_ab:
         lines += [
             "The lazy candidate has one item per history line, ONE whole active-screen grid item, and an 8dp tail item.",
-            "After each append it requests the tail item; draw-time checks reject drift/offscreen updates or a fragmented screen.",
+            "The lazy arm requests the tail before each ordinary update draw; eager corrects a changed range after layout.",
+            "Any eager correction is followed by another draw and included in the measured window, not hidden in setup.",
+            "Draw-time checks reject drift/offscreen updates or a fragmented screen. Mixed-style row heights are not assumed constant.",
             "Both arms pan six viewport heights using identical 1-second `animateScrollBy` animations, then return to the tail.",
             "Pairs use the same APK/device, with A/B order alternating per case; this is not a statistical confidence interval.",
         ]
@@ -206,14 +208,14 @@ def render_summary(results, context, sha, environment):
         "", "## Trace phase details", "",
         "Per-call values below are medians of iteration averages. These traces do not measure all recomposition/placement work.",
         "Native frame scheduling, untraced work and GC also prevent subtracting these values from frame p95.", "",
-        "| History | Scenario | Renderer | Measure/call | Draw/call | row sync max¹ | follow tail/call | Frames¹ |",
-        "| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: |",
+        "| History | Scenario | Renderer | Measure/call | Draw/call | row sync max¹ | lazy tail request/call | eager correction/call | Frames¹ |",
+        "| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for (size, scenario, renderer), result in ordered_results(results):
         values = [str(size), scenario, renderer,
                   format_number(per_operation(result, "measure")), format_number(per_operation(result, "draw")),
                   format_number(median(result, "rowSyncMaxMs")), format_number(per_operation(result, "followTail")),
-                  format_number(median(result, "frameCount"))]
+                  format_number(per_operation(result, "eagerTailCorrection")), format_number(median(result, "frameCount"))]
         lines.append("| " + " | ".join(values) + " |")
     lines += [
         "", "## Device context", "",

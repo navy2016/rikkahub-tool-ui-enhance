@@ -35,10 +35,14 @@ class TerminalScrollbackBenchmark(
         @JvmStatic
         @Parameterized.Parameters(name = "history={0,number,#},scenario={1},renderer={2}")
         fun parameters(): List<Array<Any>> = buildList {
-            val scenarios = listOf(
-                "initialCompose", "historyScroll", "activeRowUpdate", "appendAndTrim", "alternateScreenUpdate",
-            )
-            listOf(1_000, 5_000, 10_000).forEachIndexed { sizeIndex, size ->
+            val preflight = InstrumentationRegistry.getArguments().getString("terminalPreflight") == "true"
+            val scenarios = if (preflight) {
+                listOf("activeRowUpdate", "appendAndTrim", "alternateScreenUpdate")
+            } else {
+                listOf("initialCompose", "historyScroll", "activeRowUpdate", "appendAndTrim", "alternateScreenUpdate")
+            }
+            val sizes = if (preflight) listOf(1_000) else listOf(1_000, 5_000, 10_000)
+            sizes.forEachIndexed { sizeIndex, size ->
                 scenarios.forEachIndexed { scenarioIndex, scenario ->
                     // Adjacent A/B cases on ONE device/APK; alternate order to reduce fixed-order bias.
                     val renderers = if ((sizeIndex + scenarioIndex) % 2 == 0) {
@@ -65,6 +69,7 @@ class TerminalScrollbackBenchmark(
             add(TraceSectionMetric("Terminal.measure", label = "measure"))
             add(TraceSectionMetric("Terminal.draw", label = "draw"))
             add(TraceSectionMetric("Terminal.followTail", label = "followTail"))
+            add(TraceSectionMetric("Terminal.eagerTailCorrection", label = "eagerTailCorrection"))
             if (scenario == "initialCompose") {
                 add(TraceSectionMetric("Terminal.mountToDraw", TraceSectionMetric.Mode.First, "mountToDraw"))
             }

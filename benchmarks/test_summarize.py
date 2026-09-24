@@ -9,7 +9,7 @@ from summarize import (RENDERERS, SCENARIOS, SIZES, comparison_lines, load_resul
 
 def measurement(size=1000, scenario="initialCompose", renderer="eager", legacy=False):
     count = 1 if scenario == "initialCompose" else 30
-    follow_count = 30 if (scenario, renderer) == ("appendAndTrim", "lazyHistory") else 0
+    follow_count = 30 if renderer == "lazyHistory" and scenario in ("activeRowUpdate", "appendAndTrim") else 0
     result = {
         "className": "me.rerere.rikkahub.benchmark.TerminalScrollbackBenchmark",
         "name": f"{scenario}[history={size}]" if legacy else
@@ -71,6 +71,7 @@ class SummaryTest(unittest.TestCase):
     def test_requires_all_update_and_follow_tail_traces(self):
         for key, metric, runs in [
             ((10000, "appendAndTrim", "lazyHistory"), "followTailCount", [0, 30]),
+            ((10000, "activeRowUpdate", "lazyHistory"), "followTailCount", [0, 30]),
             ((10000, "appendAndTrim", "eager"), "rowSyncCount", [0, 30]),
             ((10000, "alternateScreenUpdate", "lazyHistory"), "followTailCount", [30, 30]),
         ]:
