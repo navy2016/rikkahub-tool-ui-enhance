@@ -124,7 +124,12 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     } else eagerScroll.value
 
     private fun maximumPx(): Int = if (lazyHistory) {
-        lazyMeasurement?.maxScrollPx ?: Int.MAX_VALUE
+        // This fixture deliberately uses exact 64px boxes for every structural item, so its
+        // total range is known even while the real tail is off-screen. Production must continue
+        // to use TerminalLazyViewportMeasurement.maxScrollPx and keep Int.MAX_VALUE unknown.
+        lazyMeasurement?.maxScrollPx
+            ?: ((HISTORY_ROWS + SCREEN_ROWS) * ROW_HEIGHT + TAIL_HEIGHT - viewportHeight)
+                .coerceAtLeast(0)
     } else eagerScroll.maxValue
 
     fun isAtTop(): Boolean = if (lazyHistory) {

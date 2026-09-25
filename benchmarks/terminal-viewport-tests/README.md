@@ -34,9 +34,10 @@ count 1–5, count-setting reset and cancellation cases additionally have determ
 
 ## Important limits — do not enable production LazyColumn based on this test alone
 
-Rows have **explicit 64px boxes** in this fixture, making the row renderer deterministic. The lazy
-fixture derives its known range from the measured tail item and viewport height. This does NOT
-validate variable ANSI/CJK/fallback-font heights, production anchor restoration, font changes,
+Rows have **explicit 64px boxes** in this fixture, making the row renderer deterministic. Because
+every fixture item has a fixed measured height, the fixture also knows its synthetic total range
+while the tail is off-screen; the production tracker still reports an unknown range until it sees
+the real tail. This does NOT validate variable ANSI/CJK/fallback-font heights, production anchor restoration, font changes,
 IME avoidance, mouse-cell coordinates, renderer transitions, or off-screen selection/copy. The small
 per-row SelectionContainers here test the input-mode gate, not cross-item text selection fidelity.
 
