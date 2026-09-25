@@ -34,8 +34,9 @@ count 1–5, count-setting reset and cancellation cases additionally have determ
 
 ## Important limits — do not enable production LazyColumn based on this test alone
 
-Rows have **explicit 64px boxes** in this fixture, making the test-only pixel adapter exact. This does
-NOT validate variable ANSI/CJK/fallback-font heights, production anchor restoration, font changes,
+Rows have **explicit 64px boxes** in this fixture, making the row renderer deterministic. The lazy
+fixture derives its known range from the measured tail item and viewport height. This does NOT
+validate variable ANSI/CJK/fallback-font heights, production anchor restoration, font changes,
 IME avoidance, mouse-cell coordinates, renderer transitions, or off-screen selection/copy. The small
 per-row SelectionContainers here test the input-mode gate, not cross-item text selection fidelity.
 
@@ -57,7 +58,7 @@ On an authorized SDK host/device (or the `Terminal Viewport Interaction Tests` G
 python3 .github/scripts/report-terminal-tests.py \
   benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
   --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest \
-  --require-case-group 'lazyHistory=false:10' --require-case-group 'lazyHistory=true:10'
+  --require-case-group 'lazyHistory=false:11' --require-case-group 'lazyHistory=true:11'
 ```
 
 Do not merge these debug correctness results with the 30-case Macrobenchmark A/B JSON. There are no

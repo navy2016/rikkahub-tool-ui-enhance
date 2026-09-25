@@ -41,7 +41,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.container.TerminalMeasuredViewportItem
 import me.rerere.rikkahub.data.container.TerminalLazyViewportLayout
+import me.rerere.rikkahub.data.container.TerminalLazyViewportMeasurement
+import me.rerere.rikkahub.data.container.TerminalLazyViewportMeasurementTracker
 import me.rerere.rikkahub.data.container.TerminalLazyViewportScrollTarget
+import me.rerere.rikkahub.data.container.TerminalLazyViewportItemKind
+import me.rerere.rikkahub.data.container.TerminalLazyViewportVisibleItem
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportItemAnchor
 import me.rerere.rikkahub.data.container.captureMeasuredViewportAnchor
@@ -99,9 +103,12 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     private val effects = mutableListOf<TerminalViewportScrollEffect>()
     private val effectEvents = mutableListOf<String>()
     private var lastMeasuredItems: List<TerminalMeasuredViewportItem> = emptyList()
-    private var screenItemTopPx: Int? = null
+    private var lazyMeasurement: TerminalLazyViewportMeasurement? = null
     private var lockedMeasuredAnchor: TerminalViewportItemAnchor? = null
     private val rowHeights = mutableMapOf<Long, Int>()
+    private val lazyMeasurementTracker = TerminalLazyViewportMeasurementTracker(TAIL_HEIGHT).apply {
+        reset(INITIAL_PX)
+    }
     val jumps: List<TerminalViewportScrollEffect> get() = effects.filter { it.origin == ViewportScrollOrigin.JUMP }
     var activeWriters = 0
         private set
@@ -113,17 +120,20 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
         private set
 
     fun currentPx(): Int = if (lazyHistory) {
+        lazyMeasurement?.currentScrollPx ?: fixedLazyScrollPx()
+    } else eagerScroll.value
+
+    private fun fixedLazyScrollPx(): Int {
         val row = when (val item = lazyScroll.firstVisibleItemIndex) {
             in 0 until HISTORY_ROWS -> item
             HISTORY_ROWS -> HISTORY_ROWS // ONE active-screen item, not 24 lazy items.
             else -> HISTORY_ROWS + SCREEN_ROWS
         }
         row * ROW_HEIGHT + lazyScroll.firstVisibleItemScrollOffset
-    } else eagerScroll.value
+    }
 
     private fun maximumPx(): Int = if (lazyHistory) {
-        if (lazyScroll.layoutInfo.totalItemsCount != HISTORY_ROWS + 2) Int.MAX_VALUE
-        else ((HISTORY_ROWS + SCREEN_ROWS) * ROW_HEIGHT + TAIL_HEIGHT - viewportHeight).coerceAtLeast(0)
+        lazyMeasurement?.maxScrollPx ?: Int.MAX_VALUE
     } else eagerScroll.maxValue
 
     fun isAtTop(): Boolean = if (lazyHistory) {
@@ -194,21 +204,25 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
                 withFrameNanos { }
                 if (lazyHistory) {
                     updateMeasuredLazyItems(lazyScroll.layoutInfo.visibleItemsInfo)
-                    val anchor = controller.state.value.anchor?.let {
-                        TerminalViewportItemAnchor(
-                            lineId = it.lineId,
-                            clippedTopPx = it.clippedTopPx,
-                            screenGeneration = it.screenGeneration,
-                            historyGeneration = it.historyGeneration,
+                    if (lazyMeasurement?.generationChanged == true) {
+                        controller.setMeasuredAnchorTarget(frame.revision, null, null)
+                    } else {
+                        val anchor = controller.state.value.anchor?.let {
+                            TerminalViewportItemAnchor(
+                                lineId = it.lineId,
+                                clippedTopPx = it.clippedTopPx,
+                                screenGeneration = it.screenGeneration,
+                                historyGeneration = it.historyGeneration,
+                            )
+                        }
+                        controller.setMeasuredAnchorTarget(
+                            frameRevision = frame.revision,
+                            anchor = anchor,
+                            targetScrollPx = anchor?.let {
+                                resolveMeasuredViewportAnchor(lastMeasuredItems, it, maximumPx())
+                            },
                         )
                     }
-                    controller.setMeasuredAnchorTarget(
-                        frameRevision = frame.revision,
-                        anchor = anchor,
-                        targetScrollPx = anchor?.let {
-                            resolveMeasuredViewportAnchor(lastMeasuredItems, it, maximumPx())
-                        },
-                    )
                 } else {
                     controller.setMeasuredAnchorTarget(frame.revision, null, null)
                 }
@@ -286,44 +300,37 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     }
 
     private fun updateMeasuredLazyItems(visibleItems: List<LazyListItemInfo>) {
-        lastMeasuredItems = emptyList()
-        screenItemTopPx = null
-        val viewportScroll = currentPx()
-        val viewportStartOffset = lazyScroll.layoutInfo.viewportStartOffset
-        val measured = ArrayList<TerminalMeasuredViewportItem>()
-        for (item in visibleItems) {
-            // LazyList offsets are relative to the viewport start. Convert directly to content
-            // coordinates; deriving an origin from the first item double-counts its clipping.
-            val absoluteTop = viewportScroll + item.offset - viewportStartOffset
+        val visible = visibleItems.mapNotNull { item ->
             when (val key = item.key) {
-                is Long -> measured += TerminalMeasuredViewportItem(
+                is Long -> TerminalLazyViewportVisibleItem(
+                    kind = TerminalLazyViewportItemKind.HISTORY,
                     lineId = key,
-                    topPx = absoluteTop,
+                    offsetPx = item.offset,
                     heightPx = item.size,
-                    historyGeneration = frame.historyGeneration,
                 )
-                SCREEN_KEY -> {
-                    screenItemTopPx = absoluteTop
-                    val end = minOf(rows.size, frame.historyCount + SCREEN_ROWS)
-                    var rowTop = absoluteTop
-                    for (rowIndex in frame.historyCount until end) {
-                        val row = rows[rowIndex]
-                        val rowHeight = rowHeights[row.lineId] ?: run {
-                            lastMeasuredItems = emptyList()
-                            return
-                        }
-                        measured += TerminalMeasuredViewportItem(
-                            lineId = row.lineId,
-                            topPx = rowTop,
-                            heightPx = rowHeight,
-                            screenGeneration = frame.screenGeneration,
-                        )
-                        rowTop += rowHeight
-                    }
-                }
+                SCREEN_KEY -> TerminalLazyViewportVisibleItem(
+                    kind = TerminalLazyViewportItemKind.ACTIVE_SCREEN,
+                    offsetPx = item.offset,
+                    heightPx = item.size,
+                )
+                TAIL_KEY -> TerminalLazyViewportVisibleItem(
+                    kind = TerminalLazyViewportItemKind.TAIL,
+                    offsetPx = item.offset,
+                    heightPx = item.size,
+                )
+                else -> null
             }
         }
-        lastMeasuredItems = measured.sortedBy { it.topPx }
+        lazyMeasurement = lazyMeasurementTracker.update(
+            frame = frame,
+            visibleItems = visible,
+            screenRowHeights = rowHeights,
+            screenRowsComplete = frame.screenLineIds.all { rowHeights.containsKey(it) },
+            viewportStartOffsetPx = lazyScroll.layoutInfo.viewportStartOffset,
+            viewportHeightPx = viewportHeight,
+            canScrollForward = lazyScroll.canScrollForward,
+        )
+        lastMeasuredItems = lazyMeasurement?.layout?.measuredRows ?: emptyList()
     }
 
     @Composable
@@ -344,7 +351,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
         Column(
             Modifier
                 .testTag(SCREEN_KEY)
-                .onSizeChanged { if (screenItemTopPx == null) screenItemTopPx = currentPx() },
+                .onSizeChanged { },
         ) {
             for (index in HISTORY_ROWS until rows.size) key(rows[index].lineId) { UniformRow(index) }
         }
@@ -371,6 +378,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     private suspend fun applyScrollEffect(effect: TerminalViewportScrollEffect, targetPx: Int) {
         if (lazyHistory) {
             val target = lazyTargetForEffect(effect, targetPx) ?: return
+            lazyMeasurementTracker.setExpectedScrollPx(targetPx)
             if (effect.animated) {
                 lazyScroll.animateScrollToItem(target.itemIndex, target.itemScrollOffsetPx)
             } else {
@@ -391,7 +399,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
             historyGeneration = frame.historyGeneration,
             screenGeneration = frame.screenGeneration,
             measuredRows = lastMeasuredItems,
-            activeScreenItemTopPx = screenItemTopPx,
+            activeScreenItemTopPx = lazyMeasurement?.layout?.activeScreenItemTopPx,
             tailItemHeightPx = TAIL_HEIGHT,
             viewportHeightPx = viewportHeight,
         )

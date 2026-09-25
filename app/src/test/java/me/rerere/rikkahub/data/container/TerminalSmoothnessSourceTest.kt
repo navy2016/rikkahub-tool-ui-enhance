@@ -259,6 +259,23 @@ class TerminalSmoothnessSourceTest {
     }
 
     @Test
+    fun lazyMeasurementDoesNotInventAnUnknownScrollRange() {
+        val measurementSource = listOf(
+            File("app/src/main/java/me/rerere/rikkahub/data/container/TerminalLazyViewportMeasurement.kt"),
+            File("src/main/java/me/rerere/rikkahub/data/container/TerminalLazyViewportMeasurement.kt"),
+        ).first { it.isFile }.readText()
+        assertTrue(measurementSource.contains("val maxScrollPx: Int?"))
+        assertTrue(measurementSource.contains("tailItem"))
+        assertTrue(measurementSource.contains("tailBottomPx - viewportHeightPx"))
+        assertTrue(measurementSource.contains("screenRowsComplete"))
+        assertTrue(measurementSource.contains("generationChanged"))
+        assertTrue(measurementSource.contains("screenRowsComplete"))
+        assertTrue(measurementSource.contains("setExpectedScrollPx"))
+        assertFalse(measurementSource.contains("historyLineIds.size *"))
+        assertFalse(measurementSource.contains("cellHeightPx"))
+    }
+
+    @Test
     fun unverifiedLazyGeometryCannotAutoEnableInTheProductionTerminal() {
         // The isolated gesture fixture is not permission to enable a production lazy viewport.
         assertFalse(processSessionSource.contains("LazyColumn("))
@@ -273,6 +290,21 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("scheduleTerminalRender()"))
         assertFalse(processSessionSource.contains("TERMINAL_OUTPUT_BATCH_WINDOW_MS"))
         assertFalse(processSessionSource.contains("delay(8L)"))
+    }
+
+    @Test
+    fun physicalScreenRowsHaveStableRenderedRowCache() {
+        val emulatorSource = listOf(
+            File("app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt"),
+            File("src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt"),
+        ).first { it.isFile }.readText()
+        assertTrue(emulatorSource.contains("mainScreenRenderedRows"))
+        assertTrue(emulatorSource.contains("screenLineFingerprint"))
+        assertTrue(emulatorSource.contains("cell.text.hashCode()"))
+        assertTrue(emulatorSource.contains("cell.style.hashCode()"))
+        assertTrue(emulatorSource.contains("activeScreenLineIds[row]"))
+        assertTrue(emulatorSource.contains("cursorRowForCache != row"))
+        assertTrue(emulatorSource.contains("invalidateRenderedRows()"))
     }
 
     @Test

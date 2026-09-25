@@ -189,6 +189,41 @@ class TerminalEmulatorTest {
         assertTrue(terminal.render(includeScrollback = false).text.startsWith("▁"))
     }
 
+    @Test
+    fun unchangedPhysicalRowsReuseRenderedTextWhileCursorRowIsRebuilt() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("stable")
+        val first = terminal.renderFrame(includeScrollback = false)
+        val second = terminal.renderFrame(includeScrollback = false)
+
+        assertSame(first.rows[1], second.rows[1])
+        assertNotSame(first.rows[0], second.rows[0])
+        assertEquals(first.rows[1].text, second.rows[1].text)
+    }
+
+    @Test
+    fun changedPhysicalRowDoesNotReuseItsOldRenderedText() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("stable")
+        val first = terminal.renderFrame(includeScrollback = false)
+        terminal.feed("\u001B[2;1Hchanged")
+        val second = terminal.renderFrame(includeScrollback = false)
+
+        assertNotSame(first.rows[1], second.rows[1])
+        assertEquals("changed", second.rows[1].text.text.trim())
+    }
+
+    @Test
+    fun paletteChangeInvalidatesPhysicalScreenRowCache() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6)
+        terminal.feed("stable")
+        val first = terminal.renderFrame(includeScrollback = false)
+        terminal.feed("4;2;rgb:ff/00/00")
+        val second = terminal.renderFrame(includeScrollback = false)
+
+        assertNotSame(first.rows[1], second.rows[1])
+    }
+
 
     @Test
     fun sgrButtonDragAndReleaseKeepThePressedButton() {

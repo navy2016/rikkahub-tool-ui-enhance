@@ -9,6 +9,7 @@ on:
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewport*.kt'
+      - 'app/src/test/java/me/rerere/rikkahub/data/container/TerminalLazyViewportMeasurementTest.kt'
       - 'benchmarks/terminal-viewport-tests/**'
       - '.github/workflows/terminal-viewport-interactions.yml'
       - '.github/scripts/*terminal*'
