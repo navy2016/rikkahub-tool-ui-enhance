@@ -56,7 +56,11 @@ jobs:
           disable-animations: false
           emulator-boot-timeout: 900
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: bash benchmarks/terminal-viewport-tests/run-ci.sh
+          # Keep an instrumentation/ADB deadlock from consuming the whole job without
+          # reaching the JUnit and logcat reporting steps below.
+          script: |
+            timeout --foreground --kill-after=30s 15m \
+              bash benchmarks/terminal-viewport-tests/run-ci.sh
       - name: Require eager and lazy gesture regression results
         if: always()
         run: |
