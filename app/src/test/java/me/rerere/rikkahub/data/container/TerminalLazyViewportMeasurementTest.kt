@@ -273,7 +273,7 @@ class TerminalLazyViewportMeasurementTest {
         tracker.update(
             frame = frame(screenGeneration = 8),
             visibleItems = listOf(
-                TerminalLazyViewportVisibleItem(TerminalLazyViewportItemKind.ACTIVE_SCREEN, 0, 55),
+                TerminalLazyViewportVisibleItem(TerminalLazyViewportItemKind.ACTIVE_SCREEN, offsetPx = 0, heightPx = 55),
             ),
             screenRowHeights = mapOf(100L to 24, 101L to 31),
             screenRowsComplete = true,
@@ -284,7 +284,7 @@ class TerminalLazyViewportMeasurementTest {
         val stable = tracker.update(
             frame = frame(screenGeneration = 8),
             visibleItems = listOf(
-                TerminalLazyViewportVisibleItem(TerminalLazyViewportItemKind.ACTIVE_SCREEN, 0, 55),
+                TerminalLazyViewportVisibleItem(TerminalLazyViewportItemKind.ACTIVE_SCREEN, offsetPx = 0, heightPx = 55),
             ),
             screenRowHeights = mapOf(100L to 24, 101L to 31),
             screenRowsComplete = true,

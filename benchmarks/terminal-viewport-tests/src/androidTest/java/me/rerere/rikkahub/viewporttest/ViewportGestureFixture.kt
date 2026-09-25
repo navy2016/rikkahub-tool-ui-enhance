@@ -129,7 +129,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
             HISTORY_ROWS -> HISTORY_ROWS // ONE active-screen item, not 24 lazy items.
             else -> HISTORY_ROWS + SCREEN_ROWS
         }
-        row * ROW_HEIGHT + lazyScroll.firstVisibleItemScrollOffset
+        return row * ROW_HEIGHT + lazyScroll.firstVisibleItemScrollOffset
     }
 
     private fun maximumPx(): Int = if (lazyHistory) {
