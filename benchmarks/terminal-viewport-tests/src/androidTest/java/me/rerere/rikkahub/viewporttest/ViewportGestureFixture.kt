@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -38,7 +39,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.container.TerminalMeasuredViewportItem
 import me.rerere.rikkahub.data.container.TerminalViewportController
+import me.rerere.rikkahub.data.container.TerminalViewportItemAnchor
+import me.rerere.rikkahub.data.container.captureMeasuredViewportAnchor
+import me.rerere.rikkahub.data.container.resolveMeasuredViewportAnchor
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
 import me.rerere.rikkahub.data.container.TerminalViewportState
@@ -87,6 +92,10 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
         private set
     private val effects = mutableListOf<TerminalViewportScrollEffect>()
     private val effectEvents = mutableListOf<String>()
+    private var lastMeasuredItems: List<TerminalMeasuredViewportItem> = emptyList()
+    private var screenItemTopPx: Int? = null
+    private var lockedMeasuredAnchor: TerminalViewportItemAnchor? = null
+    private val rowHeights = mutableMapOf<Long, Int>()
     val jumps: List<TerminalViewportScrollEffect> get() = effects.filter { it.origin == ViewportScrollOrigin.JUMP }
     var activeWriters = 0
         private set
@@ -122,6 +131,18 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
         }
     } else eagerScroll.maxValue != Int.MAX_VALUE && eagerScroll.value == eagerScroll.maxValue
 
+    fun measuredVisibleItems(): List<TerminalMeasuredViewportItem> = lastMeasuredItems
+
+    fun captureMeasuredAnchorForTest(): TerminalViewportItemAnchor? {
+        val anchor = captureMeasuredViewportAnchor(lastMeasuredItems, currentPx())
+        lockedMeasuredAnchor = anchor
+        return anchor
+    }
+
+    fun resolveCapturedMeasuredAnchorForTest(): Int? = lockedMeasuredAnchor?.let {
+        resolveMeasuredViewportAnchor(lastMeasuredItems, it, maximumPx())
+    }
+
     fun diagnostics(): String = "lazy=$lazyHistory px=${currentPx()} max=${maximumPx()} " +
         "busy=${if (lazyHistory) lazyScroll.isScrollInProgress else eagerScroll.isScrollInProgress} " +
         "first=${lazyScroll.firstVisibleItemIndex}:${lazyScroll.firstVisibleItemScrollOffset} " +
@@ -153,8 +174,11 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
             nowMs = { inputTimeMs },
         )
         LaunchedEffect(this) {
-            snapshotFlow { frame.revision to metrics() }.collect {
+            snapshotFlow {
+                frame.revision to (metrics() to lazyScroll.layoutInfo.visibleItemsInfo.map { it.key to it.offset })
+            }.collect {
                 withFrameNanos { }
+                if (lazyHistory) updateMeasuredLazyItems(lazyScroll.layoutInfo.visibleItemsInfo)
                 controller.updateViewport(frame, rows.size, metrics(), currentPx())
             }
         }
@@ -228,6 +252,41 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
         }
     }
 
+    private fun updateMeasuredLazyItems(visibleItems: List<LazyListItemInfo>) {
+        val first = visibleItems.firstOrNull() ?: return
+        val viewportScroll = currentPx()
+        val originTopPx = viewportScroll - (first.offset - lazyScroll.layoutInfo.viewportStartOffset)
+        val measured = ArrayList<TerminalMeasuredViewportItem>()
+        for (item in visibleItems) {
+            val absoluteTop = originTopPx + (item.offset - lazyScroll.layoutInfo.viewportStartOffset)
+            when (val key = item.key) {
+                is Long -> measured += TerminalMeasuredViewportItem(
+                    lineId = key,
+                    topPx = absoluteTop,
+                    heightPx = item.size,
+                    historyGeneration = frame.historyGeneration,
+                )
+                SCREEN_KEY -> {
+                    screenItemTopPx = absoluteTop
+                    val end = minOf(rows.size, frame.historyCount + SCREEN_ROWS)
+                    var rowTop = absoluteTop
+                    for (rowIndex in frame.historyCount until end) {
+                        val row = rows[rowIndex]
+                        val rowHeight = rowHeights[row.lineId] ?: return
+                        measured += TerminalMeasuredViewportItem(
+                            lineId = row.lineId,
+                            topPx = rowTop,
+                            heightPx = rowHeight,
+                            screenGeneration = frame.screenGeneration,
+                        )
+                        rowTop += rowHeight
+                    }
+                }
+            }
+        }
+        lastMeasuredItems = measured.sortedBy { it.topPx }
+    }
+
     @Composable
     private fun HistoryRow(index: Int) {
         DisposableEffect(rows[index].lineId) {
@@ -243,7 +302,11 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
             composedScreens++
             onDispose { composedScreens-- }
         }
-        Column(Modifier.testTag(SCREEN_KEY)) {
+        Column(
+            Modifier
+                .testTag(SCREEN_KEY)
+                .onSizeChanged { if (screenItemTopPx == null) screenItemTopPx = currentPx() },
+        ) {
             for (index in HISTORY_ROWS until rows.size) key(rows[index].lineId) { UniformRow(index) }
         }
     }
@@ -251,7 +314,11 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     @Composable
     private fun UniformRow(index: Int) {
         val density = LocalDensity.current
-        Box(Modifier.width(1_000.dp).height(with(density) { ROW_HEIGHT.toDp() })) {
+        Box(Modifier
+            .width(1_000.dp)
+            .height(with(density) { ROW_HEIGHT.toDp() })
+            .onSizeChanged { rowHeights[rows[index].lineId] = it.height }
+        ) {
             // The wrapper deliberately fixes row heights only in this contract fixture.
             val text: @Composable () -> Unit = {
                 TerminalRenderedRows(listOf(rows[index]), TextStyle(

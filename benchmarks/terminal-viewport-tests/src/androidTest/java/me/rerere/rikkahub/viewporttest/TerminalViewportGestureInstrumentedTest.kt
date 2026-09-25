@@ -133,6 +133,18 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
     }
 
     @Test
+    fun lazyLayoutPublishesMeasuredVisibleItemsAndRestoresStableAnchor() {
+        if (!lazyHistory) return
+        compose.runOnIdle {
+            val measured = viewport.measuredVisibleItems()
+            assertTrue(viewport.diagnostics(), measured.isNotEmpty())
+            val anchor = viewport.captureMeasuredAnchorForTest()
+            assertTrue(viewport.diagnostics(), anchor != null)
+            assertEquals(viewport.currentPx(), viewport.resolveCapturedMeasuredAnchorForTest())
+        }
+    }
+
+    @Test
     fun slowSwipesPanWithoutTriggeringFastJump() {
         val node = compose.onNodeWithTag(ViewportGestureFixture.OUTPUT_TAG)
         val size = node.fetchSemanticsNode().size
