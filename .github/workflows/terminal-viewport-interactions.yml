@@ -58,9 +58,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           # Keep an instrumentation/ADB deadlock from consuming the whole job without
           # reaching the JUnit and logcat reporting steps below.
-          script: |
-            python3 .github/scripts/run-terminal-with-timeout.py 900 \
-              bash benchmarks/terminal-viewport-tests/run-ci.sh
+          script: python3 .github/scripts/run-terminal-with-timeout.py 900 bash benchmarks/terminal-viewport-tests/run-ci.sh
       - name: Require eager and lazy gesture regression results
         if: always()
         run: |
