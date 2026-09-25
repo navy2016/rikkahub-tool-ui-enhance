@@ -30,11 +30,11 @@ internal suspend fun runTerminalViewportScrollEffects(
                 // that handoff, then give the child a bounded number of frames to release its
                 // mutation. Waiting on an unbounded snapshotFlow can leave the sole writer stuck
                 // forever when an Android emulator loses the corresponding idle notification.
-                var handoffFrames = 0
-                do {
-                    withFrameNanos { }
-                    handoffFrames++
-                } while (isScrollInProgress() && handoffFrames < TERMINAL_SCROLL_HANDOFF_MAX_FRAMES)
+                // Do not wait for several virtual frames here: Compose tests and lifecycle
+                // transitions may intentionally stop the frame clock while a pointer mutation is
+                // being cancelled. One yielded frame is the complete handoff window; the sole
+                // writer then proceeds even if the child still reports busy.
+                withFrameNanos { }
             }
             // A new drag/jump can invalidate the effect during the handoff. Never replay stale intent.
             if (!controller.isCurrent(effect)) return@collectLatest
@@ -46,6 +46,3 @@ internal suspend fun runTerminalViewportScrollEffects(
         }
     }
 }
-
-/** A child pointer mutation should release within a few frames; never block a jump forever. */
-private const val TERMINAL_SCROLL_HANDOFF_MAX_FRAMES = 8
