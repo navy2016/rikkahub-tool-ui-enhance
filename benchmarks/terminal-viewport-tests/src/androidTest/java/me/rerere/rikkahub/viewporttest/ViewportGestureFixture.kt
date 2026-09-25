@@ -52,6 +52,7 @@ import me.rerere.rikkahub.data.container.terminalLazyTargetForTop
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
 import me.rerere.rikkahub.data.container.TerminalViewportState
+import me.rerere.rikkahub.data.container.ViewportMode
 import me.rerere.rikkahub.data.container.ViewportScrollOrigin
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.TerminalViewportGestureConfig
@@ -193,7 +194,14 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
                 withFrameNanos { }
                 if (lazyHistory) {
                     updateMeasuredLazyItems(lazyScroll.layoutInfo.visibleItemsInfo)
-                    val anchor = controller.state.value.anchor
+                    val anchor = controller.state.value.anchor?.let {
+                        TerminalViewportItemAnchor(
+                            lineId = it.lineId,
+                            clippedTopPx = it.clippedTopPx,
+                            screenGeneration = it.screenGeneration,
+                            historyGeneration = it.historyGeneration,
+                        )
+                    }
                     controller.setMeasuredAnchorTarget(
                         frameRevision = frame.revision,
                         anchor = anchor,
