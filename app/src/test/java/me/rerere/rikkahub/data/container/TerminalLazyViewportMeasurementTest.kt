@@ -168,7 +168,7 @@ class TerminalLazyViewportMeasurementTest {
             canScrollForward = false,
         )
         assertEquals(200, result.currentScrollPx)
-        assertEquals(0, result.maxScrollPx)
+        assertEquals(200, result.maxScrollPx)
     }
 
     @Test

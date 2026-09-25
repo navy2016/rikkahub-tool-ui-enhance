@@ -96,12 +96,13 @@ internal class TerminalLazyViewportMeasurementTracker(
         historyGeneration = frame.historyGeneration
         screenGeneration = frame.screenGeneration
 
-        val scrollPx = expectedScrollPx ?: visibleItems.firstNotNullOfOrNull { item ->
+        val overlappingScrollPx = visibleItems.firstNotNullOfOrNull { item ->
             val key = ItemKey(item.kind, item.lineId)
             previousAbsoluteTops[key]?.let { absoluteTop ->
                 absoluteTop - (item.offsetPx - viewportStartOffsetPx)
             }
-        } ?: currentScrollPx
+        }
+        val scrollPx = expectedScrollPx ?: overlappingScrollPx ?: currentScrollPx
         expectedScrollPx = null
         currentScrollPx = scrollPx.coerceAtLeast(0)
 
