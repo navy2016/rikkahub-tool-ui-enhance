@@ -62,8 +62,8 @@ jobs:
           python3 .github/scripts/report-terminal-tests.py \
             benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest \
-            --require-case-group 'lazyHistory=false:10' \
-            --require-case-group 'lazyHistory=true:10'
+            --require-case-group 'lazyHistory=false:11' \
+            --require-case-group 'lazyHistory=true:11'
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

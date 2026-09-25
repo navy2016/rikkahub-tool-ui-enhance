@@ -12,7 +12,7 @@ and the same fixed status strip, parent nested-scroll connection and child fling
 has one effect executor; gestures can only ask the production controller to jump. Assertions inspect
 actual top/tail placement, controller follow intent and concurrent writer count, not just method calls.
 
-Ten pointer-input cases run in **each** arm (20 total, no skipped/missing arm accepted):
+Eleven pointer-input cases run in **each** arm (22 total, no skipped/missing arm accepted):
 
 - two fast upward swipes → actual bottom, TAIL mode, one composed screen grid;
 - two fast downward swipes → actual top, LOCKED mode;
@@ -23,7 +23,8 @@ Ten pointer-input cases run in **each** arm (20 total, no skipped/missing arm ac
 - horizontal swipes → horizontal pan, no vertical jump;
 - 30 append/trim updates during a bottom jump → final tail still visible;
 - 30 append/trim updates during a top jump → no accidental follow resumption;
-- a new pointer drag during a jump → cancellation without stale completion pulling it back.
+- a new pointer drag during a jump → cancellation without stale completion pulling it back;
+- measured `LazyListLayoutInfo` items → stable `lineId` anchor capture and restore.
 
 The recognizer's clock is injected, so software-GPU CI delays between input calls cannot turn a
 simulated quick sequence into an expired 700ms window. Pointer dispatch, velocity recognition and
