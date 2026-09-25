@@ -72,6 +72,14 @@ internal class TerminalLazyViewportMeasurementTracker(
         expectedScrollPx = scrollPx.coerceAtLeast(0)
     }
 
+    /** Seeds the first layout's content coordinate before any item overlap exists. */
+    fun bootstrapScrollPx(scrollPx: Int) {
+        if (historyGeneration == null && screenGeneration == null && previousAbsoluteTops.isEmpty()) {
+            currentScrollPx = scrollPx.coerceAtLeast(0)
+            expectedScrollPx = currentScrollPx
+        }
+    }
+
     fun update(
         frame: TerminalEmulator.RenderFrame,
         visibleItems: List<TerminalLazyViewportVisibleItem>,

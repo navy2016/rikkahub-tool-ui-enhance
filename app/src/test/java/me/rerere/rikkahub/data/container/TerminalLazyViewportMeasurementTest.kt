@@ -66,6 +66,36 @@ class TerminalLazyViewportMeasurementTest {
     }
 
     @Test
+    fun bootstrapScrollIsConsumedByTheFirstLayoutOnly() {
+        val tracker = TerminalLazyViewportMeasurementTracker(tailItemHeightPx = 8)
+        tracker.bootstrapScrollPx(320)
+        val first = tracker.update(
+            frame = frame(),
+            visibleItems = listOf(
+                TerminalLazyViewportVisibleItem(TerminalLazyViewportItemKind.HISTORY, 10, 0, 20),
+            ),
+            screenRowHeights = emptyMap(),
+            screenRowsComplete = false,
+            viewportStartOffsetPx = 0,
+            viewportHeightPx = 80,
+            canScrollForward = true,
+        )
+        assertEquals(320, first.currentScrollPx)
+        val second = tracker.update(
+            frame = frame(),
+            visibleItems = listOf(
+                TerminalLazyViewportVisibleItem(TerminalLazyViewportItemKind.HISTORY, 10, -12, 20),
+            ),
+            screenRowHeights = emptyMap(),
+            screenRowsComplete = false,
+            viewportStartOffsetPx = 0,
+            viewportHeightPx = 80,
+            canScrollForward = true,
+        )
+        assertEquals(332, second.currentScrollPx)
+    }
+
+    @Test
     fun disjointLayoutUsesExplicitExpectedScrollInsteadOfRowHeightEstimate() {
         val tracker = TerminalLazyViewportMeasurementTracker(tailItemHeightPx = 8)
         tracker.update(

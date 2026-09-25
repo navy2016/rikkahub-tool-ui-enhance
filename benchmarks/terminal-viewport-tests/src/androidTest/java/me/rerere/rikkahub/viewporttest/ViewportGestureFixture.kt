@@ -194,9 +194,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
             }.collect {
                 withFrameNanos { }
                 if (lazyHistory) {
-                    if (lazyMeasurement == null) {
-                        lazyMeasurementTracker.setExpectedScrollPx(INITIAL_PX)
-                    }
+                    lazyMeasurementTracker.bootstrapScrollPx(INITIAL_PX)
                     updateMeasuredLazyItems(lazyScroll.layoutInfo.visibleItemsInfo)
                     if (lazyMeasurement?.generationChanged == true) {
                         controller.setMeasuredAnchorTarget(frame.revision, null, null)
