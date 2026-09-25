@@ -263,7 +263,7 @@ class TerminalLazyViewportMeasurementTest {
             canScrollForward = true,
         )
         assertEquals(true, next.generationChanged)
-        assertEquals(20, next.layout.measuredRows.single { it.lineId == 10L }.topPx)
+        assertEquals(0, next.layout.measuredRows.single { it.lineId == 10L }.topPx)
         assertEquals(null, next.layout.measuredRows.firstOrNull { it.lineId == 100L })
     }
 

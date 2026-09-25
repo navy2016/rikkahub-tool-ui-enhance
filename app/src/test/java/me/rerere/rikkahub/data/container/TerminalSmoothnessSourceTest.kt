@@ -267,7 +267,6 @@ class TerminalSmoothnessSourceTest {
         assertTrue(measurementSource.contains("val maxScrollPx: Int?"))
         assertTrue(measurementSource.contains("tailItem"))
         assertTrue(measurementSource.contains("tailBottomPx - viewportHeightPx"))
-        assertTrue(measurementSource.contains("screenRowsComplete"))
         assertTrue(measurementSource.contains("generationChanged"))
         assertTrue(measurementSource.contains("screenRowsComplete"))
         assertTrue(measurementSource.contains("setExpectedScrollPx"))
@@ -290,21 +289,6 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("scheduleTerminalRender()"))
         assertFalse(processSessionSource.contains("TERMINAL_OUTPUT_BATCH_WINDOW_MS"))
         assertFalse(processSessionSource.contains("delay(8L)"))
-    }
-
-    @Test
-    fun physicalScreenRowsHaveStableRenderedRowCache() {
-        val emulatorSource = listOf(
-            File("app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt"),
-            File("src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt"),
-        ).first { it.isFile }.readText()
-        assertTrue(emulatorSource.contains("mainScreenRenderedRows"))
-        assertTrue(emulatorSource.contains("screenLineFingerprint"))
-        assertTrue(emulatorSource.contains("cell.text.hashCode()"))
-        assertTrue(emulatorSource.contains("cell.style.hashCode()"))
-        assertTrue(emulatorSource.contains("activeScreenLineIds[row]"))
-        assertTrue(emulatorSource.contains("cursorRowForCache != row"))
-        assertTrue(emulatorSource.contains("invalidateRenderedRows()"))
     }
 
     @Test

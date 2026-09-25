@@ -247,8 +247,6 @@ class TerminalEmulator(
     private val altScreen = MutableList(rows) { blankLine() }
     private val mainScreenLineIds = MutableList(rows) { newLineId() }
     private val altScreenLineIds = MutableList(rows) { newLineId() }
-    private val mainScreenRenderedRows = mutableMapOf<Long, Pair<Long, RenderedRow>>()
-    private val altScreenRenderedRows = mutableMapOf<Long, Pair<Long, RenderedRow>>()
     private val screen: MutableList<Array<Cell>> get() = if (alternateScreen) altScreen else mainScreen
     private val activeScreenLineIds: MutableList<Long>
         get() = if (alternateScreen) altScreenLineIds else mainScreenLineIds
@@ -267,7 +265,6 @@ class TerminalEmulator(
         scrollbackRenderStyleRevision = 0L
         mainScreen.resetScreen(mainScreenLineIds)
         altScreen.resetScreen(altScreenLineIds)
-        invalidateScreenRendering()
         mainScreenGeneration = newScreenGeneration()
         altScreenGeneration = newScreenGeneration()
         cursorRow = 0
@@ -813,7 +810,7 @@ class TerminalEmulator(
         screen.forEachIndexed { row, line ->
             val isNotBlank = line.isNotBlankLine()
             val isVisuallyOccupied = line.isVisuallyOccupiedLine()
-            renderedRows.add(renderScreenLine(row, line))
+            renderedRows.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }))
             recordRow(isNotBlank)
             if (isVisuallyOccupied) {
                 if (firstNonBlankScreenRow == null) firstNonBlankScreenRow = row
@@ -1237,7 +1234,7 @@ class TerminalEmulator(
             }
             removedOverride
         }
-        if (changed) invalidateRenderedRows()
+        if (changed) invalidateScrollbackRendering()
     }
 
     private fun applyPaletteOsc(value: String) {
@@ -1261,7 +1258,7 @@ class TerminalEmulator(
             }
             index += 2
         }
-        if (changed) invalidateRenderedRows()
+        if (changed) invalidateScrollbackRendering()
     }
 
     private fun applyDynamicColorOsc(code: Int, value: String) {
@@ -2386,59 +2383,22 @@ class TerminalEmulator(
         scrollbackRenderStyleRevision++
     }
 
-    private fun invalidateRenderedRows() {
-        invalidateScrollbackRendering()
-        invalidateScreenRendering()
-    }
-
-    private fun renderScreenLine(row: Int, line: Array<Cell>): RenderedRow {
-        val cache = if (alternateScreen) altScreenRenderedRows else mainScreenRenderedRows
-        val lineId = activeScreenLineIds[row]
-        val cursorRowForCache = if (cursorVisible) cursorRow else -1
-        val fingerprint = screenLineFingerprint(line, cursorRowForCache == row)
-        val cached = cache[lineId]
-        if (cached != null && cached.first == fingerprint && cursorRowForCache != row) return cached.second
-        val rendered = RenderedRow(buildAnnotatedString {
-            appendStyledLine(line, row, drawCursor = true)
-        })
-        if (cursorRowForCache != row) {
-            cache[lineId] = fingerprint to rendered
-        }
-        return rendered
-    }
-
-    private fun screenLineFingerprint(line: Array<Cell>, hasCursor: Boolean): Long {
-        var hash = 1125899906842597L
-        line.forEach { cell ->
-            hash = 31L * hash + cell.text.hashCode()
-            hash = 31L * hash + cell.style.hashCode()
-            hash = 31L * hash + cell.width
-            hash = 31L * hash + if (cell.continuation) 1L else 0L
-        }
-        return 31L * hash + if (hasCursor) 1L else 0L
-    }
-
-    private fun invalidateScreenRendering() {
-        mainScreenRenderedRows.clear()
-        altScreenRenderedRows.clear()
-    }
-
     private fun setReverseVideo(enabled: Boolean) {
         if (reverseVideo == enabled) return
         reverseVideo = enabled
-        invalidateRenderedRows()
+        invalidateScrollbackRendering()
     }
 
     private fun updateDefaultForeground(color: Color) {
         if (defaultForeground == color) return
         defaultForeground = color
-        invalidateRenderedRows()
+        invalidateScrollbackRendering()
     }
 
     private fun updateDefaultBackground(color: Color) {
         if (defaultBackground == color) return
         defaultBackground = color
-        invalidateRenderedRows()
+        invalidateScrollbackRendering()
     }
 
     private fun Style.toSpanStyle(): SpanStyle {

@@ -159,7 +159,7 @@ internal class TerminalLazyViewportMeasurementTracker(
             layout = layout,
             currentScrollPx = currentScrollPx,
             maxScrollPx = if (tailBottomPx != null && !canScrollForward) {
-                (tailBottomPx - viewportHeightPx).coerceAtLeast(0)
+                (tailBottomPx - viewportHeightPx).coerceAtLeast(currentScrollPx)
             } else null,
             generationChanged = historyChanged || screenChanged,
         )
