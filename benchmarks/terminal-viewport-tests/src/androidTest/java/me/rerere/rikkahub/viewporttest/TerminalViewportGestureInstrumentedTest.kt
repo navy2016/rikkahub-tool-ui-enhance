@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeWithVelocity
+import androidx.test.platform.app.InstrumentationRegistry
 import me.rerere.rikkahub.data.container.ViewportMode
 import me.rerere.rikkahub.data.container.ViewportScrollOrigin
 import org.junit.Assert.assertEquals
@@ -25,7 +26,15 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
     companion object {
         @JvmStatic
         @Parameterized.Parameters(name = "lazyHistory={0}")
-        fun renderers() = listOf(arrayOf(false), arrayOf(true))
+        fun renderers(): List<Array<Boolean>> {
+            val requestedArm = InstrumentationRegistry.getArguments()
+                .getString("viewportLazyHistory")
+            return when (requestedArm) {
+                "false" -> listOf(arrayOf(false))
+                "true" -> listOf(arrayOf(true))
+                else -> listOf(arrayOf(false), arrayOf(true))
+            }
+        }
     }
 
     @get:Rule

@@ -10,14 +10,14 @@ from pathlib import Path
 
 
 TERM_GRACE_SECONDS = 30
-LOG_PATH = Path("artifacts/terminal-validation/instrumentation-command.log")
+DEFAULT_LOG_PATH = Path("artifacts/terminal-validation/instrumentation-command.log")
 
 
-def publish_failure_log(return_code: int) -> None:
+def publish_failure_log(log_path: Path, return_code: int) -> None:
     try:
-        text = LOG_PATH.read_text(errors="replace")
+        text = log_path.read_text(errors="replace")
     except OSError as error:
-        text = f"Unable to read {LOG_PATH}: {error}"
+        text = f"Unable to read {log_path}: {error}"
     tail = "\n".join(text.splitlines()[-80:])[-2_700:]
     message = f"Instrumentation command exited {return_code}.\n{tail}"
     escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
@@ -48,8 +48,9 @@ def main() -> int:
         print("timeout must be positive", file=sys.stderr)
         return 2
 
-    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with LOG_PATH.open("w", encoding="utf-8", errors="replace") as log:
+    log_path = Path(os.environ.get("TERMINAL_TIMEOUT_LOG_PATH", DEFAULT_LOG_PATH))
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("w", encoding="utf-8", errors="replace") as log:
         process = subprocess.Popen(
             sys.argv[2:],
             stdout=log,
@@ -74,7 +75,7 @@ def main() -> int:
             return_code = 124
 
     if return_code != 0:
-        publish_failure_log(return_code)
+        publish_failure_log(log_path, return_code)
     return return_code
 
 
