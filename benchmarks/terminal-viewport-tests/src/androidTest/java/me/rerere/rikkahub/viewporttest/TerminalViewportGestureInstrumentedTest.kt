@@ -15,6 +15,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.Timeout
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 
@@ -29,6 +30,12 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
 
     @get:Rule
     val compose = createComposeRule()
+
+    // A stuck scroll mutation must produce a case-level JUnit failure, not consume the entire
+    // 30-minute emulator job and hide which renderer/gesture combination stopped progressing.
+    @get:Rule
+    val caseTimeout = Timeout.seconds(45)
+
     private lateinit var viewport: ViewportGestureFixture
 
     @Before
