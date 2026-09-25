@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.container
 
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TerminalViewportReducerTest {
