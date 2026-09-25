@@ -288,12 +288,13 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     private fun updateMeasuredLazyItems(visibleItems: List<LazyListItemInfo>) {
         lastMeasuredItems = emptyList()
         screenItemTopPx = null
-        val first = visibleItems.firstOrNull() ?: return
         val viewportScroll = currentPx()
-        val originTopPx = viewportScroll - first.offset
+        val viewportStartOffset = lazyScroll.layoutInfo.viewportStartOffset
         val measured = ArrayList<TerminalMeasuredViewportItem>()
         for (item in visibleItems) {
-            val absoluteTop = originTopPx + item.offset
+            // LazyList offsets are relative to the viewport start. Convert directly to content
+            // coordinates; deriving an origin from the first item double-counts its clipping.
+            val absoluteTop = viewportScroll + item.offset - viewportStartOffset
             when (val key = item.key) {
                 is Long -> measured += TerminalMeasuredViewportItem(
                     lineId = key,

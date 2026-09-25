@@ -69,12 +69,12 @@ internal fun terminalLazyTargetForAnchor(
     )
 }
 
-/** Places the bottom of the tail spacer at the viewport bottom. LazyList clamps short content. */
+/** Requests the tail item at the top; LazyList clamps this to the true content bottom. */
 internal fun terminalLazyTargetForBottom(
     layout: TerminalLazyViewportLayout,
 ): TerminalLazyViewportScrollTarget = TerminalLazyViewportScrollTarget(
     itemIndex = layout.tailItemIndex,
-    itemScrollOffsetPx = layout.tailItemHeightPx - layout.viewportHeightPx,
+    itemScrollOffsetPx = 0,
 )
 
 internal fun terminalLazyTargetForTop(

@@ -68,7 +68,7 @@ class TerminalLazyViewportAdapterTest {
             terminalLazyTargetForTop(layout),
         )
         assertEquals(
-            TerminalLazyViewportScrollTarget(itemIndex = 4, itemScrollOffsetPx = -192),
+            TerminalLazyViewportScrollTarget(itemIndex = 4, itemScrollOffsetPx = 0),
             terminalLazyTargetForBottom(layout),
         )
     }
