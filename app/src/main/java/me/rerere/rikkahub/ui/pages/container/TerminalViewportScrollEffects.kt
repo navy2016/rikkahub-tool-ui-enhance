@@ -1,10 +1,8 @@
 package me.rerere.rikkahub.ui.pages.container
 
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
@@ -28,11 +26,15 @@ internal suspend fun runTerminalViewportScrollEffects(
             if (effect.animated) {
                 // onPreFling publishes the jump BEFORE Scrollable runs its child fling. Even with
                 // zero remaining velocity, that child briefly enters a new scroll mutation and can
-                // cancel an animation started synchronously here. Yield a frame for that handoff,
-                // then wait for the child to release its mutation. Checking idle BEFORE yielding
-                // is insufficient: the zero-velocity mutation may not have started yet.
-                withFrameNanos { }
-                snapshotFlow { isScrollInProgress() }.first { !it }
+                // cancel an animation started synchronously here. Yield at least one frame for
+                // that handoff, then give the child a bounded number of frames to release its
+                // mutation. Waiting on an unbounded snapshotFlow can leave the sole writer stuck
+                // forever when an Android emulator loses the corresponding idle notification.
+                var handoffFrames = 0
+                do {
+                    withFrameNanos { }
+                    handoffFrames++
+                } while (isScrollInProgress() && handoffFrames < TERMINAL_SCROLL_HANDOFF_MAX_FRAMES)
             }
             // A new drag/jump can invalidate the effect during the handoff. Never replay stale intent.
             if (!controller.isCurrent(effect)) return@collectLatest
@@ -44,3 +46,6 @@ internal suspend fun runTerminalViewportScrollEffects(
         }
     }
 }
+
+/** A child pointer mutation should release within a few frames; never block a jump forever. */
+private const val TERMINAL_SCROLL_HANDOFF_MAX_FRAMES = 8
