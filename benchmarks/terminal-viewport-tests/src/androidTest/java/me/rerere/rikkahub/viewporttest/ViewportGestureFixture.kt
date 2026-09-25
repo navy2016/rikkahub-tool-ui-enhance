@@ -143,6 +143,10 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
         resolveMeasuredViewportAnchor(lastMeasuredItems, it, maximumPx())
     }
 
+    fun publishMeasuredAnchorForTest() {
+        controller.setMeasuredAnchorScrollPx(resolveCapturedMeasuredAnchorForTest())
+    }
+
     fun diagnostics(): String = "lazy=$lazyHistory px=${currentPx()} max=${maximumPx()} " +
         "busy=${if (lazyHistory) lazyScroll.isScrollInProgress else eagerScroll.isScrollInProgress} " +
         "first=${lazyScroll.firstVisibleItemIndex}:${lazyScroll.firstVisibleItemScrollOffset} " +

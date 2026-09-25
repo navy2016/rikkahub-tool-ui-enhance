@@ -379,6 +379,25 @@ class TerminalViewportReducerTest {
     }
 
     @Test
+    fun lockedAnchorUsesMeasuredTargetWhenVariableItemHeightsAreAvailable() {
+        val input = ViewportInput(
+            mode = ViewportMode.LOCKED,
+            anchorLineId = 21,
+            anchorClippedTopPx = 10,
+            anchorHistoryGeneration = 1,
+            cellHeightPx = 20,
+            maxScrollPx = 1_000,
+            measuredAnchorScrollPx = 317,
+        )
+        val frame = emptyFrame(
+            historyCount = 2,
+            historyLineIds = listOf(10, 21),
+            screenLineIds = listOf(30, 31, 32),
+        )
+        assertEquals(317, reduceViewport(input, frame, 5).targetScrollPx)
+    }
+
+    @Test
     fun buildLineIdsFromFrameHandlesNoHistory() {
         val frame = emptyFrame(
             historyCount = 0,

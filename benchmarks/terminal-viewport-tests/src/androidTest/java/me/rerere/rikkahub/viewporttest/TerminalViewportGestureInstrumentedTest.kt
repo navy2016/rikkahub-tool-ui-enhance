@@ -141,6 +141,7 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
             val anchor = viewport.captureMeasuredAnchorForTest()
             assertTrue(viewport.diagnostics(), anchor != null)
             assertEquals(viewport.currentPx(), viewport.resolveCapturedMeasuredAnchorForTest())
+            viewport.publishMeasuredAnchorForTest()
         }
     }
 

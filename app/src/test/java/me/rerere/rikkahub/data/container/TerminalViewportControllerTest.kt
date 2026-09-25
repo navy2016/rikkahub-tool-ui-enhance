@@ -241,6 +241,18 @@ class TerminalViewportControllerTest {
     }
 
     @Test
+    fun measuredAnchorTargetIsForwardedWithoutChangingEagerFallbackDefaults() {
+        val controller = lockedController()
+        controller.setMeasuredAnchorScrollPx(317)
+        controller.update(revision = 2)
+        assertEquals(317, controller.effect().targetScrollPx)
+        controller.setMeasuredAnchorScrollPx(null)
+        controller.finish()
+        controller.update(revision = 3, scroll = 317)
+        assertEquals(73, controller.effect().targetScrollPx)
+    }
+
+    @Test
     fun jumpToTopStaysLockedDuringItsProgrammaticAnimation() {
         val controller = lockedController()
         controller.jumpToTop(73)

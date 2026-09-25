@@ -62,6 +62,8 @@ data class ViewportInput(
     val screenScrollPx: Int? = null,
     /** Mode selected when a locked anchor no longer exists. */
     val fallbackMode: ViewportMode = ViewportMode.TAIL,
+    /** Exact target derived from measured layout items; null keeps the legacy fixed-grid reducer. */
+    val measuredAnchorScrollPx: Int? = null,
 )
 
 data class ViewportOutput(
@@ -159,7 +161,8 @@ fun reduceViewport(
                 }
 
                 anchorRowIndex >= 0 -> {
-                    val target = (anchorRowIndex * input.cellHeightPx + input.anchorClippedTopPx)
+                    val target = input.measuredAnchorScrollPx ?:
+                        (anchorRowIndex * input.cellHeightPx + input.anchorClippedTopPx)
                         .coerceIn(0, maxScroll)
                     ViewportOutput(
                         mode = ViewportMode.LOCKED,
@@ -181,7 +184,8 @@ fun reduceViewport(
                     val replacementId = nearestHistoryLineId(frame.historyLineIds, anchorId)
                         ?: return fallback()
                     val replacementRowIndex = frame.historyLineIds.indexOf(replacementId)
-                    val target = (replacementRowIndex * input.cellHeightPx + input.anchorClippedTopPx)
+                    val target = input.measuredAnchorScrollPx ?:
+                        (replacementRowIndex * input.cellHeightPx + input.anchorClippedTopPx)
                         .coerceIn(0, maxScroll)
                     ViewportOutput(
                         mode = ViewportMode.LOCKED,

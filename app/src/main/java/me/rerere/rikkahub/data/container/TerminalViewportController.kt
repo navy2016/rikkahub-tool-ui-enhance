@@ -77,6 +77,7 @@ internal class TerminalViewportController(
     private var scrollPx = 0
     private var legacyOffsetPx = restored?.takeUnless { it.autoScroll }?.verticalOffsetPx
     private var imeAnchor: ImeAnchor? = null
+    private var measuredAnchorScrollPx: Int? = null
 
     private data class ImeAnchor(
         val offsetPx: Int,
@@ -133,6 +134,14 @@ internal class TerminalViewportController(
             else -> ViewportScrollOrigin.REDUCER
         }
         reconcile(origin)
+    }
+
+    /**
+     * Supplies an exact target from a measured LazyList layout. This is an optional adapter input;
+     * eager/TUI callers never set it and retain the existing fixed-grid reducer behavior.
+     */
+    fun setMeasuredAnchorScrollPx(targetScrollPx: Int?) {
+        measuredAnchorScrollPx = targetScrollPx?.coerceAtLeast(0)
     }
 
     /** Starts or continues real user input; called before the scrollable consumes its delta. */
@@ -263,6 +272,7 @@ internal class TerminalViewportController(
                 tailScrollPx = followTarget,
                 screenScrollPx = followTarget,
                 fallbackMode = followMode(),
+                measuredAnchorScrollPx = measuredAnchorScrollPx,
             ), frame, renderedRows,
         )
         val nextAnchor = output.anchorLineId?.let { id ->
