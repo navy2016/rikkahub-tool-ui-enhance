@@ -142,6 +142,7 @@ jobs:
               --tests me.rerere.rikkahub.data.container.TerminalViewportReducerTest \
               --tests me.rerere.rikkahub.data.container.TerminalViewportControllerTest \
               --tests me.rerere.rikkahub.data.container.TerminalFastFlingTest \
+              --tests me.rerere.rikkahub.data.container.TerminalViewportItemGeometryTest \
               --stacktrace; then
               exit 0
             fi

@@ -45,6 +45,10 @@ class TerminalSmoothnessSourceTest {
         File("app/src/main/java/me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt"),
         File("src/main/java/me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt"),
     ).first { it.isFile }.readText()
+    private val itemGeometrySource = listOf(
+        File("app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportItemGeometry.kt"),
+        File("src/main/java/me/rerere/rikkahub/data/container/TerminalViewportItemGeometry.kt"),
+    ).first { it.isFile }.readText()
     private val viewportStateSource = listOf(
         File("app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportState.kt"),
         File("src/main/java/me/rerere/rikkahub/data/container/TerminalViewportState.kt"),
@@ -101,6 +105,10 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("TerminalViewportController(restoredViewportState"))
         assertTrue(controllerSource.contains("terminalImeAnchorScrollTarget"))
         assertTrue(processSessionSource.contains("val currentLastNonBlankRow by rememberUpdatedState(terminalContentBounds.lastNonBlankRow)"))
+        assertTrue(itemGeometrySource.contains("captureMeasuredViewportAnchor"))
+        assertTrue(itemGeometrySource.contains("resolveMeasuredViewportAnchor"))
+        assertTrue(itemGeometrySource.contains("lineId: Long"))
+        assertFalse(itemGeometrySource.contains("rowCount * cellHeight"))
         assertTrue(processSessionSource.contains("val currentActiveScreenBottomRow by rememberUpdatedState(terminalActiveScreenBottomRow)"))
         assertTrue(processSessionSource.contains("viewportHeightPx = outputViewportHeightPx"))
         assertTrue(processSessionSource.contains("viewportController.updateViewport("))
