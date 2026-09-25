@@ -40,6 +40,7 @@ val syncViewportSources by tasks.registering(SyncViewportSources::class) {
         "me/rerere/rikkahub/data/container/TerminalViewportController.kt",
         "me/rerere/rikkahub/data/container/TerminalViewportGeometry.kt",
         "me/rerere/rikkahub/data/container/TerminalViewportItemGeometry.kt",
+        "me/rerere/rikkahub/data/container/TerminalLazyViewportAdapter.kt",
         "me/rerere/rikkahub/data/container/TerminalViewportState.kt",
         "me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalViewportGestures.kt",

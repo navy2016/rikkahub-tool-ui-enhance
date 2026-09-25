@@ -248,6 +248,17 @@ class TerminalSmoothnessSourceTest {
     }
 
     @Test
+    fun measuredLazyTargetsAreRevisionAndGenerationBound() {
+        assertTrue(controllerSource.contains("setMeasuredAnchorTarget("))
+        assertTrue(controllerSource.contains("frameRevision: Long"))
+        assertTrue(controllerSource.contains("measured.frameRevision == frame.revision"))
+        assertTrue(controllerSource.contains("measured.anchor.clippedTopPx == anchor?.clippedTopPx"))
+        assertTrue(controllerSource.contains("measured.anchor.historyGeneration == anchor?.historyGeneration"))
+        assertTrue(processSessionSource.contains("TerminalRenderedRows(terminalRenderedRows, terminalTextStyle)"))
+        assertFalse(processSessionSource.contains("LazyColumn("))
+    }
+
+    @Test
     fun unverifiedLazyGeometryCannotAutoEnableInTheProductionTerminal() {
         // The isolated gesture fixture is not permission to enable a production lazy viewport.
         assertFalse(processSessionSource.contains("LazyColumn("))

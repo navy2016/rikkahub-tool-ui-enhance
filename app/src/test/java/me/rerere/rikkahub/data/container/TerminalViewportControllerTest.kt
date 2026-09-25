@@ -243,12 +243,28 @@ class TerminalViewportControllerTest {
     @Test
     fun measuredAnchorTargetIsForwardedWithoutChangingEagerFallbackDefaults() {
         val controller = lockedController()
-        controller.setMeasuredAnchorScrollPx(317)
+        controller.setMeasuredAnchorTarget(
+            frameRevision = 2,
+            anchor = controller.state.value.anchor,
+            targetScrollPx = 317,
+        )
         controller.update(makeFrame(revision = 2), scroll = 73)
         assertEquals(317, controller.effect().targetScrollPx)
-        controller.setMeasuredAnchorScrollPx(null)
+        controller.setMeasuredAnchorTarget(2, null, null)
         controller.finish()
         controller.update(makeFrame(revision = 3), scroll = 317)
+        assertEquals(73, controller.effect().targetScrollPx)
+    }
+
+    @Test
+    fun measuredAnchorFromAnOlderFrameIsIgnored() {
+        val controller = lockedController()
+        controller.setMeasuredAnchorTarget(
+            frameRevision = 1,
+            anchor = controller.state.value.anchor,
+            targetScrollPx = 317,
+        )
+        controller.update(makeFrame(revision = 2), scroll = 0)
         assertEquals(73, controller.effect().targetScrollPx)
     }
 

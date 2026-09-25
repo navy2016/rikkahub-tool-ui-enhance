@@ -143,6 +143,7 @@ jobs:
               --tests me.rerere.rikkahub.data.container.TerminalViewportControllerTest \
               --tests me.rerere.rikkahub.data.container.TerminalFastFlingTest \
               --tests me.rerere.rikkahub.data.container.TerminalViewportItemGeometryTest \
+              --tests me.rerere.rikkahub.data.container.TerminalLazyViewportAdapterTest \
               --stacktrace; then
               exit 0
             fi
@@ -159,7 +160,8 @@ jobs:
             --require-suite me.rerere.rikkahub.data.container.TerminalFastFlingTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalViewportControllerTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalViewportReducerTest \
-            --require-suite me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest
+            --require-suite me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest \
+            --require-suite me.rerere.rikkahub.data.container.TerminalLazyViewportAdapterTest
 
       - name: Upload test reports
         if: always()

@@ -40,10 +40,15 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.container.TerminalMeasuredViewportItem
+import me.rerere.rikkahub.data.container.TerminalLazyViewportLayout
+import me.rerere.rikkahub.data.container.TerminalLazyViewportScrollTarget
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportItemAnchor
 import me.rerere.rikkahub.data.container.captureMeasuredViewportAnchor
 import me.rerere.rikkahub.data.container.resolveMeasuredViewportAnchor
+import me.rerere.rikkahub.data.container.terminalLazyTargetForAnchor
+import me.rerere.rikkahub.data.container.terminalLazyTargetForBottom
+import me.rerere.rikkahub.data.container.terminalLazyTargetForTop
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
 import me.rerere.rikkahub.data.container.TerminalViewportState
@@ -144,7 +149,11 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     }
 
     fun publishMeasuredAnchorForTest() {
-        controller.setMeasuredAnchorScrollPx(resolveCapturedMeasuredAnchorForTest())
+        controller.setMeasuredAnchorTarget(
+            frameRevision = frame.revision,
+            anchor = lockedMeasuredAnchor,
+            targetScrollPx = resolveCapturedMeasuredAnchorForTest(),
+        )
     }
 
     fun diagnostics(): String = "lazy=$lazyHistory px=${currentPx()} max=${maximumPx()} " +
@@ -182,7 +191,19 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
                 frame.revision to (metrics() to lazyScroll.layoutInfo.visibleItemsInfo.map { it.key to it.offset })
             }.collect {
                 withFrameNanos { }
-                if (lazyHistory) updateMeasuredLazyItems(lazyScroll.layoutInfo.visibleItemsInfo)
+                if (lazyHistory) {
+                    updateMeasuredLazyItems(lazyScroll.layoutInfo.visibleItemsInfo)
+                    val anchor = controller.state.value.anchor
+                    controller.setMeasuredAnchorTarget(
+                        frameRevision = frame.revision,
+                        anchor = anchor,
+                        targetScrollPx = anchor?.let {
+                            resolveMeasuredViewportAnchor(lastMeasuredItems, it, maximumPx())
+                        },
+                    )
+                } else {
+                    controller.setMeasuredAnchorTarget(frame.revision, null, null)
+                }
                 controller.updateViewport(frame, rows.size, metrics(), currentPx())
             }
         }
@@ -257,12 +278,14 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     }
 
     private fun updateMeasuredLazyItems(visibleItems: List<LazyListItemInfo>) {
+        lastMeasuredItems = emptyList()
+        screenItemTopPx = null
         val first = visibleItems.firstOrNull() ?: return
         val viewportScroll = currentPx()
-        val originTopPx = viewportScroll - (first.offset - lazyScroll.layoutInfo.viewportStartOffset)
+        val originTopPx = viewportScroll - first.offset
         val measured = ArrayList<TerminalMeasuredViewportItem>()
         for (item in visibleItems) {
-            val absoluteTop = originTopPx + (item.offset - lazyScroll.layoutInfo.viewportStartOffset)
+            val absoluteTop = originTopPx + item.offset
             when (val key = item.key) {
                 is Long -> measured += TerminalMeasuredViewportItem(
                     lineId = key,
@@ -276,7 +299,10 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
                     var rowTop = absoluteTop
                     for (rowIndex in frame.historyCount until end) {
                         val row = rows[rowIndex]
-                        val rowHeight = rowHeights[row.lineId] ?: return
+                        val rowHeight = rowHeights[row.lineId] ?: run {
+                            lastMeasuredItems = emptyList()
+                            return
+                        }
                         measured += TerminalMeasuredViewportItem(
                             lineId = row.lineId,
                             topPx = rowTop,
@@ -335,12 +361,41 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
 
     private suspend fun applyScrollEffect(effect: TerminalViewportScrollEffect, targetPx: Int) {
         if (lazyHistory) {
-            val index = if (targetPx < HISTORY_ROWS * ROW_HEIGHT) targetPx / ROW_HEIGHT else HISTORY_ROWS
-            val offset = targetPx - index * ROW_HEIGHT
-            if (effect.animated) lazyScroll.animateScrollToItem(index, offset)
-            else lazyScroll.scrollToItem(index, offset)
+            val target = lazyTargetForEffect(effect, targetPx) ?: return
+            if (effect.animated) {
+                lazyScroll.animateScrollToItem(target.itemIndex, target.itemScrollOffsetPx)
+            } else {
+                lazyScroll.scrollToItem(target.itemIndex, target.itemScrollOffsetPx)
+            }
         } else {
             if (effect.animated) eagerScroll.animateScrollTo(targetPx) else eagerScroll.scrollTo(targetPx)
+        }
+    }
+
+    private fun lazyTargetForEffect(
+        effect: TerminalViewportScrollEffect,
+        targetPx: Int,
+    ): TerminalLazyViewportScrollTarget? {
+        val measuredLayout = TerminalLazyViewportLayout(
+            historyLineIds = frame.historyLineIds,
+            screenLineIds = frame.screenLineIds,
+            historyGeneration = frame.historyGeneration,
+            screenGeneration = frame.screenGeneration,
+            measuredRows = lastMeasuredItems,
+            activeScreenItemTopPx = screenItemTopPx,
+            tailItemHeightPx = TAIL_HEIGHT,
+            viewportHeightPx = viewportHeight,
+        )
+        return when {
+            effect.origin == ViewportScrollOrigin.JUMP && targetPx == 0 -> {
+                terminalLazyTargetForTop(measuredLayout)
+            }
+            controller.state.value.mode != ViewportMode.LOCKED -> {
+                terminalLazyTargetForBottom(measuredLayout)
+            }
+            else -> controller.state.value.anchor?.let {
+                terminalLazyTargetForAnchor(measuredLayout, it)
+            }
         }
     }
 

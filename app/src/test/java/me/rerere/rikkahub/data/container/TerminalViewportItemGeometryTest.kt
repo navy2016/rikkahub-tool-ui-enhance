@@ -40,6 +40,16 @@ class TerminalViewportItemGeometryTest {
         assertEquals(10, resolveMeasuredViewportAnchor(items, TerminalViewportItemAnchor(10, 99, null, 7), 10))
     }
 
+    @Test
+    fun measuredResolutionRejectsWrongAnchorGeneration() {
+        val items = listOf(item(10, 0, 20, history = 7))
+        assertNull(resolveMeasuredViewportAnchor(
+            items,
+            TerminalViewportItemAnchor(10, 2, null, 8),
+            100,
+        ))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun zeroHeightItemsAreRejectedRatherThanCreatingInvalidAnchors() {
         TerminalMeasuredViewportItem(1, 0, 0)

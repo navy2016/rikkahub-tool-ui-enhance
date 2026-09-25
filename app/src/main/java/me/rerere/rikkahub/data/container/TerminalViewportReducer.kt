@@ -161,9 +161,9 @@ fun reduceViewport(
                 }
 
                 anchorRowIndex >= 0 -> {
-                    val target = input.measuredAnchorScrollPx ?:
-                        (anchorRowIndex * input.cellHeightPx + input.anchorClippedTopPx)
-                        .coerceIn(0, maxScroll)
+                    val target = (input.measuredAnchorScrollPx ?: (
+                        anchorRowIndex * input.cellHeightPx + input.anchorClippedTopPx
+                    )).coerceIn(0, maxScroll)
                     ViewportOutput(
                         mode = ViewportMode.LOCKED,
                         anchorLineId = anchorId,
@@ -184,8 +184,10 @@ fun reduceViewport(
                     val replacementId = nearestHistoryLineId(frame.historyLineIds, anchorId)
                         ?: return fallback()
                     val replacementRowIndex = frame.historyLineIds.indexOf(replacementId)
-                    val target = input.measuredAnchorScrollPx ?:
-                        (replacementRowIndex * input.cellHeightPx + input.anchorClippedTopPx)
+                    // The measured target belongs to the removed anchor, not to this replacement
+                    // row. Its exact geometry is no longer valid after trim, so use the legacy
+                    // replacement coordinate until the next layout publishes a new anchor.
+                    val target = (replacementRowIndex * input.cellHeightPx + input.anchorClippedTopPx)
                         .coerceIn(0, maxScroll)
                     ViewportOutput(
                         mode = ViewportMode.LOCKED,

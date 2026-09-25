@@ -398,6 +398,46 @@ class TerminalViewportReducerTest {
     }
 
     @Test
+    fun measuredTargetIsClampedToTheCurrentScrollRange() {
+        val input = ViewportInput(
+            mode = ViewportMode.LOCKED,
+            anchorLineId = 21,
+            anchorHistoryGeneration = 1,
+            maxScrollPx = 100,
+            measuredAnchorScrollPx = 900,
+        )
+        val frame = emptyFrame(
+            historyCount = 2,
+            historyLineIds = listOf(10, 21),
+            screenLineIds = listOf(30, 31, 32),
+        )
+        assertEquals(100, reduceViewport(input, frame, 5).targetScrollPx)
+    }
+
+    @Test
+    fun measuredTargetForTrimmedAnchorIsNotAppliedToItsReplacementRow() {
+        val input = ViewportInput(
+            mode = ViewportMode.LOCKED,
+            anchorLineId = 10,
+            anchorHistoryGeneration = 1,
+            anchorClippedTopPx = 4,
+            cellHeightPx = 20,
+            maxScrollPx = 1_000,
+            measuredAnchorScrollPx = 900,
+        )
+        val frame = emptyFrame(
+            historyCount = 2,
+            historyLineIds = listOf(11, 12),
+            screenLineIds = listOf(30, 31, 32),
+        )
+        val output = reduceViewport(input, frame, 5)
+        assertEquals(ViewportMode.LOCKED, output.mode)
+        assertEquals(11L, output.anchorLineId)
+        assertEquals(4 + 0 * 20, output.targetScrollPx)
+        assertTrue(output.anchorTrimmed)
+    }
+
+    @Test
     fun buildLineIdsFromFrameHandlesNoHistory() {
         val frame = emptyFrame(
             historyCount = 0,

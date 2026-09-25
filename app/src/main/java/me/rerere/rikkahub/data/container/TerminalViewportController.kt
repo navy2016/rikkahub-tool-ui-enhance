@@ -77,7 +77,13 @@ internal class TerminalViewportController(
     private var scrollPx = 0
     private var legacyOffsetPx = restored?.takeUnless { it.autoScroll }?.verticalOffsetPx
     private var imeAnchor: ImeAnchor? = null
-    private var measuredAnchorScrollPx: Int? = null
+    private var measuredAnchorResolution: MeasuredAnchorResolution? = null
+
+    private data class MeasuredAnchorResolution(
+        val frameRevision: Long,
+        val anchor: TerminalViewportItemAnchor,
+        val scrollPx: Int,
+    )
 
     private data class ImeAnchor(
         val offsetPx: Int,
@@ -137,11 +143,18 @@ internal class TerminalViewportController(
     }
 
     /**
-     * Supplies an exact target from a measured LazyList layout. This is an optional adapter input;
-     * eager/TUI callers never set it and retain the existing fixed-grid reducer behavior.
+     * Supplies an exact target from a measured LazyList layout. The line ID and frame revision are
+     * part of the contract so a delayed layout observation cannot drive a newer terminal frame.
+     * Eager/TUI callers never set it and retain the existing fixed-grid reducer behavior.
      */
-    fun setMeasuredAnchorScrollPx(targetScrollPx: Int?) {
-        measuredAnchorScrollPx = targetScrollPx?.coerceAtLeast(0)
+    fun setMeasuredAnchorTarget(
+        frameRevision: Long,
+        anchor: TerminalViewportItemAnchor?,
+        targetScrollPx: Int?,
+    ) {
+        measuredAnchorResolution = if (anchor != null && targetScrollPx != null) {
+            MeasuredAnchorResolution(frameRevision, anchor, targetScrollPx.coerceAtLeast(0))
+        } else null
     }
 
     /** Starts or continues real user input; called before the scrollable consumes its delta. */
@@ -149,6 +162,7 @@ internal class TerminalViewportController(
         require(origin.isUserInput)
         scrollPx = currentScrollPx.coerceAtLeast(0)
         imeAnchor = null
+        measuredAnchorResolution = null
         val gesture = state.value.gesture?.takeIf { it.origin == origin }
             ?: TerminalViewportGesture(++nextOperationId, origin)
         mutableState.value = state.value.copy(gesture = gesture, scrollEffect = null)
@@ -177,6 +191,7 @@ internal class TerminalViewportController(
     fun setFollow(enabled: Boolean, currentScrollPx: Int) {
         scrollPx = currentScrollPx.coerceAtLeast(0)
         imeAnchor = null
+        measuredAnchorResolution = null
         mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
         if (enabled) {
             mutableState.value = state.value.copy(mode = followMode(), anchor = null, anchorCellHeightPx = 0)
@@ -193,6 +208,7 @@ internal class TerminalViewportController(
     private fun jump(toBottom: Boolean, currentScrollPx: Int) {
         scrollPx = currentScrollPx.coerceAtLeast(0)
         imeAnchor = null
+        measuredAnchorResolution = null
         mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
         if (toBottom) {
             mutableState.value = state.value.copy(mode = followMode(), anchor = null, anchorCellHeightPx = 0)
@@ -272,7 +288,13 @@ internal class TerminalViewportController(
                 tailScrollPx = followTarget,
                 screenScrollPx = followTarget,
                 fallbackMode = followMode(),
-                measuredAnchorScrollPx = measuredAnchorScrollPx,
+                measuredAnchorScrollPx = measuredAnchorResolution?.takeIf { measured ->
+                    measured.frameRevision == frame.revision &&
+                        measured.anchor.lineId == anchor?.lineId &&
+                        measured.anchor.clippedTopPx == anchor?.clippedTopPx &&
+                        measured.anchor.screenGeneration == anchor?.screenGeneration &&
+                        measured.anchor.historyGeneration == anchor?.historyGeneration
+                }?.scrollPx,
             ), frame, renderedRows,
         )
         val nextAnchor = output.anchorLineId?.let { id ->
