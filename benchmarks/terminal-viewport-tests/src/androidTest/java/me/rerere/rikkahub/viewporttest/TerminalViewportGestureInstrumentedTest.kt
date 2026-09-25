@@ -249,7 +249,10 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         try {
             fastSwipe(towardBottom = true)
             compose.mainClock.advanceTimeBy(32)
-            compose.runOnIdle {
+            // The lazy arm's scroll animation is intentionally still in flight here. runOnIdle
+            // waits for Compose animations to become idle, but autoAdvance is disabled above, so
+            // it would deadlock before the new pointer can interrupt that animation.
+            compose.runOnUiThread {
                 assertEquals(1, viewport.jumps.size)
                 assertTrue(viewport.diagnostics(), viewport.controller.isCurrent(viewport.jumps.single()))
             }
@@ -260,7 +263,7 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
                 repeat(3) { moveBy(Offset(0f, 100f), delayMillis = 32) }
             }
             compose.mainClock.advanceTimeBy(32)
-            compose.runOnIdle {
+            compose.runOnUiThread {
                 assertFalse(viewport.controller.isCurrent(viewport.jumps.single()))
                 assertEquals(ViewportScrollOrigin.USER_DRAG, viewport.controller.state.value.gesture?.origin)
                 assertEquals(ViewportMode.LOCKED, viewport.controller.state.value.mode)
