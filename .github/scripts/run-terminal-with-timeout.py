@@ -19,7 +19,17 @@ def publish_failure_log(log_path: Path, return_code: int) -> None:
     except OSError as error:
         text = f"Unable to read {log_path}: {error}"
     tail = "\n".join(text.splitlines()[-80:])[-2_700:]
-    message = f"Instrumentation command exited {return_code}.\n{tail}"
+    logcat_path = Path("artifacts/terminal-validation/gesture-logcat.txt")
+    probe_lines: list[str] = []
+    try:
+        probe_lines = [
+            line for line in logcat_path.read_text(errors="replace").splitlines()
+            if "TerminalViewportProbe" in line or "AndroidRuntime" in line
+        ][-40:]
+    except OSError:
+        pass
+    extra = "\nRelevant logcat:\n" + "\n".join(probe_lines) if probe_lines else ""
+    message = f"Instrumentation command exited {return_code}.\n{tail}{extra}"
     escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
     print(f"::error title=Terminal instrumentation command failed::{escaped}", flush=True)
 

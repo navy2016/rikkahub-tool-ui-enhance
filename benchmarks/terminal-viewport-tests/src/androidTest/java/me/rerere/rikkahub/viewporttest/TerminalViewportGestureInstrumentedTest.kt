@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.viewporttest
 
+import android.util.Log
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -24,6 +25,8 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) {
     companion object {
+        private const val PROBE_TAG = "TerminalViewportProbe"
+
         @JvmStatic
         @Parameterized.Parameters(name = "lazyHistory={0}")
         fun renderers(): List<Array<Boolean>> {
@@ -49,9 +52,12 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
 
     @Before
     fun mountAtTheMiddleOfHistory() {
+        Log.i(PROBE_TAG, "mount start lazy=$lazyHistory")
         viewport = ViewportGestureFixture(lazyHistory)
         compose.setContent { viewport.Content() }
+        Log.i(PROBE_TAG, "content set lazy=$lazyHistory")
         settle()
+        Log.i(PROBE_TAG, "settle complete lazy=$lazyHistory diagnostics=${viewport.diagnostics()}")
         compose.runOnIdle {
             assertTrue(viewport.controller.state.value.initialized)
             assertEquals(ViewportGestureFixture.INITIAL_PX, viewport.currentPx())
@@ -61,7 +67,9 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
     }
 
     private fun settle() {
+        Log.i(PROBE_TAG, "wait idle begin lazy=$lazyHistory")
         compose.waitForIdle()
+        Log.i(PROBE_TAG, "wait idle complete lazy=$lazyHistory")
         compose.mainClock.advanceTimeBy(64)
         compose.waitForIdle()
     }
@@ -244,6 +252,7 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
 
     @Test
     fun aNewPointerDragInterruptsJumpAndOldCompletionCannotResumeFollow() {
+        Log.i(PROBE_TAG, "interrupt case start lazy=$lazyHistory")
         compose.runOnIdle { viewport.config = viewport.config.copy(fastFlingRequiredCount = 1) }
         compose.mainClock.autoAdvance = false
         try {
@@ -285,4 +294,5 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
             assertEquals(0, viewport.activeWriters)
         }
     }
+
 }
