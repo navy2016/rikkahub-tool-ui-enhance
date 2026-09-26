@@ -10,6 +10,8 @@ import androidx.compose.ui.test.swipeWithVelocity
 import androidx.test.platform.app.InstrumentationRegistry
 import me.rerere.rikkahub.data.container.ViewportMode
 import me.rerere.rikkahub.data.container.ViewportScrollOrigin
+import org.junit.runner.Description
+import org.junit.rules.TestWatcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -47,6 +49,17 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
     // 30-minute emulator job and hide which renderer/gesture combination stopped progressing.
     @get:Rule
     val caseTimeout = Timeout.seconds(45)
+
+    @get:Rule
+    val caseProbe = object : TestWatcher() {
+        override fun starting(description: Description) {
+            Log.i(PROBE_TAG, "JUnit starting lazy=$lazyHistory case=${description.methodName}")
+        }
+
+        override fun finished(description: Description) {
+            Log.i(PROBE_TAG, "JUnit finished lazy=$lazyHistory case=${description.methodName}")
+        }
+    }
 
     private lateinit var viewport: ViewportGestureFixture
 

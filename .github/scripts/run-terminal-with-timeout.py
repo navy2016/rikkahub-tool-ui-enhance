@@ -22,10 +22,11 @@ def publish_failure_log(log_path: Path, return_code: int) -> None:
     logcat_path = Path("artifacts/terminal-validation/gesture-logcat.txt")
     probe_lines: list[str] = []
     try:
-        probe_lines = [
+        all_probe_lines = [
             line for line in logcat_path.read_text(errors="replace").splitlines()
-            if "TerminalViewportProbe" in line or "AndroidRuntime" in line
-        ][-40:]
+            if "TerminalViewportProbe" in line and "lazy=true" in line
+        ]
+        probe_lines = all_probe_lines[-20:]
     except OSError:
         pass
     extra = "\nRelevant logcat:\n" + "\n".join(probe_lines) if probe_lines else ""
