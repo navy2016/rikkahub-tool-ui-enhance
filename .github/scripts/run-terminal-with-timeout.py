@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import sys
+from collections import deque
 from pathlib import Path
 
 
@@ -13,9 +14,30 @@ TERM_GRACE_SECONDS = 30
 DEFAULT_LOG_PATH = Path("artifacts/terminal-validation/instrumentation-command.log")
 
 
+def escape_annotation(message: str) -> str:
+    return message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
 def publish_error(title: str, message: str) -> None:
-    escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-    print(f"::error title={title}::{escaped}", flush=True)
+    print(f"::error title={title}::{escape_annotation(message)}", flush=True)
+
+
+def probe_annotation_chunks(message: str) -> list[str]:
+    # Actions keeps at most ten error annotations per step. Leave room for the command failure
+    # and keep the LAST eight chunks so neither old cases nor long stacks hide the final checkpoint.
+    chunks: deque[str] = deque(maxlen=8)
+    chunk: list[str] = []
+    size = 0
+    for char in message:
+        encoded_size = len(escape_annotation(char).encode("utf-8"))
+        if size + encoded_size > 2_800:
+            chunks.append("".join(chunk))
+            chunk, size = [], 0
+        chunk.append(char)
+        size += encoded_size
+    if chunk:
+        chunks.append("".join(chunk))
+    return list(chunks)
 
 
 def publish_failure_log(log_path: Path, return_code: int) -> None:
@@ -41,9 +63,8 @@ def publish_failure_log(log_path: Path, return_code: int) -> None:
     # A combined Gradle tail + logcat exceeded the check-run API's 4096-character message
     # limit and hid the LAST checkpoint (even cutting a diagnostics line in the middle).
     # Publish probes separately, in bounded chunks, including failure/main-thread stacks.
-    probes = "\n".join(probe_lines)
-    for offset in range(0, len(probes), 1_000):
-        publish_error(f"Terminal viewport probes {offset // 1_000 + 1}", probes[offset:offset + 1_000])
+    for index, chunk in enumerate(probe_annotation_chunks("\n".join(probe_lines)), start=1):
+        publish_error(f"Terminal viewport probes {index}", chunk)
 
 
 def kill_group(process: subprocess.Popen[object], sig: signal.Signals) -> None:

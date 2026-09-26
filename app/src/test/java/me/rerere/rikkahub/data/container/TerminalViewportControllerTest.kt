@@ -241,6 +241,26 @@ class TerminalViewportControllerTest {
     }
 
     @Test
+    fun topJumpCompletionResolvesTrimmedAnchorFromTheLatestPublishedFrame() {
+        val controller = lockedController()
+        controller.jumpToTop(73)
+        val jump = controller.effect()
+        repeat(30) { index ->
+            val firstId = 101L + index
+            controller.update(
+                makeFrame(history = (firstId until firstId + 20).toList(), revision = 2L + index),
+                scroll = 0,
+            )
+            // Updating metadata must not replace the in-flight jump or its original anchor yet.
+            assertEquals(jump, controller.effect())
+        }
+        controller.scrollFinished(jump.id, 0, completed = true)
+        assertEquals(ViewportMode.LOCKED, controller.state.value.mode)
+        assertEquals(130L, controller.state.value.anchor?.lineId)
+        assertNull(controller.state.value.scrollEffect)
+    }
+
+    @Test
     fun measuredAnchorTargetIsForwardedWithoutChangingEagerFallbackDefaults() {
         val controller = lockedController()
         val anchor = controller.state.value.anchor?.let {

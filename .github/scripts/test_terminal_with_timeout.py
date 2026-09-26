@@ -49,7 +49,6 @@ class RunTerminalWithTimeoutTest(unittest.TestCase):
             self.assertIn("::error title=Terminal instrumentation command failed::", result.stdout)
             self.assertIn("adb diagnostic", result.stdout)
 
-
     def test_long_child_log_cannot_truncate_last_lazy_checkpoint_or_stack(self):
         with tempfile.TemporaryDirectory() as directory:
             logcat = Path(directory) / "artifacts/terminal-validation/gesture-logcat.txt"
@@ -78,6 +77,28 @@ class RunTerminalWithTimeoutTest(unittest.TestCase):
             self.assertNotIn("eager-only", decoded)
             for line in annotations:
                 self.assertLess(len(line), 4_096, line)
+
+
+    def test_probe_annotation_count_and_bytes_preserve_the_last_checkpoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            logcat = Path(directory) / "artifacts/terminal-validation/gesture-logcat.txt"
+            logcat.parent.mkdir(parents=True)
+            final = "TerminalViewportProbe: JUnit finished lazy=true case=trimmedAnchor"
+            logcat.write_text("\n".join([
+                *["TerminalViewportProbe: main stack lazy=true " + "终端%" * 600 for _ in range(60)],
+                final,
+            ]))
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "2", sys.executable, "-c", "raise SystemExit(1)"],
+                cwd=directory, text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(1, result.returncode, result.stderr)
+            annotations = result.stdout.splitlines()
+            self.assertLessEqual(len(annotations), 9)
+            self.assertIn(final, annotations[-1])
+            for line in annotations:
+                self.assertLess(len(line.encode("utf-8")), 4_096)
+                self.assertNotIn("\ufffd", line)
 
 
 if __name__ == "__main__":

@@ -191,6 +191,36 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
         emittedUpdates++
     }
 
+    /** Publish frame metadata and its measured anchor together before effect reconciliation. */
+    private fun publishViewport() {
+        if (lazyHistory) {
+            lazyMeasurementTracker.bootstrapScrollPx(INITIAL_PX)
+            updateMeasuredLazyItems(lazyScroll.layoutInfo.visibleItemsInfo)
+            if (lazyMeasurement?.generationChanged == true) {
+                controller.setMeasuredAnchorTarget(frame.revision, null, null)
+            } else {
+                val anchor = controller.state.value.anchor?.let {
+                    TerminalViewportItemAnchor(
+                        lineId = it.lineId,
+                        clippedTopPx = it.clippedTopPx,
+                        screenGeneration = it.screenGeneration,
+                        historyGeneration = it.historyGeneration,
+                    )
+                }
+                controller.setMeasuredAnchorTarget(
+                    frameRevision = frame.revision,
+                    anchor = anchor,
+                    targetScrollPx = anchor?.let {
+                        resolveMeasuredViewportAnchor(lastMeasuredItems, it, maximumPx())
+                    },
+                )
+            }
+        } else {
+            controller.setMeasuredAnchorTarget(frame.revision, null, null)
+        }
+        controller.updateViewport(frame, rows.size, metrics(), currentPx())
+    }
+
     @Composable
     fun Content() {
         val scope = rememberCoroutineScope()
@@ -210,32 +240,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
                 frame.revision to (metrics() to lazyScroll.layoutInfo.visibleItemsInfo.map { it.key to it.offset })
             }.collect {
                 withFrameNanos { }
-                if (lazyHistory) {
-                    lazyMeasurementTracker.bootstrapScrollPx(INITIAL_PX)
-                    updateMeasuredLazyItems(lazyScroll.layoutInfo.visibleItemsInfo)
-                    if (lazyMeasurement?.generationChanged == true) {
-                        controller.setMeasuredAnchorTarget(frame.revision, null, null)
-                    } else {
-                        val anchor = controller.state.value.anchor?.let {
-                            TerminalViewportItemAnchor(
-                                lineId = it.lineId,
-                                clippedTopPx = it.clippedTopPx,
-                                screenGeneration = it.screenGeneration,
-                                historyGeneration = it.historyGeneration,
-                            )
-                        }
-                        controller.setMeasuredAnchorTarget(
-                            frameRevision = frame.revision,
-                            anchor = anchor,
-                            targetScrollPx = anchor?.let {
-                                resolveMeasuredViewportAnchor(lastMeasuredItems, it, maximumPx())
-                            },
-                        )
-                    }
-                } else {
-                    controller.setMeasuredAnchorTarget(frame.revision, null, null)
-                }
-                controller.updateViewport(frame, rows.size, metrics(), currentPx())
+                publishViewport()
             }
         }
         LaunchedEffect(this) {
@@ -247,6 +252,10 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
                     if (lazyHistory) lazyScroll.isScrollInProgress else eagerScroll.isScrollInProgress
                 },
             ) { effect, targetPx ->
+                // A queued effect may refer to a row removed since the last coalesced frame.
+                // Refresh the controller, rather than silently "completing" an unresolved target.
+                publishViewport()
+                if (!controller.isCurrent(effect)) return@runTerminalViewportScrollEffects
                 effects += effect
                 effectEvents += "start $effect at ${currentPx()}"
                 activeWriters++
@@ -262,6 +271,9 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
                         }
                     }
                     applyScrollEffect(effect, targetPx)
+                    // Output can trim the locked anchor during an animation. Publish the new frame
+                    // BEFORE the executor's scrollFinished resolves the replacement anchor.
+                    publishViewport()
                     effectEvents += "completed ${effect.id} at ${currentPx()}"
                 } catch (error: CancellationException) {
                     effectEvents += "cancelled ${effect.id}: ${error.javaClass.simpleName}: ${error.message}"
@@ -386,7 +398,10 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
 
     private suspend fun applyScrollEffect(effect: TerminalViewportScrollEffect, targetPx: Int) {
         if (lazyHistory) {
-            val target = lazyTargetForEffect(effect, targetPx) ?: return
+            val target = checkNotNull(lazyTargetForEffect(effect, targetPx)) {
+                "Unresolved lazy target: effect=$effect frame=${frame.revision} " +
+                    "historyStart=${frame.historyStartId} ${diagnostics()}"
+            }
             if (effect.animated) {
                 lazyScroll.animateScrollToItem(target.itemIndex, target.itemScrollOffsetPx)
             } else {
@@ -394,7 +409,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
             }
             // A long animation can teleport past all overlapping items. Establish the endpoint's
             // coordinate only AFTER reaching it, never on an intermediate animation frame. The
-            // executor's readCurrentScrollPx then observes this layout before scrollFinished.
+            // completion read observes this layout and publishes the latest frame before scrollFinished.
             lazyMeasurementTracker.setExpectedScrollPx(targetPx)
         } else {
             if (effect.animated) eagerScroll.animateScrollTo(targetPx) else eagerScroll.scrollTo(targetPx)

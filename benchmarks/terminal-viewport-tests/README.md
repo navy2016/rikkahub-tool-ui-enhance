@@ -31,7 +31,10 @@ The recognizer's clock is injected, so software-GPU CI delays between input call
 simulated quick sequence into an expired 700ms window. Pointer dispatch, velocity recognition and
 scroll animations are real; animation scales are **not disabled**. Lazy scroll callbacks sample the
 current measured layout synchronously, before the controller captures a consumed delta or reconciles
-a completed effect; the coalesced frame observer is not used as a scroll-completion acknowledgement. Clock-window, direction, threshold,
+a completed effect; the coalesced frame observer is not used as a scroll-completion acknowledgement.
+Effect boundaries also publish the latest frame metadata, so a trimmed anchor is replaced by the
+production reducer before resolving another lazy item target. An unresolvable target fails explicitly
+instead of silently completing and retrying a no-op. Clock-window, direction, threshold,
 count 1–5, count-setting reset and cancellation cases additionally have deterministic JVM tests in
 `TerminalFastFlingTest`, alongside the existing reducer/controller regression suite.
 
