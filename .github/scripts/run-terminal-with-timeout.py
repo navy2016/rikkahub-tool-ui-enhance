@@ -13,6 +13,11 @@ TERM_GRACE_SECONDS = 30
 DEFAULT_LOG_PATH = Path("artifacts/terminal-validation/instrumentation-command.log")
 
 
+def publish_error(title: str, message: str) -> None:
+    escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    print(f"::error title={title}::{escaped}", flush=True)
+
+
 def publish_failure_log(log_path: Path, return_code: int) -> None:
     try:
         text = log_path.read_text(errors="replace")
@@ -26,13 +31,19 @@ def publish_failure_log(log_path: Path, return_code: int) -> None:
             line for line in logcat_path.read_text(errors="replace").splitlines()
             if "TerminalViewportProbe" in line and "lazy=true" in line
         ]
-        probe_lines = all_probe_lines[-20:]
+        probe_lines = all_probe_lines[-80:]
     except OSError:
         pass
-    extra = "\nRelevant logcat:\n" + "\n".join(probe_lines) if probe_lines else ""
-    message = f"Instrumentation command exited {return_code}.\n{tail}{extra}"
-    escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-    print(f"::error title=Terminal instrumentation command failed::{escaped}", flush=True)
+    publish_error(
+        "Terminal instrumentation command failed",
+        f"Instrumentation command exited {return_code}.\n{tail}",
+    )
+    # A combined Gradle tail + logcat exceeded the check-run API's 4096-character message
+    # limit and hid the LAST checkpoint (even cutting a diagnostics line in the middle).
+    # Publish probes separately, in bounded chunks, including failure/main-thread stacks.
+    probes = "\n".join(probe_lines)
+    for offset in range(0, len(probes), 1_000):
+        publish_error(f"Terminal viewport probes {offset // 1_000 + 1}", probes[offset:offset + 1_000])
 
 
 def kill_group(process: subprocess.Popen[object], sig: signal.Signals) -> None:

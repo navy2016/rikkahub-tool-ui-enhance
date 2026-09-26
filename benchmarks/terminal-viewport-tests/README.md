@@ -12,12 +12,13 @@ and the same fixed status strip, parent nested-scroll connection and child fling
 has one effect executor; gestures can only ask the production controller to jump. Assertions inspect
 actual top/tail placement, controller follow intent and concurrent writer count, not just method calls.
 
-Eleven pointer-input cases run in **each** arm (22 total, no skipped/missing arm accepted):
+Twelve interaction cases run in **each** arm (24 total, no skipped/missing arm accepted):
 
 - two fast upward swipes → actual bottom, TAIL mode, one composed screen grid;
 - two fast downward swipes → actual top, LOCKED mode;
 - configured count of three → no jump on the second swipe;
-- slow swipes → normal pan, no jump;
+- slow swipes → normal pan, no jump or spurious reducer correction;
+- non-animated follow → fresh completion measurement, no synchronous scroll retry loop;
 - selection mode → pan enabled, fast jump disabled;
 - mouse mode → Compose pan and fast jump disabled;
 - horizontal swipes → horizontal pan, no vertical jump;
@@ -28,7 +29,9 @@ Eleven pointer-input cases run in **each** arm (22 total, no skipped/missing arm
 
 The recognizer's clock is injected, so software-GPU CI delays between input calls cannot turn a
 simulated quick sequence into an expired 700ms window. Pointer dispatch, velocity recognition and
-scroll animations are real; animation scales are **not disabled**. Clock-window, direction, threshold,
+scroll animations are real; animation scales are **not disabled**. Lazy scroll callbacks sample the
+current measured layout synchronously, before the controller captures a consumed delta or reconciles
+a completed effect; the coalesced frame observer is not used as a scroll-completion acknowledgement. Clock-window, direction, threshold,
 count 1–5, count-setting reset and cancellation cases additionally have deterministic JVM tests in
 `TerminalFastFlingTest`, alongside the existing reducer/controller regression suite.
 
@@ -59,7 +62,7 @@ On an authorized SDK host/device (or the `Terminal Viewport Interaction Tests` G
 python3 .github/scripts/report-terminal-tests.py \
   benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
   --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest \
-  --require-case-group 'lazyHistory=false:11' --require-case-group 'lazyHistory=true:11'
+  --require-case-group 'lazyHistory=false:12' --require-case-group 'lazyHistory=true:12'
 ```
 
 Do not merge these debug correctness results with the 30-case Macrobenchmark A/B JSON. There are no

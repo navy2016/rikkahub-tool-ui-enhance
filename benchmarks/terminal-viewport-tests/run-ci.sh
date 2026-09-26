@@ -21,7 +21,7 @@ run_arm() {
   local log="artifacts/terminal-validation/instrumentation-$arm.log"
 
   # Keep each renderer's result tree independent. A stuck lazy arm must not erase the
-  # completed eager arm or prevent the reporting step from seeing its 11 cases.
+  # completed eager arm or prevent the reporting step from seeing its 12 cases.
   find "$results_root" -mindepth 1 -maxdepth 1 ! -name 'viewport-*' -exec rm -rf {} +
   rm -rf "$stage"
   mkdir -p "$stage"

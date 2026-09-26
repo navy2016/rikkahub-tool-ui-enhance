@@ -50,5 +50,35 @@ class RunTerminalWithTimeoutTest(unittest.TestCase):
             self.assertIn("adb diagnostic", result.stdout)
 
 
+    def test_long_child_log_cannot_truncate_last_lazy_checkpoint_or_stack(self):
+        with tempfile.TemporaryDirectory() as directory:
+            logcat = Path(directory) / "artifacts/terminal-validation/gesture-logcat.txt"
+            logcat.parent.mkdir(parents=True)
+            probe_lines = [
+                "I TerminalViewportProbe: slow swipe 1 clock begin lazy=true",
+                *[f"E TerminalViewportProbe: main stack lazy=true at method{i} " + "x" * 120
+                  for i in range(40)],
+                "I TerminalViewportProbe: JUnit finished lazy=true case=slowSwipes",
+            ]
+            logcat.write_text(
+                "I TerminalViewportProbe: eager-only checkpoint lazy=false\n" + "\n".join(probe_lines)
+            )
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), "2", sys.executable, "-c",
+                 "import sys; print('gradle task output\\n' * 400); sys.exit(1)"],
+                cwd=directory, text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(1, result.returncode, result.stderr)
+            annotations = result.stdout.splitlines()
+            probes = [line.split("::", 2)[2] for line in annotations
+                      if line.startswith("::error title=Terminal viewport probes")]
+            self.assertGreater(len(probes), 1)
+            decoded = "".join(probes).replace("%0A", "\n").replace("%0D", "\r").replace("%25", "%")
+            self.assertEqual("\n".join(probe_lines), decoded)
+            self.assertNotIn("eager-only", decoded)
+            for line in annotations:
+                self.assertLess(len(line), 4_096, line)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -45,8 +45,8 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
     @get:Rule
     val compose = createComposeRule()
 
-    // A stuck scroll mutation must produce a case-level JUnit failure, not consume the entire
-    // 30-minute emulator job and hide which renderer/gesture combination stopped progressing.
+    // Bound the test body. A blocked UI thread can also stall Compose rule teardown, so the host
+    // watchdog remains necessary; the watcher records the timeout and main-thread stack first.
     @get:Rule
     val caseTimeout = Timeout.seconds(45)
 
@@ -54,6 +54,22 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
     val caseProbe = object : TestWatcher() {
         override fun starting(description: Description) {
             Log.i(PROBE_TAG, "JUnit starting lazy=$lazyHistory case=${description.methodName}")
+        }
+
+        override fun succeeded(description: Description) {
+            Log.i(PROBE_TAG, "JUnit passed lazy=$lazyHistory case=${description.methodName}")
+        }
+
+        override fun failed(error: Throwable, description: Description) {
+            Log.e(PROBE_TAG, "JUnit failed lazy=$lazyHistory case=${description.methodName}: $error")
+            error.stackTrace.take(16).forEach {
+                Log.e(PROBE_TAG, "failure stack lazy=$lazyHistory at $it")
+            }
+            // Do not post to the UI thread here: a synchronous scroll retry loop can block it.
+            Thread.getAllStackTraces().entries.firstOrNull { it.key.name == "main" }?.let { (thread, stack) ->
+                Log.e(PROBE_TAG, "main thread lazy=$lazyHistory state=${thread.state}")
+                stack.take(24).forEach { Log.e(PROBE_TAG, "main stack lazy=$lazyHistory at $it") }
+            }
         }
 
         override fun finished(description: Description) {
@@ -183,6 +199,20 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
     }
 
     @Test
+    fun nonAnimatedFollowReadsTheCompletedLayoutBeforeReconciling() {
+        compose.runOnIdle { viewport.controller.setFollow(true, viewport.currentPx()) }
+        settle()
+        compose.runOnIdle {
+            assertTrue(viewport.diagnostics(), viewport.isAtBottom())
+            assertEquals(ViewportMode.TAIL, viewport.controller.state.value.mode)
+            assertNull(viewport.controller.state.value.scrollEffect)
+            assertEquals(viewport.diagnostics(), 1, viewport.scrollEffectCount)
+            assertEquals(1, viewport.maximumWriters)
+            assertEquals(0, viewport.activeWriters)
+        }
+    }
+
+    @Test
     fun slowSwipesPanWithoutTriggeringFastJump() {
         Log.i(PROBE_TAG, "slow swipe node lookup begin lazy=$lazyHistory")
         val node = compose.onNodeWithTag(ViewportGestureFixture.OUTPUT_TAG)
@@ -200,7 +230,11 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
         Log.i(PROBE_TAG, "slow swipe settle begin lazy=$lazyHistory")
         assertNoJump()
         Log.i(PROBE_TAG, "slow swipe settle complete lazy=$lazyHistory diagnostics=${viewport.diagnostics()}")
-        compose.runOnIdle { assertTrue(viewport.currentPx() > ViewportGestureFixture.INITIAL_PX) }
+        compose.runOnIdle {
+            assertTrue(viewport.currentPx() > ViewportGestureFixture.INITIAL_PX)
+            // A normal pan captures its final consumed position; no reducer correction is needed.
+            assertEquals(viewport.diagnostics(), 0, viewport.scrollEffectCount)
+        }
         Log.i(PROBE_TAG, "slow swipe assertion complete lazy=$lazyHistory")
     }
 

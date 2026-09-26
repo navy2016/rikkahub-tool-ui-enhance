@@ -110,6 +110,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
         reset(INITIAL_PX)
     }
     val jumps: List<TerminalViewportScrollEffect> get() = effects.filter { it.origin == ViewportScrollOrigin.JUMP }
+    val scrollEffectCount: Int get() = effects.size
     var activeWriters = 0
         private set
     var maximumWriters = 0
@@ -122,6 +123,17 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     fun currentPx(): Int = if (lazyHistory) {
         lazyMeasurement?.currentScrollPx ?: INITIAL_PX
     } else eagerScroll.value
+
+    /**
+     * Scroll callbacks run on the UI thread, after LazyList has applied its consumed delta/layout.
+     * The frame-coalesced observer below is too late for onPostScroll or scrollFinished: reporting
+     * its cached position can capture the previous row and synchronously retry a completed scroll
+     * forever, starving the very frame that would refresh that cache.
+     */
+    private fun readCurrentScrollPx(): Int {
+        if (lazyHistory) updateMeasuredLazyItems(lazyScroll.layoutInfo.visibleItemsInfo)
+        return currentPx()
+    }
 
     private fun maximumPx(): Int = if (lazyHistory) {
         // This fixture deliberately uses exact 64px boxes for every structural item, so its
@@ -187,7 +199,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
             controller = controller,
             config = config,
             interactionSource = if (lazyHistory) lazyScroll.interactionSource else eagerScroll.interactionSource,
-            currentScrollPx = { currentPx() },
+            currentScrollPx = { readCurrentScrollPx() },
             isScrollInProgress = { if (lazyHistory) lazyScroll.isScrollInProgress else eagerScroll.isScrollInProgress },
             // Input recognition has a deterministic clock; fling animations and pointer dispatch are real.
             // This avoids mistaking a busy software-GPU CI host for a >700ms human gesture interval.
@@ -229,7 +241,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
         LaunchedEffect(this) {
             runTerminalViewportScrollEffects(
                 controller = controller,
-                currentScrollPx = { currentPx() },
+                currentScrollPx = { readCurrentScrollPx() },
                 maxScrollPx = { maximumPx() },
                 isScrollInProgress = {
                     if (lazyHistory) lazyScroll.isScrollInProgress else eagerScroll.isScrollInProgress
@@ -375,12 +387,15 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     private suspend fun applyScrollEffect(effect: TerminalViewportScrollEffect, targetPx: Int) {
         if (lazyHistory) {
             val target = lazyTargetForEffect(effect, targetPx) ?: return
-            lazyMeasurementTracker.setExpectedScrollPx(targetPx)
             if (effect.animated) {
                 lazyScroll.animateScrollToItem(target.itemIndex, target.itemScrollOffsetPx)
             } else {
                 lazyScroll.scrollToItem(target.itemIndex, target.itemScrollOffsetPx)
             }
+            // A long animation can teleport past all overlapping items. Establish the endpoint's
+            // coordinate only AFTER reaching it, never on an intermediate animation frame. The
+            // executor's readCurrentScrollPx then observes this layout before scrollFinished.
+            lazyMeasurementTracker.setExpectedScrollPx(targetPx)
         } else {
             if (effect.animated) eagerScroll.animateScrollTo(targetPx) else eagerScroll.scrollTo(targetPx)
         }
