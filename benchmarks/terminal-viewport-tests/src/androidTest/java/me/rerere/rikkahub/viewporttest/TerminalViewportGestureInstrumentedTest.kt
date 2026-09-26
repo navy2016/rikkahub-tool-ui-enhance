@@ -184,16 +184,24 @@ class TerminalViewportGestureInstrumentedTest(private val lazyHistory: Boolean) 
 
     @Test
     fun slowSwipesPanWithoutTriggeringFastJump() {
+        Log.i(PROBE_TAG, "slow swipe node lookup begin lazy=$lazyHistory")
         val node = compose.onNodeWithTag(ViewportGestureFixture.OUTPUT_TAG)
         val size = node.fetchSemanticsNode().size
-        repeat(2) {
+        Log.i(PROBE_TAG, "slow swipe node ready lazy=$lazyHistory size=$size")
+        repeat(2) { index ->
+            Log.i(PROBE_TAG, "slow swipe $index clock begin lazy=$lazyHistory")
             compose.runOnIdle { viewport.inputTimeMs += 100 }
+            Log.i(PROBE_TAG, "slow swipe $index input begin lazy=$lazyHistory")
             node.performTouchInput {
                 swipe(Offset(size.width / 2f, size.height * 0.8f), Offset(size.width / 2f, size.height * 0.2f), 600)
             }
+            Log.i(PROBE_TAG, "slow swipe $index input complete lazy=$lazyHistory diagnostics=${viewport.diagnostics()}")
         }
+        Log.i(PROBE_TAG, "slow swipe settle begin lazy=$lazyHistory")
         assertNoJump()
+        Log.i(PROBE_TAG, "slow swipe settle complete lazy=$lazyHistory diagnostics=${viewport.diagnostics()}")
         compose.runOnIdle { assertTrue(viewport.currentPx() > ViewportGestureFixture.INITIAL_PX) }
+        Log.i(PROBE_TAG, "slow swipe assertion complete lazy=$lazyHistory")
     }
 
     @Test
