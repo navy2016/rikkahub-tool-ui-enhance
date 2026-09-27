@@ -41,7 +41,7 @@ internal fun createTerminalRenderedRows(
 /**
  * Shared by the terminal and the isolated rendering benchmark. The caller owns the mutable snapshot
  * so row updates and viewport metadata are still published atomically. Returns whether a transient
- * TUI blank needs a later commit. This deliberately preserves the existing eager row-list algorithm.
+ * TUI blank needs a later commit. Stable row states and their pending blank grace survive structural updates.
  */
 internal fun synchronizeTerminalRenderedRows(
     terminalRenderedRows: SnapshotStateList<TerminalRenderedRowState>,
@@ -54,27 +54,27 @@ internal fun synchronizeTerminalRenderedRows(
     val nextLineIds = buildLineIdsFromFrame(frame, rendered.size).ifEmpty {
         rendered.indices.map { index -> Long.MIN_VALUE + index }
     }
-    val idsChanged = terminalRenderedRows.size != rendered.size ||
-        terminalRenderedRows.indices.any { terminalRenderedRows[it].lineId != nextLineIds[it] }
+    // SnapshotStateList.toList() is an O(1), immutable view. Read the list's snapshot record once
+    // rather than once per row, and retain it while applying any structural changes below.
+    val previousRows = terminalRenderedRows.toList()
+    val idsChanged = previousRows.size != rendered.size ||
+        previousRows.indices.any { previousRows[it].lineId != nextLineIds[it] }
     if (idsChanged) {
-        // Scrollback trim shifts every positional row. Reuse state by stable ID so a row's
-        // pending blank grace period and Compose slot follow the row, not its old index.
-        val existing = terminalRenderedRows.associateBy { it.lineId }
-        terminalRenderedRows.clear()
-        rendered.forEachIndexed { index, row ->
-            terminalRenderedRows.add(
-                existing[nextLineIds[index]] ?: TerminalRenderedRowState(nextLineIds[index], row.text)
-            )
-        }
+        synchronizeTerminalRowStructure(terminalRenderedRows, previousRows, rendered, nextLineIds)
     }
+    val currentRows = if (idsChanged) terminalRenderedRows.toList() else previousRows
     var hasDeferredGridBlank = false
     val stableGridStart = (rendered.size - TERMINAL_GRID_STABLE_BOTTOM_ROWS).coerceAtLeast(0)
     for (index in rendered.indices) {
-        val rowState = terminalRenderedRows[index]
+        val rowState = currentRows[index]
         val next = rendered[index].text
+        val previousText = rowState.text
+        // Cached history rows usually keep the same AnnotatedString. A pending TUI blank must
+        // still run through the grace/force logic, even if this frame reuses an existing text.
+        if (previousText === next && rowState.pendingBlankSinceMs == 0L) continue
         val deferTransientGridClear = usesTuiViewport &&
             index >= stableGridStart &&
-            rowState.text.text.isNotBlank() &&
+            previousText.text.isNotBlank() &&
             next.text.isBlank()
         if (deferTransientGridClear && !forcePendingGridBlanks) {
             if (rowState.pendingBlankSinceMs == 0L) rowState.pendingBlankSinceMs = nowMs
@@ -85,10 +85,53 @@ internal fun synchronizeTerminalRenderedRows(
         } else if (!next.text.isBlank()) {
             rowState.pendingBlankSinceMs = 0L
         }
-        if (rowState.text != next) rowState.text = next
+        if (previousText != next) rowState.text = next
         rowState.pendingBlankSinceMs = 0L
     }
     return hasDeferredGridBlank
+}
+
+/** Only the list structure changes here; the caller updates text within the same mutable snapshot. */
+private fun synchronizeTerminalRowStructure(
+    rows: SnapshotStateList<TerminalRenderedRowState>,
+    previous: List<TerminalRenderedRowState>,
+    rendered: List<TerminalEmulator.RenderedRow>,
+    nextIds: List<Long>,
+) {
+    if (nextIds.isEmpty()) {
+        rows.clear()
+        return
+    }
+    val retainedStart = previous.indexOfFirst { it.lineId == nextIds.first() }
+    if (retainedStart >= 0) {
+        val retainedCount = minOf(previous.size - retainedStart, nextIds.size)
+        val overlapMatches = (0 until retainedCount).all { previous[retainedStart + it].lineId == nextIds[it] }
+        // New emulator line IDs exceed all earlier IDs. Verify that condition rather than assume
+        // any suffix is new: a reorder can move an old row from before retainedStart to the tail.
+        val maxPreviousId = if (retainedCount < nextIds.size) previous.maxOf { it.lineId } else Long.MAX_VALUE
+        val suffixIsNew = (retainedCount until nextIds.size).all { nextIds[it] > maxPreviousId }
+        if (overlapMatches && suffixIsNew) {
+            // Normal append/trim: only edit the head/tail and retain all surviving row objects.
+            // No full ID map, clear/reinsert, or per-row snapshot-list write is needed. ID validation
+            // and persistent-list edits still have history-sized work; this is not O(visible rows).
+            if (retainedStart > 0) rows.subList(0, retainedStart).clear()
+            if (rows.size > retainedCount) rows.subList(retainedCount, rows.size).clear()
+            if (nextIds.size > retainedCount) {
+                rows.addAll((retainedCount until nextIds.size).map { index ->
+                    TerminalRenderedRowState(nextIds[index], rendered[index].text)
+                })
+            }
+            return
+        }
+    }
+    // Reorder/replace/non-monotonic IDs: retain the original stable-ID semantics. Build off-list
+    // and publish in bulk, instead of performing up to 10k individual SnapshotStateList.add calls.
+    val existing = previous.associateBy { it.lineId }
+    val replacement = nextIds.mapIndexed { index, id ->
+        existing[id] ?: TerminalRenderedRowState(id, rendered[index].text)
+    }
+    rows.clear()
+    rows.addAll(replacement)
 }
 
 /** Eager physical rows; the parent owns scrolling, selection and all viewport coordinates. */

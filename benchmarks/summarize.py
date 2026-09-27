@@ -225,6 +225,27 @@ def render_summary(results, context, sha, environment):
     return "\n".join(lines)
 
 
+def render_hot_path_summary(results, sha, environment):
+    """Keep all sizes' update metrics visible within one check-run annotation."""
+    lines = [
+        f"Terminal hot paths — commit {sha}; environment={environment}",
+        "Full matrix, traces and device context: job summary/artifact. CPU timings are not FPS.",
+        "Both arms share row sync; these are NOT old/new synchronizer comparisons.",
+        "History | Scenario | Renderer | n | rowSync/op ms | rowSync max ms | CPU p95 ms | RSS anon MiB",
+    ]
+    for (size, scenario, renderer), result in ordered_results(results):
+        if scenario not in ("activeRowUpdate", "appendAndTrim"):
+            continue
+        rss = median(result, "memoryRssAnonMaxKb")
+        lines.append(" | ".join([
+            str(size), scenario, renderer, str(result.get("repeatIterations", "?")),
+            format_number(per_operation(result, "rowSync")), format_number(median(result, "rowSyncMaxMs")),
+            format_number(percentile(result, "frameDurationCpuMs", "P95")),
+            format_number(rss / 1024 if rss is not None else None),
+        ]))
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
@@ -233,6 +254,7 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--suite", choices=("baseline", "ab"), default="baseline")
     parser.add_argument("--require-complete", action="store_true")
+    parser.add_argument("--github-annotation", action="store_true")
     args = parser.parse_args()
     results, context = load_results(args.root)
     payload = context.get("payload", {})
@@ -242,6 +264,10 @@ def main():
         validate_complete(results, args.suite)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(render_summary(results, context, args.sha, args.environment))
+    if args.github_annotation:
+        message = render_hot_path_summary(results, args.sha, args.environment)
+        escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print("::notice title=Terminal rendering hot paths::" + escaped)
 
 
 if __name__ == "__main__":

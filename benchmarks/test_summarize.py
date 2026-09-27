@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from summarize import (RENDERERS, SCENARIOS, SIZES, comparison_lines, load_results, overrun_percent,
-                       per_operation, render_summary, result_key, validate_complete)
+                       per_operation, render_hot_path_summary, render_summary, result_key, validate_complete)
 
 
 def measurement(size=1000, scenario="initialCompose", renderer="eager", legacy=False):
@@ -50,6 +50,19 @@ class SummaryTest(unittest.TestCase):
         self.assertIn("| 1000 | initialCompose | eager | 2 | 150.00 |", output)
         self.assertIn("| 50.00 | — |", output)
         self.assertEqual(50, overrun_percent(measurement()))
+
+    def test_hot_path_annotation_keeps_all_sizes_and_both_arms_without_truncation(self):
+        summary = render_hot_path_summary(matrix(), "a" * 40, "ci-emulator")
+        lines = [line for line in summary.splitlines() if line[:1].isdigit()]
+        self.assertEqual(12, len(lines))
+        for size in SIZES:
+            for scenario in ("activeRowUpdate", "appendAndTrim"):
+                for renderer in RENDERERS:
+                    self.assertIn(f"{size} | {scenario} | {renderer} | 2 | 0.10 | — | 20.00 | —", summary)
+        self.assertNotIn("alternateScreenUpdate", summary)
+        self.assertIn("NOT old/new", summary)
+        escaped = summary.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D")
+        self.assertLess(len(escaped.encode("utf-8")), 3_500)
 
     def test_legacy_names_remain_readable(self):
         self.assertEqual((1000, "initialCompose", "eager"), result_key(measurement(legacy=True)["name"]))

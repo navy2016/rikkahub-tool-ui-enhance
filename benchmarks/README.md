@@ -3,8 +3,9 @@
 ## Scope
 
 Compare eager `Column` against a **benchmark-only, history-only `LazyColumn`** at
-**1,000 / 5,000 / 10,000 history rows + 24 active rows**. This step does **not** change the production
-terminal, viewport reducer/controller, or TUI physical-grid semantics.
+**1,000 / 5,000 / 10,000 history rows + 24 active rows**. The harness never switches the production
+renderer or changes viewport reducer/controller and TUI physical-grid semantics. Shared row-sync
+optimizations apply to production and both benchmark arms, so they also require terminal regressions.
 
 The opt-in `terminal-target` APK compiles the production `TerminalEmulator`, stable-ID helper,
 `TerminalRenderedRows` and font sources via Gradle `Sync` tasks. Generated copies are only in `build/`;
@@ -145,6 +146,26 @@ row-sync traces and memory together, then reproduce on a representative physical
   **ordinary history only**. Keep TUI/alternate-screen physical-grid rendering and coordinate ownership
   intact; rerun the existing viewport event-sequence tests and this same benchmark.
 - Do not merge a lazy migration based solely on emulator timings or on a JVM `renderFrame` microbenchmark.
+
+## Current row-sync follow-up
+
+The shared synchronizer now takes one immutable row-list snapshot per phase. Ordinary contiguous
+head trim/tail append edits only those ranges and allocates states only for new rows. The fast path
+verifies the entire retained ID sequence and that appended IDs are newer than every previous ID;
+it does not assume contiguous IDs or mistake a reorder for an append. Other structural updates
+reuse states by ID and use one bulk `addAll`, rather than one snapshot-list write per row.
+
+Cached, identical `AnnotatedString` instances skip redundant text checks, except when a TUI blank
+has a pending grace period. ANSI-only changes, forced blank commits, reordered pending blanks and
+fallback IDs retain their existing behavior. Tests exercise 30 real-emulator appends at 1k/5k/10k
+and mixed structural updates. Overall synchronization is still **O(history)**; this does not solve
+all eager composition/layout costs or authorize a production LazyColumn migration.
+
+Use the unchanged full matrix to inspect `rowSync/op`, row-sync maxima and frame timings after
+this change. The workflow publishes a compact all-size hot-path annotation (to avoid truncating
+10k results), while the job summary/artifact retains the complete 30-case report and raw traces.
+Both renderer arms use the new synchronizer: their same-run ratios compare renderers, **not** old
+versus new synchronization. Do not infer a before/after speedup from separate CI hosts/runs.
 
 ## Recorded baselines
 
