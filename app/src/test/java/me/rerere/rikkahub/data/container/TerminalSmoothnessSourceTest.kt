@@ -139,8 +139,8 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("TerminalRenderedRows(terminalRenderedRows, terminalTextStyle)"))
         assertTrue(renderedRowsSource.contains("val lineId: Long"))
         assertTrue(renderedRowsSource.contains("buildLineIdsFromFrame(frame, rendered.size)"))
-        assertTrue(renderedRowsSource.contains("existing[nextLineIds[index]]"))
-        assertTrue(renderedRowsSource.contains("terminalRenderedRows.indices.any"))
+        // Row identity through trim/reorder is checked behaviorally in TerminalRenderedRowsTest.
+        // Keep this guard about production wiring/keying, not the synchronizer's loop variables.
         assertTrue(renderedRowsSource.contains("key(row.lineId)"))
         assertFalse(renderedRowsSource.contains("TerminalRenderedRowState(it.text)"))
     }
@@ -150,7 +150,8 @@ class TerminalSmoothnessSourceTest {
         assertTrue(renderedRowsSource.contains("class TerminalRenderedRowState"))
         assertTrue(renderedRowsSource.contains("mutableStateListOf<TerminalRenderedRowState>()"))
         assertTrue(processSessionSource.contains("Snapshot.withMutableSnapshot"))
-        assertTrue(renderedRowsSource.contains("if (rowState.text != next) rowState.text = next"))
+        // Verify observable per-row state; cached/delta update mechanics have behavior tests.
+        assertTrue(renderedRowsSource.contains("var text by mutableStateOf(initialText)"))
         assertTrue(renderedRowsSource.contains("TERMINAL_GRID_STABLE_BOTTOM_ROWS"))
         assertTrue(processSessionSource.contains("TERMINAL_GRID_CLEAR_GRACE_MS"))
         assertTrue(processSessionSource.contains("holdCompleteFrameForGrid"))
