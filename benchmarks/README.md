@@ -181,3 +181,7 @@ use separate hosts/runs to claim a speedup. The [2026-09-24 A/B report](results/
 records the complete 30-case matrix and paired ratios. Results support continuing an isolated
 ordinary-history production-integration prototype; they do **not** justify default rollout without
 viewport/controller integration tests and representative physical-device measurements.
+
+
+- [2026-09-27: row-sync 优化后的热点摘要](results/2026-09-27-85e2696-row-sync-hotpaths-ci-emulator.md)
+  — 30 项矩阵通过，归档 12 项更新热点；数据支持下一步隔离验证 eager 的组合/布局组织。
