@@ -11,6 +11,8 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
@@ -20,6 +22,7 @@ import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRows
 /** Non-observable, main-thread counters; probes must not themselves trigger recomposition. */
 internal class LazyCompositionStats {
     var historyRows = 0
+    var historyChunks = 0
     var activeGrids = 0
 }
 
@@ -34,6 +37,35 @@ internal fun TerminalBenchmarkViewport(
     stats: LazyCompositionStats,
     modifier: Modifier = Modifier,
 ) {
+    if (layout.useChunkedHistory) {
+        // This is still fully eager: every row is retained, and ScrollState owns actual geometry.
+        // Only the composition/layout tree is partitioned. No fixed-height boxes or pixel estimates.
+        Column(modifier.horizontalScroll(horizontalScroll).verticalScroll(verticalScroll)) {
+            layout.historyChunks.forEach { chunk ->
+                key(chunk.bucket) {
+                    EagerHistoryChunkRows(
+                        chunk = HistoryChunkRows(
+                            chunk.bucket, List(chunk.endExclusive - chunk.start) { rows[chunk.start + it] },
+                        ),
+                        style = style,
+                        stats = stats,
+                    )
+                }
+            }
+            key(TerminalBenchmarkLayout.ACTIVE_SCREEN_KEY) {
+                DisposableEffect(Unit) {
+                    stats.activeGrids++
+                    onDispose { stats.activeGrids-- }
+                }
+                Column {
+                    TerminalRenderedRows(List(layout.screenRows) { rows[layout.historyRows + it] }, style)
+                }
+            }
+            key(TerminalBenchmarkLayout.TAIL_KEY) { Spacer(Modifier.height(8.dp)) }
+        }
+        return
+    }
+
     if (!layout.useLazyHistory) {
         // Unchanged eager backend, including ALL TUI/alternate/full-grid cases in either arm.
         Column(modifier.horizontalScroll(horizontalScroll).verticalScroll(verticalScroll)) {
@@ -76,4 +108,24 @@ internal fun TerminalBenchmarkViewport(
             Spacer(Modifier.height(8.dp))
         }
     }
+}
+
+/** An immutable list container of observable @Stable row states; never mutate this list in place. */
+@Stable
+private data class HistoryChunkRows(val bucket: Long, val rows: List<TerminalRenderedRowState>)
+
+@Composable
+private fun EagerHistoryChunkRows(chunk: HistoryChunkRows, style: TextStyle, stats: LazyCompositionStats) {
+    DisposableEffect(chunk.bucket, chunk.rows.size) {
+        val count = chunk.rows.size
+        stats.historyChunks++
+        stats.historyRows += count
+        Trace.setCounter("Terminal.eagerHistoryChunks", stats.historyChunks.toLong())
+        onDispose {
+            stats.historyChunks--
+            stats.historyRows -= count
+            Trace.setCounter("Terminal.eagerHistoryChunks", stats.historyChunks.toLong())
+        }
+    }
+    Column { TerminalRenderedRows(chunk.rows, style) }
 }

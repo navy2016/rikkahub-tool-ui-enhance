@@ -7,6 +7,11 @@ on:
         description: 'Measured repetitions per size/scenario/renderer (1-50)'
         default: '3'
         required: true
+      candidate:
+        description: 'Renderer paired with flat eager in the same run'
+        type: choice
+        options: [lazyHistory, chunkedEager]
+        default: lazyHistory
   push:
     branches: [fix/terminal-viewport-semantic-reducer]
     paths:
@@ -30,6 +35,7 @@ jobs:
     timeout-minutes: 90
     env:
       TERMINAL_BENCHMARK_ITERATIONS: ${{ inputs.iterations || '3' }}
+      TERMINAL_BENCHMARK_CANDIDATE: ${{ inputs.candidate || 'lazyHistory' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -82,15 +88,17 @@ jobs:
         if: always()
         run: |
           python3 -m unittest discover -s benchmarks -p 'test_*.py'
+          suite=ab
+          if [ "$TERMINAL_BENCHMARK_CANDIDATE" = chunkedEager ]; then suite=chunked-eager; fi
           python3 benchmarks/summarize.py benchmarks/terminal-macrobenchmark/build/outputs \
-            --sha "$GITHUB_SHA" --environment ci-emulator --suite ab --require-complete --github-annotation \
+            --sha "$GITHUB_SHA" --environment ci-emulator --suite "$suite" --require-complete --github-annotation \
             --output artifacts/terminal-scrollback/summary.md
           cat artifacts/terminal-scrollback/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload raw data, traces, logs and APKs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: terminal-scrollback-benchmark-${{ github.sha }}
+          name: terminal-scrollback-benchmark-${{ env.TERMINAL_BENCHMARK_CANDIDATE }}-${{ github.sha }}
           path: |
             artifacts/terminal-scrollback/**
             benchmarks/terminal-target/build/outputs/apk/benchmark/**

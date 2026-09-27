@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from summarize import (RENDERERS, SCENARIOS, SIZES, comparison_lines, load_results, overrun_percent,
+from summarize import (RENDERERS, SCENARIOS, SIZES, SUITE_RENDERERS, comparison_lines, load_results, overrun_percent,
                        per_operation, render_hot_path_summary, render_summary, result_key, validate_complete)
 
 
@@ -31,7 +31,7 @@ def measurement(size=1000, scenario="initialCompose", renderer="eager", legacy=F
     return result
 
 
-def matrix(renderers=RENDERERS):
+def matrix(renderers=SUITE_RENDERERS["ab"]):
     return {(size, scenario, renderer): measurement(size, scenario, renderer)
             for size in SIZES for scenario in SCENARIOS for renderer in renderers}
 
@@ -57,12 +57,35 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(12, len(lines))
         for size in SIZES:
             for scenario in ("activeRowUpdate", "appendAndTrim"):
-                for renderer in RENDERERS:
+                for renderer in SUITE_RENDERERS["ab"]:
                     self.assertIn(f"{size} | {scenario} | {renderer} | 2 | 0.10 | — | 20.00 | —", summary)
         self.assertNotIn("alternateScreenUpdate", summary)
         self.assertIn("NOT old/new", summary)
         escaped = summary.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D")
         self.assertLess(len(escaped.encode("utf-8")), 3_500)
+
+    def test_chunked_eager_is_a_distinct_complete_pair_not_a_relabelled_lazy_arm(self):
+        results = matrix(SUITE_RENDERERS["chunked-eager"])
+        validate_complete(results, "chunked-eager")
+        with self.assertRaises(ValueError):
+            validate_complete(results, "ab")
+        with self.assertRaises(ValueError):
+            validate_complete(matrix(), "chunked-eager")
+        with self.assertRaises(ValueError):
+            validate_complete(matrix(), "typo")
+        output = render_summary(results, {}, "sha", "ci-emulator")
+        self.assertIn("stable-chunk eager A/B", output)
+        self.assertIn("retains ALL history rows", output)
+        self.assertIn("E/Ch", output)
+        self.assertNotIn("ONE whole active-screen grid item", output)
+        self.assertEqual((10000, "appendAndTrim", "chunkedEager"), result_key(
+            "render[history=10000,scenario=appendAndTrim,renderer=chunkedEager]"))
+        mixed = matrix(RENDERERS)
+        with self.assertRaises(ValueError):
+            render_summary(mixed, {}, "sha", "ci-emulator")
+        results[(10000, "appendAndTrim", "chunkedEager")]["metrics"]["followTailCount"]["runs"] = [30, 30]
+        with self.assertRaises(ValueError):
+            validate_complete(results, "chunked-eager")
 
     def test_legacy_names_remain_readable(self):
         self.assertEqual((1000, "initialCompose", "eager"), result_key(measurement(legacy=True)["name"]))

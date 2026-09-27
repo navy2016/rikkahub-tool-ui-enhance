@@ -260,9 +260,17 @@ class TerminalBenchmarkActivity : ComponentActivity() {
         }
     }
 
-    private fun layoutFor(frame: TerminalEmulator.RenderFrame) = TerminalBenchmarkLayout.fromFrame(
-        frame, renderer, configuredTui, preserveFullGrid,
-    )
+    private fun layoutFor(frame: TerminalEmulator.RenderFrame): TerminalBenchmarkLayout {
+        val layout = TerminalBenchmarkLayout.fromFrame(frame, renderer, configuredTui, preserveFullGrid)
+        if (renderer == BenchmarkRenderer.CHUNKED_EAGER && frame.historyCount > 0 &&
+            !frame.isAlternateScreen && !configuredTui && !preserveFullGrid
+        ) {
+            // The benchmark workload has monotonic IDs. A misconfigured candidate must fail,
+            // not silently measure flat eager under the chunkedEager label.
+            check(layout.useChunkedHistory) { "Chunked benchmark unexpectedly fell back to flat eager" }
+        }
+        return layout
+    }
 
     private fun verifyTail() {
         val current = checkNotNull(layoutState)
@@ -271,9 +279,17 @@ class TerminalBenchmarkActivity : ComponentActivity() {
             check(verticalScroll.value == verticalScroll.maxValue) {
                 "Eager viewport left the tail: value=${verticalScroll.value}, max=${verticalScroll.maxValue}"
             }
-            check(compositionStats.historyRows == 0 && compositionStats.activeGrids == 0)
+            if (current.useChunkedHistory) {
+                check(compositionStats.historyRows == current.historyRows) { "Chunking must retain ALL history rows" }
+                check(compositionStats.historyChunks == current.historyChunks.size)
+                check(compositionStats.activeGrids == 1) { "The active screen must remain one complete physical grid" }
+            } else {
+                check(compositionStats.historyRows == 0 && compositionStats.activeGrids == 0)
+                check(compositionStats.historyChunks == 0)
+            }
             return
         }
+        check(compositionStats.historyChunks == 0)
         check(!lazyScroll.canScrollForward) {
             "Lazy viewport left the tail: index=${lazyScroll.firstVisibleItemIndex}, " +
                 "offset=${lazyScroll.firstVisibleItemScrollOffset}"

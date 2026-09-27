@@ -167,6 +167,22 @@ this change. The workflow publishes a compact all-size hot-path annotation (to a
 Both renderer arms use the new synchronizer: their same-run ratios compare renderers, **not** old
 versus new synchronization. Do not infer a before/after speedup from separate CI hosts/runs.
 
+## Stable-chunk eager candidate (benchmark-only)
+
+`chunkedEager` keeps **every** history row composed inside the same `verticalScroll` Column and uses
+the same row sync, production Text, measured tail correction and six-viewport pan as flat eager.
+Only the composition/layout tree is grouped: history rows are keyed by `floorDiv(lineId, 128)`
+buckets, so head trimming changes only the first bucket and appending only the last. Interior
+buckets keep their keys and members. There are no fixed row heights or pixel estimates.
+
+Reordered, duplicate or incomplete IDs return no chunks. Alternate screen, configured TUI and
+full-grid modes stay on flat eager, with one whole physical screen. The fixture fails if ordinary
+monotonic history unexpectedly falls back, if any row/chunk is missing, or if the screen is split.
+
+Run it with the workflow's `candidate=chunkedEager` input. It is paired with flat eager in one run
+(`--suite chunked-eager`, `E/Ch` ratios) and must not be combined with `ab` LazyColumn data.
+It only tests whether a shallower eager tree reduces the UI cost; it is not a production change.
+
 ## Recorded baselines
 
 - [2026-09-23: eager Column, 1k / 5k / 10k](results/2026-09-23-da85ea9-ci-emulator.md)

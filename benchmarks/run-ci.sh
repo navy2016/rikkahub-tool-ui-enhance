@@ -6,6 +6,12 @@ iterations="${TERMINAL_BENCHMARK_ITERATIONS:-3}"
   echo 'TERMINAL_BENCHMARK_ITERATIONS must be an integer in 1..50' >&2
   exit 1
 }
+candidate="${TERMINAL_BENCHMARK_CANDIDATE:-lazyHistory}"
+case "$candidate" in
+  lazyHistory) suite=ab ;;
+  chunkedEager) suite=chunked-eager ;;
+  *) echo 'TERMINAL_BENCHMARK_CANDIDATE must be lazyHistory or chunkedEager' >&2; exit 1 ;;
+esac
 output=artifacts/terminal-scrollback
 mkdir -p "$output"
 collect_diagnostics() {
@@ -34,7 +40,8 @@ PYERROR
 trap collect_diagnostics EXIT
 adb logcat -c
 {
-  printf 'sha=%s\niterations=%s\nenvironment=ci-emulator\nsuite=ab\n' "${GITHUB_SHA:-unknown}" "$iterations"
+  printf 'sha=%s\niterations=%s\nenvironment=ci-emulator\nsuite=%s\ncandidate=%s\n' \
+    "${GITHUB_SHA:-unknown}" "$iterations" "$suite" "$candidate"
   adb shell getprop ro.build.fingerprint
   adb shell wm size
   adb shell wm density
@@ -47,6 +54,7 @@ run_instrumentation() {
     -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.benchmark.TerminalScrollbackBenchmark \
     -Pandroid.testInstrumentationRunnerArguments.terminalIterations="$repeats" \
     -Pandroid.testInstrumentationRunnerArguments.terminalPreflight="$preflight" \
+    -Pandroid.testInstrumentationRunnerArguments.terminalCandidateRenderer="$candidate" \
     -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.payload.sourceSha="${GITHUB_SHA:-unknown}" \
     -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.payload.runId="${GITHUB_RUN_ID:-unknown}" \
     -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.output.payload.suite="$suite" \
@@ -65,4 +73,4 @@ for entry in benchmarks/terminal-macrobenchmark/build/outputs/*; do
 done
 
 echo 'Full A/B collection (fresh instrumentation process and result JSON)'
-run_instrumentation "$iterations" false ab
+run_instrumentation "$iterations" false "$suite"

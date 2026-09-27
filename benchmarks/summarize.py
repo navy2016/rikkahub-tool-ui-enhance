@@ -9,7 +9,12 @@ from pathlib import Path
 
 SIZES = (1000, 5000, 10000)
 SCENARIOS = ("initialCompose", "historyScroll", "activeRowUpdate", "appendAndTrim", "alternateScreenUpdate")
-RENDERERS = ("eager", "lazyHistory")
+RENDERERS = ("eager", "lazyHistory", "chunkedEager")
+SUITE_RENDERERS = {
+    "baseline": ("eager",),
+    "ab": ("eager", "lazyHistory"),
+    "chunked-eager": ("eager", "chunkedEager"),
+}
 
 
 def single_runs(result, name):
@@ -86,7 +91,9 @@ def load_results(root):
 
 
 def validate_complete(results, suite="baseline"):
-    renderers = RENDERERS if suite == "ab" else ("eager",)
+    if suite not in SUITE_RENDERERS:
+        raise ValueError(f"Unknown benchmark suite: {suite}")
+    renderers = SUITE_RENDERERS[suite]
     expected = {(size, scenario, renderer) for size in SIZES for scenario in SCENARIOS for renderer in renderers}
     if set(results) != expected:
         raise ValueError(f"Incomplete matrix: missing={expected - set(results)}, unexpected={set(results) - expected}")
@@ -111,7 +118,7 @@ def validate_complete(results, suite="baseline"):
                         or any(count != expected_count for count in counts)
                         or any(total <= 0 for total in sums)):
                     raise ValueError(f"Missing/incomplete {prefix} traces for {key}")
-        if suite == "ab":
+        if suite != "baseline":
             # Pin every ordinary lazy update: both key movement and styled-line height changes
             # can leave the changing screen offscreen. Alternate/full-grid controls stay eager.
             expected_count = 30 if key[2] == "lazyHistory" and key[1] in ("activeRowUpdate", "appendAndTrim") else 0
@@ -130,12 +137,21 @@ def ordered_results(results):
     ))
 
 
+def candidate_renderer(results):
+    candidates = {key[2] for key in results if key[2] != "eager"}
+    if len(candidates) > 1:
+        raise ValueError("Compare one candidate per paired run; do not mix suites")
+    return next(iter(candidates), None)
+
+
 def comparison_lines(results):
+    candidate = candidate_renderer(results)
+    label = "E/Ch" if candidate == "chunkedEager" else "E/L"
     lines = [
         "", "## Same-run A/B comparison", "",
-        "Only paired ordinary-history cases are compared. E/L is eager divided by lazyHistory, **not FPS**.",
+        f"Only paired ordinary-history cases are compared. {label} is eager divided by {candidate}, **not FPS**.",
         "Do not compare ratios across different hosts/runs or subtract differently aggregated statistics.",
-        "", "| History | Scenario | Mount E/L | CPU frame p95 E/L | row sync E/L |",
+        "", f"| History | Scenario | Mount {label} | CPU frame p95 {label} | row sync {label} |",
         "| ---: | --- | ---: | ---: | ---: |",
     ]
     def ratio(a, b):
@@ -146,7 +162,7 @@ def comparison_lines(results):
             if scenario == "alternateScreenUpdate":
                 continue  # Both arms are eager here; a noise ratio must not be called a TUI speedup.
             eager = results.get((size, scenario, "eager"))
-            lazy = results.get((size, scenario, "lazyHistory"))
+            lazy = results.get((size, scenario, candidate))
             if eager is None or lazy is None:
                 continue
             values = [str(size), scenario,
@@ -158,8 +174,12 @@ def comparison_lines(results):
 
 
 def render_summary(results, context, sha, environment):
-    is_ab = any(key[2] == "lazyHistory" for key in results)
-    title = "history-only LazyColumn A/B" if is_ab else "rendering baseline"
+    candidate = candidate_renderer(results)
+    title = {
+        "lazyHistory": "history-only LazyColumn A/B",
+        "chunkedEager": "stable-chunk eager A/B",
+        None: "rendering baseline",
+    }[candidate]
     lines = [
         f"# Terminal scrollback {title}", "",
         f"- Commit: `{sha}`",
@@ -194,7 +214,7 @@ def render_summary(results, context, sha, environment):
         "Updates: 30 separately drawn operations, nominally 33ms apart; slow frames extend the workload rather than drop updates.",
         "`alternateScreenUpdate` preloads the stated history but renders only 24 physical rows; BOTH renderer arms use eager here.",
     ]
-    if is_ab:
+    if candidate == "lazyHistory":
         lines += [
             "The lazy candidate has one item per history line, ONE whole active-screen grid item, and an 8dp tail item.",
             "The lazy arm requests the tail before each ordinary update draw; eager corrects a changed range after layout.",
@@ -203,6 +223,17 @@ def render_summary(results, context, sha, environment):
             "Both arms pan six viewport heights using identical 1-second `animateScrollBy` animations, then return to the tail.",
             "Pairs use the same APK/device, with A/B order alternating per case; this is not a statistical confidence interval.",
         ]
+    elif candidate == "chunkedEager":
+        lines += [
+            "Chunked eager retains ALL history rows, grouped by stable ID buckets of 128 IDs, not pixel estimates.",
+            "Only the composition/layout tree changes; both arms use ScrollState, shared row sync and production Text.",
+            "The physical screen remains whole. TUI/alternate/full-grid cases use the unchanged flat eager backend.",
+            "Both arms correct the actual measured tail after output and include any correction draw in timing.",
+            "Both arms pan six viewport heights using identical 1-second animations, then return to the tail.",
+            "Runtime probes reject missing history chunks/rows, split screens or unexpected candidate fallback.",
+            "This is a benchmark-only experiment, not a production renderer or selection/viewport acceptance test.",
+        ]
+    if candidate:
         lines += comparison_lines(results)
     lines += [
         "", "## Trace phase details", "",
@@ -252,7 +283,7 @@ def main():
     parser.add_argument("--sha", required=True)
     parser.add_argument("--environment", required=True, choices=("ci-emulator", "physical-device"))
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--suite", choices=("baseline", "ab"), default="baseline")
+    parser.add_argument("--suite", choices=tuple(SUITE_RENDERERS), default="baseline")
     parser.add_argument("--require-complete", action="store_true")
     parser.add_argument("--github-annotation", action="store_true")
     args = parser.parse_args()

@@ -35,7 +35,10 @@ class TerminalScrollbackBenchmark(
         @JvmStatic
         @Parameterized.Parameters(name = "history={0,number,#},scenario={1},renderer={2}")
         fun parameters(): List<Array<Any>> = buildList {
-            val preflight = InstrumentationRegistry.getArguments().getString("terminalPreflight") == "true"
+            val arguments = InstrumentationRegistry.getArguments()
+            val preflight = arguments.getString("terminalPreflight") == "true"
+            val candidate = arguments.getString("terminalCandidateRenderer") ?: "lazyHistory"
+            require(candidate in listOf("lazyHistory", "chunkedEager")) { "Unknown candidate: $candidate" }
             val scenarios = if (preflight) {
                 listOf("activeRowUpdate", "appendAndTrim", "alternateScreenUpdate")
             } else {
@@ -46,9 +49,9 @@ class TerminalScrollbackBenchmark(
                 scenarios.forEachIndexed { scenarioIndex, scenario ->
                     // Adjacent A/B cases on ONE device/APK; alternate order to reduce fixed-order bias.
                     val renderers = if ((sizeIndex + scenarioIndex) % 2 == 0) {
-                        listOf("eager", "lazyHistory")
+                        listOf("eager", candidate)
                     } else {
-                        listOf("lazyHistory", "eager")
+                        listOf(candidate, "eager")
                     }
                     renderers.forEach { renderer -> add(arrayOf(size, scenario, renderer)) }
                 }
