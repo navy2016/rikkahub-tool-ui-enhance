@@ -170,6 +170,8 @@ metadata, an unchanged FIFO range, screen identities and `historyRenderRevision`
 history Text is unchanged; active-screen updates then compare/synchronize only the physical screen
 rows. Palette/default-color/reverse-video changes and column resize advance the history render
 revision and force a full text pass. Trim/append/reorder currently remain full-structure fallbacks.
+The 2eece58 benchmark hard-asserts the fast path visits 24 rows for active updates and visits every
+row for append/trim. Its 10k rowSync/op was 0.13 / 0.33 / 0.59 ms for flat/chunked/chunked+layers.
 This does not authorize a production LazyColumn migration. The isolated target directly receives its
 chunk plan, so `ProcessSessionPage`'s `remember` allocation cache is a production wiring optimization,
 not a separately timed benchmark phase. The sync metadata fast path IS shared and measured here.
@@ -235,6 +237,9 @@ viewport/controller integration tests and representative physical-device measure
 
 - [2026-09-27: row-sync 优化后的热点摘要](results/2026-09-27-85e2696-row-sync-hotpaths-ci-emulator.md)
   — 30 项矩阵通过，归档 12 项更新热点；数据支持下一步隔离验证 eager 的组合/布局组织。
+
+- [2026-09-28: activity-screen row-sync fast path](results/2026-09-28-2eece58-row-sync-fast-path-ci-emulator.md)
+  — 45 cases, 248 terminal tests and 32 viewport tests passed; 10k active-update rowSync/op was 0.13 / 0.33 / 0.59 ms.
 
 - [2026-09-28: three-arm archival chunk/layer matrix](results/2026-09-28-de57926-chunked-layers-ci-emulator.md)
   — 45 cases passed; 10k append/trim CPU p95 was 6435.24 / 333.53 / 140.02 ms for flat/chunked/chunked+layers.
