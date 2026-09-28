@@ -7,7 +7,7 @@ is the three-arm `chunked-layers` experiment: legacy flat eager, production arch
 and the identical chunks with opt-in display-list isolation. The two-arm `ab` (flat vs benchmark-only
 history `LazyColumn`) and `chunked-eager` formats remain available; never merge independent runs.
 
-Production ordinary history now uses the shared **fully eager, unlayered** transcript. It keeps
+Production ordinary history now uses the shared **fully eager transcript with isolated history display lists**. It keeps
 ScrollState/verticalScroll, all rows, natural Text geometry, selection and the single scroll-effect
 owner; TUI/alternate/full-grid modes stay flat. Neither LazyColumn nor isolated layers are enabled in
 production. Source changes still require unit and interaction/geometry regressions, not just timings.
@@ -188,8 +188,8 @@ The older `7d95aa7` benchmark-only implementation grouped line IDs rather than a
 fell back on non-monotonic IDs. Inspect the source SHA before interpreting an archived report.
 
 `chunkedLayers` uses the **same** plan, row list and Text, adding only default `graphicsLayer()` to each
-history Column (no clipping, alpha or forced offscreen buffer). It is experimental, not the production
-default. Both chunked arms include measured tail correction and identical six-viewport pans. Optional
+history Column (no clipping, alpha or forced offscreen buffer). The three-arm run passed, so this is
+now the production ordinary-history default; TUI/alternate/full-grid paths still produce no chunks. Both chunked arms include measured tail correction and identical six-viewport pans. Optional
 non-observable composition probes in the shared helper verify every history row/chunk is retained and
 the active screen is whole; probes are absent in production.
 
@@ -202,8 +202,8 @@ Workflow `candidate` inputs:
 | `chunkedLayers` (default) | `chunked-layers` | flat eager / archival chunks / identical chunks + layers |
 
 The three-arm report includes `E/Ch`, `E/La` and **`Ch/La`** same-run ratios. The last isolates drawing
-isolation rather than conflating it with chunking or a change in row-sync implementation. No automatic
-rollout follows a successful run. The independent natural-geometry fixture compares all Text nodes,
+isolation rather than conflating it with chunking or a change in row-sync implementation. The production switch is guarded by the 32-case geometry/gesture regression workflow and the 244-case
+terminal regression workflow; it does not enable LazyColumn. The independent natural-geometry fixture compares all Text nodes,
 scroll ranges/offsets and selection-wrapper/resize/RTL transitions, in addition to the existing 24
 real-pointer gesture cases; it is still not complete end-to-end IME/selection-copy or real-device acceptance.
 
@@ -229,6 +229,9 @@ viewport/controller integration tests and representative physical-device measure
 
 - [2026-09-27: row-sync 优化后的热点摘要](results/2026-09-27-85e2696-row-sync-hotpaths-ci-emulator.md)
   — 30 项矩阵通过，归档 12 项更新热点；数据支持下一步隔离验证 eager 的组合/布局组织。
+
+- [2026-09-28: three-arm archival chunk/layer matrix](results/2026-09-28-de57926-chunked-layers-ci-emulator.md)
+  — 45 cases passed; 10k append/trim CPU p95 was 6435.24 / 333.53 / 140.02 ms for flat/chunked/chunked+layers.
 
 - [2026-09-27: initial stable-chunk eager comparison and lazy regression](results/2026-09-27-7d95aa7-chunked-eager-ci-emulator.md)
   — both 30-case runs passed; 10k append/trim CPU p95 was 7414.46 / 394.85 ms in the chunked run.

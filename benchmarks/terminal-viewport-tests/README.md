@@ -88,7 +88,8 @@ Each case compares flat vs chunked layouts on the same frame and checks actual c
 CI requires these 8 **in addition to** the 24 pointer cases. They run in a separate instrumentation
 invocation with the same 180-second watchdog, so a failure cannot erase the completed gesture results.
 This is geometry evidence only: it does not inject a real IME, drag selection handles across chunks,
-verify clipboard contents, measure production throughput or enable production drawing layers.
+verify clipboard contents or measure production throughput. The production drawing-layer switch is
+validated by the same geometry cases, not by this fixture's timing.
 
 To run just the geometry cases on an authorized SDK host/device:
 

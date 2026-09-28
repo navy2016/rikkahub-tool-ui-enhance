@@ -294,8 +294,9 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("usesTuiViewport = commandIsTui || terminalFrameIsAlternateScreen ||"))
         assertTrue(processSessionSource.contains("SelectionContainer {"))
         assertTrue(processSessionSource.contains(".verticalScroll("))
-        // Draw isolation has not passed the three-arm experiment yet; keep it opt-in.
-        assertFalse(processSessionSource.contains("isolateChunkDrawing = true"))
+        // Ordinary history uses the measured display-list isolation; grid modes still produce no
+        // chunks and therefore use the unchanged flat path.
+        assertTrue(processSessionSource.contains("isolateChunkDrawing = true"))
         assertTrue(renderedRowsSource.contains("isolateChunkDrawing: Boolean = false"))
     }
 

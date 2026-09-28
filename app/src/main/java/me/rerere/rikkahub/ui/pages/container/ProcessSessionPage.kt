@@ -1813,6 +1813,9 @@ private fun TerminalInteractivePanel(
                                 usesTuiViewport = commandIsTui || terminalFrameIsAlternateScreen ||
                                     shouldPreserveFullTerminalGrid,
                             ),
+                            // The same-run benchmark isolated this display-list boundary without
+                            // changing ScrollState, natural row geometry or viewport ownership.
+                            isolateChunkDrawing = true,
                         )
                     }
                     if (selectionMode) {
