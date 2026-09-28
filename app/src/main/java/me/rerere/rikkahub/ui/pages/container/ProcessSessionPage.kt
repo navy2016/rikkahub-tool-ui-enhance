@@ -955,6 +955,19 @@ private fun TerminalInteractivePanel(
     val currentPreserveFullTerminalGrid by rememberUpdatedState(shouldPreserveFullTerminalGrid)
     val currentScreenStartRow by rememberUpdatedState(terminalScreenStartRow)
     val currentActiveScreenBottomRow by rememberUpdatedState(terminalActiveScreenBottomRow)
+    // Text-only updates do not change the FIFO partition. Keep the plan stable so recomposition
+    // reaches the changed row/chunk without allocating a new chunk list every frame.
+    val terminalHistoryChunkPlan = remember(
+        terminalScreenStartRow,
+        terminalHistoryStartSequence,
+        currentUsesTuiViewport,
+    ) {
+        terminalHistoryChunks(
+            historyCount = terminalScreenStartRow,
+            firstSequence = terminalHistoryStartSequence,
+            usesTuiViewport = currentUsesTuiViewport,
+        )
+    }
     val terminalContentHeightPx = if (currentUsesTuiViewport) {
         if (currentPreservePhysicalGrid) {
             terminalRows * terminalCellHeightPx + currentTerminalTailPaddingPx
@@ -1807,12 +1820,7 @@ private fun TerminalInteractivePanel(
                         TerminalRenderedTranscript(
                             rows = terminalRenderedRows.toList(),
                             style = terminalTextStyle,
-                            historyChunks = terminalHistoryChunks(
-                                historyCount = terminalScreenStartRow,
-                                firstSequence = terminalHistoryStartSequence,
-                                usesTuiViewport = commandIsTui || terminalFrameIsAlternateScreen ||
-                                    shouldPreserveFullTerminalGrid,
-                            ),
+                            historyChunks = terminalHistoryChunkPlan,
                             // The same-run benchmark isolated this display-list boundary without
                             // changing ScrollState, natural row geometry or viewport ownership.
                             isolateChunkDrawing = true,

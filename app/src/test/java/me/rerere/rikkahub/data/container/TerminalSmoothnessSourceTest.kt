@@ -290,6 +290,8 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("rows = terminalRenderedRows.toList()"))
         assertTrue(processSessionSource.contains("terminalHistoryStartSequence = frame.historyStartSequence"))
         assertTrue(processSessionSource.contains("historyCount = terminalScreenStartRow"))
+        assertTrue(processSessionSource.contains("val terminalHistoryChunkPlan = remember("))
+        assertTrue(processSessionSource.contains("historyChunks = terminalHistoryChunkPlan"))
         assertTrue(processSessionSource.contains("firstSequence = terminalHistoryStartSequence"))
         assertTrue(processSessionSource.contains("usesTuiViewport = commandIsTui || terminalFrameIsAlternateScreen ||"))
         assertTrue(processSessionSource.contains("SelectionContainer {"))

@@ -209,8 +209,9 @@ internal interface TerminalTranscriptCompositionObserver {
  * Only ordinary history is partitioned; the complete active screen stays together. Callers pass
  * an immutable row-list view and a plan from the SAME frame/snapshot.
  *
- * Drawing isolation is an opt-in benchmark candidate. Production keeps the default (false) until
- * a same-run comparison and geometry regressions validate it; no estimated/fixed row heights.
+ * Drawing isolation is enabled by the production ordinary-history caller after the same-run
+ * comparison and geometry regressions passed. It remains false by default for other callers and
+ * for benchmark controls; no estimated/fixed row heights are used.
  */
 @Composable
 internal fun TerminalRenderedTranscript(
