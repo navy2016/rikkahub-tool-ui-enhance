@@ -44,7 +44,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRowState
+import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRowsSyncState
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRows
+import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRowsSyncState
 import me.rerere.rikkahub.ui.pages.container.synchronizeTerminalRenderedRows
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.TerminalEmulator
@@ -61,6 +63,7 @@ class TerminalBenchmarkActivity : ComponentActivity() {
     private lateinit var status: TextView
     private lateinit var output: ComposeView
     private var rows by mutableStateOf<SnapshotStateList<TerminalRenderedRowState>?>(null)
+    private var rowSyncState: TerminalRenderedRowsSyncState? = null
     private val verticalScroll = ScrollState(Int.MAX_VALUE)
     private val horizontalScroll = ScrollState(0)
     private lateinit var lazyScroll: LazyListState
@@ -186,6 +189,7 @@ class TerminalBenchmarkActivity : ComponentActivity() {
             traced("Terminal.rowSync") {
                 Snapshot.withMutableSnapshot {
                     rows = createTerminalRenderedRows(frame)
+                    rowSyncState = createTerminalRenderedRowsSyncState(frame)
                     layoutState = layoutFor(frame)
                 }
             }
@@ -229,8 +233,28 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                                 frame,
                                 usesTuiViewport = frame.isAlternateScreen || configuredTui || preserveFullGrid,
                                 nowMs = SystemClock.uptimeMillis(),
+                                syncState = checkNotNull(rowSyncState),
                             )
                             layoutState = layoutFor(frame)
+                        }
+                    }
+                    when (scenario) {
+                        "activeRowUpdate" -> {
+                            check(checkNotNull(rowSyncState).lastUsedMetadataFastPath)
+                            check(
+                                checkNotNull(rowSyncState).lastVisitedTextRows ==
+                                    TerminalBenchmarkWorkload.SCREEN_ROWS,
+                            )
+                        }
+                        "appendAndTrim" -> {
+                            check(!checkNotNull(rowSyncState).lastUsedMetadataFastPath)
+                            check(checkNotNull(rowSyncState).lastVisitedTextRows == frame.rows.size)
+                        }
+                        "alternateScreenUpdate" -> {
+                            check(
+                                checkNotNull(rowSyncState).lastVisitedTextRows ==
+                                    TerminalBenchmarkWorkload.SCREEN_ROWS,
+                            )
                         }
                     }
                     if (layoutState!!.useLazyHistory) {

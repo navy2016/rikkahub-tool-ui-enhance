@@ -165,8 +165,14 @@ reuse states by ID and use one bulk `addAll`, rather than one snapshot-list writ
 Cached, identical `AnnotatedString` instances skip redundant text checks, except when a TUI blank
 has a pending grace period. ANSI-only changes, forced blank commits, reordered pending blanks and
 fallback IDs retain their existing behavior. Tests exercise 30 real-emulator appends at 1k/5k/10k
-and mixed structural updates. Overall synchronization is still **O(history)**; this does not solve
-all eager composition/layout costs or authorize a production LazyColumn migration.
+and mixed structural updates. Complete or legacy frames still use the full O(history) validation path. With complete production
+metadata, an unchanged FIFO range, screen identities and `historyRenderRevision` prove that retained
+history Text is unchanged; active-screen updates then compare/synchronize only the physical screen
+rows. Palette/default-color/reverse-video changes and column resize advance the history render
+revision and force a full text pass. Trim/append/reorder currently remain full-structure fallbacks.
+This does not authorize a production LazyColumn migration. The isolated target directly receives its
+chunk plan, so `ProcessSessionPage`'s `remember` allocation cache is a production wiring optimization,
+not a separately timed benchmark phase. The sync metadata fast path IS shared and measured here.
 
 Use the unchanged full matrix to inspect `rowSync/op`, row-sync maxima and frame timings after
 this change. The workflow publishes a compact all-size hot-path annotation (to avoid truncating

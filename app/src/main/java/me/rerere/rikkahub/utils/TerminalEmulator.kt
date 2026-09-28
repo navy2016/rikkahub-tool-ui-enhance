@@ -123,6 +123,11 @@ class TerminalEmulator(
          * history is hidden/empty or when a synthetic/legacy frame supplies no archival metadata.
          */
         val historyStartSequence: Long? = null,
+        /**
+         * Changes whenever retained history Text may render differently without changing line IDs
+         * or FIFO ordinals (palette/default colors/reverse video/column resize).
+         */
+        val historyRenderRevision: Long = 0,
         /** Stable IDs of history rows in rendered order. IDs are not assumed to be contiguous. */
         val historyLineIds: List<Long> = emptyList(),
         /** Changes only when the entire scrollback history is explicitly cleared or reset. */
@@ -417,6 +422,8 @@ class TerminalEmulator(
             }
             scrollback.clear()
             resizedScrollback.takeLast(scrollbackLimit).forEach { scrollback.addLast(it) }
+            // IDs/ordinals survive, but the cells and therefore Text may have changed.
+            invalidateScrollbackRendering()
         }
         scrollTop = 0
         scrollBottom = newRows - 1
@@ -842,6 +849,7 @@ class TerminalEmulator(
             historyEndId = historyEndId,
             historyCount = if (includeHistory) scrollback.size else 0,
             historyStartSequence = if (includeHistory) scrollback.firstOrNull()?.archiveSequence else null,
+            historyRenderRevision = scrollbackRenderStyleRevision,
             historyLineIds = historyLineIds,
             historyGeneration = historyGeneration,
             screenLineIds = screenLineIds,

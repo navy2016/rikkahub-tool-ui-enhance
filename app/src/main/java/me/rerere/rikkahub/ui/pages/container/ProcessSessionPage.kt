@@ -828,6 +828,9 @@ private fun TerminalInteractivePanel(
     val terminalRenderedRows = remember(processId) {
         createTerminalRenderedRows(initialTerminalRenderFrame)
     }
+    val terminalRenderedRowsSyncState = remember(processId) {
+        createTerminalRenderedRowsSyncState(initialTerminalRenderFrame)
+    }
     var terminalContentBounds by remember(processId) {
         mutableStateOf(initialTerminalRenderFrame.contentBounds)
     }
@@ -1065,6 +1068,7 @@ private fun TerminalInteractivePanel(
                 usesTuiViewport = usesTuiViewport,
                 forcePendingGridBlanks = forcePendingGridBlanks,
                 nowMs = now,
+                syncState = terminalRenderedRowsSyncState,
             )
             terminalContentBounds = bounds
             terminalScreenStartRow = frame.screenStartRow

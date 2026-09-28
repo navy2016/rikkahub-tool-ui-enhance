@@ -1025,6 +1025,26 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun historyRenderRevisionOnlyChangesWhenRetainedHistoryTextMayChange() {
+        val terminal = TerminalEmulator(initialColumns = 30, initialRows = 6, maxScrollbackLines = 100)
+        terminal.feed((0 until 106).joinToString("\r\n") { "\u001B[32mline $it\u001B[0m" })
+        val initial = terminal.renderFrame()
+        assertEquals(initial.historyRenderRevision, terminal.renderFrame().historyRenderRevision)
+
+        terminal.feed("\r\u001B[2Kscreen only")
+        val screenUpdate = terminal.renderFrame()
+        assertEquals(initial.historyRenderRevision, screenUpdate.historyRenderRevision)
+
+        terminal.feed("\u001B]4;2;rgb:ffff/0000/0000\u0007")
+        val palette = terminal.renderFrame()
+        assertTrue(palette.historyRenderRevision > screenUpdate.historyRenderRevision)
+
+        terminal.resize(columns = 12, rows = 6)
+        val resized = terminal.renderFrame()
+        assertTrue(resized.historyRenderRevision > palette.historyRenderRevision)
+    }
+
+    @Test
     fun renderFrameInvalidatesArchivedRowsForGlobalStyleChanges() {
         val terminal = terminalWithScrollback()
         val original = terminal.renderFrame().rows.first()

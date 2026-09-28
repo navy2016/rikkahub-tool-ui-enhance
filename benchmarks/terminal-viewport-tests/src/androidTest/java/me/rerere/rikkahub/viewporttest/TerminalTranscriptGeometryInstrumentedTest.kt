@@ -37,6 +37,7 @@ import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderedTranscript
 import me.rerere.rikkahub.ui.pages.container.TerminalTranscriptCompositionObserver
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRows
+import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRowsSyncState
 import me.rerere.rikkahub.ui.pages.container.synchronizeTerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.terminalHistoryChunks
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
@@ -229,6 +230,7 @@ class TerminalTranscriptGeometryInstrumentedTest(private val chunkLayers: Boolea
         }
         var frame by mutableStateOf(terminal.renderFrame())
         private val rows = createTerminalRenderedRows(frame)
+        private val rowSyncState = createTerminalRenderedRowsSyncState(frame)
         var grouped by mutableStateOf(false)
         var selection by mutableStateOf(false)
         var tui by mutableStateOf(false)
@@ -256,7 +258,9 @@ class TerminalTranscriptGeometryInstrumentedTest(private val chunkLayers: Boolea
         fun publishFrame() {
             val next = terminal.renderFrame()
             Snapshot.withMutableSnapshot {
-                synchronizeTerminalRenderedRows(rows, next, tui || next.isAlternateScreen, nowMs = 1_000L)
+                synchronizeTerminalRenderedRows(
+                    rows, next, tui || next.isAlternateScreen, nowMs = 1_000L, syncState = rowSyncState,
+                )
                 frame = next
             }
         }

@@ -110,3 +110,14 @@ Few initial frames: inspect mount latency, not p95 alone.
 - 未完成实体设备、多轮热状态和长时间持续输出验证。
 - benchmark 的 graphicsLayer 是默认显示列表层，不是离屏 bitmap；不同 GPU/系统版本的收益可能不同。
 - 仍需依赖回归测试验证选择、IME、恢复锚点和快速连续滑动；本次 244 项终端单元测试与 32 项模拟器布局/手势测试均通过。
+
+
+## 独立重复运行
+
+- [工作流 #36376311408](https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/36376311408)
+  在提交 `ed013f0ff56ec4799a34143553cf79b0cfd9a20e` 上再次完成 45 项三臂矩阵。
+- 该提交只把生产 `ProcessSessionPage` 的 chunk 计划放进 `remember`；隔离 benchmark 直接接收布局计划，
+  所以这不是缓存优化的 before/after。不同 CI 主机的数据也不能相减。
+- 定性结论重复：10k `appendAndTrim` CPU p95 为 `7565.36 / 427.19 / 182.53 ms`，
+  10k `activeRowUpdate` 为 `394.96 / 358.79 / 112.23 ms`（flat / chunks / chunks+layers）。
+  三臂完整性、尾部校验和各场景 annotation 均通过。

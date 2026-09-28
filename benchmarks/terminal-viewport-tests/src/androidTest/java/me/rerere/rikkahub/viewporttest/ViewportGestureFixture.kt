@@ -61,6 +61,7 @@ import me.rerere.rikkahub.data.container.ViewportScrollOrigin
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.TerminalViewportGestureConfig
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRows
+import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRowsSyncState
 import me.rerere.rikkahub.ui.pages.container.rememberTerminalViewportGestures
 import me.rerere.rikkahub.ui.pages.container.runTerminalViewportScrollEffects
 import me.rerere.rikkahub.ui.pages.container.synchronizeTerminalRenderedRows
@@ -88,6 +89,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     var frame by mutableStateOf(makeFrame())
         private set
     private val rows = createTerminalRenderedRows(frame)
+    private val rowSyncState = createTerminalRenderedRowsSyncState(frame)
     val controller = TerminalViewportController(TerminalViewportState(
         autoScroll = false, verticalOffsetPx = INITIAL_PX,
     ))
@@ -185,7 +187,9 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     fun appendAndTrim() {
         val next = makeFrame(firstHistoryId = frame.historyStartId + 1, revision = frame.revision + 1)
         Snapshot.withMutableSnapshot {
-            synchronizeTerminalRenderedRows(rows, next, usesTuiViewport = false, nowMs = inputTimeMs)
+            synchronizeTerminalRenderedRows(
+                rows, next, usesTuiViewport = false, nowMs = inputTimeMs, syncState = rowSyncState,
+            )
             frame = next
         }
         emittedUpdates++

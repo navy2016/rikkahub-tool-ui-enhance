@@ -30,6 +30,61 @@ internal class TerminalRenderedRowState(
     var pendingBlankSinceMs: Long = 0L
 }
 
+/**
+ * Non-observable synchronization metadata. It never drives composition and is valid only when the
+ * frame carries complete history/screen identity. The fast path still synchronizes every active
+ * screen row; it skips retained history only while structure and history render revision match.
+ */
+internal class TerminalRenderedRowsSyncState(frame: TerminalEmulator.RenderFrame) {
+    var lastUsedMetadataFastPath: Boolean = false
+        private set
+    var lastVisitedTextRows: Int = frame.rows.size
+        private set
+
+    private var valid = false
+    private var historyCount = 0
+    private var historyStartSequence: Long? = null
+    private var historyGeneration = 0L
+    private var historyRenderRevision = 0L
+    private var screenGeneration = 0L
+    private var screenLineIds: List<Long> = emptyList()
+
+    init { record(frame, usedFastPath = false, visitedTextRows = frame.rows.size) }
+
+    internal fun hasSameStructure(frame: TerminalEmulator.RenderFrame): Boolean = valid &&
+        hasCompleteIdentity(frame) && historyCount == frame.historyCount &&
+        historyStartSequence == frame.historyStartSequence &&
+        historyGeneration == frame.historyGeneration && screenGeneration == frame.screenGeneration &&
+        screenLineIds == frame.screenLineIds
+
+    internal fun hasSameHistoryRendering(frame: TerminalEmulator.RenderFrame): Boolean =
+        hasSameStructure(frame) && historyRenderRevision == frame.historyRenderRevision
+
+    internal fun record(frame: TerminalEmulator.RenderFrame, usedFastPath: Boolean, visitedTextRows: Int) {
+        valid = hasCompleteIdentity(frame)
+        historyCount = frame.historyCount
+        historyStartSequence = frame.historyStartSequence
+        historyGeneration = frame.historyGeneration
+        historyRenderRevision = frame.historyRenderRevision
+        screenGeneration = frame.screenGeneration
+        screenLineIds = frame.screenLineIds.toList()
+        lastUsedMetadataFastPath = usedFastPath
+        lastVisitedTextRows = visitedTextRows
+    }
+
+    private fun hasCompleteIdentity(frame: TerminalEmulator.RenderFrame): Boolean {
+        val screenRows = frame.rows.size - frame.historyCount
+        return frame.historyCount in 0..frame.rows.size &&
+            frame.historyLineIds.size == frame.historyCount &&
+            frame.screenLineIds.size == screenRows &&
+            (frame.historyCount == 0 || frame.historyStartSequence != null)
+    }
+}
+
+internal fun createTerminalRenderedRowsSyncState(
+    frame: TerminalEmulator.RenderFrame,
+): TerminalRenderedRowsSyncState = TerminalRenderedRowsSyncState(frame)
+
 internal fun createTerminalRenderedRows(
     frame: TerminalEmulator.RenderFrame,
 ): SnapshotStateList<TerminalRenderedRowState> = mutableStateListOf<TerminalRenderedRowState>().apply {
@@ -53,23 +108,27 @@ internal fun synchronizeTerminalRenderedRows(
     usesTuiViewport: Boolean,
     forcePendingGridBlanks: Boolean = false,
     nowMs: Long,
+    syncState: TerminalRenderedRowsSyncState? = null,
 ): Boolean {
     val rendered = frame.rows
-    val nextLineIds = buildLineIdsFromFrame(frame, rendered.size).ifEmpty {
-        rendered.indices.map { index -> Long.MIN_VALUE + index }
-    }
     // SnapshotStateList.toList() is an O(1), immutable view. Read the list's snapshot record once
     // rather than once per row, and retain it while applying any structural changes below.
     val previousRows = terminalRenderedRows.toList()
-    val idsChanged = previousRows.size != rendered.size ||
-        previousRows.indices.any { previousRows[it].lineId != nextLineIds[it] }
+    val metadataProvesSameStructure = previousRows.size == rendered.size && syncState?.hasSameStructure(frame) == true
+    val nextLineIds = if (metadataProvesSameStructure) null else buildLineIdsFromFrame(frame, rendered.size).ifEmpty {
+        rendered.indices.map { index -> Long.MIN_VALUE + index }
+    }
+    val idsChanged = nextLineIds != null && (previousRows.size != rendered.size ||
+        previousRows.indices.any { previousRows[it].lineId != nextLineIds[it] })
     if (idsChanged) {
-        synchronizeTerminalRowStructure(terminalRenderedRows, previousRows, rendered, nextLineIds)
+        synchronizeTerminalRowStructure(terminalRenderedRows, previousRows, rendered, checkNotNull(nextLineIds))
     }
     val currentRows = if (idsChanged) terminalRenderedRows.toList() else previousRows
     var hasDeferredGridBlank = false
     val stableGridStart = (rendered.size - TERMINAL_GRID_STABLE_BOTTOM_ROWS).coerceAtLeast(0)
-    for (index in rendered.indices) {
+    val historyCanBeSkipped = !idsChanged && syncState?.hasSameHistoryRendering(frame) == true
+    val textStart = if (historyCanBeSkipped) frame.historyCount else 0
+    for (index in textStart until rendered.size) {
         val rowState = currentRows[index]
         val next = rendered[index].text
         val previousText = rowState.text
@@ -92,6 +151,11 @@ internal fun synchronizeTerminalRenderedRows(
         if (previousText != next) rowState.text = next
         rowState.pendingBlankSinceMs = 0L
     }
+    syncState?.record(
+        frame = frame,
+        usedFastPath = metadataProvesSameStructure && historyCanBeSkipped,
+        visitedTextRows = (rendered.size - textStart).coerceAtLeast(0),
+    )
     return hasDeferredGridBlank
 }
 

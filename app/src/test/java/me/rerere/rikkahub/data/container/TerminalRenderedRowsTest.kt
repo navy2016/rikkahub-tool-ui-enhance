@@ -7,6 +7,7 @@ import androidx.compose.ui.text.SpanStyle
 import me.rerere.rikkahub.ui.pages.container.TERMINAL_HISTORY_CHUNK_ROWS
 import me.rerere.rikkahub.ui.pages.container.terminalHistoryChunks
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRows
+import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRowsSyncState
 import me.rerere.rikkahub.ui.pages.container.synchronizeTerminalRenderedRows
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.junit.Assert.assertEquals
@@ -245,6 +246,90 @@ class TerminalRenderedRowsTest {
                 assertEquals(0L, row.pendingBlankSinceMs)
             }
         }
+    }
+
+    @Test
+    fun completeFrameMetadataSkipsRetainedHistoryForActiveScreenUpdates() {
+        for (historySize in listOf(1_000, 5_000, 10_000)) {
+            val terminal = TerminalEmulator(initialColumns = 80, initialRows = 6, maxScrollbackLines = historySize)
+            terminal.feed((0 until historySize + 6).joinToString("\r\n") { "line $it" })
+            val before = terminal.renderFrame()
+            assertEquals(historySize, before.historyCount)
+            val rows = createTerminalRenderedRows(before)
+            val historyStates = rows.take(historySize)
+            val syncState = createTerminalRenderedRowsSyncState(before)
+
+            terminal.feed("\r\u001B[2Kactive changed")
+            val after = terminal.renderFrame()
+            Snapshot.withMutableSnapshot {
+                synchronizeTerminalRenderedRows(
+                    rows, after, false, nowMs = 100, syncState = syncState,
+                )
+            }
+
+            assertTrue(syncState.lastUsedMetadataFastPath)
+            assertEquals(terminal.rows, syncState.lastVisitedTextRows)
+            assertEquals(before.historyStartSequence, after.historyStartSequence)
+            assertEquals(before.historyRenderRevision, after.historyRenderRevision)
+            historyStates.forEachIndexed { index, state -> assertSame(state, rows[index]) }
+            assertTrue(rows.last().text.text.contains("active changed"))
+        }
+    }
+
+    @Test
+    fun globalStyleChangesAndColumnResizeForceHistoryTextSynchronization() {
+        val terminal = TerminalEmulator(initialColumns = 30, initialRows = 6, maxScrollbackLines = 100)
+        terminal.feed((0 until 106).joinToString("\r\n") { "\u001B[32mline $it\u001B[0m" })
+        var frame = terminal.renderFrame()
+        val rows = createTerminalRenderedRows(frame)
+        val syncState = createTerminalRenderedRowsSyncState(frame)
+
+        terminal.feed("\u001B]4;2;rgb:ffff/0000/0000\u0007")
+        var next = terminal.renderFrame()
+        assertTrue(next.historyRenderRevision > frame.historyRenderRevision)
+        Snapshot.withMutableSnapshot {
+            synchronizeTerminalRenderedRows(rows, next, false, nowMs = 100, syncState = syncState)
+        }
+        assertFalse(syncState.lastUsedMetadataFastPath)
+        assertEquals(next.rows.size, syncState.lastVisitedTextRows)
+
+        frame = next
+        terminal.resize(columns = 12, rows = 6)
+        next = terminal.renderFrame()
+        assertTrue(next.historyRenderRevision > frame.historyRenderRevision)
+        Snapshot.withMutableSnapshot {
+            synchronizeTerminalRenderedRows(rows, next, false, nowMs = 200, syncState = syncState)
+        }
+        assertFalse(syncState.lastUsedMetadataFastPath)
+        assertEquals(next.rows.size, syncState.lastVisitedTextRows)
+        assertEquals(next.rows.map { it.text }, rows.map { it.text })
+    }
+
+    @Test
+    fun structuralChangesAndIncompleteMetadataKeepTheFullFallback() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 100)
+        terminal.feed((0 until 106).joinToString("\r\n") { "line $it" })
+        val before = terminal.renderFrame()
+        val rows = createTerminalRenderedRows(before)
+        val syncState = createTerminalRenderedRowsSyncState(before)
+        terminal.feed("\r\nnew history")
+        val after = terminal.renderFrame()
+        Snapshot.withMutableSnapshot {
+            synchronizeTerminalRenderedRows(rows, after, false, nowMs = 100, syncState = syncState)
+        }
+        assertFalse(syncState.lastUsedMetadataFastPath)
+        assertEquals(after.rows.size, syncState.lastVisitedTextRows)
+
+        val incomplete = after.copy(historyLineIds = emptyList(), screenLineIds = emptyList())
+        val incompleteRows = createTerminalRenderedRows(incomplete)
+        val incompleteState = createTerminalRenderedRowsSyncState(incomplete)
+        Snapshot.withMutableSnapshot {
+            synchronizeTerminalRenderedRows(
+                incompleteRows, incomplete, false, nowMs = 200, syncState = incompleteState,
+            )
+        }
+        assertFalse(incompleteState.lastUsedMetadataFastPath)
+        assertEquals(incomplete.rows.size, incompleteState.lastVisitedTextRows)
     }
 
     @Test
