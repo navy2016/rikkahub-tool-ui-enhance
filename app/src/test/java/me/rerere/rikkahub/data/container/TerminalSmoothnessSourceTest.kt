@@ -293,7 +293,8 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("val terminalHistoryChunkPlan = remember("))
         assertTrue(processSessionSource.contains("historyChunks = terminalHistoryChunkPlan"))
         assertTrue(processSessionSource.contains("firstSequence = terminalHistoryStartSequence"))
-        assertTrue(processSessionSource.contains("usesTuiViewport = commandIsTui || terminalFrameIsAlternateScreen ||"))
+        assertTrue(processSessionSource.contains("val currentUsesTuiViewport by rememberUpdatedState("))
+        assertTrue(processSessionSource.contains("commandIsTui || terminalFrameIsAlternateScreen ||"))
         assertTrue(processSessionSource.contains("SelectionContainer {"))
         assertTrue(processSessionSource.contains(".verticalScroll("))
         // Ordinary history uses the measured display-list isolation; grid modes still produce no
