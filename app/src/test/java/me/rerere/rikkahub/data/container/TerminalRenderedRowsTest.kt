@@ -4,6 +4,8 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import me.rerere.rikkahub.ui.pages.container.TERMINAL_HISTORY_CHUNK_ROWS
+import me.rerere.rikkahub.ui.pages.container.terminalHistoryChunks
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.synchronizeTerminalRenderedRows
 import me.rerere.rikkahub.utils.TerminalEmulator
@@ -241,6 +243,82 @@ class TerminalRenderedRowsTest {
                 byId[row.lineId]?.let { assertSame(it, row) }
                 assertEquals(next.rows[index].text, row.text)
                 assertEquals(0L, row.pendingBlankSinceMs)
+            }
+        }
+    }
+
+    @Test
+    fun archivalChunksCoverEveryRowOnceWithBoundedGroupsAtAllSizes() {
+        for (size in listOf(1, 127, 128, 129, 1_000, 5_000, 10_000)) {
+            for (start in listOf(0L, 1L, 125L, 127L, 128L, Long.MAX_VALUE - 10_000)) {
+                val chunks = terminalHistoryChunks(size, start)
+                assertEquals((0 until size).toList(), chunks.flatMap { (it.start until it.endExclusive).toList() })
+                assertEquals(chunks.size, chunks.map { it.bucket }.distinct().size)
+                assertTrue(chunks.size <= (size + TERMINAL_HISTORY_CHUNK_ROWS - 1) / TERMINAL_HISTORY_CHUNK_ROWS + 1)
+                chunks.forEach { chunk ->
+                    assertTrue(chunk.endExclusive - chunk.start in 1..TERMINAL_HISTORY_CHUNK_ROWS)
+                    for (index in chunk.start until chunk.endExclusive) {
+                        assertEquals((start + index) / TERMINAL_HISTORY_CHUNK_ROWS, chunk.bucket)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun unknownOrUnsafeArchivalMetadataAndTuiModesKeepFlatEager() {
+        assertTrue(terminalHistoryChunks(10, null).isEmpty())
+        assertTrue(terminalHistoryChunks(0, 1L).isEmpty())
+        assertTrue(terminalHistoryChunks(-1, 1L).isEmpty())
+        assertTrue(terminalHistoryChunks(10, -1L).isEmpty())
+        assertTrue(terminalHistoryChunks(2, Long.MAX_VALUE).isEmpty())
+        assertTrue(terminalHistoryChunks(1_000, 1L, usesTuiViewport = true).isEmpty())
+        assertEquals(1, terminalHistoryChunks(1, Long.MAX_VALUE).size)
+    }
+
+    @Test
+    fun archivalChunkMembershipIgnoresSparseAndReorderedLineIds() {
+        val ids = (0 until 1_000).map { if (it % 2 == 0) Long.MAX_VALUE - it else it * 10_000L }
+        val before = terminalHistoryChunks(ids.size, 125L).associate { chunk ->
+            chunk.bucket to ids.subList(chunk.start, chunk.endExclusive)
+        }
+        val afterIds = ids.drop(1) + 9_999_999L
+        val after = terminalHistoryChunks(afterIds.size, 126L).associate { chunk ->
+            chunk.bucket to afterIds.subList(chunk.start, chunk.endExclusive)
+        }
+        assertEquals(afterIds, after.values.flatten())
+        // Only the first and last buckets can change. No density-dependent singleton groups.
+        before.keys.intersect(after.keys).filter { it != before.keys.first() && it != after.keys.last() }
+            .forEach { assertEquals(before[it], after[it]) }
+        assertTrue(after.size <= 9)
+    }
+
+    @Test
+    fun realEmulatorTrimsKeepSurvivingRowsInTheSameArchivalBucket() {
+        for (size in listOf(1_000, 5_000, 10_000)) {
+            val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = size)
+            // Start near a bucket boundary so 30 trims remove an ENTIRE first bucket as well.
+            terminal.feed((1..(size + 131)).joinToString("\r\n") { "row$it" })
+            var frame = terminal.renderFrame()
+            val rows = createTerminalRenderedRows(frame)
+            repeat(30) { update ->
+                val previous = rows.toList().take(size)
+                val buckets = terminalHistoryChunks(size, frame.historyStartSequence).flatMap { chunk ->
+                    (chunk.start until chunk.endExclusive).map { previous[it].lineId to chunk.bucket }
+                }.toMap()
+                terminal.feed("\r\nnext$update")
+                frame = terminal.renderFrame()
+                Snapshot.withMutableSnapshot {
+                    synchronizeTerminalRenderedRows(rows, frame, false, nowMs = 100L + update)
+                }
+                val chunks = terminalHistoryChunks(size, frame.historyStartSequence)
+                for (chunk in chunks) {
+                    for (index in chunk.start until chunk.endExclusive) {
+                        val row = rows[index]
+                        buckets[row.lineId]?.let { assertEquals(it, chunk.bucket) }
+                        if (index < size - 1) assertSame(previous[index + 1], row)
+                    }
+                }
             }
         }
     }

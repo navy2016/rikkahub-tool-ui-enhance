@@ -50,7 +50,8 @@ per-row SelectionContainers here test the input-mode gate, not cross-item text s
 The earlier runtime draft's `rowCount * cellHeight` approximation was removed: the A/B measurements
 already showed styled updates can alter the true scroll range. No such approximate adapter or
 history-size auto-enable threshold is present in `ProcessSessionPage`. Production still uses its
-original eager renderer, pixel metrics and single scroll-effect executor. Only gesture ownership has
+fully eager ScrollState renderer (ordinary history in archival chunks), pixel metrics and single
+scroll-effect executor. Only gesture ownership has
 been extracted so this fixture cannot silently test a different fast-fling implementation.
 
 ## Run
@@ -70,3 +71,29 @@ python3 .github/scripts/report-terminal-tests.py \
 
 Do not merge these debug correctness results with the 30-case Macrobenchmark A/B JSON. There are no
 performance acceptance thresholds here. APKs, JUnit XML and logcat are retained for 14 days by CI.
+
+
+## Natural transcript geometry regression
+
+`TerminalTranscriptGeometryInstrumentedTest` uses the actual production Text and shared transcript,
+**without** fixed row boxes. Four cases run with chunk layers off and on (8 cases):
+
+- all ANSI/CJK rows, their un-clipped positions and natural widths/heights, plus both scroll ranges;
+- partial-head and whole-head-bucket removal, append/style updates and actual measured tail;
+- a single production-shaped SelectionContainer, font-scale/size changes, viewport contraction,
+  terminal resize, RTL alignment and horizontal/vertical offsets;
+- TUI fallback, alternate-screen entry/exit, history clear and return to chunked history.
+
+Each case compares flat vs chunked layouts on the same frame and checks actual composition counts.
+CI requires these 8 **in addition to** the 24 pointer cases. They run in a separate instrumentation
+invocation with the same 180-second watchdog, so a failure cannot erase the completed gesture results.
+This is geometry evidence only: it does not inject a real IME, drag selection handles across chunks,
+verify clipboard contents, measure production throughput or enable production drawing layers.
+
+To run just the geometry cases on an authorized SDK host/device:
+
+```bash
+./gradlew -PterminalViewportTests=true \
+  :benchmarks:terminal-viewport-tests:connectedDebugAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.viewporttest.TerminalTranscriptGeometryInstrumentedTest
+```

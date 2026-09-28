@@ -121,7 +121,7 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                             ),
                         )
                         TerminalBenchmarkViewport(
-                            rows = rendered,
+                            rows = rendered.toList(),
                             layout = currentLayout,
                             style = style,
                             verticalScroll = verticalScroll,
@@ -262,11 +262,12 @@ class TerminalBenchmarkActivity : ComponentActivity() {
 
     private fun layoutFor(frame: TerminalEmulator.RenderFrame): TerminalBenchmarkLayout {
         val layout = TerminalBenchmarkLayout.fromFrame(frame, renderer, configuredTui, preserveFullGrid)
-        if (renderer == BenchmarkRenderer.CHUNKED_EAGER && frame.historyCount > 0 &&
+        if ((renderer == BenchmarkRenderer.CHUNKED_EAGER || renderer == BenchmarkRenderer.CHUNKED_LAYERS) &&
+            frame.historyCount > 0 &&
             !frame.isAlternateScreen && !configuredTui && !preserveFullGrid
         ) {
-            // The benchmark workload has monotonic IDs. A misconfigured candidate must fail,
-            // not silently measure flat eager under the chunkedEager label.
+            // Archival metadata is mandatory here. Do not silently time flat eager under a
+            // chunked label, even though production conservatively falls back for legacy frames.
             check(layout.useChunkedHistory) { "Chunked benchmark unexpectedly fell back to flat eager" }
         }
         return layout

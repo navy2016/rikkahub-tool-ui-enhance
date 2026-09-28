@@ -1,7 +1,9 @@
 package me.rerere.rikkahub.ui.pages.container
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -9,6 +11,8 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import me.rerere.rikkahub.data.container.buildLineIdsFromFrame
@@ -157,4 +161,113 @@ private fun TerminalRenderedRow(
     style: TextStyle,
 ) {
     Text(text = state.text, style = style, softWrap = false, maxLines = 1)
+}
+
+internal const val TERMINAL_HISTORY_CHUNK_ROWS = 128
+
+/** A composition partition, NOT a scroll item, row ID, measured height or viewport coordinate. */
+internal data class TerminalHistoryChunk(val bucket: Long, val start: Int, val endExclusive: Int)
+
+/**
+ * History is a FIFO sequence even when its stable line IDs have gaps or are out of order. Bucketing
+ * the archival ordinal bounds BOTH rows per group and number of groups. Positional chunking would
+ * move a row across every boundary on each head trim; line-ID buckets can degenerate to one row
+ * each. Neither problem occurs here. Work is O(chunks), independent of the line-ID distribution.
+ * Unknown metadata and TUI/physical-grid modes conservatively retain the flat eager path.
+ */
+internal fun terminalHistoryChunks(
+    historyCount: Int,
+    firstSequence: Long?,
+    usesTuiViewport: Boolean = false,
+): List<TerminalHistoryChunk> {
+    if (usesTuiViewport || historyCount <= 0 || firstSequence == null || firstSequence < 0L ||
+        firstSequence > Long.MAX_VALUE - (historyCount - 1).toLong()
+    ) return emptyList()
+    return buildList {
+        var start = 0
+        while (start < historyCount) {
+            val sequence = firstSequence + start
+            val count = minOf(
+                historyCount - start,
+                TERMINAL_HISTORY_CHUNK_ROWS - (sequence % TERMINAL_HISTORY_CHUNK_ROWS).toInt(),
+            )
+            add(TerminalHistoryChunk(sequence / TERMINAL_HISTORY_CHUNK_ROWS, start, start + count))
+            start += count
+        }
+    }
+}
+
+/** Non-observable diagnostics used by isolated fixtures, absent in production. Never drive UI state. */
+internal interface TerminalTranscriptCompositionObserver {
+    fun historyChunkDelta(chunks: Int, rows: Int)
+    fun activeScreenDelta(screens: Int)
+}
+
+/**
+ * Fully eager transcript: same Text, ordering and natural sizes as [TerminalRenderedRows]. The
+ * parent still owns ScrollState, SelectionContainer, tail padding and all viewport coordinates.
+ * Only ordinary history is partitioned; the complete active screen stays together. Callers pass
+ * an immutable row-list view and a plan from the SAME frame/snapshot.
+ *
+ * Drawing isolation is an opt-in benchmark candidate. Production keeps the default (false) until
+ * a same-run comparison and geometry regressions validate it; no estimated/fixed row heights.
+ */
+@Composable
+internal fun TerminalRenderedTranscript(
+    rows: List<TerminalRenderedRowState>,
+    style: TextStyle,
+    historyChunks: List<TerminalHistoryChunk>,
+    isolateChunkDrawing: Boolean = false,
+    observer: TerminalTranscriptCompositionObserver? = null,
+) {
+    if (historyChunks.isEmpty()) {
+        TerminalRenderedRows(rows, style)
+        return
+    }
+    historyChunks.forEach { chunk ->
+        key(chunk.bucket) {
+            TerminalHistoryChunkRows(
+                chunk = TerminalHistoryChunkContent(chunk.bucket, rows.subList(chunk.start, chunk.endExclusive)),
+                style = style,
+                isolateDrawing = isolateChunkDrawing,
+                observer = observer,
+            )
+        }
+    }
+    // Distinct source/key scope from history. A screen row archiving may recompose ONCE across
+    // this boundary, but surviving history rows keep both their bucket and stable line-ID keys.
+    key("terminal-active-screen") {
+        if (observer != null) {
+            DisposableEffect(observer) {
+                observer.activeScreenDelta(1)
+                onDispose { observer.activeScreenDelta(-1) }
+            }
+        }
+        Column { TerminalRenderedRows(rows.subList(historyChunks.last().endExclusive, rows.size), style) }
+    }
+}
+
+/** The list is an immutable view; observable @Stable row states inside it may update their text. */
+@Stable
+private data class TerminalHistoryChunkContent(val bucket: Long, val rows: List<TerminalRenderedRowState>)
+
+@Composable
+private fun TerminalHistoryChunkRows(
+    chunk: TerminalHistoryChunkContent,
+    style: TextStyle,
+    isolateDrawing: Boolean,
+    observer: TerminalTranscriptCompositionObserver?,
+) {
+    if (observer != null) {
+        DisposableEffect(chunk.bucket, chunk.rows.size, observer) {
+            val count = chunk.rows.size
+            observer.historyChunkDelta(1, count)
+            onDispose { observer.historyChunkDelta(-1, -count) }
+        }
+    }
+    // Default graphicsLayer has no clipping, alpha or offscreen raster buffer. It only gives
+    // unchanged chunks their own display list; the benchmark measures whether this is worthwhile.
+    Column(if (isolateDrawing) Modifier.graphicsLayer() else Modifier) {
+        TerminalRenderedRows(chunk.rows, style)
+    }
 }

@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from summarize import (RENDERERS, SCENARIOS, SIZES, SUITE_RENDERERS, comparison_lines, load_results, overrun_percent,
+from summarize import (RENDERERS, SCENARIOS, SIZES, SUITE_RENDERERS, comparison_lines, github_annotations, load_results, overrun_percent,
                        per_operation, render_hot_path_summary, render_summary, result_key, validate_complete)
 
 
@@ -86,6 +86,47 @@ class SummaryTest(unittest.TestCase):
         results[(10000, "appendAndTrim", "chunkedEager")]["metrics"]["followTailCount"]["runs"] = [30, 30]
         with self.assertRaises(ValueError):
             validate_complete(results, "chunked-eager")
+
+    def test_layer_experiment_requires_three_complete_arms(self):
+        results = matrix(SUITE_RENDERERS["chunked-layers"])
+        validate_complete(results, "chunked-layers")
+        for other in ("baseline", "ab", "chunked-eager"):
+            with self.assertRaises(ValueError):
+                validate_complete(results, other)
+        for missing in SUITE_RENDERERS["chunked-layers"]:
+            partial = {key: value for key, value in results.items() if key[2] != missing}
+            with self.assertRaises(ValueError):
+                validate_complete(partial, "chunked-layers")
+        self.assertEqual((10000, "appendAndTrim", "chunkedLayers"), result_key(
+            "render[history=10000,scenario=appendAndTrim,renderer=chunkedLayers]"))
+        results[(1000, "appendAndTrim", "eager")]["sampledMetrics"]["frameDurationCpuMs"]["P95"] = 200
+        results[(1000, "appendAndTrim", "chunkedEager")]["sampledMetrics"]["frameDurationCpuMs"]["P95"] = 100
+        text = render_summary(results, {}, "sha", "ci-emulator")
+        self.assertIn("three-arm", text)
+        self.assertIn("Ch/La: chunkedEager / chunkedLayers", text)
+        self.assertIn("| 1000 | appendAndTrim | — | 10.00× | 1.00× |", text)
+        self.assertIn("| 1000 | appendAndTrim | — | 5.00× | 1.00× |", text)
+        results[(10000, "appendAndTrim", "chunkedLayers")]["metrics"]["followTailCount"]["runs"] = [30, 30]
+        with self.assertRaises(ValueError):
+            validate_complete(results, "chunked-layers")
+
+    def test_scenario_annotations_cover_every_case_without_truncation_or_fake_zeroes(self):
+        for suite in ("ab", "chunked-layers"):
+            results = matrix(SUITE_RENDERERS[suite])
+            notices = github_annotations(results, "a" * 40, "ci-emulator")
+            self.assertEqual(6, len(notices))
+            for scenario, (title, text) in zip(SCENARIOS, notices[1:]):
+                self.assertIn(scenario, title)
+                data = [line for line in text.splitlines() if line[:1].isdigit()]
+                self.assertEqual(3 * len(SUITE_RENDERERS[suite]), len(data))
+                for size in SIZES:
+                    for renderer in SUITE_RENDERERS[suite]:
+                        self.assertIn(f"{size} | {renderer} | 2 |", text)
+                self.assertIn(" | — | — | 2.00 | —", text)  # No measure/draw/RSS sample: NOT zero.
+            for _, text in notices:
+                escaped = text.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D")
+                self.assertLess(len(escaped.encode("utf-8")), 3_500)
+            self.assertIn("NOT a TUI speedup", notices[-1][1])
 
     def test_legacy_names_remain_readable(self):
         self.assertEqual((1000, "initialCompose", "eager"), result_key(measurement(legacy=True)["name"]))

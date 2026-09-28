@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.utils
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -959,6 +960,68 @@ class TerminalEmulatorTest {
         assertEquals(beforeTrim.historyGeneration, afterTrim.historyGeneration)
         assertTrue(cleared.historyGeneration > afterTrim.historyGeneration)
         assertTrue(cleared.historyLineIds.isEmpty())
+    }
+
+    @Test
+    fun archivalOrdinalsSurviveHeadTrimLimitChangeResizeAndAlternateScreen() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 260)
+        terminal.feed((1..280).joinToString("\r\n") { "line$it" })
+        val before = terminal.renderFrame()
+        terminal.feed((281..300).joinToString("\r\n", prefix = "\r\n") { "line$it" })
+        val trimmed = terminal.renderFrame()
+        assertEquals(260, trimmed.historyCount)
+        assertEquals(before.historyStartSequence!! + 20, trimmed.historyStartSequence)
+        assertEquals(before.historyLineIds.drop(20), trimmed.historyLineIds.take(240))
+
+        terminal.setMaxScrollbackLines(129)
+        val limited = terminal.renderFrame()
+        assertEquals(trimmed.historyStartSequence!! + 131, limited.historyStartSequence)
+        terminal.resize(columns = 25, rows = 8)
+        val resized = terminal.renderFrame()
+        assertEquals(limited.historyLineIds, resized.historyLineIds)
+        assertEquals(limited.historyStartSequence, resized.historyStartSequence)
+        assertNull(terminal.renderFrame(includeScrollback = false).historyStartSequence)
+
+        terminal.feed("\u001B[?1049h" + (1..300).joinToString("\r\n") { "alt$it" })
+        assertNull(terminal.renderFrame().historyStartSequence)
+        terminal.feed("\u001B[?1049l")
+        assertEquals(resized.historyStartSequence, terminal.renderFrame().historyStartSequence)
+        terminal.feed("\u001B[8;1H\r\nnext")
+        // Alternate-screen scrolling consumes line IDs, but MUST NOT consume archival ordinals.
+        assertEquals(resized.historyStartSequence!! + 1, terminal.renderFrame().historyStartSequence)
+    }
+
+    @Test
+    fun archivalOrdinalsStayDenseWhenReverseIndexMakesHistoryIdsNonMonotonic() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 20)
+        terminal.feed("\u001B[H\u001BM") // New, larger line ID at the TOP of the screen.
+        terminal.feed("\u001B[6;1H\r\none\r\ntwo")
+        val frame = terminal.renderFrame()
+        assertEquals(2, frame.historyCount)
+        assertTrue(frame.historyLineIds[0] > frame.historyLineIds[1])
+        assertEquals(0L, frame.historyStartSequence)
+        terminal.setMaxScrollbackLines(1)
+        assertEquals(1L, terminal.renderFrame().historyStartSequence)
+    }
+
+    @Test
+    fun clearHistoryPathsNeverRecycleArchivalOrdinals() {
+        val clearers: List<(TerminalEmulator) -> Unit> = listOf(
+            { it.clearScrollbackOnly() }, { it.feed("\u001B[3J") }, { it.reset() },
+        )
+        clearers.forEach { clear ->
+            val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 20)
+            terminal.feed((1..30).joinToString("\r\n") { "line$it" })
+            val before = terminal.renderFrame()
+            clear(terminal)
+            assertEquals(0, terminal.renderFrame().historyCount)
+            assertNull(terminal.renderFrame().historyStartSequence)
+            terminal.feed("\u001B[6;1H\r\nnew")
+            val next = terminal.renderFrame()
+            assertEquals(1, next.historyCount)
+            assertEquals(before.historyStartSequence!! + before.historyCount, next.historyStartSequence)
+            assertTrue(next.historyGeneration > before.historyGeneration)
+        }
     }
 
     @Test

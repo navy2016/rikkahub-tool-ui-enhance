@@ -9,11 +9,12 @@ from pathlib import Path
 
 SIZES = (1000, 5000, 10000)
 SCENARIOS = ("initialCompose", "historyScroll", "activeRowUpdate", "appendAndTrim", "alternateScreenUpdate")
-RENDERERS = ("eager", "lazyHistory", "chunkedEager")
+RENDERERS = ("eager", "lazyHistory", "chunkedEager", "chunkedLayers")
 SUITE_RENDERERS = {
     "baseline": ("eager",),
     "ab": ("eager", "lazyHistory"),
     "chunked-eager": ("eager", "chunkedEager"),
+    "chunked-layers": ("eager", "chunkedEager", "chunkedLayers"),
 }
 
 
@@ -137,47 +138,55 @@ def ordered_results(results):
     ))
 
 
-def candidate_renderer(results):
-    candidates = {key[2] for key in results if key[2] != "eager"}
-    if len(candidates) > 1:
-        raise ValueError("Compare one candidate per paired run; do not mix suites")
-    return next(iter(candidates), None)
+def candidate_renderers(results):
+    candidates = tuple(renderer for renderer in RENDERERS[1:] if any(key[2] == renderer for key in results))
+    if len(candidates) > 1 and candidates != ("chunkedEager", "chunkedLayers"):
+        raise ValueError("Do not mix lazy and chunk experiments or assemble independent runs")
+    return candidates
 
 
 def comparison_lines(results):
-    candidate = candidate_renderer(results)
-    label = "E/Ch" if candidate == "chunkedEager" else "E/L"
+    candidates = candidate_renderers(results)
+    pairs = [("eager", candidate, {"lazyHistory": "E/L", "chunkedEager": "E/Ch", "chunkedLayers": "E/La"}[candidate])
+             for candidate in candidates]
+    if candidates == ("chunkedEager", "chunkedLayers"):
+        pairs.append(("chunkedEager", "chunkedLayers", "Ch/La"))
     lines = [
-        "", "## Same-run A/B comparison", "",
-        f"Only paired ordinary-history cases are compared. {label} is eager divided by {candidate}, **not FPS**.",
+        "", "## Same-run renderer comparison", "",
+        "Only adjacent ordinary-history arms from ONE run are compared; ratios are **not FPS**.",
         "Do not compare ratios across different hosts/runs or subtract differently aggregated statistics.",
-        "", f"| History | Scenario | Mount {label} | CPU frame p95 {label} | row sync {label} |",
-        "| ---: | --- | ---: | ---: | ---: |",
     ]
+
     def ratio(a, b):
         return format_number(a / b) + "×" if a is not None and b is not None and b > 0 else "—"
 
-    for size in SIZES:
-        for scenario in SCENARIOS:
-            if scenario == "alternateScreenUpdate":
-                continue  # Both arms are eager here; a noise ratio must not be called a TUI speedup.
-            eager = results.get((size, scenario, "eager"))
-            lazy = results.get((size, scenario, candidate))
-            if eager is None or lazy is None:
-                continue
-            values = [str(size), scenario,
-                      ratio(median(eager, "mountToDrawFirstMs"), median(lazy, "mountToDrawFirstMs")),
-                      ratio(percentile(eager, "frameDurationCpuMs", "P95"), percentile(lazy, "frameDurationCpuMs", "P95")),
-                      ratio(per_operation(eager, "rowSync"), per_operation(lazy, "rowSync"))]
-            lines.append("| " + " | ".join(values) + " |")
+    for numerator, denominator, label in pairs:
+        lines += ["", f"### {label}: {numerator} / {denominator}", "",
+                  f"| History | Scenario | Mount {label} | CPU frame p95 {label} | row sync {label} |",
+                  "| ---: | --- | ---: | ---: | ---: |"]
+        for size in SIZES:
+            for scenario in SCENARIOS:
+                if scenario == "alternateScreenUpdate":
+                    continue  # Identical flat backend: noise is not a TUI speedup.
+                a = results.get((size, scenario, numerator))
+                b = results.get((size, scenario, denominator))
+                if a is None or b is None:
+                    continue
+                values = [str(size), scenario,
+                          ratio(median(a, "mountToDrawFirstMs"), median(b, "mountToDrawFirstMs")),
+                          ratio(percentile(a, "frameDurationCpuMs", "P95"), percentile(b, "frameDurationCpuMs", "P95")),
+                          ratio(per_operation(a, "rowSync"), per_operation(b, "rowSync"))]
+                lines.append("| " + " | ".join(values) + " |")
     return lines
 
 
 def render_summary(results, context, sha, environment):
-    candidate = candidate_renderer(results)
+    candidates = candidate_renderers(results)
+    candidate = candidates[-1] if candidates else None
     title = {
         "lazyHistory": "history-only LazyColumn A/B",
         "chunkedEager": "stable-chunk eager A/B",
+        "chunkedLayers": "archival chunks / isolated layers (three-arm)",
         None: "rendering baseline",
     }[candidate]
     lines = [
@@ -223,15 +232,24 @@ def render_summary(results, context, sha, environment):
             "Both arms pan six viewport heights using identical 1-second `animateScrollBy` animations, then return to the tail.",
             "Pairs use the same APK/device, with A/B order alternating per case; this is not a statistical confidence interval.",
         ]
-    elif candidate == "chunkedEager":
+    elif candidate in ("chunkedEager", "chunkedLayers"):
         lines += [
-            "Chunked eager retains ALL history rows, grouped by stable ID buckets of 128 IDs, not pixel estimates.",
+            "Chunked eager retains ALL history rows, using stable composition buckets, not pixel estimates.",
+            "Current sources group 128 FIFO archival ordinals (legacy 7d95aa7 used ID buckets); inspect the measured SHA.",
             "Only the composition/layout tree changes; both arms use ScrollState, shared row sync and production Text.",
             "The physical screen remains whole. TUI/alternate/full-grid cases use the unchanged flat eager backend.",
             "Both arms correct the actual measured tail after output and include any correction draw in timing.",
             "Both arms pan six viewport heights using identical 1-second animations, then return to the tail.",
             "Runtime probes reject missing history chunks/rows, split screens or unexpected candidate fallback.",
-            "This is a benchmark-only experiment, not a production renderer or selection/viewport acceptance test.",
+            "The current chunk arms call the shared production transcript; eager is the legacy flat control.",
+            "This harness alone is not a production selection/viewport acceptance test.",
+        ]
+    if candidate == "chunkedLayers":
+        lines += [
+            "All THREE arms run in one invocation; their adjacent order rotates between size/scenario groups.",
+            "chunkedEager and chunkedLayers use identical archival grouping; ONLY graphicsLayer boundaries differ.",
+            "Ch/La isolates that drawing choice in this run. Independent CI runs are not a controlled comparison.",
+            "Production defaults to unlayered chunks; this report does not automatically enable layers.",
         ]
     if candidate:
         lines += comparison_lines(results)
@@ -277,6 +295,43 @@ def render_hot_path_summary(results, sha, environment):
     return "\n".join(lines)
 
 
+def render_scenario_summary(results, scenario, sha, environment):
+    """One bounded annotation per scenario: complete matrix access even if blobs are unreachable."""
+    if scenario not in SCENARIOS:
+        raise ValueError(f"Unknown scenario: {scenario}")
+    lines = [
+        f"Terminal {scenario} — commit {sha}; environment={environment}",
+        "ms; CPU percentiles pool frames; other values are medians of iteration values/averages. Not FPS.",
+        "History | Renderer | n | Mount | render/op | sync/op | CPU p50 | CPU p95 | Measure/call | Draw/call | Frames | RSS anon MiB",
+    ]
+    for (size, current, renderer), result in ordered_results(results):
+        if current != scenario:
+            continue
+        rss = median(result, "memoryRssAnonMaxKb")
+        lines.append(" | ".join([
+            str(size), renderer, str(result.get("repeatIterations", "?")),
+            format_number(median(result, "mountToDrawFirstMs")),
+            format_number(per_operation(result, "renderFrame")), format_number(per_operation(result, "rowSync")),
+            format_number(percentile(result, "frameDurationCpuMs", "P50")),
+            format_number(percentile(result, "frameDurationCpuMs", "P95")),
+            format_number(per_operation(result, "measure")), format_number(per_operation(result, "draw")),
+            format_number(median(result, "frameCount")), format_number(rss / 1024 if rss is not None else None),
+        ]))
+    if scenario == "initialCompose":
+        lines.append("Few initial frames: inspect mount latency, not p95 alone.")
+    if scenario == "alternateScreenUpdate":
+        lines.append("All arms use the same flat 24-row grid here. Differences are NOT a TUI speedup.")
+    return "\n".join(lines)
+
+
+def github_annotations(results, sha, environment):
+    # Six notices, below GitHub's ten-notices-per-step limit. Never truncate away the 10k cases.
+    return [("Terminal rendering hot paths", render_hot_path_summary(results, sha, environment))] + [
+        (f"Terminal benchmark {scenario}", render_scenario_summary(results, scenario, sha, environment))
+        for scenario in SCENARIOS
+    ]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
@@ -296,9 +351,9 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(render_summary(results, context, args.sha, args.environment))
     if args.github_annotation:
-        message = render_hot_path_summary(results, args.sha, args.environment)
-        escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-        print("::notice title=Terminal rendering hot paths::" + escaped)
+        for title, message in github_annotations(results, args.sha, args.environment):
+            escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+            print(f"::notice title={title}::" + escaped)
 
 
 if __name__ == "__main__":

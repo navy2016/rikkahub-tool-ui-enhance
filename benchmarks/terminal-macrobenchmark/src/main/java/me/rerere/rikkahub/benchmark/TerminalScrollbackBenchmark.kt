@@ -37,8 +37,8 @@ class TerminalScrollbackBenchmark(
         fun parameters(): List<Array<Any>> = buildList {
             val arguments = InstrumentationRegistry.getArguments()
             val preflight = arguments.getString("terminalPreflight") == "true"
-            val candidate = arguments.getString("terminalCandidateRenderer") ?: "lazyHistory"
-            require(candidate in listOf("lazyHistory", "chunkedEager")) { "Unknown candidate: $candidate" }
+            val candidate = arguments.getString("terminalCandidateRenderer") ?: "chunkedLayers"
+            require(candidate in listOf("lazyHistory", "chunkedEager", "chunkedLayers")) { "Unknown candidate: $candidate" }
             val scenarios = if (preflight) {
                 listOf("activeRowUpdate", "appendAndTrim", "alternateScreenUpdate")
             } else {
@@ -47,8 +47,14 @@ class TerminalScrollbackBenchmark(
             val sizes = if (preflight) listOf(1_000) else listOf(1_000, 5_000, 10_000)
             sizes.forEachIndexed { sizeIndex, size ->
                 scenarios.forEachIndexed { scenarioIndex, scenario ->
-                    // Adjacent A/B cases on ONE device/APK; alternate order to reduce fixed-order bias.
-                    val renderers = if ((sizeIndex + scenarioIndex) % 2 == 0) {
+                    // ONE APK/device/invocation. The layer experiment has three adjacent arms:
+                    // legacy flat, production chunks, identical chunks with isolated display lists.
+                    // Rotate the three-arm order; retain alternating order for two-arm suites.
+                    val renderers = if (candidate == "chunkedLayers") {
+                        val arms = listOf("eager", "chunkedEager", "chunkedLayers")
+                        val offset = (sizeIndex + scenarioIndex) % arms.size
+                        arms.drop(offset) + arms.take(offset)
+                    } else if ((sizeIndex + scenarioIndex) % 2 == 0) {
                         listOf("eager", candidate)
                     } else {
                         listOf(candidate, "eager")

@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.benchmark
 
+import me.rerere.rikkahub.ui.pages.container.TERMINAL_HISTORY_CHUNK_ROWS
+import me.rerere.rikkahub.ui.pages.container.terminalHistoryChunks
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -32,6 +34,7 @@ class TerminalBenchmarkLayoutTest {
             )) {
                 assertFalse(layout.useLazyHistory)
                 assertFalse(layout.useChunkedHistory)
+                assertFalse(layout.isolateChunkDrawing)
             }
         }
         assertFalse(TerminalBenchmarkLayout.fromFrame(normal, BenchmarkRenderer.EAGER).useLazyHistory)
@@ -74,10 +77,10 @@ class TerminalBenchmarkLayoutTest {
     fun eagerChunksCoverEveryHistoryRowOnceAtEveryBenchmarkSize() {
         for (size in TerminalBenchmarkWorkload.historySizes) {
             val ids = List(size) { 100L + it }
-            val chunks = stableEagerHistoryChunks(ids)
+            val chunks = terminalHistoryChunks(ids.size, ids.firstOrNull())
             assertEquals(ids.indices.toList(), chunks.flatMap { (it.start until it.endExclusive).toList() })
             assertEquals(chunks.size, chunks.map { it.bucket }.distinct().size)
-            assertTrue(chunks.all { it.endExclusive - it.start in 1..EAGER_HISTORY_CHUNK_IDS.toInt() })
+            assertTrue(chunks.all { it.endExclusive - it.start in 1..TERMINAL_HISTORY_CHUNK_ROWS })
         }
     }
 
@@ -85,7 +88,7 @@ class TerminalBenchmarkLayoutTest {
     fun trimmingAPartialHeadChunkKeepsInteriorKeysAndMembership() {
         val before = (125L..383L).toList()
         val after = before.drop(1) + 384L
-        fun contents(ids: List<Long>) = stableEagerHistoryChunks(ids).associate {
+        fun contents(ids: List<Long>) = terminalHistoryChunks(ids.size, ids.firstOrNull()).associate {
             it.bucket to ids.subList(it.start, it.endExclusive)
         }
         val old = contents(before)
@@ -99,33 +102,29 @@ class TerminalBenchmarkLayoutTest {
     }
 
     @Test
-    fun chunkingPreservesGapsAndRejectsReorderedOrDuplicateIds() {
-        val ids = listOf(-1L, 0L, 7L, 127L, 129L, 300L)
-        val chunks = stableEagerHistoryChunks(ids)
-        assertEquals(ids, chunks.flatMap { ids.subList(it.start, it.endExclusive) })
-        assertEquals(listOf(-1L, 0L, 1L, 2L), chunks.map { it.bucket })
-        assertTrue(stableEagerHistoryChunks(listOf(300L, 1L, 301L)).isEmpty())
-        assertTrue(stableEagerHistoryChunks(listOf(1L, 1L)).isEmpty())
-        assertTrue(stableEagerHistoryChunks(emptyList()).isEmpty())
-    }
-
-    @Test
-    fun chunkCandidateRequiresCompleteMonotonicHistoryAndKeepsOneScreen() {
+    fun productionChunkPlansHandleReorderedIdsAndOnlyLayerIsolationDiffers() {
         val frame = TerminalBenchmarkWorkload.prepare(1_000).renderFrame()
-        val layout = TerminalBenchmarkLayout.fromFrame(frame, BenchmarkRenderer.CHUNKED_EAGER)
-        assertTrue(layout.useChunkedHistory)
-        assertFalse(layout.useLazyHistory)
-        assertEquals(24, layout.screenRows)
-        assertEquals(1_000, layout.historyChunks.sumOf { it.endExclusive - it.start })
-        val invalidFrames = listOf(
-            frame.copy(historyLineIds = frame.historyLineIds.reversed()),
-            frame.copy(historyLineIds = emptyList()),
-            TerminalEmulator(initialRows = 24).renderFrame(),
-        )
-        for (invalid in invalidFrames) {
-            val fallback = TerminalBenchmarkLayout.fromFrame(invalid, BenchmarkRenderer.CHUNKED_EAGER)
-            assertFalse(fallback.useChunkedHistory)
-            assertFalse(fallback.useLazyHistory)
+        val unlayered = TerminalBenchmarkLayout.fromFrame(frame, BenchmarkRenderer.CHUNKED_EAGER)
+        val layered = TerminalBenchmarkLayout.fromFrame(frame, BenchmarkRenderer.CHUNKED_LAYERS)
+        assertEquals(unlayered.copy(isolateChunkDrawing = true), layered)
+        for (renderer in listOf(BenchmarkRenderer.CHUNKED_EAGER, BenchmarkRenderer.CHUNKED_LAYERS)) {
+            val layout = TerminalBenchmarkLayout.fromFrame(frame, renderer)
+            assertTrue(layout.useChunkedHistory)
+            assertFalse(layout.useLazyHistory)
+            assertEquals(24, layout.screenRows)
+            assertEquals(1_000, layout.historyChunks.sumOf { it.endExclusive - it.start })
+            assertEquals(layout, TerminalBenchmarkLayout.fromFrame(
+                frame.copy(historyLineIds = frame.historyLineIds.reversed()), renderer,
+            ))
+            val noMetadata = listOf(
+                frame.copy(historyStartSequence = null), TerminalEmulator(initialRows = 24).renderFrame(),
+            )
+            for (invalid in noMetadata) {
+                val fallback = TerminalBenchmarkLayout.fromFrame(invalid, renderer)
+                assertFalse(fallback.useChunkedHistory)
+                assertFalse(fallback.isolateChunkDrawing)
+                assertFalse(fallback.useLazyHistory)
+            }
         }
     }
 

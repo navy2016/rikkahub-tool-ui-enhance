@@ -2,15 +2,21 @@
 
 ## Scope
 
-Compare eager `Column` against a **benchmark-only, history-only `LazyColumn`** at
-**1,000 / 5,000 / 10,000 history rows + 24 active rows**. The harness never switches the production
-renderer or changes viewport reducer/controller and TUI physical-grid semantics. Shared row-sync
-optimizations apply to production and both benchmark arms, so they also require terminal regressions.
+Measure **1,000 / 5,000 / 10,000 history rows + 24 active rows** on one device/APK. Current default
+is the three-arm `chunked-layers` experiment: legacy flat eager, production archival-chunk eager,
+and the identical chunks with opt-in display-list isolation. The two-arm `ab` (flat vs benchmark-only
+history `LazyColumn`) and `chunked-eager` formats remain available; never merge independent runs.
+
+Production ordinary history now uses the shared **fully eager, unlayered** transcript. It keeps
+ScrollState/verticalScroll, all rows, natural Text geometry, selection and the single scroll-effect
+owner; TUI/alternate/full-grid modes stay flat. Neither LazyColumn nor isolated layers are enabled in
+production. Source changes still require unit and interaction/geometry regressions, not just timings.
 
 The opt-in `terminal-target` APK compiles the production `TerminalEmulator`, stable-ID helper,
 `TerminalRenderedRows` and font sources via Gradle `Sync` tasks. Generated copies are only in `build/`;
 there is no second row-diff/Text implementation to drift away from production. `ProcessSessionPage`
 uses the same extracted helpers, still inside its existing atomic snapshot and scroll container.
+Both chunked benchmark arms call `TerminalRenderedTranscript` directly; they cannot fork its row tree.
 
 The target has a **separate application ID**, no shell/rootfs/native dependencies, no network permission,
 and no production user data. It is non-debuggable, profileable, debug-key signed, and unminified. Like
@@ -22,8 +28,8 @@ Normal builds do not include either benchmark module unless `-PterminalBenchmark
 - 80 physical columns, 24 active rows, JetBrains Mono 14sp, no font padding, 8dp tail padding.
 - Deterministic unique lines with ANSI colors/bold and mixed ASCII/CJK, narrower than 80 cells.
 - A fresh process/emulator model per measured iteration; shell-like fixture seeding is **outside** timing.
-- Both renderer arms are compiled into one APK and run on one device in adjacent size/scenario pairs.
-  Eager/lazy order alternates between pairs. Each arm has the same repetition count.
+- All selected renderers are compiled into one APK and run on one device in adjacent size/scenario groups.
+  Two-arm order alternates; three-arm order rotates. Every arm has the same repetition count.
 - Native control/status views above the terminal. Accessibility traversal of the Compose subtree is
   disabled only in the fixture to avoid timing a 10k-node UiAutomator tree walk; Text/layout/draw remain.
 - First composition measures the **cold** `renderFrame` cache. Other scenarios mount first, outside the
@@ -66,7 +72,7 @@ mount, every output update, and the return pan. Candidate checks also require th
 item to be visible, exactly one active-grid composition, and fewer history compositions than the whole
 history. Composition counters are non-observable; they do not drive recomposition.
 
-A/B collection has **30 cases** (3 sizes × 5 scenarios × 2 arms). The summary must reject a missing arm,
+Two-arm collection has **30 cases**; `chunked-layers` has **45 cases** (3 sizes × 5 scenarios × 3 arms). The summary must reject a missing arm,
 mismatched repetitions, or missing follow-tail requests. Fixture assertion failures are surfaced to the
 test driver rather than reported as successful timing samples. These guards are **not** production
 viewport or text-selection acceptance tests.
@@ -102,9 +108,9 @@ The **Terminal Scrollback Benchmark** Actions workflow has a 90-minute job budge
 API 34 x86_64 emulator
 (Nexus 6 profile, 2 cores, 4GiB RAM, 768MiB heap, SwiftShader). CI runs three repetitions per case by default.
 It suppresses **only** AndroidX's `EMULATOR` warning, not debuggable/profileable failures. CI first runs a
-1k/one-repeat preflight of all output-update scenarios in both arms. Only if it passes does the full
+1k/one-repeat preflight of all output-update scenarios in the selected arms. Only if it passes does the full
 matrix run in a fresh instrumentation invocation. Preflight output is archived separately and never
-included in the A/B summary. Both measured arms run in one invocation; do not merge separate runs to
+included in the A/B summary. All measured arms run in one invocation; do not merge separate runs to
 manufacture a paired comparison.
 
 To run on a dedicated, authorized physical test device from a normal Android SDK development host:
@@ -114,10 +120,11 @@ To run on a dedicated, authorized physical test device from a normal Android SDK
   :benchmarks:terminal-target:testBenchmarkUnitTest \
   :benchmarks:terminal-macrobenchmark:connectedBenchmarkAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.benchmark.TerminalScrollbackBenchmark \
-  -Pandroid.testInstrumentationRunnerArguments.terminalIterations=5
+  -Pandroid.testInstrumentationRunnerArguments.terminalIterations=5 \
+  -Pandroid.testInstrumentationRunnerArguments.terminalCandidateRenderer=chunkedLayers
 
 python3 benchmarks/summarize.py benchmarks/terminal-macrobenchmark/build/outputs \
-  --sha "$(git rev-parse HEAD)" --environment physical-device --suite ab --require-complete \
+  --sha "$(git rev-parse HEAD)" --environment physical-device --suite chunked-layers --require-complete \
   --output /tmp/terminal-scrollback-summary.md
 ```
 
@@ -167,21 +174,42 @@ this change. The workflow publishes a compact all-size hot-path annotation (to a
 Both renderer arms use the new synchronizer: their same-run ratios compare renderers, **not** old
 versus new synchronization. Do not infer a before/after speedup from separate CI hosts/runs.
 
-## Stable-chunk eager candidate (benchmark-only)
+## Shared archival chunks and opt-in drawing layers
 
-`chunkedEager` keeps **every** history row composed inside the same `verticalScroll` Column and uses
-the same row sync, production Text, measured tail correction and six-viewport pan as flat eager.
-Only the composition/layout tree is grouped: history rows are keyed by `floorDiv(lineId, 128)`
-buckets, so head trimming changes only the first bucket and appending only the last. Interior
-buckets keep their keys and members. There are no fixed row heights or pixel estimates.
+`chunkedEager` now calls the production transcript helper. It keeps **every** history row composed,
+uses the original `verticalScroll`/ScrollState, and leaves the entire active screen together. Each
+history group contains at most 128 FIFO archival ordinals. Head trims only change the first group,
+appends the last; stable line IDs still key Text rows and viewport anchors. There are no fixed row
+heights, pixel estimates or lazy items. The ordinal never consumes IDs for screen/TUI operations and
+survives resize; clearing history does not recycle ordinals. Null/unsafe archival metadata and
+TUI/alternate/full-grid modes retain the flat backend. Host tests cover these gates and 1k/5k/10k trims.
 
-Reordered, duplicate or incomplete IDs return no chunks. Alternate screen, configured TUI and
-full-grid modes stay on flat eager, with one whole physical screen. The fixture fails if ordinary
-monotonic history unexpectedly falls back, if any row/chunk is missing, or if the screen is split.
+The older `7d95aa7` benchmark-only implementation grouped line IDs rather than archival ordinals and
+fell back on non-monotonic IDs. Inspect the source SHA before interpreting an archived report.
 
-Run it with the workflow's `candidate=chunkedEager` input. It is paired with flat eager in one run
-(`--suite chunked-eager`, `E/Ch` ratios) and must not be combined with `ab` LazyColumn data.
-It only tests whether a shallower eager tree reduces the UI cost; it is not a production change.
+`chunkedLayers` uses the **same** plan, row list and Text, adding only default `graphicsLayer()` to each
+history Column (no clipping, alpha or forced offscreen buffer). It is experimental, not the production
+default. Both chunked arms include measured tail correction and identical six-viewport pans. Optional
+non-observable composition probes in the shared helper verify every history row/chunk is retained and
+the active screen is whole; probes are absent in production.
+
+Workflow `candidate` inputs:
+
+| candidate | suite | renderers |
+| --- | --- | --- |
+| `lazyHistory` | `ab` | flat eager / lazy history |
+| `chunkedEager` | `chunked-eager` | flat eager / production archival chunks |
+| `chunkedLayers` (default) | `chunked-layers` | flat eager / archival chunks / identical chunks + layers |
+
+The three-arm report includes `E/Ch`, `E/La` and **`Ch/La`** same-run ratios. The last isolates drawing
+isolation rather than conflating it with chunking or a change in row-sync implementation. No automatic
+rollout follows a successful run. The independent natural-geometry fixture compares all Text nodes,
+scroll ranges/offsets and selection-wrapper/resize/RTL transitions, in addition to the existing 24
+real-pointer gesture cases; it is still not complete end-to-end IME/selection-copy or real-device acceptance.
+
+CI publishes six bounded notices: the existing update hot paths plus one complete all-size/all-renderer
+table per scenario, including mount, CPU, measure/draw, frame count and memory. This keeps the full
+matrix accessible via the check-run API when artifact/blob downloads fail. Missing values remain `—`.
 
 ## Recorded baselines
 
@@ -201,3 +229,7 @@ viewport/controller integration tests and representative physical-device measure
 
 - [2026-09-27: row-sync 优化后的热点摘要](results/2026-09-27-85e2696-row-sync-hotpaths-ci-emulator.md)
   — 30 项矩阵通过，归档 12 项更新热点；数据支持下一步隔离验证 eager 的组合/布局组织。
+
+- [2026-09-27: initial stable-chunk eager comparison and lazy regression](results/2026-09-27-7d95aa7-chunked-eager-ci-emulator.md)
+  — both 30-case runs passed; 10k append/trim CPU p95 was 7414.46 / 394.85 ms in the chunked run.
+  Only annotation-accessible hot paths are archived; no cross-run three-arm or real-device claim.

@@ -6,11 +6,12 @@ iterations="${TERMINAL_BENCHMARK_ITERATIONS:-3}"
   echo 'TERMINAL_BENCHMARK_ITERATIONS must be an integer in 1..50' >&2
   exit 1
 }
-candidate="${TERMINAL_BENCHMARK_CANDIDATE:-lazyHistory}"
+candidate="${TERMINAL_BENCHMARK_CANDIDATE:-chunkedLayers}"
 case "$candidate" in
   lazyHistory) suite=ab ;;
   chunkedEager) suite=chunked-eager ;;
-  *) echo 'TERMINAL_BENCHMARK_CANDIDATE must be lazyHistory or chunkedEager' >&2; exit 1 ;;
+  chunkedLayers) suite=chunked-layers ;;
+  *) echo 'TERMINAL_BENCHMARK_CANDIDATE must be lazyHistory, chunkedEager or chunkedLayers' >&2; exit 1 ;;
 esac
 output=artifacts/terminal-scrollback
 mkdir -p "$output"
@@ -62,7 +63,7 @@ run_instrumentation() {
     --stacktrace
 }
 
-echo 'Preflight: one repeat, 1k history, both arms, all output-update scenarios'
+echo 'Preflight: one repeat, 1k history, all selected arms, all output-update scenarios'
 run_instrumentation 1 true preflight
 # Keep diagnostics, but never mix preflight samples with the final A/B matrix. Leave APKs in place.
 mkdir -p "$output/preflight"

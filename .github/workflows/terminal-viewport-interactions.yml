@@ -43,7 +43,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Inject real pointer gestures into eager and lazy containers
+      - name: Test pointer gestures and natural transcript geometry
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -59,14 +59,17 @@ jobs:
           # Keep an instrumentation/ADB deadlock from consuming the whole job without
           # reaching the JUnit and logcat reporting steps below.
           script: python3 .github/scripts/run-terminal-with-timeout.py 900 bash benchmarks/terminal-viewport-tests/run-ci.sh
-      - name: Require eager and lazy gesture regression results
+      - name: Require both gesture arms and both chunk geometry modes
         if: always()
         run: |
           python3 .github/scripts/report-terminal-tests.py \
             benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest \
             --require-case-group 'lazyHistory=false:12' \
-            --require-case-group 'lazyHistory=true:12'
+            --require-case-group 'lazyHistory=true:12' \
+            --require-suite me.rerere.rikkahub.viewporttest.TerminalTranscriptGeometryInstrumentedTest \
+            --require-case-group 'chunkLayers=false:4' \
+            --require-case-group 'chunkLayers=true:4'
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

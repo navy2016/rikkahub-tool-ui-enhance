@@ -97,6 +97,7 @@ class TerminalEmulator(
 
     private class ScrollbackLine(
         val id: Long,
+        val archiveSequence: Long,
         val cells: Array<Cell>,
         val isNotBlank: Boolean,
     ) {
@@ -115,6 +116,13 @@ class TerminalEmulator(
         val historyEndId: Long = 0,
         /** Number of history rows. */
         val historyCount: Int = 0,
+        /**
+         * FIFO archival ordinal of the first retained history row. Row i has ordinal start + i.
+         * Unlike line IDs, these are contiguous even after screen insert/delete/reverse-index.
+         * Only for composition grouping, never a viewport anchor or pixel coordinate. Null when
+         * history is hidden/empty or when a synthetic/legacy frame supplies no archival metadata.
+         */
+        val historyStartSequence: Long? = null,
         /** Stable IDs of history rows in rendered order. IDs are not assumed to be contiguous. */
         val historyLineIds: List<Long> = emptyList(),
         /** Changes only when the entire scrollback history is explicitly cleared or reset. */
@@ -235,6 +243,8 @@ class TerminalEmulator(
     // cache with the row makes reuse explicit and prevents mutable live-screen rows from being
     // cached without a content revision.
     private var nextLineId = 1L
+    // Do not reset on clear/reset: newly archived rows must not reuse old archival ordinals.
+    private var nextHistorySequence = 0L
     private var nextScreenGeneration = 1L
     private var nextHistoryGeneration = 1L
     private var historyGeneration = newHistoryGeneration()
@@ -402,7 +412,8 @@ class TerminalEmulator(
         if (columnsChanged) {
             // Preserve stable line ids across a column resize so a locked viewport anchor stays valid.
             val resizedScrollback = scrollback.map { line ->
-                newScrollbackLinePreservingId(line.id, resizedLine(line.cells, newColumns, defaultStyle))
+                val cells = resizedLine(line.cells, newColumns, defaultStyle)
+                ScrollbackLine(line.id, line.archiveSequence, cells, cells.isNotBlankLine())
             }
             scrollback.clear()
             resizedScrollback.takeLast(scrollbackLimit).forEach { scrollback.addLast(it) }
@@ -830,6 +841,7 @@ class TerminalEmulator(
             historyStartId = historyStartId,
             historyEndId = historyEndId,
             historyCount = if (includeHistory) scrollback.size else 0,
+            historyStartSequence = if (includeHistory) scrollback.firstOrNull()?.archiveSequence else null,
             historyLineIds = historyLineIds,
             historyGeneration = historyGeneration,
             screenLineIds = screenLineIds,
@@ -2360,12 +2372,7 @@ class TerminalEmulator(
 
     private fun newScrollbackLine(id: Long, cells: Array<Cell>): ScrollbackLine = ScrollbackLine(
         id = id,
-        cells = cells,
-        isNotBlank = cells.isNotBlankLine(),
-    )
-
-    private fun newScrollbackLinePreservingId(id: Long, cells: Array<Cell>): ScrollbackLine = ScrollbackLine(
-        id = id,
+        archiveSequence = nextHistorySequence++,
         cells = cells,
         isNotBlank = cells.isNotBlankLine(),
     )

@@ -136,7 +136,7 @@ class TerminalSmoothnessSourceTest {
     fun renderedRowsFollowStableIdsWhenScrollbackIsTrimmed() {
         assertTrue(processSessionSource.contains("createTerminalRenderedRows(initialTerminalRenderFrame)"))
         assertTrue(processSessionSource.contains("synchronizeTerminalRenderedRows("))
-        assertTrue(processSessionSource.contains("TerminalRenderedRows(terminalRenderedRows, terminalTextStyle)"))
+        assertTrue(processSessionSource.contains("TerminalRenderedTranscript("))
         assertTrue(renderedRowsSource.contains("val lineId: Long"))
         assertTrue(renderedRowsSource.contains("buildLineIdsFromFrame(frame, rendered.size)"))
         // Row identity through trim/reorder is checked behaviorally in TerminalRenderedRowsTest.
@@ -256,7 +256,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(controllerSource.contains("measured.frameRevision == frame.revision"))
         assertTrue(controllerSource.contains("measured.anchor.clippedTopPx == anchor?.clippedTopPx"))
         assertTrue(controllerSource.contains("measured.anchor.historyGeneration == anchor?.historyGeneration"))
-        assertTrue(processSessionSource.contains("TerminalRenderedRows(terminalRenderedRows, terminalTextStyle)"))
+        assertTrue(processSessionSource.contains("TerminalRenderedTranscript("))
         assertFalse(processSessionSource.contains("LazyColumn("))
     }
 
@@ -282,7 +282,21 @@ class TerminalSmoothnessSourceTest {
         assertFalse(processSessionSource.contains("LazyColumn("))
         assertFalse(processSessionSource.contains("rememberLazyListState("))
         assertFalse(processSessionSource.contains("TERMINAL_LAZY_HISTORY_MIN_ROWS"))
-        assertTrue(processSessionSource.contains("TerminalRenderedRows(terminalRenderedRows, terminalTextStyle)"))
+        assertTrue(processSessionSource.contains("TerminalRenderedTranscript("))
+    }
+
+    @Test
+    fun productionChunksUseArchivalMetadataButKeepTheExistingScrollAndSelectionOwners() {
+        assertTrue(processSessionSource.contains("rows = terminalRenderedRows.toList()"))
+        assertTrue(processSessionSource.contains("terminalHistoryStartSequence = frame.historyStartSequence"))
+        assertTrue(processSessionSource.contains("historyCount = terminalScreenStartRow"))
+        assertTrue(processSessionSource.contains("firstSequence = terminalHistoryStartSequence"))
+        assertTrue(processSessionSource.contains("usesTuiViewport = commandIsTui || terminalFrameIsAlternateScreen ||"))
+        assertTrue(processSessionSource.contains("SelectionContainer {"))
+        assertTrue(processSessionSource.contains(".verticalScroll("))
+        // Draw isolation has not passed the three-arm experiment yet; keep it opt-in.
+        assertFalse(processSessionSource.contains("isolateChunkDrawing = true"))
+        assertTrue(renderedRowsSource.contains("isolateChunkDrawing: Boolean = false"))
     }
 
     @Test

@@ -834,6 +834,9 @@ private fun TerminalInteractivePanel(
     var terminalScreenStartRow by remember(processId) {
         mutableIntStateOf(initialTerminalRenderFrame.screenStartRow)
     }
+    var terminalHistoryStartSequence by remember(processId) {
+        mutableStateOf(initialTerminalRenderFrame.historyStartSequence)
+    }
     var terminalActiveScreenBottomRow by remember(processId) {
         mutableStateOf(
             terminalEffectiveScreenBottomRow(
@@ -1052,6 +1055,7 @@ private fun TerminalInteractivePanel(
             )
             terminalContentBounds = bounds
             terminalScreenStartRow = frame.screenStartRow
+            terminalHistoryStartSequence = frame.historyStartSequence
             terminalActiveScreenBottomRow = terminalEffectiveScreenBottomRow(
                 frame.screenContentBounds,
                 frame.cursorRow,
@@ -1800,7 +1804,16 @@ private fun TerminalInteractivePanel(
                             )
                     ) {
                     val terminalContent: @Composable () -> Unit = {
-                        TerminalRenderedRows(terminalRenderedRows, terminalTextStyle)
+                        TerminalRenderedTranscript(
+                            rows = terminalRenderedRows.toList(),
+                            style = terminalTextStyle,
+                            historyChunks = terminalHistoryChunks(
+                                historyCount = terminalScreenStartRow,
+                                firstSequence = terminalHistoryStartSequence,
+                                usesTuiViewport = commandIsTui || terminalFrameIsAlternateScreen ||
+                                    shouldPreserveFullTerminalGrid,
+                            ),
+                        )
                     }
                     if (selectionMode) {
                         SelectionContainer {
