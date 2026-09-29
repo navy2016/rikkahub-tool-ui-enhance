@@ -1,6 +1,9 @@
 name: Verify Release APK
 
 on:
+  push:
+    branches: [fix/terminal-viewport-semantic-reducer]
+    paths: ['.github/workflows/verify-release-apk.yml']
   workflow_dispatch:
     inputs:
       release_run_id:
@@ -26,8 +29,26 @@ jobs:
       - name: Bind artifact to the successful release run and source SHA
         run: |
           set -euo pipefail
+          # A workflow introduced only on a feature branch is not initially dispatchable.
+          # Its path-filtered push verifies the latest existing release artifact on that branch.
+          # No build, release publication or default-branch change is required.
+          if [ -z "$RELEASE_RUN_ID" ] && [ -z "$SOURCE_SHA" ]; then
+            while IFS=$'\t' read -r run_id source_sha; do
+              artifact_count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
+                --jq "[.artifacts[] | select(.name == \"rikkahub-release-$source_sha\" and .expired == false)] | length")
+              if [ "$artifact_count" -eq 1 ]; then
+                RELEASE_RUN_ID="$run_id"
+                SOURCE_SHA="$source_sha"
+                break
+              fi
+            done < <(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs" \
+              -f branch="$GITHUB_REF_NAME" -f status=success -f per_page=10 \
+              --jq '.workflow_runs[] | [.id, .head_sha] | @tsv')
+          fi
           [[ "$RELEASE_RUN_ID" =~ ^[0-9]+$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          export RELEASE_RUN_ID SOURCE_SHA
+          printf 'RELEASE_RUN_ID=%s\nSOURCE_SHA=%s\n' "$RELEASE_RUN_ID" "$SOURCE_SHA" >> "$GITHUB_ENV"
           mkdir -p verification
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN_ID" > verification/source-run.json
           python3 - <<'PY'
@@ -43,8 +64,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.release_run_id }}
-          name: rikkahub-release-${{ inputs.source_sha }}
+          run-id: ${{ env.RELEASE_RUN_ID }}
+          name: rikkahub-release-${{ env.SOURCE_SHA }}
           path: apk
       - name: Verify signing, manifest, archive and native ABI
         run: |
@@ -89,7 +110,7 @@ jobs:
       - name: Publish verification evidence
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk-verification-${{ inputs.source_sha }}
+          name: release-apk-verification-${{ env.SOURCE_SHA }}
           path: verification/
           if-no-files-found: error
           retention-days: 14
