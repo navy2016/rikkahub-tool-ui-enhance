@@ -257,6 +257,11 @@ class TerminalEmulator(
     private var altScreenGeneration = newScreenGeneration()
     private val scrollback = ArrayDeque<ScrollbackLine>()
     private var scrollbackRenderStyleRevision = 0L
+    private val frameOwner = Any()
+    private var cachedHistorySnapshot: TerminalHistorySnapshot? = null
+    /** Non-observable work counter, shared by regression tests and the isolated benchmark. */
+    internal var lastRenderHistoryVisits: Int = 0
+        private set
     private var stateRevision = 0L
     private val mainScreen = MutableList(rows) { blankLine() }
     private val altScreen = MutableList(rows) { blankLine() }
@@ -276,6 +281,7 @@ class TerminalEmulator(
     fun reset() {
         currentStyle = defaultStyle
         scrollback.clear()
+        cachedHistorySnapshot = null
         historyGeneration = newHistoryGeneration()
         scrollbackRenderStyleRevision = 0L
         mainScreen.resetScreen(mainScreenLineIds)
@@ -352,6 +358,7 @@ class TerminalEmulator(
     fun clearScrollbackOnly() {
         if (scrollback.isEmpty()) return
         scrollback.clear()
+        cachedHistorySnapshot = null
         historyGeneration = newHistoryGeneration()
         scrollbackRenderStyleRevision = 0L
         stateRevision++
@@ -758,6 +765,34 @@ class TerminalEmulator(
         )
     }
 
+    private fun historySnapshot(): TerminalHistorySnapshot {
+        val firstSequence = scrollback.firstOrNull()?.archiveSequence ?: nextHistorySequence
+        cachedHistorySnapshot?.let { cached ->
+            if (cached.generation == historyGeneration && cached.renderRevision == scrollbackRenderStyleRevision &&
+                cached.firstSequence == firstSequence && cached.rows.size == scrollback.size
+            ) return cached
+        }
+        val rendered = ArrayList<RenderedRow>(scrollback.size)
+        val ids = ArrayList<Long>(scrollback.size)
+        var first: Int? = null
+        var last: Int? = null
+        var count = 0
+        scrollback.forEachIndexed { index, line ->
+            lastRenderHistoryVisits++
+            rendered.add(renderScrollbackLine(line))
+            ids.add(line.id)
+            if (line.isNotBlank) {
+                if (first == null) first = index
+                last = index
+                count++
+            }
+        }
+        return TerminalHistorySnapshot(
+            frameOwner, historyGeneration, scrollbackRenderStyleRevision, firstSequence,
+            rendered, ids, ContentBounds(first, last, count),
+        ).also { cachedHistorySnapshot = it }
+    }
+
     /** Alternate-scroll wheel maps to cursor key sequences (still ASCII/keyboard emulation). */
     private fun alternateScrollSequenceKeyCodes(event: MouseEvent): ByteArray? {
         if (!alternateScreen || !alternateScroll || event.type != MouseEventType.WHEEL) return null
@@ -796,40 +831,29 @@ class TerminalEmulator(
     @Synchronized
     fun renderFrame(includeScrollback: Boolean = true): RenderFrame {
         val includeHistory = includeScrollback && !alternateScreen
-        val renderedRows = ArrayList<RenderedRow>(rows + if (includeHistory) scrollback.size else 0)
-        val screenStartRow = if (includeHistory) scrollback.size else 0
-        var rowIndex = 0
-        var firstNonBlankRow: Int? = null
-        var lastNonBlankRow: Int? = null
-        var nonBlankRowCount = 0
+        lastRenderHistoryVisits = 0
+        val history = if (includeHistory) historySnapshot() else TerminalHistorySnapshot(
+            frameOwner, historyGeneration, scrollbackRenderStyleRevision, nextHistorySequence,
+            emptyList(), emptyList(), ContentBounds(null, null, 0),
+        )
+        val screenStartRow = history.rows.size
+        val screenRows = ArrayList<RenderedRow>(rows)
+        var firstNonBlankRow = history.contentBounds.firstNonBlankRow
+        var lastNonBlankRow = history.contentBounds.lastNonBlankRow
+        var nonBlankRowCount = history.contentBounds.nonBlankRowCount
         var firstNonBlankScreenRow: Int? = null
         var lastNonBlankScreenRow: Int? = null
         var nonBlankScreenRowCount = 0
-
-        fun recordRow(isNotBlank: Boolean) {
-            if (isNotBlank) {
-                if (firstNonBlankRow == null) firstNonBlankRow = rowIndex
-                lastNonBlankRow = rowIndex
-                nonBlankRowCount++
-            }
-            rowIndex++
-        }
-
-        val historyStartId = if (includeHistory && scrollback.isNotEmpty()) scrollback.first().id else 0L
-        val historyEndId = if (includeHistory && scrollback.isNotEmpty()) scrollback.last().id else 0L
-        val historyLineIds = if (includeHistory) scrollback.map { it.id } else emptyList()
-        if (includeHistory) {
-            scrollback.forEach { line ->
-                renderedRows.add(renderScrollbackLine(line))
-                recordRow(line.isNotBlank)
-            }
-        }
-        val screenLineIds = activeScreenLineIds.toList()
+        val screenLineIds = java.util.Collections.unmodifiableList(activeScreenLineIds.toList())
         screen.forEachIndexed { row, line ->
             val isNotBlank = line.isNotBlankLine()
             val isVisuallyOccupied = line.isVisuallyOccupiedLine()
-            renderedRows.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }))
-            recordRow(isNotBlank)
+            screenRows.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }))
+            if (isNotBlank) {
+                if (firstNonBlankRow == null) firstNonBlankRow = screenStartRow + row
+                lastNonBlankRow = screenStartRow + row
+                nonBlankRowCount++
+            }
             if (isVisuallyOccupied) {
                 if (firstNonBlankScreenRow == null) firstNonBlankScreenRow = row
                 lastNonBlankScreenRow = row
@@ -837,7 +861,9 @@ class TerminalEmulator(
             }
         }
         return RenderFrame(
-            rows = renderedRows,
+            rows = TerminalFrameRows(
+                history, screenRows, screenLineIds, activeScreenGeneration, columns, includeHistory, nextLineId,
+            ),
             contentBounds = ContentBounds(firstNonBlankRow, lastNonBlankRow, nonBlankRowCount),
             screenContentBounds = ContentBounds(
                 firstNonBlankScreenRow,
@@ -845,12 +871,12 @@ class TerminalEmulator(
                 nonBlankScreenRowCount,
             ),
             screenStartRow = screenStartRow,
-            historyStartId = historyStartId,
-            historyEndId = historyEndId,
-            historyCount = if (includeHistory) scrollback.size else 0,
-            historyStartSequence = if (includeHistory) scrollback.firstOrNull()?.archiveSequence else null,
+            historyStartId = history.lineIds.firstOrNull() ?: 0L,
+            historyEndId = history.lineIds.lastOrNull() ?: 0L,
+            historyCount = history.rows.size,
+            historyStartSequence = history.firstSequence.takeIf { history.rows.isNotEmpty() },
             historyRenderRevision = scrollbackRenderStyleRevision,
-            historyLineIds = historyLineIds,
+            historyLineIds = history.lineIds,
             historyGeneration = historyGeneration,
             screenLineIds = screenLineIds,
             screenGeneration = activeScreenGeneration,
@@ -1757,6 +1783,7 @@ class TerminalEmulator(
             3 -> if (!selective) {
                 if (scrollback.isNotEmpty()) {
                     scrollback.clear()
+                    cachedHistorySnapshot = null
                     historyGeneration = newHistoryGeneration()
                 }
             }
@@ -2396,6 +2423,7 @@ class TerminalEmulator(
 
     private fun invalidateScrollbackRendering() {
         scrollbackRenderStyleRevision++
+        cachedHistorySnapshot = null
     }
 
     private fun setReverseVideo(enabled: Boolean) {

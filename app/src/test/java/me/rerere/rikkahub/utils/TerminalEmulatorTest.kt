@@ -963,6 +963,84 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun activeUpdatesReuseTheEntireHistorySnapshotAtAllSizes() {
+        for (size in listOf(1_000, 5_000, 10_000)) {
+            val terminal = TerminalEmulator(initialRows = 6, maxScrollbackLines = size)
+            terminal.feed((0 until size + 6).joinToString("\r\n") { "row $it" })
+            val before = terminal.renderFrame()
+            assertEquals(size, terminal.lastRenderHistoryVisits)
+            val owned = requireNotNull(before.ownedRows())
+            repeat(5) { update ->
+                terminal.feed("\r\u001B[2Kactive $update")
+                val after = terminal.renderFrame()
+                assertEquals(0, terminal.lastRenderHistoryVisits)
+                assertSame(owned.history, requireNotNull(after.ownedRows()).history)
+                assertSame(before.historyLineIds, after.historyLineIds)
+                assertEquals(terminal.render().text, after.rows.joinToString("\n") { it.text.text })
+                assertEquals(terminal.contentBounds(), after.contentBounds)
+                assertEquals(after.rows.toList(), after.rows)
+                assertEquals(after.rows, after.rows.toList())
+                assertEquals(after.rows.toList().hashCode(), after.rows.hashCode())
+            }
+        }
+    }
+
+    @Test
+    fun oldFramesRemainImmutableAcrossEveryHistoryInvalidation() {
+        val terminal = TerminalEmulator(initialColumns = 40, initialRows = 6, maxScrollbackLines = 140)
+        terminal.feed((0 until 150).joinToString("\r\n") { if (it % 5 == 0) "" else "row $it" })
+        val operations: List<(TerminalEmulator) -> Unit> = listOf(
+            { it.feed("\r\nnew") }, { it.setMaxScrollbackLines(80) },
+            { it.feed("\u001B[?5h") }, { it.feed("\u001B]10;rgb:ffff/0000/0000\u0007") },
+            { it.feed("\u001B]11;rgb:0000/ffff/0000\u0007") },
+            { it.feed("\u001B]4;2;rgb:0000/0000/ffff\u0007") }, { it.feed("\u001B]104;2\u0007") },
+            { it.resize(columns = 20, rows = 6) }, { it.resize(columns = 60, rows = 8) },
+            { it.feed("\u001B[?1049hALT") }, { it.feed("\u001B[?1049l") },
+            { it.clearScrollbackOnly() }, { it.feed("\u001B[8;1H\r\nagain") },
+            { it.feed("\u001B[3J") }, { it.reset() },
+        )
+        operations.forEach { operation ->
+            val before = terminal.renderFrame()
+            val rows = before.rows.toList()
+            val ids = before.historyLineIds.toList()
+            val bounds = before.contentBounds
+            operation(terminal)
+            val after = terminal.renderFrame()
+            assertEquals(rows, before.rows)
+            assertEquals(ids, before.historyLineIds)
+            assertEquals(bounds, before.contentBounds)
+            assertEquals(terminal.render().text, after.rows.joinToString("\n") { it.text.text })
+            assertEquals(terminal.contentBounds(), after.contentBounds)
+            terminal.renderFrame()
+            assertEquals(0, terminal.lastRenderHistoryVisits)
+        }
+    }
+
+    @Test
+    fun hiddenHistoryDoesNotEvictTheMainHistorySnapshot() {
+        val terminal = terminalWithScrollback()
+        val main = requireNotNull(terminal.renderFrame().ownedRows())
+        val hidden = terminal.renderFrame(includeScrollback = false)
+        assertEquals(0, terminal.lastRenderHistoryVisits)
+        assertEquals(0, hidden.historyCount)
+        assertEquals(terminal.rows, hidden.rows.size)
+        assertSame(main.history, requireNotNull(terminal.renderFrame().ownedRows()).history)
+        assertEquals(0, terminal.lastRenderHistoryVisits)
+    }
+
+    @Test
+    fun copiedSyntheticFramesCannotClaimOwnedSnapshotIdentity() {
+        val frame = terminalWithScrollback().renderFrame()
+        assertTrue(frame.ownedRows() != null)
+        assertNull(frame.copy(rows = frame.rows.toList()).ownedRows())
+        assertNull(frame.copy(historyLineIds = frame.historyLineIds.reversed()).ownedRows())
+        assertNull(frame.copy(screenLineIds = frame.screenLineIds.toList()).ownedRows())
+        assertNull(frame.copy(historyGeneration = frame.historyGeneration + 1).ownedRows())
+        assertNull(frame.copy(historyRenderRevision = frame.historyRenderRevision + 1).ownedRows())
+        assertNull(frame.copy(screenGeneration = frame.screenGeneration + 1).ownedRows())
+    }
+
+    @Test
     fun archivalOrdinalsSurviveHeadTrimLimitChangeResizeAndAlternateScreen() {
         val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 260)
         terminal.feed((1..280).joinToString("\r\n") { "line$it" })
