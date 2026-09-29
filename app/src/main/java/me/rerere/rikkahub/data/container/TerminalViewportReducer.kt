@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.container
 
 import me.rerere.rikkahub.utils.TerminalEmulator
+import me.rerere.rikkahub.utils.ownedRows
 
 /**
  * Semantic viewport modes for the terminal reducer.
@@ -100,6 +101,13 @@ fun reduceViewport(
     input: ViewportInput,
     frame: TerminalEmulator.RenderFrame,
     renderedRows: Int,
+): ViewportOutput = reduceViewport(input, frame, renderedRows, null)
+
+internal fun reduceViewport(
+    input: ViewportInput,
+    frame: TerminalEmulator.RenderFrame,
+    renderedRows: Int,
+    lookup: TerminalViewportLineLookup?,
 ): ViewportOutput {
     val maxScroll = input.maxScrollPx
 
@@ -138,11 +146,12 @@ fun reduceViewport(
         }
 
         ViewportMode.LOCKED -> {
-            val renderedLineIds = buildLineIdsFromFrame(frame, renderedRows)
+            if (!hasCompleteTerminalLineIds(frame, renderedRows)) return fallback()
             val anchorId = input.anchorLineId ?: run {
                 return fallback()
             }
-            val anchorRowIndex = renderedLineIds.indexOf(anchorId)
+            val anchorRowIndex = lookup?.find(frame, renderedRows, anchorId)
+                ?: findTerminalLineIndex(frame, renderedRows, anchorId)
             val anchorIsScreenRow = anchorRowIndex >= frame.historyCount
             val historyGenerationChanged = input.anchorScreenGeneration == null &&
                 input.anchorHistoryGeneration != null &&
@@ -174,7 +183,7 @@ fun reduceViewport(
                     )
                 }
 
-                input.anchorScreenGeneration != null || historyGenerationChanged || renderedLineIds.isEmpty() -> {
+                input.anchorScreenGeneration != null || historyGenerationChanged -> {
                     fallback()
                 }
 
@@ -245,11 +254,10 @@ internal fun captureViewportAnchor(
     scrollPx: Int,
     cellHeightPx: Int,
 ): ViewportAnchor? {
-    if (cellHeightPx <= 0) return null
-    val lineIds = buildLineIdsFromFrame(frame, renderedRows)
-    if (lineIds.isEmpty()) return null
-    val row = (scrollPx.coerceAtLeast(0) / cellHeightPx).coerceIn(0, lineIds.lastIndex)
-    val lineId = lineIds.getOrNull(row) ?: return null
+    if (cellHeightPx <= 0 || !hasCompleteTerminalLineIds(frame, renderedRows)) return null
+    val row = (scrollPx.coerceAtLeast(0) / cellHeightPx).coerceIn(0, renderedRows - 1)
+    val lineId = if (row < frame.historyCount) frame.historyLineIds[row]
+        else frame.screenLineIds[row - frame.historyCount]
     val clippedTopPx = scrollPx.coerceAtLeast(0) % cellHeightPx
     return ViewportAnchor(
         lineId = lineId,
@@ -257,4 +265,68 @@ internal fun captureViewportAnchor(
         screenGeneration = if (row >= frame.historyCount) frame.screenGeneration else null,
         historyGeneration = if (row < frame.historyCount) frame.historyGeneration else null,
     )
+}
+
+private fun hasCompleteTerminalLineIds(frame: TerminalEmulator.RenderFrame, renderedRows: Int): Boolean =
+    renderedRows > 0 && frame.historyCount in 0..renderedRows &&
+        (frame.historyCount == 0 || frame.historyLineIds.size == frame.historyCount) &&
+        frame.screenLineIds.size >= renderedRows - frame.historyCount
+
+private fun findTerminalLineIndex(frame: TerminalEmulator.RenderFrame, renderedRows: Int, id: Long): Int {
+    for (index in 0 until frame.historyCount) if (frame.historyLineIds[index] == id) return index
+    for (index in 0 until renderedRows - frame.historyCount) {
+        if (frame.screenLineIds[index] == id) return frame.historyCount + index
+    }
+    return -1
+}
+
+/**
+ * Session-local cache of ONE verified anchor, not an O(history) index. Archival ordinal arithmetic
+ * is only a candidate row index, never a pixel/line-ID estimate. Validate the actual ID before use.
+ * Legacy/replaced metadata takes the allocation-free scan; generation semantics remain in reducer.
+ */
+internal class TerminalViewportLineLookup {
+    private var owner: Any? = null
+    private var generation = 0L
+    private var lineId: Long? = null
+    private var sequence: Long? = null
+    var lastVisitedHistoryIds: Int = 0
+        private set
+    var lastUsedCachedIndex: Boolean = false
+        private set
+
+    fun find(frame: TerminalEmulator.RenderFrame, renderedRows: Int, id: Long): Int {
+        lastVisitedHistoryIds = 0
+        lastUsedCachedIndex = false
+        if (!hasCompleteTerminalLineIds(frame, renderedRows)) return -1
+        val history = frame.ownedRows()?.history
+        val cachedSequence = sequence
+        if (history != null && owner === history.owner && generation == history.generation && lineId == id &&
+            cachedSequence != null && cachedSequence >= history.firstSequence && cachedSequence < history.endSequence
+        ) {
+            val index = (cachedSequence - history.firstSequence).toInt()
+            lastVisitedHistoryIds++
+            if (frame.historyLineIds[index] == id) {
+                lastUsedCachedIndex = true
+                return index
+            }
+        }
+        sequence = null
+        for (index in 0 until frame.historyCount) {
+            lastVisitedHistoryIds++
+            if (frame.historyLineIds[index] == id) {
+                if (history != null) {
+                    owner = history.owner
+                    generation = history.generation
+                    lineId = id
+                    sequence = history.firstSequence + index
+                }
+                return index
+            }
+        }
+        for (index in 0 until renderedRows - frame.historyCount) {
+            if (frame.screenLineIds[index] == id) return frame.historyCount + index
+        }
+        return -1
+    }
 }

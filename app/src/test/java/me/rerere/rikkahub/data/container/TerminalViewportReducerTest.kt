@@ -462,4 +462,64 @@ class TerminalViewportReducerTest {
         val ids = buildLineIdsFromFrame(frame, 2)
         assertEquals(listOf(5L, 6L), ids)
     }
+
+    @Test
+    fun captureReadsOnlyTheSelectedIdEvenWithTenThousandHistoryRows() {
+        var reads = 0
+        val ids = object : AbstractList<Long>() {
+            override val size = 10_000
+            override fun get(index: Int): Long { reads++; return index * 7L + 10 }
+        }
+        val frame = emptyFrame(historyCount = ids.size, historyLineIds = ids)
+        assertEquals(9_000 * 7L + 10, captureViewportAnchor(frame, 10_005, 180_007, 20)?.lineId)
+        assertEquals(1, reads)
+        assertEquals(1L, captureViewportAnchor(frame, 10_005, 200_007, 20)?.lineId)
+        assertEquals(1, reads)
+    }
+
+    @Test
+    fun ownedAnchorLookupReusesOrdinalsAcrossTextUpdatesAndHeadTrims() {
+        for (size in listOf(1_000, 5_000, 10_000)) {
+            val terminal = TerminalEmulator(initialRows = 6, maxScrollbackLines = size)
+            terminal.feed((0 until size + 6).joinToString("\r\n") { "row $it" })
+            var frame = terminal.renderFrame()
+            val anchorId = frame.historyLineIds[size / 2]
+            val lookup = TerminalViewportLineLookup()
+            val input = ViewportInput(ViewportMode.LOCKED, anchorLineId = anchorId,
+                anchorHistoryGeneration = frame.historyGeneration, anchorClippedTopPx = 7,
+                maxScrollPx = size * 20, cellHeightPx = 20)
+            assertEquals(size / 2, lookup.find(frame, frame.rows.size, anchorId))
+            repeat(30) { update ->
+                terminal.feed(if (update % 2 == 0) "\r\u001B[2Kactive $update" else "\r\nnew $update")
+                frame = terminal.renderFrame()
+                val expected = reduceViewport(input, frame, frame.rows.size)
+                assertEquals(expected, reduceViewport(input, frame, frame.rows.size, lookup))
+                assertEquals(1, lookup.lastVisitedHistoryIds)
+                assertTrue(lookup.lastUsedCachedIndex)
+            }
+        }
+    }
+
+    @Test
+    fun anchorLookupRejectsDifferentOwnersReplacedIdsAndClearedHistory() {
+        fun terminal() = TerminalEmulator(initialRows = 6, maxScrollbackLines = 100).apply {
+            feed((0 until 106).joinToString("\r\n") { "row $it" })
+        }
+        val terminal = terminal()
+        val original = terminal.renderFrame()
+        val id = original.historyLineIds[50]
+        val lookup = TerminalViewportLineLookup()
+        assertEquals(50, lookup.find(original, original.rows.size, id))
+        val other = terminal().renderFrame()
+        assertEquals(50, lookup.find(other, other.rows.size, id))
+        assertEquals(false, lookup.lastUsedCachedIndex)
+        val reordered = original.copy(historyLineIds = original.historyLineIds.reversed())
+        assertEquals(49, lookup.find(reordered, reordered.rows.size, id))
+        assertEquals(false, lookup.lastUsedCachedIndex)
+        terminal.clearScrollbackOnly()
+        terminal.feed("\r\nnew")
+        val cleared = terminal.renderFrame()
+        assertEquals(-1, lookup.find(cleared, cleared.rows.size, id))
+        assertEquals(false, lookup.lastUsedCachedIndex)
+    }
 }

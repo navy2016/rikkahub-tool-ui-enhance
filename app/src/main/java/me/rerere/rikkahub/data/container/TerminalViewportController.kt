@@ -78,6 +78,7 @@ internal class TerminalViewportController(
     private var legacyOffsetPx = restored?.takeUnless { it.autoScroll }?.verticalOffsetPx
     private var imeAnchor: ImeAnchor? = null
     private var measuredAnchorResolution: MeasuredAnchorResolution? = null
+    private val anchorLookup = TerminalViewportLineLookup()
 
     private data class MeasuredAnchorResolution(
         val frameRevision: Long,
@@ -295,7 +296,7 @@ internal class TerminalViewportController(
                         measured.anchor.screenGeneration == anchor?.screenGeneration &&
                         measured.anchor.historyGeneration == anchor?.historyGeneration
                 }?.scrollPx,
-            ), frame, renderedRows,
+            ), frame, renderedRows, anchorLookup,
         )
         val nextAnchor = output.anchorLineId?.let { id ->
             ViewportAnchor(
