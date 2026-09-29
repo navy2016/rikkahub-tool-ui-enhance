@@ -189,7 +189,7 @@ class TerminalBenchmarkActivity : ComponentActivity() {
             traced("Terminal.rowSync") {
                 Snapshot.withMutableSnapshot {
                     rows = createTerminalRenderedRows(frame)
-                    rowSyncState = createTerminalRenderedRowsSyncState(frame)
+                    rowSyncState = createTerminalRenderedRowsSyncState(frame, checkNotNull(rows))
                     layoutState = layoutFor(frame)
                 }
             }
@@ -240,6 +240,7 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                     }
                     when (scenario) {
                         "activeRowUpdate" -> {
+                            check(terminal.lastRenderHistoryVisits == 0)
                             check(checkNotNull(rowSyncState).lastUsedMetadataFastPath)
                             check(
                                 checkNotNull(rowSyncState).lastVisitedTextRows ==
@@ -248,9 +249,14 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                         }
                         "appendAndTrim" -> {
                             check(!checkNotNull(rowSyncState).lastUsedMetadataFastPath)
-                            check(checkNotNull(rowSyncState).lastVisitedTextRows == frame.rows.size)
+                            check(checkNotNull(rowSyncState).lastUsedFifoFastPath)
+                            check(checkNotNull(rowSyncState).lastVisitedTextRows == TerminalBenchmarkWorkload.SCREEN_ROWS + 1)
+                            check(checkNotNull(rowSyncState).lastSkippedHistoryRows == frame.historyCount - 1)
+                            // History snapshot rebuild remains O(history) on append/trim.
+                            check(terminal.lastRenderHistoryVisits == frame.historyCount)
                         }
                         "alternateScreenUpdate" -> {
+                            check(terminal.lastRenderHistoryVisits == 0)
                             check(
                                 checkNotNull(rowSyncState).lastVisitedTextRows ==
                                     TerminalBenchmarkWorkload.SCREEN_ROWS,

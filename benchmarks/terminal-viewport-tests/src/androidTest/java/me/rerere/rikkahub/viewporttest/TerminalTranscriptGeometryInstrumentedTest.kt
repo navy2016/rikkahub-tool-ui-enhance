@@ -230,7 +230,7 @@ class TerminalTranscriptGeometryInstrumentedTest(private val chunkLayers: Boolea
         }
         var frame by mutableStateOf(terminal.renderFrame())
         private val rows = createTerminalRenderedRows(frame)
-        private val rowSyncState = createTerminalRenderedRowsSyncState(frame)
+        private val rowSyncState = createTerminalRenderedRowsSyncState(frame, rows)
         var grouped by mutableStateOf(false)
         var selection by mutableStateOf(false)
         var tui by mutableStateOf(false)

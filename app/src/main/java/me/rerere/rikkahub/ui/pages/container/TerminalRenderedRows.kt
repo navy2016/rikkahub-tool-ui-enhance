@@ -17,6 +17,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import me.rerere.rikkahub.data.container.buildLineIdsFromFrame
 import me.rerere.rikkahub.utils.TerminalEmulator
+import me.rerere.rikkahub.utils.TerminalFrameRows
+import me.rerere.rikkahub.utils.ownedRows
 
 internal const val TERMINAL_GRID_CLEAR_GRACE_MS = 50L
 internal const val TERMINAL_GRID_STABLE_BOTTOM_ROWS = 8
@@ -31,59 +33,152 @@ internal class TerminalRenderedRowState(
 }
 
 /**
- * Non-observable synchronization metadata. It never drives composition and is valid only when the
- * frame carries complete history/screen identity. The fast path still synchronizes every active
- * screen row; it skips retained history only while structure and history render revision match.
+ * Session-local proof tied to the exact immutable row-list view last synchronized. This state is
+ * never read by composition, but participates in the caller's snapshot so an aborted publication
+ * cannot commit newer cache metadata while leaving older row Text behind.
+ * Only emulator-owned snapshots may skip retained history. Synthetic metadata, externally edited
+ * structure, pending blanks, global style/geometry changes and ambiguous transitions fall back.
  */
-internal class TerminalRenderedRowsSyncState(frame: TerminalEmulator.RenderFrame) {
+internal class TerminalRenderedRowsSyncState(
+    frame: TerminalEmulator.RenderFrame,
+    initialRows: List<TerminalRenderedRowState>,
+) {
     var lastUsedMetadataFastPath: Boolean = false
+        private set
+    var lastUsedFifoFastPath: Boolean = false
         private set
     var lastVisitedTextRows: Int = frame.rows.size
         private set
+    var lastSkippedHistoryRows: Int = 0
+        private set
 
-    private var valid = false
-    private var historyCount = 0
-    private var historyStartSequence: Long? = null
-    private var historyGeneration = 0L
-    private var historyRenderRevision = 0L
-    private var screenGeneration = 0L
-    private var screenLineIds: List<Long> = emptyList()
+    private data class Binding(
+        val owned: TerminalFrameRows?,
+        val rowView: List<TerminalRenderedRowState>,
+        val pendingBlanks: Boolean,
+    )
 
-    init { record(frame, usedFastPath = false, visitedTextRows = frame.rows.size) }
+    private var binding by mutableStateOf(
+        Binding(frame.ownedRows(), initialRows, false),
+        androidx.compose.runtime.referentialEqualityPolicy(),
+    )
 
-    internal fun hasSameStructure(frame: TerminalEmulator.RenderFrame): Boolean = valid &&
-        hasCompleteIdentity(frame) && historyCount == frame.historyCount &&
-        historyStartSequence == frame.historyStartSequence &&
-        historyGeneration == frame.historyGeneration && screenGeneration == frame.screenGeneration &&
-        screenLineIds == frame.screenLineIds
-
-    internal fun hasSameHistoryRendering(frame: TerminalEmulator.RenderFrame): Boolean =
-        hasSameStructure(frame) && historyRenderRevision == frame.historyRenderRevision
-
-    internal fun record(frame: TerminalEmulator.RenderFrame, usedFastPath: Boolean, visitedTextRows: Int) {
-        valid = hasCompleteIdentity(frame)
-        historyCount = frame.historyCount
-        historyStartSequence = frame.historyStartSequence
-        historyGeneration = frame.historyGeneration
-        historyRenderRevision = frame.historyRenderRevision
-        screenGeneration = frame.screenGeneration
-        screenLineIds = frame.screenLineIds.toList()
-        lastUsedMetadataFastPath = usedFastPath
-        lastVisitedTextRows = visitedTextRows
+    init {
+        // One creation-time check, not a per-frame scan. Refuse a mismatched initial binding.
+        val owned = binding.owned
+        var valid = owned != null && initialRows.size == frame.rows.size
+        var pending = false
+        if (valid && owned != null) {
+            for (index in initialRows.indices) {
+                val expectedId = if (index < frame.historyCount) frame.historyLineIds[index]
+                    else frame.screenLineIds[index - frame.historyCount]
+                val row = initialRows[index]
+                if (row.lineId != expectedId || row.text != frame.rows[index].text) valid = false
+                if (row.pendingBlankSinceMs != 0L) pending = true
+            }
+        }
+        binding = Binding(owned.takeIf { valid }, initialRows, pending)
     }
 
-    private fun hasCompleteIdentity(frame: TerminalEmulator.RenderFrame): Boolean {
-        val screenRows = frame.rows.size - frame.historyCount
-        return frame.historyCount in 0..frame.rows.size &&
-            frame.historyLineIds.size == frame.historyCount &&
-            frame.screenLineIds.size == screenRows &&
-            (frame.historyCount == 0 || frame.historyStartSequence != null)
+    internal fun hasSameStructure(frame: TerminalEmulator.RenderFrame, previousRows: List<TerminalRenderedRowState>): Boolean {
+        val binding = binding
+        val before = binding.owned ?: return false
+        val after = frame.ownedRows() ?: return false
+        return previousRows === binding.rowView && before.history.owner === after.history.owner &&
+            before.history.generation == after.history.generation &&
+            before.history.firstSequence == after.history.firstSequence &&
+            before.history.rows.size == after.history.rows.size &&
+            before.includesHistory == after.includesHistory && before.columns == after.columns &&
+            before.screenGeneration == after.screenGeneration && before.screenLineIds == after.screenLineIds
+    }
+
+    internal fun canSkipHistory(frame: TerminalEmulator.RenderFrame): Boolean = binding.let {
+        !it.pendingBlanks && it.owned?.history?.renderRevision == frame.historyRenderRevision
+    }
+
+    internal fun fifoPlan(
+        frame: TerminalEmulator.RenderFrame,
+        previousRows: List<TerminalRenderedRowState>,
+        usesTuiViewport: Boolean,
+    ): TerminalFifoRowPlan? {
+        val binding = binding
+        val before = binding.owned ?: return null
+        val after = frame.ownedRows() ?: return null
+        if (usesTuiViewport || binding.pendingBlanks || previousRows !== binding.rowView ||
+            !before.includesHistory || !after.includesHistory ||
+            before.history.owner !== after.history.owner || before.history.generation != after.history.generation ||
+            before.history.renderRevision != after.history.renderRevision || before.columns != after.columns ||
+            before.screenGeneration != after.screenGeneration || before.screenLineIds.size != after.screenLineIds.size ||
+            before.nextLineId > after.nextLineId
+        ) return null
+        val old = before.history
+        val next = after.history
+        // FIFO can remove a prefix and append a suffix, never replace/reorder the retained range.
+        if (old.firstSequence < 0 || next.firstSequence < old.firstSequence ||
+            next.firstSequence > old.endSequence || next.endSequence < old.endSequence ||
+            old.endSequence < old.firstSequence || next.endSequence < next.firstSequence ||
+            (next.firstSequence == old.firstSequence && next.endSequence == old.endSequence)
+        ) return null
+        val dropped = (next.firstSequence - old.firstSequence).toInt()
+        val retained = (old.endSequence - next.firstSequence).toInt()
+        val previousScreen = previousRows.subList(old.rows.size, previousRows.size)
+            .withIndex().associateBy { it.value.lineId }
+        val tail = ArrayList<TerminalRenderedRowState>(after.size - retained)
+        var lastScreenIndex = -1
+        var lastNewId = before.nextLineId - 1
+        var foundNewRow = false
+        for (index in retained until after.size) {
+            val id = if (index < next.rows.size) next.lineIds[index] else after.screenLineIds[index - next.rows.size]
+            val existing = previousScreen[id]
+            // Unknown old IDs are NOT new rows. Keep the general stable-ID reconciliation for them.
+            if (existing != null) {
+                if (foundNewRow || existing.index <= lastScreenIndex) return null
+                lastScreenIndex = existing.index
+            } else {
+                if (id < before.nextLineId || id <= lastNewId) return null
+                foundNewRow = true
+                lastNewId = id
+            }
+            tail.add(existing?.value ?: TerminalRenderedRowState(id, after[index].text))
+        }
+        // The usual append keeps the entire old screen as a prefix of the new tail. Preserve it
+        // structurally too, so this path needs only head trim + new suffix insertion, not reinsertion
+        // of the whole screen. Text synchronization still visits the newly archived rows.
+        var screenPrefix = 0
+        while (screenPrefix < before.screenLineIds.size && screenPrefix < tail.size &&
+            previousRows[old.rows.size + screenPrefix] === tail[screenPrefix]
+        ) screenPrefix++
+        return TerminalFifoRowPlan(dropped, retained, screenPrefix, tail)
+    }
+
+    internal fun record(
+        frame: TerminalEmulator.RenderFrame,
+        rows: List<TerminalRenderedRowState>,
+        usedFastPath: Boolean,
+        usedFifoFastPath: Boolean,
+        visitedTextRows: Int,
+        skippedHistoryRows: Int,
+        hasPendingBlanks: Boolean,
+    ) {
+        binding = Binding(frame.ownedRows(), rows, hasPendingBlanks)
+        lastUsedMetadataFastPath = usedFastPath
+        lastUsedFifoFastPath = usedFifoFastPath
+        lastVisitedTextRows = visitedTextRows
+        lastSkippedHistoryRows = skippedHistoryRows
     }
 }
 
+internal data class TerminalFifoRowPlan(
+    val droppedHistoryRows: Int,
+    val retainedHistoryRows: Int,
+    val retainedScreenPrefix: Int,
+    val tailRows: List<TerminalRenderedRowState>,
+)
+
 internal fun createTerminalRenderedRowsSyncState(
     frame: TerminalEmulator.RenderFrame,
-): TerminalRenderedRowsSyncState = TerminalRenderedRowsSyncState(frame)
+    rows: SnapshotStateList<TerminalRenderedRowState>,
+): TerminalRenderedRowsSyncState = TerminalRenderedRowsSyncState(frame, rows.toList())
 
 internal fun createTerminalRenderedRows(
     frame: TerminalEmulator.RenderFrame,
@@ -114,20 +209,31 @@ internal fun synchronizeTerminalRenderedRows(
     // SnapshotStateList.toList() is an O(1), immutable view. Read the list's snapshot record once
     // rather than once per row, and retain it while applying any structural changes below.
     val previousRows = terminalRenderedRows.toList()
-    val metadataProvesSameStructure = previousRows.size == rendered.size && syncState?.hasSameStructure(frame) == true
-    val nextLineIds = if (metadataProvesSameStructure) null else buildLineIdsFromFrame(frame, rendered.size).ifEmpty {
+    val fifo = syncState?.fifoPlan(frame, previousRows, usesTuiViewport)
+    val metadataProvesSameStructure = previousRows.size == rendered.size &&
+        syncState?.hasSameStructure(frame, previousRows) == true
+    val nextLineIds = if (fifo != null || metadataProvesSameStructure) null else buildLineIdsFromFrame(frame, rendered.size).ifEmpty {
         rendered.indices.map { index -> Long.MIN_VALUE + index }
     }
-    val idsChanged = nextLineIds != null && (previousRows.size != rendered.size ||
+    val idsChanged = fifo != null || nextLineIds != null && (previousRows.size != rendered.size ||
         previousRows.indices.any { previousRows[it].lineId != nextLineIds[it] })
-    if (idsChanged) {
+    if (fifo != null) {
+        if (fifo.droppedHistoryRows > 0) terminalRenderedRows.subList(0, fifo.droppedHistoryRows).clear()
+        val retainedEnd = fifo.retainedHistoryRows + fifo.retainedScreenPrefix
+        if (terminalRenderedRows.size > retainedEnd) terminalRenderedRows.subList(retainedEnd, terminalRenderedRows.size).clear()
+        if (fifo.tailRows.size > fifo.retainedScreenPrefix) {
+            terminalRenderedRows.addAll(fifo.tailRows.subList(fifo.retainedScreenPrefix, fifo.tailRows.size))
+        }
+        // Persistent-list structural edits can still have history-sized work. Only retained ID/
+        // Text validation is skipped; the benchmark must report row-sync and whole-frame costs.
+    } else if (idsChanged) {
         synchronizeTerminalRowStructure(terminalRenderedRows, previousRows, rendered, checkNotNull(nextLineIds))
     }
     val currentRows = if (idsChanged) terminalRenderedRows.toList() else previousRows
     var hasDeferredGridBlank = false
     val stableGridStart = (rendered.size - TERMINAL_GRID_STABLE_BOTTOM_ROWS).coerceAtLeast(0)
-    val historyCanBeSkipped = !idsChanged && syncState?.hasSameHistoryRendering(frame) == true
-    val textStart = if (historyCanBeSkipped) frame.historyCount else 0
+    val historyCanBeSkipped = metadataProvesSameStructure && syncState?.canSkipHistory(frame) == true
+    val textStart = fifo?.retainedHistoryRows ?: if (historyCanBeSkipped) frame.historyCount else 0
     for (index in textStart until rendered.size) {
         val rowState = currentRows[index]
         val next = rendered[index].text
@@ -153,8 +259,12 @@ internal fun synchronizeTerminalRenderedRows(
     }
     syncState?.record(
         frame = frame,
+        rows = currentRows,
         usedFastPath = metadataProvesSameStructure && historyCanBeSkipped,
+        usedFifoFastPath = fifo != null,
         visitedTextRows = (rendered.size - textStart).coerceAtLeast(0),
+        skippedHistoryRows = textStart,
+        hasPendingBlanks = hasDeferredGridBlank,
     )
     return hasDeferredGridBlank
 }

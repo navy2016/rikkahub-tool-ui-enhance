@@ -10,7 +10,8 @@ history `LazyColumn`) and `chunked-eager` formats remain available; never merge 
 Production ordinary history now uses the shared **fully eager transcript with isolated history display lists**. It keeps
 ScrollState/verticalScroll, all rows, natural Text geometry, selection and the single scroll-effect
 owner; TUI/alternate/full-grid modes stay flat. Neither LazyColumn nor isolated layers are enabled in
-production. Source changes still require unit and interaction/geometry regressions, not just timings.
+the TUI/physical-grid path; ordinary history uses layers but not LazyColumn. Source changes still
+require unit and interaction/geometry regressions, not just timings.
 
 The opt-in `terminal-target` APK compiles the production `TerminalEmulator`, stable-ID helper,
 `TerminalRenderedRows` and font sources via Gradle `Sync` tasks. Generated copies are only in `build/`;
@@ -59,7 +60,7 @@ shared production row loop. The `lazyHistory` arm uses:
 
 The LazyColumn is height-bounded and is not nested in a verticalScroll. Alternate screen, configured
 TUI commands and full-grid mode all fall back to the eager backend; host tests cover these gates.
-The candidate still pays for the same full emulator snapshot and O(history) row-state synchronization.
+All candidates share the same frame snapshot and row synchronizer, including their incremental paths.
 
 After every ordinary update, the candidate calls `requestScrollToItem(tailItemIndex)` **before the next
 draw**. Both stable-key movement during trim and changed row metrics during a styled/CJK rewrite can
@@ -156,30 +157,37 @@ row-sync traces and memory together, then reproduce on a representative physical
 
 ## Current row-sync follow-up
 
-The shared synchronizer now takes one immutable row-list snapshot per phase. Ordinary contiguous
-head trim/tail append edits only those ranges and allocates states only for new rows. The fast path
-verifies the entire retained ID sequence and that appended IDs are newer than every previous ID;
-it does not assume contiguous IDs or mistake a reorder for an append. Other structural updates
-reuse states by ID and use one bulk `addAll`, rather than one snapshot-list write per row.
+`renderFrame` now reuses an immutable owned history snapshot (Text, IDs and content bounds). Its
+random-access history/screen concatenation does not flatten the retained prefix. Active updates
+visit **zero history rows** during frame creation; initial render, append/trim and style/column
+invalidations still rebuild the history snapshot. This rebuild and persistent-list structural edits
+remain O(history), so the whole append pipeline is **not** claimed to be O(screen).
 
-Cached, identical `AnnotatedString` instances skip redundant text checks, except when a TUI blank
-has a pending grace period. ANSI-only changes, forced blank commits, reordered pending blanks and
-fallback IDs retain their existing behavior. Tests exercise 30 real-emulator appends at 1k/5k/10k
-and mixed structural updates. Complete or legacy frames still use the full O(history) validation path. With complete production
-metadata, an unchanged FIFO range, screen identities and `historyRenderRevision` prove that retained
-history Text is unchanged; active-screen updates then compare/synchronize only the physical screen
-rows. Palette/default-color/reverse-video changes and column resize advance the history render
-revision and force a full text pass. Trim/append/reorder currently remain full-structure fallbacks.
-The 2eece58 benchmark hard-asserts the fast path visits 24 rows for active updates and visits every
-row for append/trim. Its 10k rowSync/op was 0.13 / 0.33 / 0.59 ms for flat/chunked/chunked+layers.
-This does not authorize a production LazyColumn migration. The isolated target directly receives its
-chunk plan, so `ProcessSessionPage`'s `remember` allocation cache is a production wiring optimization,
-not a separately timed benchmark phase. The sync metadata fast path IS shared and measured here.
+The shared synchronizer binds its proof to the last published immutable row-list view and emulator
+owner. Stable frame identity skips retained Text for screen-only updates. A FIFO ordinal overlap,
+same generation/style/geometry and verified old-screen/new-ID suffix allow ordinary append/trim to
+skip retained history too. No assumption of contiguous or sorted history IDs is made. Reorders,
+synthetic/incomplete frames, another emulator, pending TUI blanks, screen generation changes and
+resize/style invalidation retain full reconciliation. The proof participates in the caller's mutable
+snapshot but is never read by composition; discarded snapshots cannot commit it ahead of Text.
+
+Benchmark hard assertions: active updates visit 24 Text rows and 0 frame-history rows; one-line
+append/trim visits 25 Text rows and skips H-1, while frame-history visits remain H. Alternate screen
+still renders the complete 24-row grid with 0 history visits. These are work counts, not FPS claims.
+
+Viewport capture now indexes one ID without building a history-sized combined list. The controller
+caches one owned archival anchor, verifies the actual ID, and preserves all reducer generation,
+trim, pixel and single-writer semantics. This is covered by host/controller tests, **not timed by
+the isolated renderer benchmark**, which does not host the production viewport controller.
+
+Production frame publication uses reference equality rather than structurally comparing 10k rows.
+The target directly receives its chunk plan, so `ProcessSessionPage`'s `remember`/publication wiring
+is not a separately timed benchmark phase. No production LazyColumn migration is enabled.
 
 Use the unchanged full matrix to inspect `rowSync/op`, row-sync maxima and frame timings after
 this change. The workflow publishes a compact all-size hot-path annotation (to avoid truncating
-10k results), while the job summary/artifact retains the complete 30-case report and raw traces.
-Both renderer arms use the new synchronizer: their same-run ratios compare renderers, **not** old
+10k results), while the job summary/artifact retains the complete 45-case report and raw traces.
+All renderer arms use the new synchronizer: their same-run ratios compare renderers, **not** old
 versus new synchronization. Do not infer a before/after speedup from separate CI hosts/runs.
 
 ## Shared archival chunks and opt-in drawing layers

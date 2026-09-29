@@ -89,7 +89,7 @@ internal class ViewportGestureFixture(val lazyHistory: Boolean) {
     var frame by mutableStateOf(makeFrame())
         private set
     private val rows = createTerminalRenderedRows(frame)
-    private val rowSyncState = createTerminalRenderedRowsSyncState(frame)
+    private val rowSyncState = createTerminalRenderedRowsSyncState(frame, rows)
     val controller = TerminalViewportController(TerminalViewportState(
         autoScroll = false, verticalOffsetPx = INITIAL_PX,
     ))

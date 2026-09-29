@@ -59,6 +59,7 @@ import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -829,7 +830,7 @@ private fun TerminalInteractivePanel(
         createTerminalRenderedRows(initialTerminalRenderFrame)
     }
     val terminalRenderedRowsSyncState = remember(processId) {
-        createTerminalRenderedRowsSyncState(initialTerminalRenderFrame)
+        createTerminalRenderedRowsSyncState(initialTerminalRenderFrame, terminalRenderedRows)
     }
     var terminalContentBounds by remember(processId) {
         mutableStateOf(initialTerminalRenderFrame.contentBounds)
@@ -856,7 +857,9 @@ private fun TerminalInteractivePanel(
         mutableLongStateOf(initialTerminalRenderFrame.revision)
     }
     var terminalViewportFrame by remember(processId) {
-        mutableStateOf(initialTerminalRenderFrame)
+        // Rows and metadata are published as one frame. Do not structurally compare a 10k-row
+        // frame here; revision guards above the publisher already suppress unchanged updates.
+        mutableStateOf(initialTerminalRenderFrame, referentialEqualityPolicy())
     }
     var terminalModeSummary by remember { mutableStateOf(initialTerminalRenderFrame.modeSummary) }
     var terminalStatus by remember { mutableStateOf("就绪") }

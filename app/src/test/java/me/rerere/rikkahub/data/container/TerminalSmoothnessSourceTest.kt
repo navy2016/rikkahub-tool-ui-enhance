@@ -136,7 +136,7 @@ class TerminalSmoothnessSourceTest {
     fun renderedRowsFollowStableIdsWhenScrollbackIsTrimmed() {
         assertTrue(processSessionSource.contains("createTerminalRenderedRows(initialTerminalRenderFrame)"))
         assertTrue(processSessionSource.contains("synchronizeTerminalRenderedRows("))
-        assertTrue(processSessionSource.contains("createTerminalRenderedRowsSyncState(initialTerminalRenderFrame)"))
+        assertTrue(processSessionSource.contains("createTerminalRenderedRowsSyncState(initialTerminalRenderFrame, terminalRenderedRows)"))
         assertTrue(processSessionSource.contains("syncState = terminalRenderedRowsSyncState"))
         assertTrue(processSessionSource.contains("TerminalRenderedTranscript("))
         assertTrue(renderedRowsSource.contains("val lineId: Long"))

@@ -257,7 +257,7 @@ class TerminalRenderedRowsTest {
             assertEquals(historySize, before.historyCount)
             val rows = createTerminalRenderedRows(before)
             val historyStates = rows.take(historySize)
-            val syncState = createTerminalRenderedRowsSyncState(before)
+            val syncState = createTerminalRenderedRowsSyncState(before, rows)
 
             terminal.feed("\r\u001B[2Kactive changed")
             val after = terminal.renderFrame()
@@ -282,7 +282,7 @@ class TerminalRenderedRowsTest {
         terminal.feed((0 until 106).joinToString("\r\n") { "\u001B[32mline $it\u001B[0m" })
         var frame = terminal.renderFrame()
         val rows = createTerminalRenderedRows(frame)
-        val syncState = createTerminalRenderedRowsSyncState(frame)
+        val syncState = createTerminalRenderedRowsSyncState(frame, rows)
 
         terminal.feed("\u001B]4;2;rgb:ffff/0000/0000\u0007")
         var next = terminal.renderFrame()
@@ -306,23 +306,24 @@ class TerminalRenderedRowsTest {
     }
 
     @Test
-    fun structuralChangesAndIncompleteMetadataKeepTheFullFallback() {
+    fun appendUsesFifoButIncompleteMetadataKeepsTheFullFallback() {
         val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 100)
         terminal.feed((0 until 106).joinToString("\r\n") { "line $it" })
         val before = terminal.renderFrame()
         val rows = createTerminalRenderedRows(before)
-        val syncState = createTerminalRenderedRowsSyncState(before)
+        val syncState = createTerminalRenderedRowsSyncState(before, rows)
         terminal.feed("\r\nnew history")
         val after = terminal.renderFrame()
         Snapshot.withMutableSnapshot {
             synchronizeTerminalRenderedRows(rows, after, false, nowMs = 100, syncState = syncState)
         }
         assertFalse(syncState.lastUsedMetadataFastPath)
-        assertEquals(after.rows.size, syncState.lastVisitedTextRows)
+        assertTrue(syncState.lastUsedFifoFastPath)
+        assertEquals(terminal.rows + 1, syncState.lastVisitedTextRows)
 
         val incomplete = after.copy(historyLineIds = emptyList(), screenLineIds = emptyList())
         val incompleteRows = createTerminalRenderedRows(incomplete)
-        val incompleteState = createTerminalRenderedRowsSyncState(incomplete)
+        val incompleteState = createTerminalRenderedRowsSyncState(incomplete, incompleteRows)
         Snapshot.withMutableSnapshot {
             synchronizeTerminalRenderedRows(
                 incompleteRows, incomplete, false, nowMs = 200, syncState = incompleteState,
@@ -330,6 +331,190 @@ class TerminalRenderedRowsTest {
         }
         assertFalse(incompleteState.lastUsedMetadataFastPath)
         assertEquals(incomplete.rows.size, incompleteState.lastVisitedTextRows)
+    }
+
+    @Test
+    fun fifoAppendsAndTrimsVisitOnlyTheChangedTailAtAllSizes() {
+        for (size in listOf(1_000, 5_000, 10_000)) {
+            val terminal = TerminalEmulator(initialRows = 6, maxScrollbackLines = size)
+            terminal.feed((0 until size + 6).joinToString("\r\n") { "row $it" })
+            val frame = terminal.renderFrame()
+            val rows = createTerminalRenderedRows(frame)
+            val sync = createTerminalRenderedRowsSyncState(frame, rows)
+            repeat(30) { update ->
+                val previous = rows.toList()
+                terminal.feed("\r\nnew $update")
+                val next = terminal.renderFrame()
+                Snapshot.withMutableSnapshot {
+                    synchronizeTerminalRenderedRows(rows, next, false, nowMs = 100L + update, syncState = sync)
+                }
+                assertTrue(sync.lastUsedFifoFastPath)
+                assertEquals(7, sync.lastVisitedTextRows)
+                assertEquals(size - 1, sync.lastSkippedHistoryRows)
+                assertEquals(buildLineIdsFromFrame(next, next.rows.size), rows.map { it.lineId })
+                assertEquals(next.rows.map { it.text }, rows.map { it.text })
+                for (index in 0 until rows.lastIndex) assertSame(previous[index + 1], rows[index])
+            }
+            terminal.setMaxScrollbackLines(size / 2)
+            val limited = terminal.renderFrame()
+            Snapshot.withMutableSnapshot {
+                synchronizeTerminalRenderedRows(rows, limited, false, nowMs = 200, syncState = sync)
+            }
+            assertTrue(sync.lastUsedFifoFastPath)
+            assertEquals(6, sync.lastVisitedTextRows)
+            assertEquals(limited.rows.map { it.text }, rows.map { it.text })
+        }
+    }
+
+    @Test
+    fun growingHistoryAndNonMonotonicIdsPreserveScreenStatesWhenTheyArchive() {
+        val terminal = TerminalEmulator(initialRows = 6, maxScrollbackLines = 100)
+        terminal.feed("\u001B[H\u001BM\u001B[6;1H") // A larger ID now precedes older screen IDs.
+        val frame = terminal.renderFrame()
+        val rows = createTerminalRenderedRows(frame)
+        val sync = createTerminalRenderedRowsSyncState(frame, rows)
+        repeat(20) { update ->
+            val previous = rows.toList().associateBy { it.lineId }
+            terminal.feed("\r\nnew $update")
+            val next = terminal.renderFrame()
+            Snapshot.withMutableSnapshot {
+                synchronizeTerminalRenderedRows(rows, next, false, nowMs = 100L + update, syncState = sync)
+            }
+            assertTrue(sync.lastUsedFifoFastPath)
+            assertEquals(7, sync.lastVisitedTextRows)
+            rows.forEach { row -> previous[row.lineId]?.let { assertSame(it, row) } }
+            assertEquals(next.rows.map { it.text }, rows.map { it.text })
+        }
+    }
+
+    @Test
+    fun mixedRealEmulatorMutationsMatchTheFullSynchronizer() {
+        val terminal = TerminalEmulator(initialColumns = 40, initialRows = 8, maxScrollbackLines = 150)
+        terminal.feed((0 until 180).joinToString("\r\n") { "\u001B[32mrow $it\u001B[0m" })
+        val first = terminal.renderFrame()
+        val optimized = createTerminalRenderedRows(first)
+        val reference = createTerminalRenderedRows(first)
+        val sync = createTerminalRenderedRowsSyncState(first, optimized)
+        val mutations: List<(TerminalEmulator) -> Unit> = listOf(
+            { it.feed("\r\nappend") }, { it.feed("\r\u001B[2K中文 changed") },
+            { it.feed("\u001B[H\u001BM\u001B[8;1H\r\nreordered") },
+            { it.feed("\u001B[2;1H\u001B[L\u001B[8;1H\r\ninsert") },
+            { it.feed("\u001B[?5h\r\nreverse") }, { it.feed("\u001B[?5l") },
+            { it.feed("\u001B]10;rgb:ffff/0000/0000\u0007") },
+            { it.feed("\u001B]4;2;rgb:0000/0000/ffff\u0007\r\ncolored") },
+            { it.resize(columns = 20, rows = 6) }, { it.resize(columns = 40, rows = 8) },
+            { it.setMaxScrollbackLines(50) }, { it.setMaxScrollbackLines(150) },
+            { it.feed((0..180).joinToString("\r\n", prefix = "\r\n") { "burst $it" }) },
+            { it.feed("\u001B[?1049hALT") }, { it.feed("\u001B[2J") },
+            { it.feed("\u001B[?1049l") }, { it.clearScrollbackOnly() },
+            { it.feed("\u001B[8;1H\r\nnew history") }, { it.reset() },
+        )
+        repeat(3) { cycle ->
+            mutations.forEachIndexed { index, mutate ->
+                val previous = optimized.toList().associateBy { it.lineId }
+                mutate(terminal)
+                val next = terminal.renderFrame()
+                Snapshot.withMutableSnapshot {
+                    val now = 100L + cycle * 2_000L + index * 100L
+                    val expected = synchronizeTerminalRenderedRows(reference, next, next.isAlternateScreen,
+                        forcePendingGridBlanks = true, nowMs = now)
+                    assertEquals(expected, synchronizeTerminalRenderedRows(optimized, next, next.isAlternateScreen,
+                        forcePendingGridBlanks = true, nowMs = now, syncState = sync))
+                }
+                assertEquals(reference.map { it.lineId }, optimized.map { it.lineId })
+                assertEquals(reference.map { it.text }, optimized.map { it.text })
+                optimized.forEach { row -> previous[row.lineId]?.let { assertSame(it, row) } }
+            }
+        }
+    }
+
+    @Test
+    fun pendingGridBlanksForceFullSyncUntilCommittedEvenWhenRowsArchive() {
+        val terminal = TerminalEmulator(initialRows = 6, maxScrollbackLines = 100)
+        terminal.feed((0 until 106).joinToString("\r\n") { "row $it" })
+        val first = terminal.renderFrame()
+        val rows = createTerminalRenderedRows(first)
+        val sync = createTerminalRenderedRowsSyncState(first, rows)
+        terminal.feed("\u001B[?25l\u001B[1;1H\u001B[2K")
+        Snapshot.withMutableSnapshot {
+            assertTrue(synchronizeTerminalRenderedRows(rows, terminal.renderFrame(), true, nowMs = 100, syncState = sync))
+        }
+        val next = terminal.renderFrame()
+        Snapshot.withMutableSnapshot {
+            assertFalse(synchronizeTerminalRenderedRows(rows, next, true,
+                forcePendingGridBlanks = true, nowMs = 110, syncState = sync))
+        }
+        assertFalse(sync.lastUsedMetadataFastPath)
+        assertEquals(next.rows.map { it.text }, rows.map { it.text })
+        terminal.feed("\u001B[2;1H\u001B[2K")
+        Snapshot.withMutableSnapshot {
+            assertTrue(synchronizeTerminalRenderedRows(rows, terminal.renderFrame(), true, nowMs = 200, syncState = sync))
+        }
+        terminal.feed("\u001B[6;1H\r\nnew")
+        val archived = terminal.renderFrame()
+        Snapshot.withMutableSnapshot {
+            synchronizeTerminalRenderedRows(rows, archived, false, nowMs = 210, syncState = sync)
+        }
+        assertFalse(sync.lastUsedFifoFastPath)
+        assertEquals(archived.rows.size, sync.lastVisitedTextRows)
+        assertEquals(archived.rows.map { it.text }, rows.map { it.text })
+    }
+
+    @Test
+    fun replacedListSyntheticRowsDifferentOwnersAndScreenReorderCannotUseFifoProof() {
+        fun seeded() = TerminalEmulator(initialRows = 6, maxScrollbackLines = 100).apply {
+            feed((0 until 106).joinToString("\r\n") { "row $it" })
+        }
+        val terminal = seeded()
+        var frame = terminal.renderFrame()
+        val rows = createTerminalRenderedRows(frame)
+        val sync = createTerminalRenderedRowsSyncState(frame, rows)
+        Snapshot.withMutableSnapshot { val row = rows.removeAt(10); rows.add(10, row) }
+        terminal.feed("\r\nappend")
+        frame = terminal.renderFrame()
+        Snapshot.withMutableSnapshot { synchronizeTerminalRenderedRows(rows, frame, false, nowMs = 100, syncState = sync) }
+        assertFalse(sync.lastUsedFifoFastPath)
+        val synthetic = frame.copy(rows = frame.rows.map { TerminalEmulator.RenderedRow(AnnotatedString("replaced")) })
+        Snapshot.withMutableSnapshot { synchronizeTerminalRenderedRows(rows, synthetic, false, nowMs = 200, syncState = sync) }
+        assertFalse(sync.lastUsedMetadataFastPath)
+        assertEquals(synthetic.rows.map { it.text }, rows.map { it.text })
+        frame = seeded().renderFrame()
+        Snapshot.withMutableSnapshot { synchronizeTerminalRenderedRows(rows, frame, false, nowMs = 300, syncState = sync) }
+        assertFalse(sync.lastUsedMetadataFastPath)
+        assertEquals(frame.rows.map { it.text }, rows.map { it.text })
+        frame = terminal.renderFrame()
+        Snapshot.withMutableSnapshot { synchronizeTerminalRenderedRows(rows, frame, false, nowMs = 400, syncState = sync) }
+        terminal.feed("\u001B[H\u001BM\u001B[6;1H\r\nreordered")
+        frame = terminal.renderFrame()
+        Snapshot.withMutableSnapshot { synchronizeTerminalRenderedRows(rows, frame, false, nowMs = 500, syncState = sync) }
+        assertFalse(sync.lastUsedFifoFastPath)
+        assertEquals(frame.rows.map { it.text }, rows.map { it.text })
+    }
+
+    @Test
+    fun discardedSnapshotDoesNotAdvanceTheHistorySynchronizationProof() {
+        val terminal = TerminalEmulator(initialRows = 6, maxScrollbackLines = 100)
+        terminal.feed((0 until 106).joinToString("\r\n") { "row $it" })
+        val original = terminal.renderFrame()
+        val rows = createTerminalRenderedRows(original)
+        val sync = createTerminalRenderedRowsSyncState(original, rows)
+        terminal.feed("\u001B[?5h")
+        val changed = terminal.renderFrame()
+        val discarded = Snapshot.takeMutableSnapshot()
+        try {
+            discarded.enter {
+                synchronizeTerminalRenderedRows(rows, changed, false, nowMs = 100, syncState = sync)
+            }
+        } finally {
+            discarded.dispose() // Deliberately do NOT apply the Text or its synchronization proof.
+        }
+        assertEquals(original.rows.map { it.text }, rows.map { it.text })
+        Snapshot.withMutableSnapshot {
+            synchronizeTerminalRenderedRows(rows, changed, false, nowMs = 200, syncState = sync)
+        }
+        assertFalse(sync.lastUsedMetadataFastPath)
+        assertEquals(changed.rows.size, sync.lastVisitedTextRows)
+        assertEquals(changed.rows.map { it.text }, rows.map { it.text })
     }
 
     @Test
