@@ -4,6 +4,8 @@ This is an **opt-in correctness fixture**, not a performance benchmark or a prod
 Normal app/release builds do not include this APK. It injects real Compose pointer gestures into an
 eager Column and a history-only LazyColumn, using generated copies of the **production** viewport
 controller, reducer, gesture helper and row Text renderer. There is no shell, PTY or production data.
+The isolated correctness APK uses a non-debuggable, unminified Release build and an installation-only
+test signing key; this is separate from the production application's private release signing key.
 
 ## Contract under test
 
@@ -60,7 +62,7 @@ On an authorized SDK host/device (or the `Terminal Viewport Interaction Tests` G
 
 ```bash
 ./gradlew -PterminalViewportTests=true \
-  :benchmarks:terminal-viewport-tests:connectedDebugAndroidTest \
+  :benchmarks:terminal-viewport-tests:connectedReleaseAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest
 
 python3 .github/scripts/report-terminal-tests.py \
@@ -69,7 +71,7 @@ python3 .github/scripts/report-terminal-tests.py \
   --require-case-group 'lazyHistory=false:12' --require-case-group 'lazyHistory=true:12'
 ```
 
-Do not merge these debug correctness results with the 30-case Macrobenchmark A/B JSON. There are no
+Do not merge these correctness results with Macrobenchmark JSON. There are no
 performance acceptance thresholds here. APKs, JUnit XML and logcat are retained for 14 days by CI.
 
 
@@ -95,6 +97,6 @@ To run just the geometry cases on an authorized SDK host/device:
 
 ```bash
 ./gradlew -PterminalViewportTests=true \
-  :benchmarks:terminal-viewport-tests:connectedDebugAndroidTest \
+  :benchmarks:terminal-viewport-tests:connectedReleaseAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.viewporttest.TerminalTranscriptGeometryInstrumentedTest
 ```

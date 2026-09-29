@@ -19,6 +19,8 @@ val includeX86_64AbiForTests = providers.gradleProperty("includeX86_64AbiForTest
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 36
+    // Scope release host-test selection to terminal CI; leave other instrumentation configurations alone.
+    if (providers.gradleProperty("terminalReleaseTests").orNull == "true") testBuildType = "release"
 
     lint {
         disable += "ExpiredTargetSdkVersion"

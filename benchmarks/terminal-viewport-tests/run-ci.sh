@@ -30,7 +30,7 @@ run_arm() {
   TERMINAL_TIMEOUT_LOG_PATH="$log" \
     python3 .github/scripts/run-terminal-with-timeout.py 180 \
     bash .github/scripts/run-terminal-gradle.sh -PterminalViewportTests=true \
-      :benchmarks:terminal-viewport-tests:connectedDebugAndroidTest \
+      :benchmarks:terminal-viewport-tests:connectedReleaseAndroidTest \
       -Pandroid.testInstrumentationRunnerArguments.class="me.rerere.rikkahub.viewporttest.$test_class" \
       -Pandroid.testInstrumentationRunnerArguments.viewportLazyHistory="$arm" \
       --stacktrace || arm_status=$?

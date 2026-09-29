@@ -5,6 +5,8 @@ on:
   push:
     branches: [fix/terminal-viewport-semantic-reducer]
     paths:
+      - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewport*.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt'
@@ -36,8 +38,8 @@ jobs:
         run: |
           chmod +x gradlew
           bash .github/scripts/run-terminal-gradle.sh -PterminalViewportTests=true \
-            :benchmarks:terminal-viewport-tests:assembleDebug \
-            :benchmarks:terminal-viewport-tests:assembleDebugAndroidTest --stacktrace
+            :benchmarks:terminal-viewport-tests:assembleRelease \
+            :benchmarks:terminal-viewport-tests:assembleReleaseAndroidTest --stacktrace
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

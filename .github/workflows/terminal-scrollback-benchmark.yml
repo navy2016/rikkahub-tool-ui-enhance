@@ -20,6 +20,7 @@ on:
       - '!benchmarks/README.md'
       - '!benchmarks/terminal-viewport-tests/**'
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportReducer.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt'
       - '.github/workflows/terminal-scrollback-benchmark.yml'

@@ -36,6 +36,7 @@ val syncViewportSources by tasks.registering(SyncViewportSources::class) {
     sourceDirectory.set(rootProject.layout.projectDirectory.dir("app/src/main/java"))
     includedPaths.set(listOf(
         "me/rerere/rikkahub/utils/TerminalEmulator.kt",
+        "me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt",
         "me/rerere/rikkahub/data/container/TerminalViewportReducer.kt",
         "me/rerere/rikkahub/data/container/TerminalViewportController.kt",
         "me/rerere/rikkahub/data/container/TerminalViewportGeometry.kt",
@@ -60,6 +61,7 @@ val syncViewportResources by tasks.registering(SyncViewportSources::class) {
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 36
+    testBuildType = "release"
     defaultConfig {
         applicationId = "me.rerere.rikkahub.terminalviewporttest"
         minSdk = 29
@@ -73,9 +75,17 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+    buildTypes {
+        release {
+            // Isolated correctness APK, signed for installation but never debuggable.
+            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            isMinifyEnabled = false
+        }
+    }
 }
 androidComponents {
-    beforeVariants { it.enable = it.buildType == "debug" }
+    beforeVariants { it.enable = it.buildType == "release" }
     onVariants { variant ->
         variant.sources.java?.addGeneratedSourceDirectory(syncViewportSources) { it.outputDirectory }
         variant.sources.res?.addGeneratedSourceDirectory(syncViewportResources) { it.outputDirectory }
@@ -89,7 +99,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.ui)
     implementation("androidx.compose.foundation:foundation")
-    debugImplementation(libs.androidx.ui.test.manifest)
+    releaseImplementation(libs.androidx.ui.test.manifest)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)
     androidTestImplementation(libs.androidx.junit)

@@ -37,6 +37,7 @@ val syncTerminalSources by tasks.registering(SyncTerminalFiles::class) {
     sourceDirectory.set(rootProject.layout.projectDirectory.dir("app/src/main/java"))
     includedPaths.set(listOf(
         "me/rerere/rikkahub/utils/TerminalEmulator.kt",
+        "me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt",
         "me/rerere/rikkahub/data/container/TerminalViewportReducer.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt",
         "me/rerere/rikkahub/ui/theme/Type.kt",

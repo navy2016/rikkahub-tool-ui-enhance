@@ -54,8 +54,16 @@ jobs:
           if [ "$BUILD_TYPE" = debug ]; then
             ./gradlew assembleDebug
           else
-            ./gradlew assembleRelease
+            bash .github/scripts/run-terminal-gradle.sh assembleRelease
           fi
+
+      - name: Upload focused build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-diagnostics-${{ github.sha }}
+          path: artifacts/terminal-validation/gradle.log
+          retention-days: 7
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

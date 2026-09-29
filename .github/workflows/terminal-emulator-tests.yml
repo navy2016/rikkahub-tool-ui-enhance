@@ -13,6 +13,7 @@ on:
     paths:
       - 'app/src/main/java/me/rerere/rikkahub/RouteActivity.kt'
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/**'
       - 'app/src/main/java/me/rerere/rikkahub/data/repository/ConversationRepository.kt'
       - 'app/src/main/java/me/rerere/rikkahub/di/RepositoryModule.kt'
@@ -35,6 +36,7 @@ on:
     paths:
       - 'app/src/main/java/me/rerere/rikkahub/RouteActivity.kt'
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/**'
       - 'app/src/main/java/me/rerere/rikkahub/data/repository/ConversationRepository.kt'
       - 'app/src/main/java/me/rerere/rikkahub/di/RepositoryModule.kt'
@@ -60,6 +62,8 @@ jobs:
     name: Run TerminalEmulator unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      ORG_GRADLE_PROJECT_terminalReleaseTests: 'true'
 
     steps:
       - name: Checkout
@@ -108,7 +112,7 @@ jobs:
                 "client_info": {
                   "mobilesdk_app_id": "1:000000000000:android:0000000000000001",
                   "android_client_info": {
-                    "package_name": "me.rerere.rikkahub.dev.next"
+                    "package_name": "me.rerere.rikkahub.dev.next.mod"
                   }
                 },
                 "api_key": [{"current_key": "AIzaSyDummyKey000000000000000000000001"}]
@@ -119,16 +123,16 @@ jobs:
           EOFGS
 
       - name: Run PTY mode inference tests
-        run: bash .github/scripts/run-terminal-gradle.sh :app:testDebugUnitTest --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest --stacktrace
+        run: bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest --stacktrace
 
       - name: Run Bun and terminal UI source tests
-        run: bash .github/scripts/run-terminal-gradle.sh :app:testDebugUnitTest --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest --tests me.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest --stacktrace
+        run: bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest --tests me.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest --stacktrace
 
       - name: Run focused unit tests
         run: |
           for attempt in 1 2 3; do
             echo "Gradle test attempt ${attempt}/3"
-            if bash .github/scripts/run-terminal-gradle.sh :app:testDebugUnitTest \
+            if bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest \
               --tests me.rerere.rikkahub.utils.TerminalEmulatorTest \
               --tests me.rerere.rikkahub.data.container.ControlInputTest \
               --tests me.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest \
@@ -157,7 +161,9 @@ jobs:
       - name: Publish focused regression results
         if: always()
         run: |
-          python3 .github/scripts/report-terminal-tests.py app/build/test-results/testDebugUnitTest \
+          python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
+            --require-suite me.rerere.rikkahub.utils.TerminalEmulatorTest \
+            --require-suite me.rerere.rikkahub.data.container.TerminalRenderedRowsTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalFastFlingTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalViewportControllerTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalViewportReducerTest \
@@ -171,7 +177,7 @@ jobs:
         with:
           name: terminal-emulator-test-reports
           path: |
-            app/build/reports/tests/testDebugUnitTest/**
-            app/build/test-results/testDebugUnitTest/**
+            app/build/reports/tests/testReleaseUnitTest/**
+            app/build/test-results/testReleaseUnitTest/**
             artifacts/terminal-validation/**
           retention-days: 7

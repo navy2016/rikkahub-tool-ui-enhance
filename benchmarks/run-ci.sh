@@ -47,7 +47,7 @@ adb logcat -c
   adb shell wm size
   adb shell wm density
   adb shell getprop dalvik.vm.heapsize
-  sha256sum app/src/main/java/me/rerere/rikkahub/{utils/TerminalEmulator.kt,data/container/TerminalViewportReducer.kt,ui/pages/container/TerminalRenderedRows.kt,ui/theme/Type.kt} app/src/main/res/font/jetbrains_mono.ttf
+  sha256sum app/src/main/java/me/rerere/rikkahub/{utils/TerminalEmulator.kt,utils/TerminalFrameSnapshot.kt,data/container/TerminalViewportReducer.kt,ui/pages/container/TerminalRenderedRows.kt,ui/theme/Type.kt} app/src/main/res/font/jetbrains_mono.ttf
 } > "$output/environment.txt"
 run_instrumentation() {
   local repeats="$1" preflight="$2" suite="$3"
