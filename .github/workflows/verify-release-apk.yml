@@ -1,0 +1,95 @@
+name: Verify Release APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: 'Successful Release Build run in this repository'
+        required: true
+      source_sha:
+        description: 'Exact 40-character SHA built by that run'
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_RUN_ID: ${{ inputs.release_run_id }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+    steps:
+      - name: Bind artifact to the successful release run and source SHA
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          mkdir -p verification
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RELEASE_RUN_ID" > verification/source-run.json
+          python3 - <<'PY'
+          import json, os
+          with open('verification/source-run.json') as stream:
+              run = json.load(stream)
+          assert run['head_sha'] == os.environ['SOURCE_SHA'], 'Source SHA mismatch'
+          assert run['status'] == 'completed' and run['conclusion'] == 'success', 'Release build did not succeed'
+          assert run['path'] == '.github/workflows/release.yml', 'Not the production release workflow'
+          assert run['repository']['full_name'] == os.environ['GITHUB_REPOSITORY'], 'Repository mismatch'
+          PY
+      - name: Download only the release APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.release_run_id }}
+          name: rikkahub-release-${{ inputs.source_sha }}
+          path: apk
+      - name: Verify signing, manifest, archive and native ABI
+        run: |
+          set -euo pipefail
+          mapfile -d '' apks < <(find apk -type f -name '*.apk' -print0)
+          [ "${#apks[@]}" -eq 1 ]
+          tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          "$tools/apksigner" verify --verbose --print-certs "${apks[0]}" > verification/signature.txt
+          "$tools/aapt" dump badging "${apks[0]}" > verification/manifest.txt
+          export APK_PATH="${apks[0]}"
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, re, zipfile
+          apk = pathlib.Path(os.environ['APK_PATH'])
+          manifest = pathlib.Path('verification/manifest.txt').read_text()
+          signature = pathlib.Path('verification/signature.txt').read_text()
+          package = re.search(r"package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'", manifest)
+          assert package, 'Missing manifest package'
+          assert package[1] == 'me.rerere.rikkahub.dev.next.mod', 'Unexpected app ID'
+          assert 'application-debuggable' not in manifest, 'Debuggable APK'
+          assert 'application-testOnly' not in manifest, 'Test-only APK'
+          assert re.search(r'Verified using v[23](?:\.1)? scheme .*: true', signature), 'No v2/v3 signature'
+          certificates = re.findall(r'Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)', signature)
+          assert certificates, 'No signer certificate'
+          with zipfile.ZipFile(apk) as archive:
+              assert archive.testzip() is None, 'Corrupt APK member'
+              abis = sorted({name.split('/')[1] for name in archive.namelist() if name.startswith('lib/') and name.endswith('.so')})
+          assert abis == ['arm64-v8a'], f'Unexpected native ABIs: {abis}'
+          digest = hashlib.sha256()
+          with apk.open('rb') as stream:
+              for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                  digest.update(chunk)
+          result = dict(source_sha=os.environ['SOURCE_SHA'], release_run_id=os.environ['RELEASE_RUN_ID'],
+              apk=apk.name, bytes=apk.stat().st_size, sha256=digest.hexdigest(), package=package[1],
+              version_code=package[2], version_name=package[3], debuggable=False, native_abis=abis,
+              signer_certificate_sha256=certificates, signature_verified=True, zip_verified=True)
+          pathlib.Path('verification/apk-verification.json').write_text(json.dumps(result, indent=2) + '\n')
+          message = json.dumps(result)
+          print('::notice title=Release APK verified::' + message)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write('```json\n' + json.dumps(result, indent=2) + '\n```\n')
+          PY
+      - name: Publish verification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-verification-${{ inputs.source_sha }}
+          path: verification/
+          if-no-files-found: error
+          retention-days: 14
