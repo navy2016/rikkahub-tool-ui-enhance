@@ -11,8 +11,11 @@ on:
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewport*.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalLazyViewport*.kt'
       - 'app/src/test/java/me/rerere/rikkahub/data/container/TerminalLazyViewportMeasurementTest.kt'
       - 'benchmarks/terminal-viewport-tests/**'
+      - 'benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmarkViewport.kt'
+      - 'benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmarkLayout.kt'
       - '.github/workflows/terminal-viewport-interactions.yml'
       - '.github/scripts/*terminal*'
       - 'settings.gradle.kts'
@@ -71,7 +74,9 @@ jobs:
             --require-case-group 'lazyHistory=true:12' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalTranscriptGeometryInstrumentedTest \
             --require-case-group 'chunkLayers=false:4' \
-            --require-case-group 'chunkLayers=true:4'
+            --require-case-group 'chunkLayers=true:4' \
+            --require-suite me.rerere.rikkahub.viewporttest.TerminalLazyNaturalGeometryInstrumentedTest \
+            --require-case-group 'naturalLazy:8'
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

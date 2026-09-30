@@ -3,9 +3,11 @@
 ## Scope
 
 Measure **1,000 / 5,000 / 10,000 history rows + 24 active rows** on one device/APK. Current default
-is the three-arm `chunked-layers` experiment: legacy flat eager, production archival-chunk eager,
-and the identical chunks with opt-in display-list isolation. The two-arm `ab` (flat vs benchmark-only
-history `LazyColumn`) and `chunked-eager` formats remain available; never merge independent runs.
+is `production-lazy` (`candidate=productionVsLazy`): the current production archival chunks with
+display-list isolation versus the benchmark-only history `LazyColumn`, 30 cases total. Adjacent arm
+order alternates across sizes/scenarios. Both use the same incremental frame and row synchronizer.
+The archived three-arm `chunked-layers` and two-arm `ab` / `chunked-eager` formats remain available;
+never merge independent runs or substitute the legacy flat eager control for current production.
 
 Production ordinary history now uses the shared **fully eager transcript with isolated history display lists**. It keeps
 ScrollState/verticalScroll, all rows, natural Text geometry, selection and the single scroll-effect
@@ -122,10 +124,10 @@ To run on a dedicated, authorized physical test device from a normal Android SDK
   :benchmarks:terminal-macrobenchmark:connectedBenchmarkAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.benchmark.TerminalScrollbackBenchmark \
   -Pandroid.testInstrumentationRunnerArguments.terminalIterations=5 \
-  -Pandroid.testInstrumentationRunnerArguments.terminalCandidateRenderer=chunkedLayers
+  -Pandroid.testInstrumentationRunnerArguments.terminalCandidateRenderer=productionVsLazy
 
 python3 benchmarks/summarize.py benchmarks/terminal-macrobenchmark/build/outputs \
-  --sha "$(git rev-parse HEAD)" --environment physical-device --suite chunked-layers --require-complete \
+  --sha "$(git rev-parse HEAD)" --environment physical-device --suite production-lazy --require-complete \
   --output /tmp/terminal-scrollback-summary.md
 ```
 
@@ -189,6 +191,27 @@ this change. The workflow publishes a compact all-size hot-path annotation (to a
 10k results), while the job summary/artifact retains the complete 45-case report and raw traces.
 All renderer arms use the new synchronizer: their same-run ratios compare renderers, **not** old
 versus new synchronization. Do not infer a before/after speedup from separate CI hosts/runs.
+
+## Lazy-history migration investigation (not enabled in production)
+
+The `TerminalLazyNaturalGeometryInstrumentedTest` correctness suite compiles the exact same
+`TerminalBenchmarkViewport` / partition sources as this target, not a second lazy renderer. It
+compares real Text/spans, widths, heights and viewport positions at clipped history anchors and the
+physical screen. It covers repeated FIFO trims, font/scale/row-resize changes, disjoint ID restore,
+styled tail updates, TUI/alternate/full-grid fallback and clearing history. Its synthetic large-font
+spans are explicitly a renderer stress case, not a claim that ANSI feed emits font-size spans.
+
+The offscreen-widest-row case is a **blocker characterization**, not a compatibility acceptance:
+the current lazy candidate only measures composed rows, while production horizontalScroll retains
+the maximum width of all history. The resulting difference must remain visible in the report.
+No fixed-height box, all-history width scan, eager geometry oracle or invented scroll maximum is
+fed to the lazy arm to hide this difference. These tests do not approve production migration,
+cross-item selection/clipboard, real IME, RTL or a complete variable-height controller integration.
+
+The opt-in lazy measurement tracker now retains only the immediately previous visible items,
+avoiding stale absolute positions and session-lifetime growth after browsing many rows. Its JVM
+tests visit 10k distinct IDs. Screen-to-history anchors also retain reducer generation semantics.
+Neither helper is invoked by the current production eager terminal.
 
 ## Shared archival chunks and opt-in drawing layers
 

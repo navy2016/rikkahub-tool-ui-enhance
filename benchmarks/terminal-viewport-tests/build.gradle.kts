@@ -58,6 +58,17 @@ val syncViewportResources by tasks.registering(SyncViewportSources::class) {
     outputDirectory.set(layout.buildDirectory.dir("generated/viewportResources"))
 }
 
+// Real-height correctness uses the EXACT candidate/control rendered by Macrobenchmark. This is
+// opt-in fixture code only: neither this source directory nor its helpers enter the production APK.
+val syncBenchmarkViewport by tasks.registering(SyncViewportSources::class) {
+    sourceDirectory.set(rootProject.layout.projectDirectory.dir("benchmarks/terminal-target/src/main/java"))
+    includedPaths.set(listOf(
+        "me/rerere/rikkahub/benchmark/TerminalBenchmarkLayout.kt",
+        "me/rerere/rikkahub/benchmark/TerminalBenchmarkViewport.kt",
+    ))
+    outputDirectory.set(layout.buildDirectory.dir("generated/benchmarkViewport"))
+}
+
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 36
@@ -88,6 +99,7 @@ androidComponents {
     beforeVariants { it.enable = it.buildType == "release" }
     onVariants { variant ->
         variant.sources.java?.addGeneratedSourceDirectory(syncViewportSources) { it.outputDirectory }
+        variant.sources.java?.addGeneratedSourceDirectory(syncBenchmarkViewport) { it.outputDirectory }
         variant.sources.res?.addGeneratedSourceDirectory(syncViewportResources) { it.outputDirectory }
     }
 }

@@ -46,4 +46,5 @@ run_arm() {
 run_arm false
 run_arm true
 run_arm geometry TerminalTranscriptGeometryInstrumentedTest
+run_arm natural TerminalLazyNaturalGeometryInstrumentedTest
 exit "$overall_status"

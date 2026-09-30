@@ -100,3 +100,25 @@ To run just the geometry cases on an authorized SDK host/device:
   :benchmarks:terminal-viewport-tests:connectedReleaseAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.viewporttest.TerminalTranscriptGeometryInstrumentedTest
 ```
+
+## Natural lazy-history compatibility investigation
+
+Eight `naturalLazy*` cases run in `TerminalLazyNaturalGeometryInstrumentedTest`, in addition to the
+24 gesture and 8 chunk geometry cases (40 total). CI requires all cases, including the documented
+blocker characterization. The fixture imports the exact benchmark candidate/control source through
+a generated-source task; it never ships in the production APK. Reference geometry is measured in the
+eager production tree but is not supplied to the lazy arm. Lazy addressing uses stable IDs and real
+clipped offsets, not a full-list pixel height estimate.
+
+- ANSI/Chinese/combining-character/URL Text and clipped top anchors match the production renderer.
+- 30 trims retain the history anchor via LazyList keys without a corrective scroll request.
+- Larger font spans, font scale, visual viewport contraction and terminal row resize are remeasured.
+- The whole physical screen stays one item; individual rows use measured internal offsets.
+- Styled output and archival use the same before-draw tail request as the benchmark.
+- TUI/alternate/full-grid fallback, empty history and disjoint/trimmed/cleared anchors are checked.
+- The widest offscreen row exposes the current candidate's **horizontal-range blocker**. That case
+  expects and documents the mismatch; passing it is not horizontal compatibility approval.
+
+This suite does not replace the controller's fixed-grid capture with measured capture, claim a known
+global lazy scroll range, inject a real IME, test RTL or exercise selection handles/copy across lazy
+items. Those remain migration gates. Production still uses the user's tested eager chunks/layers.
