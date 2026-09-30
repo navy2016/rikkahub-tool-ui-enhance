@@ -78,4 +78,14 @@ class TerminalLazyViewportAdapterTest {
         assertNull(terminalLazyTargetForAnchor(layout, ViewportAnchor(999, 0, null, 3)))
         assertNull(terminalLazyTargetForAnchor(layout, ViewportAnchor(101, 0, 7, null)))
     }
+
+    @Test
+    fun archivedScreenAnchorSurvivesSubsequentScreenGenerationChange() {
+        val archived = layout.copy(historyLineIds = listOf(10, 100), screenLineIds = listOf(200, 201),
+            screenGeneration = 9, measuredRows = emptyList(), activeScreenItemTopPx = null)
+        assertEquals(TerminalLazyViewportScrollTarget(1, 7),
+            terminalLazyTargetForAnchor(archived, ViewportAnchor(100, 7, 8, null)))
+        assertNull(terminalLazyTargetForAnchor(archived, ViewportAnchor(100, 7, null, 2)))
+        assertNull(terminalLazyTargetForAnchor(layout, ViewportAnchor(101, 0, null, 3)))
+    }
 }

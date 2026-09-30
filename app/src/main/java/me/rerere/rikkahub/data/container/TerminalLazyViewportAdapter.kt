@@ -43,10 +43,11 @@ internal fun terminalLazyTargetForAnchor(
     layout: TerminalLazyViewportLayout,
     anchor: ViewportAnchor,
 ): TerminalLazyViewportScrollTarget? {
-    if (anchor.screenGeneration != null && anchor.screenGeneration != layout.screenGeneration) return null
-    if (anchor.historyGeneration != null && anchor.historyGeneration != layout.historyGeneration) return null
     val historyIndex = layout.historyLineIds.indexOf(anchor.lineId)
     if (historyIndex >= 0) {
+        if (anchor.historyGeneration != null && anchor.historyGeneration != layout.historyGeneration) return null
+        // A physical row can archive before the next screen generation. History now owns its ID;
+        // the old screen generation must not reject that surviving anchor (same reducer contract).
         val measured = layout.measuredRows.firstOrNull { it.lineId == anchor.lineId }
         val clippedTopPx = measured?.let {
             anchor.clippedTopPx.coerceIn(0, it.heightPx - 1)
@@ -57,6 +58,8 @@ internal fun terminalLazyTargetForAnchor(
         )
     }
 
+    if (anchor.screenGeneration != null && anchor.screenGeneration != layout.screenGeneration) return null
+    if (anchor.historyGeneration != null) return null // History cannot migrate back into the screen.
     val measured = layout.measuredRows.firstOrNull { it.lineId == anchor.lineId } ?: return null
     if (measured.screenGeneration != anchor.screenGeneration) return null
     if (layout.screenLineIds.indexOf(anchor.lineId) < 0) return null

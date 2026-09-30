@@ -59,6 +59,9 @@ internal class TerminalLazyViewportMeasurementTracker(
     private var historyGeneration: Long? = null
     private var screenGeneration: Long? = null
 
+    /** Diagnostics only; revisiting a long transcript must not retain one entry per visited row. */
+    internal val retainedItemCount: Int get() = previousAbsoluteTops.size
+
     fun reset(scrollPx: Int = 0) {
         previousAbsoluteTops.clear()
         currentScrollPx = scrollPx.coerceAtLeast(0)
@@ -114,6 +117,10 @@ internal class TerminalLazyViewportMeasurementTracker(
         expectedScrollPx = null
         currentScrollPx = scrollPx.coerceAtLeast(0)
 
+        // Only the immediately preceding layout can prove overlap. An older, previously offscreen
+        // row may have moved after trim/font/layout changes; it is not an absolute-position oracle.
+        // Keeping all visited IDs also leaked measurement entries for the session's entire lifetime.
+        previousAbsoluteTops.clear()
         val absoluteItems = visibleItems.map { item ->
             val key = ItemKey(item.kind, item.lineId)
             val absoluteTop = currentScrollPx + item.offsetPx - viewportStartOffsetPx

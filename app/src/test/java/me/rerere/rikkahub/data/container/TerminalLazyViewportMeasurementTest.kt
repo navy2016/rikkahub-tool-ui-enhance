@@ -7,6 +7,37 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class TerminalLazyViewportMeasurementTest {
+    private fun observe(tracker: TerminalLazyViewportMeasurementTracker, id: Long, offset: Int = 0) = tracker.update(
+        frame = frame(history = listOf(id)),
+        visibleItems = listOf(TerminalLazyViewportVisibleItem(TerminalLazyViewportItemKind.HISTORY, id, offset, 31)),
+        screenRowHeights = emptyMap(), screenRowsComplete = false, viewportStartOffsetPx = 0,
+        viewportHeightPx = 80, canScrollForward = true,
+    )
+
+    @Test
+    fun measurementCacheIsBoundedByPreviousVisibleItemsNotVisitedHistory() {
+        val tracker = TerminalLazyViewportMeasurementTracker(8)
+        for (id in 1L..10_000L) {
+            observe(tracker, id)
+            assertEquals(1, tracker.retainedItemCount)
+        }
+        tracker.reset()
+        assertEquals(0, tracker.retainedItemCount)
+    }
+
+    @Test
+    fun disjointRevisitCannotResurrectAnOldAbsoluteCoordinate() {
+        val tracker = TerminalLazyViewportMeasurementTracker(8)
+        observe(tracker, 10)
+        tracker.setExpectedScrollPx(417)
+        observe(tracker, 11)
+        // Row 10's old absolute top is no longer trusted after a disjoint layout. Keep the
+        // current coordinate until an explicit jump origin arrives; do not silently jump to 9.
+        assertEquals(417, observe(tracker, 10, -9).currentScrollPx)
+        tracker.setExpectedScrollPx(53)
+        assertEquals(53, observe(tracker, 10, -7).currentScrollPx)
+    }
+
     private fun frame(
         history: List<Long> = listOf(10, 11, 12),
         screen: List<Long> = listOf(100, 101),
