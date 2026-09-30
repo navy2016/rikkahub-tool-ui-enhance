@@ -1,9 +1,6 @@
 name: Verify Release APK
 
 on:
-  push:
-    branches: [fix/terminal-viewport-semantic-reducer]
-    paths: ['.github/workflows/verify-release-apk.yml']
   workflow_dispatch:
     inputs:
       release_run_id:
@@ -29,22 +26,7 @@ jobs:
       - name: Bind artifact to the successful release run and source SHA
         run: |
           set -euo pipefail
-          # A workflow introduced only on a feature branch is not initially dispatchable.
-          # Its path-filtered push verifies the latest existing release artifact on that branch.
-          # No build, release publication or default-branch change is required.
-          if [ -z "$RELEASE_RUN_ID" ] && [ -z "$SOURCE_SHA" ]; then
-            while IFS=$'\t' read -r run_id source_sha; do
-              artifact_count=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
-                --jq "[.artifacts[] | select(.name == \"rikkahub-release-$source_sha\" and .expired == false)] | length")
-              if [ "$artifact_count" -eq 1 ]; then
-                RELEASE_RUN_ID="$run_id"
-                SOURCE_SHA="$source_sha"
-                break
-              fi
-            done < <(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs" \
-              -f branch="$GITHUB_REF_NAME" -f status=success -f per_page=10 \
-              --jq '.workflow_runs[] | [.id, .head_sha] | @tsv')
-          fi
+          # Always bind verification to an explicitly requested build, never infer "latest".
           [[ "$RELEASE_RUN_ID" =~ ^[0-9]+$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           export RELEASE_RUN_ID SOURCE_SHA
