@@ -69,14 +69,26 @@ jobs:
           path: apk
       - name: Verify signing, manifest, archive and native ABI
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          trap 'code=$?; python3 - <<'"'"'PYERROR'"'"'
+          from pathlib import Path
+          texts = []
+          for path in Path("verification").glob("*.txt"):
+              texts.append(path.name + ":\n" + path.read_text(errors="replace")[-1800:])
+          message = "\n\n".join(texts)[-3500:] or "No APK diagnostics produced; inspect artifact/tool discovery."
+          print("::error title=APK verification failed::" + message.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))
+          PYERROR
+          exit "$code"' ERR
           mapfile -d '' apks < <(find apk -type f -name '*.apk' -print0)
+          printf 'apk_count=%s\n' "${#apks[@]}" > verification/discovery.txt
+          printf '%s\n' "${apks[@]}" >> verification/discovery.txt
           [ "${#apks[@]}" -eq 1 ]
           tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
-          "$tools/apksigner" verify --verbose --print-certs "${apks[0]}" > verification/signature.txt
-          "$tools/aapt" dump badging "${apks[0]}" > verification/manifest.txt
+          printf 'tools=%s\n' "$tools" >> verification/discovery.txt
+          "$tools/apksigner" verify --verbose --print-certs "${apks[0]}" > verification/signature.txt 2>&1
+          "$tools/aapt" dump badging "${apks[0]}" > verification/manifest.txt 2>&1
           export APK_PATH="${apks[0]}"
-          python3 - <<'PY'
+          python3 - 2> verification/validation-errors.txt <<'PY'
           import hashlib, json, os, pathlib, re, zipfile
           apk = pathlib.Path(os.environ['APK_PATH'])
           manifest = pathlib.Path('verification/manifest.txt').read_text()
@@ -108,6 +120,7 @@ jobs:
               stream.write('```json\n' + json.dumps(result, indent=2) + '\n```\n')
           PY
       - name: Publish verification evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-apk-verification-${{ env.SOURCE_SHA }}
