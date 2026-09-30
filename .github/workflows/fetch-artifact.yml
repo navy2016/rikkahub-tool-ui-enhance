@@ -8,6 +8,10 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+  actions: read
+
 jobs:
   fetch:
     runs-on: ubuntu-latest
@@ -33,7 +37,7 @@ jobs:
               artifact_id: artifact.id,
               archive_format: 'zip'
             });
-            core.info(`Download URL: ${download.url}`);
+            core.info(`Download URL obtained`);
             const res = await fetch(download.url);
             if (!res.ok) throw new Error(`Download failed: ${res.status}`);
             const buf = Buffer.from(await res.arrayBuffer());
