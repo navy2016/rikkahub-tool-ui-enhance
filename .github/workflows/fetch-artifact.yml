@@ -1,0 +1,46 @@
+name: Fetch and Republish Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Source workflow run ID'
+        required: true
+        type: string
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const runId = core.getInput('run_id');
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId
+            });
+            const artifact = artifacts.data.artifacts[0];
+            core.info(`Found artifact: ${artifact.name} (${artifact.size_in_bytes} bytes)`);
+            const download = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: artifact.id,
+              archive_format: 'zip'
+            });
+            const res = await fetch(download.url);
+            const buf = Buffer.from(await res.arrayBuffer());
+            fs.writeFileSync('/tmp/artifact.zip', buf);
+            core.info(`Downloaded ${buf.length} bytes`);
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: 'artifact-cache'
+          files: /tmp/artifact.zip
+          name: 'Artifact Cache'
+          body: 'Auto-uploaded artifact from run ${{ inputs.run_id }}'
+          prerelease: true
