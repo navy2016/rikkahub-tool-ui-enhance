@@ -8,10 +8,10 @@ on:
         default: '3'
         required: true
       candidate:
-        description: 'Candidate vs flat eager; chunkedLayers also includes unlayered chunks'
+        description: 'productionVsLazy compares the current production chunks/layers with lazy history'
         type: choice
-        options: [lazyHistory, chunkedEager, chunkedLayers]
-        default: chunkedLayers
+        options: [productionVsLazy, lazyHistory, chunkedEager, chunkedLayers]
+        default: productionVsLazy
   push:
     branches: [fix/terminal-viewport-semantic-reducer]
     paths:
@@ -36,7 +36,7 @@ jobs:
     timeout-minutes: 90
     env:
       TERMINAL_BENCHMARK_ITERATIONS: ${{ inputs.iterations || '3' }}
-      TERMINAL_BENCHMARK_CANDIDATE: ${{ inputs.candidate || 'chunkedLayers' }}
+      TERMINAL_BENCHMARK_CANDIDATE: ${{ inputs.candidate || 'productionVsLazy' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -92,6 +92,7 @@ jobs:
           suite=ab
           if [ "$TERMINAL_BENCHMARK_CANDIDATE" = chunkedEager ]; then suite=chunked-eager; fi
           if [ "$TERMINAL_BENCHMARK_CANDIDATE" = chunkedLayers ]; then suite=chunked-layers; fi
+          if [ "$TERMINAL_BENCHMARK_CANDIDATE" = productionVsLazy ]; then suite=production-lazy; fi
           python3 benchmarks/summarize.py benchmarks/terminal-macrobenchmark/build/outputs \
             --sha "$GITHUB_SHA" --environment ci-emulator --suite "$suite" --require-complete --github-annotation \
             --output artifacts/terminal-scrollback/summary.md

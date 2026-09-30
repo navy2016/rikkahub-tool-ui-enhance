@@ -15,6 +15,7 @@ SUITE_RENDERERS = {
     "ab": ("eager", "lazyHistory"),
     "chunked-eager": ("eager", "chunkedEager"),
     "chunked-layers": ("eager", "chunkedEager", "chunkedLayers"),
+    "production-lazy": ("chunkedLayers", "lazyHistory"),
 }
 
 
@@ -139,6 +140,8 @@ def ordered_results(results):
 
 
 def candidate_renderers(results):
+    if {key[2] for key in results} == set(SUITE_RENDERERS["production-lazy"]):
+        return ("lazyHistory",)
     candidates = tuple(renderer for renderer in RENDERERS[1:] if any(key[2] == renderer for key in results))
     if len(candidates) > 1 and candidates != ("chunkedEager", "chunkedLayers"):
         raise ValueError("Do not mix lazy and chunk experiments or assemble independent runs")
@@ -147,8 +150,10 @@ def candidate_renderers(results):
 
 def comparison_lines(results):
     candidates = candidate_renderers(results)
-    pairs = [("eager", candidate, {"lazyHistory": "E/L", "chunkedEager": "E/Ch", "chunkedLayers": "E/La"}[candidate])
-             for candidate in candidates]
+    production_lazy = {key[2] for key in results} == set(SUITE_RENDERERS["production-lazy"])
+    pairs = [("chunkedLayers", "lazyHistory", "P/L")] if production_lazy else [
+        ("eager", candidate, {"lazyHistory": "E/L", "chunkedEager": "E/Ch", "chunkedLayers": "E/La"}[candidate])
+        for candidate in candidates]
     if candidates == ("chunkedEager", "chunkedLayers"):
         pairs.append(("chunkedEager", "chunkedLayers", "Ch/La"))
     lines = [
@@ -189,6 +194,8 @@ def render_summary(results, context, sha, environment):
         "chunkedLayers": "archival chunks / isolated layers (three-arm)",
         None: "rendering baseline",
     }[candidate]
+    if {key[2] for key in results} == set(SUITE_RENDERERS["production-lazy"]):
+        title = "production chunks/layers vs history-only LazyColumn A/B"
     lines = [
         f"# Terminal scrollback {title}", "",
         f"- Commit: `{sha}`",
@@ -225,6 +232,7 @@ def render_summary(results, context, sha, environment):
     ]
     if candidate == "lazyHistory":
         lines += [
+            "Inspect the renderer column: production-lazy uses chunkedLayers as control, archived ab uses flat eager.",
             "The lazy candidate has one item per history line, ONE whole active-screen grid item, and an 8dp tail item.",
             "The lazy arm requests the tail before each ordinary update draw; eager corrects a changed range after layout.",
             "Any eager correction is followed by another draw and included in the measured window, not hidden in setup.",
@@ -249,7 +257,7 @@ def render_summary(results, context, sha, environment):
             "All THREE arms run in one invocation; their adjacent order rotates between size/scenario groups.",
             "chunkedEager and chunkedLayers use identical archival grouping; ONLY graphicsLayer boundaries differ.",
             "Ch/La isolates that drawing choice in this run. Independent CI runs are not a controlled comparison.",
-            "Production defaults to unlayered chunks; this report does not automatically enable layers.",
+            "The measured commit determines production defaults; this report does not automatically switch renderers.",
         ]
     if candidate:
         lines += comparison_lines(results)

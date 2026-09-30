@@ -111,7 +111,7 @@ class SummaryTest(unittest.TestCase):
             validate_complete(results, "chunked-layers")
 
     def test_scenario_annotations_cover_every_case_without_truncation_or_fake_zeroes(self):
-        for suite in ("ab", "chunked-layers"):
+        for suite in ("ab", "chunked-layers", "production-lazy"):
             results = matrix(SUITE_RENDERERS[suite])
             notices = github_annotations(results, "a" * 40, "ci-emulator")
             self.assertEqual(6, len(notices))
@@ -134,6 +134,25 @@ class SummaryTest(unittest.TestCase):
             measurement(10000, "appendAndTrim", "lazyHistory")["name"]))
         with self.assertRaises(ValueError):
             result_key("render[history=1000,scenario=initialCompose,renderer=typo]")
+
+    def test_production_lazy_pair_cannot_substitute_the_old_flat_control(self):
+        results = matrix(SUITE_RENDERERS["production-lazy"])
+        validate_complete(results, "production-lazy")
+        for other in ("ab", "chunked-eager", "chunked-layers"):
+            with self.assertRaises(ValueError):
+                validate_complete(matrix(SUITE_RENDERERS[other]), "production-lazy")
+        for missing in SUITE_RENDERERS["production-lazy"]:
+            with self.assertRaises(ValueError):
+                validate_complete({key: value for key, value in results.items() if key[2] != missing}, "production-lazy")
+        results[(1000, "appendAndTrim", "chunkedLayers")]["sampledMetrics"]["frameDurationCpuMs"]["P95"] = 100
+        output = render_summary(results, {}, "sha", "ci-emulator")
+        self.assertIn("production chunks/layers vs history-only LazyColumn A/B", output)
+        self.assertIn("P/L: chunkedLayers / lazyHistory", output)
+        self.assertIn("| 1000 | appendAndTrim | — | 5.00× | 1.00× |", output)
+        self.assertNotIn("### E/L", output)
+        results[(1000, "appendAndTrim", "lazyHistory")]["metrics"]["followTailCount"]["runs"] = [0, 30]
+        with self.assertRaises(ValueError):
+            validate_complete(results, "production-lazy")
 
     def test_requires_both_complete_arms_and_the_same_repetition_count(self):
         results = matrix()

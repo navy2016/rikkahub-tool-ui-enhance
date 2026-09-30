@@ -6,12 +6,13 @@ iterations="${TERMINAL_BENCHMARK_ITERATIONS:-3}"
   echo 'TERMINAL_BENCHMARK_ITERATIONS must be an integer in 1..50' >&2
   exit 1
 }
-candidate="${TERMINAL_BENCHMARK_CANDIDATE:-chunkedLayers}"
+candidate="${TERMINAL_BENCHMARK_CANDIDATE:-productionVsLazy}"
 case "$candidate" in
   lazyHistory) suite=ab ;;
   chunkedEager) suite=chunked-eager ;;
   chunkedLayers) suite=chunked-layers ;;
-  *) echo 'TERMINAL_BENCHMARK_CANDIDATE must be lazyHistory, chunkedEager or chunkedLayers' >&2; exit 1 ;;
+  productionVsLazy) suite=production-lazy ;;
+  *) echo 'Unknown TERMINAL_BENCHMARK_CANDIDATE' >&2; exit 1 ;;
 esac
 output=artifacts/terminal-scrollback
 mkdir -p "$output"

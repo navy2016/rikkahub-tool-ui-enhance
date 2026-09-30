@@ -37,8 +37,10 @@ class TerminalScrollbackBenchmark(
         fun parameters(): List<Array<Any>> = buildList {
             val arguments = InstrumentationRegistry.getArguments()
             val preflight = arguments.getString("terminalPreflight") == "true"
-            val candidate = arguments.getString("terminalCandidateRenderer") ?: "chunkedLayers"
-            require(candidate in listOf("lazyHistory", "chunkedEager", "chunkedLayers")) { "Unknown candidate: $candidate" }
+            val candidate = arguments.getString("terminalCandidateRenderer") ?: "productionVsLazy"
+            require(candidate in listOf("productionVsLazy", "lazyHistory", "chunkedEager", "chunkedLayers")) {
+                "Unknown candidate: $candidate"
+            }
             val scenarios = if (preflight) {
                 listOf("activeRowUpdate", "appendAndTrim", "alternateScreenUpdate")
             } else {
@@ -50,7 +52,12 @@ class TerminalScrollbackBenchmark(
                     // ONE APK/device/invocation. The layer experiment has three adjacent arms:
                     // legacy flat, production chunks, identical chunks with isolated display lists.
                     // Rotate the three-arm order; retain alternating order for two-arm suites.
-                    val renderers = if (candidate == "chunkedLayers") {
+                    val renderers = if (candidate == "productionVsLazy") {
+                        // Compare against what users actually run, not the obsolete flat control.
+                        // Keep ONE APK/device/invocation and alternate adjacent arm order.
+                        if ((sizeIndex + scenarioIndex) % 2 == 0) listOf("chunkedLayers", "lazyHistory")
+                        else listOf("lazyHistory", "chunkedLayers")
+                    } else if (candidate == "chunkedLayers") {
                         val arms = listOf("eager", "chunkedEager", "chunkedLayers")
                         val offset = (sizeIndex + scenarioIndex) % arms.size
                         arms.drop(offset) + arms.take(offset)
