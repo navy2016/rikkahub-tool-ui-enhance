@@ -65,12 +65,12 @@ class TerminalUiSourceTest {
         // Existing status actions and KEYS remain exactly one dispatch branch each.
         for (id in listOf("RAW", "AUTO", "COLS", "HIST", "JUMP", "IME", "GRID", "KEYS", "TOUCH",
             "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL")) {
-            assertEquals(1, Regex("\\\"$id\\\" -> TerminalStatus").findAll(processSessionSource).count())
+            assertEquals(1, processSessionSource.split("\"$id\" -> TerminalStatus").size - 1)
         }
         for (id in listOf("CTRL", "ALT", "SHIFT", "SEL", "KBD", "ESC", "TAB", "S-TAB", "UP", "DOWN",
             "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "BKSP", "DEL", "ENTER", "C-C", "C-D",
             "C-Z", "C-L", "C-U", "C-W", "C-A", "C-E", "C-R", "COPY", "PASTE", "CLEAR", "TEST", "CLI")) {
-            assertEquals(1, Regex("\\\"$id\\\" -> TerminalKey").findAll(processSessionSource).count())
+            assertEquals(1, processSessionSource.split("\"$id\" -> TerminalKey").size - 1)
         }
     }
 
