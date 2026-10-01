@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -68,6 +69,7 @@ class TerminalBenchmarkActivity : ComponentActivity() {
     private val horizontalScroll = ScrollState(0)
     private lateinit var lazyScroll: LazyListState
     private var layoutState by mutableStateOf<TerminalBenchmarkLayout?>(null)
+    private var publishedFrame by mutableStateOf<TerminalEmulator.RenderFrame?>(null, referentialEqualityPolicy())
     private val compositionStats = LazyCompositionStats()
     private var renderer = BenchmarkRenderer.EAGER
     private var configuredTui = false
@@ -111,7 +113,8 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                 MaterialTheme {
                     val rendered = rows
                     val currentLayout = layoutState
-                    if (rendered != null && currentLayout != null) {
+                    val currentFrame = publishedFrame
+                    if (rendered != null && currentLayout != null && currentFrame != null) {
                         val style = TextStyle(
                             color = Color(0xFF00E676),
                             fontFamily = JetbrainsMono,
@@ -124,6 +127,7 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                             ),
                         )
                         TerminalBenchmarkViewport(
+                            frame = currentFrame,
                             rows = rendered.toList(),
                             layout = currentLayout,
                             style = style,
@@ -191,12 +195,16 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                     rows = createTerminalRenderedRows(frame)
                     rowSyncState = createTerminalRenderedRowsSyncState(frame, checkNotNull(rows))
                     layoutState = layoutFor(frame)
+                    publishedFrame = frame
                 }
             }
             // Complete on actual draw callbacks, not a fixed sleep or merely a state assignment.
             output.awaitNextDraw()
             output.awaitNextDraw()
             verifyTail()
+            if (checkNotNull(layoutState).useLazyHistory) {
+                check(compositionStats.measuredHistoryWidths == frame.historyCount.toLong())
+            }
         } finally {
             Trace.endAsyncSection("Terminal.mountToDraw", 1)
         }
@@ -219,6 +227,7 @@ class TerminalBenchmarkActivity : ComponentActivity() {
             }
             "activeRowUpdate", "appendAndTrim", "alternateScreenUpdate" -> {
                 repeat(TerminalBenchmarkWorkload.UPDATE_COUNT) { index ->
+                    val previousWidthMeasures = compositionStats.measuredHistoryWidths
                     val deadline = SystemClock.uptimeMillis() + TerminalBenchmarkWorkload.UPDATE_INTERVAL_MS
                     val lineIndex = historyRows + TerminalBenchmarkWorkload.SCREEN_ROWS + index
                     val line = TerminalBenchmarkWorkload.line(lineIndex)
@@ -236,6 +245,7 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                                 syncState = checkNotNull(rowSyncState),
                             )
                             layoutState = layoutFor(frame)
+                            publishedFrame = frame
                         }
                     }
                     when (scenario) {
@@ -283,6 +293,12 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                         output.awaitNextDraw()
                     }
                     verifyTail()
+                    if (checkNotNull(layoutState).useLazyHistory) {
+                        val expected = if (scenario == "appendAndTrim") 1L else 0L
+                        check(compositionStats.measuredHistoryWidths - previousWidthMeasures == expected) {
+                            "Width history work did not match the owned FIFO delta"
+                        }
+                    }
                     delay((deadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
                 }
             }
