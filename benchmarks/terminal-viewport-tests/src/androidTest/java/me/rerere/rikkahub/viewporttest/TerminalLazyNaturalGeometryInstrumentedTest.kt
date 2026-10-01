@@ -56,6 +56,9 @@ import org.junit.Test
 import org.junit.rules.Timeout
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
+import org.junit.runner.RunWith
+import org.junit.runners.Parameterized
+import androidx.test.platform.app.InstrumentationRegistry
 import kotlin.math.roundToInt
 
 /**
@@ -65,7 +68,21 @@ import kotlin.math.roundToInt
  * Width-index work stays in the candidate and is independently measured by Macrobenchmark. These
  * cases do not approve real IME, cross-item selection/copy or a production controller switch.
  */
-class TerminalLazyNaturalGeometryInstrumentedTest {
+@RunWith(Parameterized::class)
+class TerminalLazyNaturalGeometryInstrumentedTest(private val intrinsicWidths: Boolean) {
+    companion object {
+        @JvmStatic
+        @Parameterized.Parameters(name = "widthIntrinsics={0}")
+        fun widthModes(): List<Array<Boolean>> = when (
+            InstrumentationRegistry.getArguments().getString("viewportWidthMode")
+        ) {
+            "natural-layout" -> listOf(arrayOf(false))
+            "natural-intrinsic" -> listOf(arrayOf(true))
+            else -> listOf(arrayOf(false), arrayOf(true))
+        }
+    }
+
+    private val lazyRenderer = if (intrinsicWidths) BenchmarkRenderer.LAZY_INTRINSIC else BenchmarkRenderer.LAZY_HISTORY
     @get:Rule val compose = createComposeRule()
     @get:Rule val timeout = Timeout.seconds(45)
     @get:Rule val probe = object : TestWatcher() {
@@ -148,7 +165,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
             fixture.runScroll { fixture.eager.scrollTo(measuredTop + anchor.clippedTopPx) }
         }
         val reference = geometry(fixture)
-        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        use(fixture, lazyRenderer)
         compose.runOnIdle { fixture.restoreHistory(anchor) }
         val actual = geometry(fixture)
         assertRowsMatch(reference, actual)
@@ -211,7 +228,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         mount(fixture)
         compose.runOnIdle { fixture.bottom() }
         val reference = geometry(fixture)
-        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        use(fixture, lazyRenderer)
         compose.runOnIdle { fixture.bottom() }
         val actual = geometry(fixture)
         assertRowsMatch(reference, actual)
@@ -241,7 +258,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
     fun naturalLazyStyledOutputAndArchivalKeepTheActualTailVisible() {
         val fixture = Fixture()
         mount(fixture)
-        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        use(fixture, lazyRenderer)
         compose.runOnIdle { fixture.bottom() }
         idle(fixture)
         repeat(12) { update ->
@@ -265,7 +282,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
     fun naturalLazyTuiAlternateFullGridAndHistoryClearKeepTheScreenComplete() {
         val fixture = Fixture()
         mount(fixture)
-        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        use(fixture, lazyRenderer)
         for (fullGrid in listOf(false, true)) {
             compose.runOnIdle {
                 fixture.configuredTui = !fullGrid
@@ -330,7 +347,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         mount(fixture)
         val productionRange = compose.runOnIdle { fixture.horizontal.maxValue }
         val anchor = ViewportAnchor(fixture.frame.historyLineIds[130], 0, null, fixture.frame.historyGeneration)
-        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        use(fixture, lazyRenderer)
         compose.runOnIdle { fixture.restoreHistory(anchor) }
         idle(fixture)
         compose.runOnIdle {
@@ -355,7 +372,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         val fixture = Fixture(wideFirst = true)
         mount(fixture)
         val originalRange = compose.runOnIdle { fixture.horizontal.maxValue }
-        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        use(fixture, lazyRenderer)
         compose.runOnIdle {
             fixture.restoreHistory(ViewportAnchor(fixture.frame.historyLineIds[130], 7, null,
                 fixture.frame.historyGeneration))
@@ -409,7 +426,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         compose.runOnIdle { fixture.bottom() }
         val reference = geometry(fixture)
         val productionRange = fixture.horizontal.maxValue
-        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        use(fixture, lazyRenderer)
         compose.runOnIdle { fixture.bottom() }
         assertRowsMatch(reference, geometry(fixture))
         assertEquals(productionRange, fixture.horizontal.maxValue)
@@ -419,7 +436,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
     fun naturalLazyWidestLiveRowSurvivesArchivalAndExpiresWhenHistoryClears() {
         val fixture = Fixture()
         mount(fixture)
-        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        use(fixture, lazyRenderer)
         val initialRange = compose.runOnIdle { fixture.horizontal.maxValue }
         compose.runOnIdle {
             fixture.terminal.feed("\r\u001B[2Kwide live " + "W".repeat(68))
@@ -435,7 +452,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         assertEquals("wide live " + "W".repeat(68) + " ", liveText)
         use(fixture, BenchmarkRenderer.CHUNKED_LAYERS)
         assertEquals("Live row width must match production", wideRange, fixture.horizontal.maxValue)
-        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        use(fixture, lazyRenderer)
         compose.runOnIdle {
             repeat(24) { fixture.terminal.feed("\r\n" + fixture.line(50_000 + it)) }
             fixture.publish()
@@ -452,7 +469,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         assertTrue(archivedRange < wideRange)
         use(fixture, BenchmarkRenderer.CHUNKED_LAYERS)
         assertEquals("Archived row width must match production", archivedRange, fixture.horizontal.maxValue)
-        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        use(fixture, lazyRenderer)
         compose.runOnIdle {
             fixture.terminal.clearScrollbackOnly()
             fixture.publish()

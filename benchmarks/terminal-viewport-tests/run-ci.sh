@@ -33,6 +33,7 @@ run_arm() {
       :benchmarks:terminal-viewport-tests:connectedReleaseAndroidTest \
       -Pandroid.testInstrumentationRunnerArguments.class="me.rerere.rikkahub.viewporttest.$test_class" \
       -Pandroid.testInstrumentationRunnerArguments.viewportLazyHistory="$arm" \
+      -Pandroid.testInstrumentationRunnerArguments.viewportWidthMode="$arm" \
       --stacktrace || arm_status=$?
 
   find "$results_root" -mindepth 1 -maxdepth 1 ! -name 'viewport-*' -exec cp -a {} "$stage"/ \;
@@ -46,5 +47,7 @@ run_arm() {
 run_arm false
 run_arm true
 run_arm geometry TerminalTranscriptGeometryInstrumentedTest
-run_arm natural TerminalLazyNaturalGeometryInstrumentedTest
+run_arm natural-layout TerminalLazyNaturalGeometryInstrumentedTest
+run_arm natural-intrinsic TerminalLazyNaturalGeometryInstrumentedTest
+run_arm intrinsic TerminalIntrinsicWidthInstrumentedTest
 exit "$overall_status"

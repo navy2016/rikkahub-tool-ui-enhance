@@ -7,6 +7,7 @@ import me.rerere.rikkahub.utils.TerminalEmulator
 internal enum class BenchmarkRenderer(val wireName: String) {
     EAGER("eager"),
     LAZY_HISTORY("lazyHistory"),
+    LAZY_INTRINSIC("lazyIntrinsic"),
     CHUNKED_EAGER("chunkedEager"),
     CHUNKED_LAYERS("chunkedLayers");
 
@@ -23,6 +24,7 @@ internal data class TerminalBenchmarkLayout(
     val useLazyHistory: Boolean,
     val historyChunks: List<TerminalHistoryChunk> = emptyList(),
     val isolateChunkDrawing: Boolean = false,
+    val useIntrinsicWidths: Boolean = false,
 ) {
     val useChunkedHistory: Boolean get() = historyChunks.isNotEmpty()
     val activeScreenItemIndex: Int get() = historyRows
@@ -49,9 +51,11 @@ internal data class TerminalBenchmarkLayout(
             return TerminalBenchmarkLayout(
                 historyRows = frame.historyCount,
                 screenRows = frame.rows.size - frame.historyCount,
-                useLazyHistory = renderer == BenchmarkRenderer.LAZY_HISTORY && ordinaryHistory,
+                useLazyHistory = renderer in listOf(BenchmarkRenderer.LAZY_HISTORY, BenchmarkRenderer.LAZY_INTRINSIC) &&
+                    ordinaryHistory,
                 historyChunks = chunks,
                 isolateChunkDrawing = renderer == BenchmarkRenderer.CHUNKED_LAYERS && chunks.isNotEmpty(),
+                useIntrinsicWidths = renderer == BenchmarkRenderer.LAZY_INTRINSIC && ordinaryHistory,
             )
         }
     }

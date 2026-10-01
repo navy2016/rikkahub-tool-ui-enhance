@@ -17,6 +17,7 @@ on:
       - 'benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmarkViewport.kt'
       - 'benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmarkLayout.kt'
       - 'benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmarkWidthIndex.kt'
+      - 'benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalIntrinsicWidthMeasurer.kt'
       - '.github/workflows/terminal-viewport-interactions.yml'
       - '.github/scripts/*terminal*'
       - 'settings.gradle.kts'
@@ -77,7 +78,10 @@ jobs:
             --require-case-group 'chunkLayers=false:4' \
             --require-case-group 'chunkLayers=true:4' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalLazyNaturalGeometryInstrumentedTest \
-            --require-case-group 'naturalLazy:11'
+            --require-case-group 'widthIntrinsics=false:11' \
+            --require-case-group 'widthIntrinsics=true:11' \
+            --require-suite me.rerere.rikkahub.viewporttest.TerminalIntrinsicWidthInstrumentedTest \
+            --require-case-group 'intrinsicWidth:6'
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

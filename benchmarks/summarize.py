@@ -9,13 +9,15 @@ from pathlib import Path
 
 SIZES = (1000, 5000, 10000)
 SCENARIOS = ("initialCompose", "historyScroll", "activeRowUpdate", "appendAndTrim", "alternateScreenUpdate")
-RENDERERS = ("eager", "lazyHistory", "chunkedEager", "chunkedLayers")
+RENDERERS = ("eager", "lazyHistory", "chunkedEager", "chunkedLayers", "lazyIntrinsic")
+LAZY_RENDERERS = ("lazyHistory", "lazyIntrinsic")
 SUITE_RENDERERS = {
     "baseline": ("eager",),
     "ab": ("eager", "lazyHistory"),
     "chunked-eager": ("eager", "chunkedEager"),
     "chunked-layers": ("eager", "chunkedEager", "chunkedLayers"),
     "production-lazy": ("chunkedLayers", "lazyHistory"),
+    "width-intrinsics": ("chunkedLayers", "lazyHistory", "lazyIntrinsic"),
 }
 
 
@@ -123,11 +125,11 @@ def validate_complete(results, suite="baseline", require_width_index=False):
         if suite != "baseline":
             # Pin every ordinary lazy update: both key movement and styled-line height changes
             # can leave the changing screen offscreen. Alternate/full-grid controls stay eager.
-            expected_count = 30 if key[2] == "lazyHistory" and key[1] in ("activeRowUpdate", "appendAndTrim") else 0
+            expected_count = 30 if key[2] in LAZY_RENDERERS and key[1] in ("activeRowUpdate", "appendAndTrim") else 0
             counts = single_runs(result, "followTailCount")
             if len(counts) != iterations or any(count != expected_count for count in counts):
                 raise ValueError(f"Incorrect follow-tail trace count for {key}")
-        if require_width_index and key[2] == "lazyHistory" and key[1] in (
+        if require_width_index and key[2] in LAZY_RENDERERS and key[1] in (
                 "initialCompose", "activeRowUpdate", "appendAndTrim"):
             # Width discovery lives in composition, not rowSync. Require the cost rather than
             # reporting the old, horizontally incomplete candidate under a new compatibility label.
@@ -152,6 +154,8 @@ def ordered_results(results):
 
 
 def candidate_renderers(results):
+    if {key[2] for key in results} == set(SUITE_RENDERERS["width-intrinsics"]):
+        return LAZY_RENDERERS
     if {key[2] for key in results} == set(SUITE_RENDERERS["production-lazy"]):
         return ("lazyHistory",)
     candidates = tuple(renderer for renderer in RENDERERS[1:] if any(key[2] == renderer for key in results))
@@ -164,8 +168,11 @@ def comparison_lines(results):
     candidates = candidate_renderers(results)
     production_lazy = {key[2] for key in results} == set(SUITE_RENDERERS["production-lazy"])
     pairs = [("chunkedLayers", "lazyHistory", "P/L")] if production_lazy else [
-        ("eager", candidate, {"lazyHistory": "E/L", "chunkedEager": "E/Ch", "chunkedLayers": "E/La"}[candidate])
+        ("eager", candidate, {"lazyHistory": "E/L", "chunkedEager": "E/Ch", "chunkedLayers": "E/La", "lazyIntrinsic": "E/I"}[candidate])
         for candidate in candidates]
+    if candidates == LAZY_RENDERERS:
+        pairs = [("chunkedLayers", "lazyHistory", "P/L"), ("chunkedLayers", "lazyIntrinsic", "P/I"),
+                 ("lazyHistory", "lazyIntrinsic", "L/I")]
     if candidates == ("chunkedEager", "chunkedLayers"):
         pairs.append(("chunkedEager", "chunkedLayers", "Ch/La"))
     lines = [
@@ -201,6 +208,7 @@ def render_summary(results, context, sha, environment):
     candidates = candidate_renderers(results)
     candidate = candidates[-1] if candidates else None
     title = {
+        "lazyIntrinsic": "production / full-layout width / intrinsic width (three-arm)",
         "lazyHistory": "history-only LazyColumn A/B",
         "chunkedEager": "stable-chunk eager A/B",
         "chunkedLayers": "archival chunks / isolated layers (three-arm)",
@@ -242,7 +250,7 @@ def render_summary(results, context, sha, environment):
         "Updates: 30 separately drawn operations, nominally 33ms apart; slow frames extend the workload rather than drop updates.",
         "`alternateScreenUpdate` preloads the stated history but renders only 24 physical rows; BOTH renderer arms use eager here.",
     ]
-    if candidate == "lazyHistory":
+    if candidate in LAZY_RENDERERS:
         lines += [
             "Inspect the renderer column: production-lazy uses chunkedLayers as control, archived ab uses flat eager.",
             "The lazy candidate has one item per history line, ONE whole active-screen grid item, and an 8dp tail item.",
@@ -252,6 +260,14 @@ def render_summary(results, context, sha, environment):
             "Both arms pan six viewport heights using identical 1-second `animateScrollBy` animations, then return to the tail.",
             "Pairs use the same APK/device, with A/B order alternating per case; this is not a statistical confidence interval.",
         ]
+        if candidate == "lazyIntrinsic":
+            lines += [
+                "The two lazy arms have identical row trees and FIFO width indices; only the width measurer differs.",
+                "lazyHistory constructs a full TextLayoutResult; lazyIntrinsic uses ceil(maxIntrinsicWidth) with the same resolved style.",
+                "Font shaping/spans/fallback/bidi still use Compose. No character-count estimate or history-sized paragraph cache.",
+                "All THREE arms run adjacent in one invocation with rotating order. L/I isolates width discovery within this run.",
+                "Width work stays in the measured mount/update window. Cold history is still scanned; no zero-cost claim.",
+            ]
     elif candidate in ("chunkedEager", "chunkedLayers"):
         lines += [
             "Chunked eager retains ALL history rows, using stable composition buckets, not pixel estimates.",
@@ -357,7 +373,7 @@ def render_width_summary(results, sha, environment):
         "History | Scenario | Renderer | n | Width/call | Width max | Width calls | Width total",
     ]
     for (size, scenario, renderer), result in ordered_results(results):
-        if renderer != "lazyHistory" or scenario not in ("initialCompose", "activeRowUpdate", "appendAndTrim"):
+        if renderer not in LAZY_RENDERERS or scenario not in ("initialCompose", "activeRowUpdate", "appendAndTrim"):
             continue
         lines.append(" | ".join([
             str(size), scenario, renderer, str(result.get("repeatIterations", "?")),

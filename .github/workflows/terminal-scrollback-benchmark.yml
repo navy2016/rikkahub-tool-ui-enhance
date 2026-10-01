@@ -8,10 +8,10 @@ on:
         default: '3'
         required: true
       candidate:
-        description: 'productionVsLazy compares the current production chunks/layers with lazy history'
+        description: 'widthIntrinsics compares production, full-layout width and intrinsic width on one device'
         type: choice
-        options: [productionVsLazy, lazyHistory, chunkedEager, chunkedLayers]
-        default: productionVsLazy
+        options: [widthIntrinsics, productionVsLazy, lazyHistory, chunkedEager, chunkedLayers]
+        default: widthIntrinsics
   push:
     branches: [fix/terminal-viewport-semantic-reducer]
     paths:
@@ -36,7 +36,7 @@ jobs:
     timeout-minutes: 90
     env:
       TERMINAL_BENCHMARK_ITERATIONS: ${{ inputs.iterations || '3' }}
-      TERMINAL_BENCHMARK_CANDIDATE: ${{ inputs.candidate || 'productionVsLazy' }}
+      TERMINAL_BENCHMARK_CANDIDATE: ${{ inputs.candidate || 'widthIntrinsics' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -100,6 +100,7 @@ jobs:
           if [ "$TERMINAL_BENCHMARK_CANDIDATE" = chunkedEager ]; then suite=chunked-eager; fi
           if [ "$TERMINAL_BENCHMARK_CANDIDATE" = chunkedLayers ]; then suite=chunked-layers; fi
           if [ "$TERMINAL_BENCHMARK_CANDIDATE" = productionVsLazy ]; then suite=production-lazy; fi
+          if [ "$TERMINAL_BENCHMARK_CANDIDATE" = widthIntrinsics ]; then suite=width-intrinsics; fi
           python3 benchmarks/summarize.py benchmarks/terminal-macrobenchmark/build/outputs \
             --sha "$GITHUB_SHA" --environment ci-emulator --suite "$suite" --require-complete --require-width-index --github-annotation \
             --output artifacts/terminal-scrollback/summary.md

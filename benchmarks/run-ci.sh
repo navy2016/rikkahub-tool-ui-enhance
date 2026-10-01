@@ -6,12 +6,13 @@ iterations="${TERMINAL_BENCHMARK_ITERATIONS:-3}"
   echo 'TERMINAL_BENCHMARK_ITERATIONS must be an integer in 1..50' >&2
   exit 1
 }
-candidate="${TERMINAL_BENCHMARK_CANDIDATE:-productionVsLazy}"
+candidate="${TERMINAL_BENCHMARK_CANDIDATE:-widthIntrinsics}"
 case "$candidate" in
   lazyHistory) suite=ab ;;
   chunkedEager) suite=chunked-eager ;;
   chunkedLayers) suite=chunked-layers ;;
   productionVsLazy) suite=production-lazy ;;
+  widthIntrinsics) suite=width-intrinsics ;;
   *) echo 'Unknown TERMINAL_BENCHMARK_CANDIDATE' >&2; exit 1 ;;
 esac
 output=artifacts/terminal-scrollback
@@ -50,6 +51,7 @@ adb logcat -c
   adb shell getprop dalvik.vm.heapsize
   sha256sum app/src/main/java/me/rerere/rikkahub/{utils/TerminalEmulator.kt,utils/TerminalFrameSnapshot.kt,data/container/TerminalViewportReducer.kt,ui/pages/container/TerminalRenderedRows.kt,ui/theme/Type.kt} app/src/main/res/font/jetbrains_mono.ttf
   sha256sum benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmark{Activity,Layout,Viewport,WidthIndex}.kt
+  sha256sum benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalIntrinsicWidthMeasurer.kt
 } > "$output/environment.txt"
 run_instrumentation() {
   local repeats="$1" preflight="$2" suite="$3"

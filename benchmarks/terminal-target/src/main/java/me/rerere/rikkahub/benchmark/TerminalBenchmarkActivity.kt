@@ -337,6 +337,15 @@ class TerminalBenchmarkActivity : ComponentActivity() {
             return
         }
         check(compositionStats.historyChunks == 0)
+        val widthMeasurements = compositionStats.measuredHistoryWidths + compositionStats.measuredScreenWidths
+        check(widthMeasurements > 0)
+        if (current.useIntrinsicWidths) {
+            check(compositionStats.fullWidthLayouts == 0L) { "Intrinsic candidate allocated full width layouts" }
+            check(compositionStats.intrinsicWidthMeasurements == widthMeasurements)
+        } else {
+            check(compositionStats.intrinsicWidthMeasurements == 0L) { "Full-layout control used intrinsics" }
+            check(compositionStats.fullWidthLayouts == widthMeasurements)
+        }
         check(!lazyScroll.canScrollForward) {
             "Lazy viewport left the tail: index=${lazyScroll.firstVisibleItemIndex}, " +
                 "offset=${lazyScroll.firstVisibleItemScrollOffset}"

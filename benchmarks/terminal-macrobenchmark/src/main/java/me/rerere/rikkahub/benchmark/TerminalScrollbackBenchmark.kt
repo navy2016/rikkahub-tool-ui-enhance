@@ -37,8 +37,8 @@ class TerminalScrollbackBenchmark(
         fun parameters(): List<Array<Any>> = buildList {
             val arguments = InstrumentationRegistry.getArguments()
             val preflight = arguments.getString("terminalPreflight") == "true"
-            val candidate = arguments.getString("terminalCandidateRenderer") ?: "productionVsLazy"
-            require(candidate in listOf("productionVsLazy", "lazyHistory", "chunkedEager", "chunkedLayers")) {
+            val candidate = arguments.getString("terminalCandidateRenderer") ?: "widthIntrinsics"
+            require(candidate in listOf("widthIntrinsics", "productionVsLazy", "lazyHistory", "chunkedEager", "chunkedLayers")) {
                 "Unknown candidate: $candidate"
             }
             val scenarios = if (preflight) {
@@ -52,7 +52,13 @@ class TerminalScrollbackBenchmark(
                     // ONE APK/device/invocation. The layer experiment has three adjacent arms:
                     // legacy flat, production chunks, identical chunks with isolated display lists.
                     // Rotate the three-arm order; retain alternating order for two-arm suites.
-                    val renderers = if (candidate == "productionVsLazy") {
+                    val renderers = if (candidate == "widthIntrinsics") {
+                        // Full-layout vs intrinsics isolates width discovery on IDENTICAL lazy
+                        // row trees; the third arm retains the current production renderer.
+                        val arms = listOf("chunkedLayers", "lazyHistory", "lazyIntrinsic")
+                        val offset = (sizeIndex + scenarioIndex) % arms.size
+                        arms.drop(offset) + arms.take(offset)
+                    } else if (candidate == "productionVsLazy") {
                         // Compare against what users actually run, not the obsolete flat control.
                         // Keep ONE APK/device/invocation and alternate adjacent arm order.
                         if ((sizeIndex + scenarioIndex) % 2 == 0) listOf("chunkedLayers", "lazyHistory")

@@ -103,8 +103,12 @@ To run just the geometry cases on an authorized SDK host/device:
 
 ## Natural lazy-history compatibility investigation
 
-Eleven `naturalLazy*` cases run in `TerminalLazyNaturalGeometryInstrumentedTest`, in addition to the
-24 gesture and 8 chunk geometry cases (43 total). CI requires all cases. The fixture imports the exact
+Eleven `naturalLazy*` cases run with each of `widthIntrinsics=false` and `widthIntrinsics=true` in
+`TerminalLazyNaturalGeometryInstrumentedTest` (22 cases). Six `TerminalIntrinsicWidthInstrumentedTest`
+cases compare integer widths with the original TextMeasurer, across ANSI/Chinese/emoji/combining,
+font/style spans, bidi/paragraph boundaries, whitespace, density, cursor/resize/palette and FIFO changes.
+Together with the 24 gesture and 8 chunk geometry cases there are **60 required cases**. Each arm has
+an independent result tree and watchdog. The fixture imports the exact
 benchmark candidate/control/width-index source through
 a generated-source task; it never ships in the production APK. Reference geometry is measured in the
 eager production tree but is not supplied to the lazy arm. Lazy addressing uses stable IDs and real
@@ -121,7 +125,8 @@ clipped offsets, not a full-list pixel height estimate.
 - Trimming the maximum-width row must shrink the range and clamp the horizontal offset identically.
 - RTL row positions/ranges, font-scale changes, widest-screen-row archival and history clear are compared.
 
-The candidate measures cold history width using TextMeasurer and caches only scalar maximum
+The control uses TextMeasurer; the new candidate uses Compose MultiParagraphIntrinsics, omitting
+full paragraph layout after the exact natural width has been computed. Both cache only scalar maximum
 candidates. This work is timed by Macrobenchmark; there is no eager-tree geometry oracle supplied
 to the candidate, no fixed-height box, no column-count width estimate, and no hidden history-sized
 Paragraph cache. Eight scalar-index JVM tests separately cover cold/incremental counts at 1k/5k/10k,

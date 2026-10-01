@@ -10,6 +10,19 @@ import org.junit.Test
 
 class TerminalBenchmarkLayoutTest {
     @Test
+    fun intrinsicArmOnlyChangesTheWidthMeasurementNotTheRowTree() {
+        for (size in TerminalBenchmarkWorkload.historySizes) {
+            val frame = TerminalBenchmarkWorkload.prepare(size).renderFrame()
+            val fullLayout = TerminalBenchmarkLayout.fromFrame(frame, BenchmarkRenderer.LAZY_HISTORY)
+            val intrinsics = TerminalBenchmarkLayout.fromFrame(frame, BenchmarkRenderer.LAZY_INTRINSIC)
+            assertEquals(fullLayout.copy(useIntrinsicWidths = true), intrinsics)
+            assertEquals(intrinsics, TerminalBenchmarkLayout.fromFrame(
+                frame.copy(historyLineIds = frame.historyLineIds.reversed()), BenchmarkRenderer.LAZY_INTRINSIC,
+            ))
+        }
+    }
+
+    @Test
     fun historyIsLazyButScreenIsOneItemAndTheTailIsAlwaysLast() {
         for (size in TerminalBenchmarkWorkload.historySizes) {
             val frame = TerminalBenchmarkWorkload.prepare(size).renderFrame()
@@ -35,6 +48,7 @@ class TerminalBenchmarkLayoutTest {
                 assertFalse(layout.useLazyHistory)
                 assertFalse(layout.useChunkedHistory)
                 assertFalse(layout.isolateChunkDrawing)
+                assertFalse(layout.useIntrinsicWidths)
             }
         }
         assertFalse(TerminalBenchmarkLayout.fromFrame(normal, BenchmarkRenderer.EAGER).useLazyHistory)
@@ -45,6 +59,7 @@ class TerminalBenchmarkLayoutTest {
             assertFalse(layout.useLazyHistory)
             assertFalse(layout.useChunkedHistory)
             assertEquals(0, layout.historyRows)
+            assertFalse(layout.useIntrinsicWidths)
             assertEquals(24, layout.screenRows)
         }
     }

@@ -3,13 +3,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from summarize import (RENDERERS, SCENARIOS, SIZES, SUITE_RENDERERS, comparison_lines, github_annotations, load_results, overrun_percent,
+from summarize import (LAZY_RENDERERS, RENDERERS, SCENARIOS, SIZES, SUITE_RENDERERS, comparison_lines, github_annotations, load_results, overrun_percent,
                        per_operation, render_hot_path_summary, render_summary, result_key, validate_complete)
 
 
 def measurement(size=1000, scenario="initialCompose", renderer="eager", legacy=False):
     count = 1 if scenario == "initialCompose" else 30
-    follow_count = 30 if renderer == "lazyHistory" and scenario in ("activeRowUpdate", "appendAndTrim") else 0
+    follow_count = 30 if renderer in LAZY_RENDERERS and scenario in ("activeRowUpdate", "appendAndTrim") else 0
     result = {
         "className": "me.rerere.rikkahub.benchmark.TerminalScrollbackBenchmark",
         "name": f"{scenario}[history={size}]" if legacy else
@@ -111,7 +111,7 @@ class SummaryTest(unittest.TestCase):
             validate_complete(results, "chunked-layers")
 
     def test_scenario_annotations_cover_every_case_without_truncation_or_fake_zeroes(self):
-        for suite in ("ab", "chunked-layers", "production-lazy"):
+        for suite in ("ab", "chunked-layers", "production-lazy", "width-intrinsics"):
             results = matrix(SUITE_RENDERERS[suite])
             notices = github_annotations(results, "a" * 40, "ci-emulator")
             self.assertEqual(6, len(notices))
@@ -180,6 +180,43 @@ class SummaryTest(unittest.TestCase):
         results[(1000, "appendAndTrim", "lazyHistory")]["metrics"]["followTailCount"]["runs"] = [0, 30]
         with self.assertRaises(ValueError):
             validate_complete(results, "production-lazy")
+
+    def test_intrinsic_experiment_requires_both_width_paths_and_the_production_control(self):
+        results = matrix(SUITE_RENDERERS["width-intrinsics"])
+        validate_complete(results, "width-intrinsics")
+        for missing in SUITE_RENDERERS["width-intrinsics"]:
+            with self.assertRaises(ValueError):
+                validate_complete({key: value for key, value in results.items() if key[2] != missing}, "width-intrinsics")
+        with self.assertRaises(ValueError):
+            validate_complete(results, "production-lazy")
+        with self.assertRaises(ValueError):
+            validate_complete(results, "width-intrinsics", require_width_index=True)
+        for (_, scenario, renderer), result in results.items():
+            if renderer in LAZY_RENDERERS and scenario in ("initialCompose", "activeRowUpdate", "appendAndTrim"):
+                count = 1 if scenario == "initialCompose" else 30
+                result["metrics"].update({
+                    "widthIndexCount": {"runs": [count, count]},
+                    "widthIndexSumMs": {"runs": [12, 24]},
+                    "widthIndexMaxMs": {"runs": [3, 6]},
+                })
+        validate_complete(results, "width-intrinsics", require_width_index=True)
+        text = render_summary(results, {}, "sha", "ci-emulator")
+        self.assertIn("L/I: lazyHistory / lazyIntrinsic", text)
+        self.assertIn("P/I: chunkedLayers / lazyIntrinsic", text)
+        self.assertIn("identical row trees", text)
+        self.assertEqual(1, text.count("The two lazy arms have identical row trees"))
+        table = text.split("| History | Scenario | Renderer | Repeats |", 1)[1].split("¹ Median", 1)[0]
+        self.assertEqual(45, sum(line.startswith(("| 1000 |", "| 5000 |", "| 10000 |"))
+                                 for line in table.splitlines()))
+        self.assertNotIn("The two lazy arms", table)
+        notices = github_annotations(results, "a" * 40, "ci-emulator")
+        self.assertEqual(7, len(notices))
+        widths = notices[-1][1]
+        self.assertEqual(18, len([line for line in widths.splitlines() if line[:1].isdigit()]))
+        self.assertLess(len(widths.replace("\n", "%0A").encode()), 3500)
+        results[(10000, "appendAndTrim", "lazyIntrinsic")]["metrics"]["followTailCount"]["runs"] = [0, 30]
+        with self.assertRaises(ValueError):
+            validate_complete(results, "width-intrinsics", require_width_index=True)
 
     def test_requires_both_complete_arms_and_the_same_repetition_count(self):
         results = matrix()

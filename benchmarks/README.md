@@ -3,9 +3,11 @@
 ## Scope
 
 Measure **1,000 / 5,000 / 10,000 history rows + 24 active rows** on one device/APK. Current default
-is `production-lazy` (`candidate=productionVsLazy`): the current production archival chunks with
-display-list isolation versus the benchmark-only history `LazyColumn`, 30 cases total. Adjacent arm
-order alternates across sizes/scenarios. Both use the same incremental frame and row synchronizer.
+is `width-intrinsics` (`candidate=widthIntrinsics`): current production chunks/layers, the previous
+full-layout-width lazy candidate, and the intrinsic-width lazy candidate (45 cases). Adjacent order
+rotates across sizes/scenarios. The two lazy arms have identical rows and FIFO index; only scalar
+width measurement changes. All arms use the same incremental frame and row synchronizer.
+The `production-lazy` pair remains available as `candidate=productionVsLazy` (30 cases).
 The archived three-arm `chunked-layers` and two-arm `ab` / `chunked-eager` formats remain available;
 never merge independent runs or substitute the legacy flat eager control for current production.
 
@@ -124,10 +126,10 @@ To run on a dedicated, authorized physical test device from a normal Android SDK
   :benchmarks:terminal-macrobenchmark:connectedBenchmarkAndroidTest \
   -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.benchmark.TerminalScrollbackBenchmark \
   -Pandroid.testInstrumentationRunnerArguments.terminalIterations=5 \
-  -Pandroid.testInstrumentationRunnerArguments.terminalCandidateRenderer=productionVsLazy
+  -Pandroid.testInstrumentationRunnerArguments.terminalCandidateRenderer=widthIntrinsics
 
 python3 benchmarks/summarize.py benchmarks/terminal-macrobenchmark/build/outputs \
-  --sha "$(git rev-parse HEAD)" --environment physical-device --suite production-lazy --require-complete \
+  --sha "$(git rev-parse HEAD)" --environment physical-device --suite width-intrinsics --require-complete --require-width-index \
   --output /tmp/terminal-scrollback-summary.md
 ```
 
@@ -193,6 +195,21 @@ All renderer arms use the new synchronizer: their same-run ratios compare render
 versus new synchronization. Do not infer a before/after speedup from separate CI hosts/runs.
 
 ## Lazy-history migration investigation (not enabled in production)
+
+The `lazyIntrinsic` arm obtains `ceil(maxIntrinsicWidth)` from Compose MultiParagraphIntrinsics
+with the same resolved style/density/direction/font resolver used by the full-layout control. This
+is the width TextMeasurer chooses with unbounded constraints, Clip and no soft wrap. Shaping, spans,
+fallback fonts and bidi are retained; only the following MultiParagraph/TextLayoutResult creation
+is omitted from width discovery. Visible Text still performs its own unchanged layout/draw. No
+glyph-width approximation, full-history paragraph cache or forced GC is introduced. The scalar
+FIFO index and cold O(H) scan are unchanged. Allocation-path counters reject a mislabeled arm.
+
+The correctness fixture runs all 11 natural geometry cases against **both** width paths plus six
+exact integer-width tests spanning styles, scripts, emoji, fallback, density, direction, paragraph
+boundaries, live/archived cursor text and FIFO invalidations. Geometry references are never fed
+to the timed candidate. These tests and measured same-run data, not cross-host ratios, decide whether
+the new width path is an improvement. The terminal status bar and KEYS features/semantics are out
+of scope and unchanged; any adjustment requires a user-approved proposal first.
 
 The `TerminalLazyNaturalGeometryInstrumentedTest` correctness suite compiles the exact same
 `TerminalBenchmarkViewport` / partition sources as this target, not a second lazy renderer. It

@@ -38,6 +38,8 @@ internal class LazyCompositionStats : TerminalTranscriptCompositionObserver {
     var activeGrids = 0
     var measuredHistoryWidths = 0L
     var measuredScreenWidths = 0L
+    var fullWidthLayouts = 0L
+    var intrinsicWidthMeasurements = 0L
 
     override fun historyChunkDelta(chunks: Int, rows: Int) {
         historyChunks += chunks
@@ -85,7 +87,7 @@ internal fun TerminalBenchmarkViewport(
         return
     }
 
-    val widthPx = exactTranscriptWidth(frame, style, stats)
+    val widthPx = exactTranscriptWidth(frame, style, stats, layout.useIntrinsicWidths)
     val density = LocalDensity.current
     // Width is independent of which rows happen to be composed. Measure natural Text width once
     // per new row/metric revision; do not compose all history or approximate width from cell counts.
@@ -137,6 +139,7 @@ private fun exactTranscriptWidth(
     frame: TerminalEmulator.RenderFrame,
     style: TextStyle,
     stats: LazyCompositionStats,
+    useIntrinsics: Boolean,
 ): Int {
     val density = LocalDensity.current
     val direction = LocalLayoutDirection.current
@@ -154,20 +157,29 @@ private fun exactTranscriptWidth(
         }
     }
     val metricKey = WidthMetrics(style, density, direction, resolver, fonts)
-    val index = remember { TerminalBenchmarkWidthIndex() }
-    // No history-sized paragraph cache: scalar history maxima live in the index, not TextMeasurer.
-    val measurer = rememberTextMeasurer(cacheSize = 0)
+    val index = remember(useIntrinsics) { TerminalBenchmarkWidthIndex() }
+    // The old path remains a controlled arm. Both use the same FIFO index and Text rendering.
+    val measurer = if (useIntrinsics) null else rememberTextMeasurer(cacheSize = 0)
+    val intrinsicMeasurer = if (useIntrinsics) remember(metricKey) {
+        TerminalIntrinsicWidthMeasurer(style, density, direction, resolver)
+    } else null
     Trace.beginSection("Terminal.widthIndex")
     return try {
         index.width(frame, metricKey) { text ->
-            measurer.measure(text, style, softWrap = false, maxLines = 1,
-                layoutDirection = direction, density = density, fontFamilyResolver = resolver,
-                skipCache = true).size.width
+            if (intrinsicMeasurer != null) {
+                intrinsicMeasurer.width(text).also { stats.intrinsicWidthMeasurements++ }
+            } else {
+                checkNotNull(measurer).measure(text, style, softWrap = false, maxLines = 1,
+                    layoutDirection = direction, density = density, fontFamilyResolver = resolver,
+                    skipCache = true).size.width.also { stats.fullWidthLayouts++ }
+            }
         }.also {
             stats.measuredHistoryWidths += index.lastMeasuredHistoryRows
             stats.measuredScreenWidths += index.lastMeasuredScreenRows
             Trace.setCounter("Terminal.widthHistoryMeasurements", stats.measuredHistoryWidths)
             Trace.setCounter("Terminal.widthCandidates", index.retainedCandidates.toLong())
+            Trace.setCounter("Terminal.widthFullLayouts", stats.fullWidthLayouts)
+            Trace.setCounter("Terminal.widthIntrinsicMeasurements", stats.intrinsicWidthMeasurements)
         }
     } finally {
         Trace.endSection()
