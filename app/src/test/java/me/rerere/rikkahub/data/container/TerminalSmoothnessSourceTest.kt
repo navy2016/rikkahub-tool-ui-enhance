@@ -138,7 +138,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("synchronizeTerminalRenderedRows("))
         assertTrue(processSessionSource.contains("createTerminalRenderedRowsSyncState(initialTerminalRenderFrame, terminalRenderedRows)"))
         assertTrue(processSessionSource.contains("syncState = terminalRenderedRowsSyncState"))
-        assertTrue(processSessionSource.contains("TerminalRenderedTranscript("))
+        assertTrue(processSessionSource.contains("TerminalConfiguredTranscript("))
         assertTrue(renderedRowsSource.contains("val lineId: Long"))
         assertTrue(renderedRowsSource.contains("buildLineIdsFromFrame(frame, rendered.size)"))
         // Row identity through trim/reorder is checked behaviorally in TerminalRenderedRowsTest.
@@ -258,7 +258,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(controllerSource.contains("measured.frameRevision == frame.revision"))
         assertTrue(controllerSource.contains("measured.anchor.clippedTopPx == anchor?.clippedTopPx"))
         assertTrue(controllerSource.contains("measured.anchor.historyGeneration == anchor?.historyGeneration"))
-        assertTrue(processSessionSource.contains("TerminalRenderedTranscript("))
+        assertTrue(processSessionSource.contains("TerminalConfiguredTranscript("))
         assertFalse(processSessionSource.contains("LazyColumn("))
     }
 
@@ -284,7 +284,7 @@ class TerminalSmoothnessSourceTest {
         assertFalse(processSessionSource.contains("LazyColumn("))
         assertFalse(processSessionSource.contains("rememberLazyListState("))
         assertFalse(processSessionSource.contains("TERMINAL_LAZY_HISTORY_MIN_ROWS"))
-        assertTrue(processSessionSource.contains("TerminalRenderedTranscript("))
+        assertTrue(processSessionSource.contains("TerminalConfiguredTranscript("))
     }
 
     @Test
@@ -301,7 +301,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains(".verticalScroll("))
         // Ordinary history uses the measured display-list isolation; grid modes still produce no
         // chunks and therefore use the unchanged flat path.
-        assertTrue(processSessionSource.contains("isolateChunkDrawing = true"))
+        assertTrue(processSessionSource.contains("mode = appliedTerminalRenderMode"))
         assertTrue(renderedRowsSource.contains("isolateChunkDrawing: Boolean = false"))
     }
 

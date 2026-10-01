@@ -104,6 +104,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -122,6 +123,9 @@ import me.rerere.rikkahub.data.container.isConfiguredTerminalCommand
 import me.rerere.rikkahub.data.container.isTuiCommand
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
+import me.rerere.rikkahub.data.container.TerminalRenderMode
+import me.rerere.rikkahub.data.container.effectiveTerminalRenderMode
+import me.rerere.rikkahub.data.container.terminalRendererForCommand
 import me.rerere.rikkahub.data.container.terminalEffectiveScreenBottomRow
 import me.rerere.rikkahub.data.container.ControlInput
 import me.rerere.rikkahub.data.container.ProcessStatus
@@ -291,7 +295,7 @@ private fun defaultTerminalQuickCommands() = listOf(
     TerminalQuickCommandConfig("tty", "tty; stty size; echo ${'$'}TERM"),
 )
 
-private fun defaultTerminalStatusItems() = listOf("RAW", "AUTO", "COLS", "HIST", "JUMP", "IME", "GRID", "KEYS", "TOUCH", "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL").map { TerminalItemConfig(it) }
+private fun defaultTerminalStatusItems() = listOf("RAW", "AUTO", "COLS", "HIST", "JUMP", "IME", "GRID", "RENDER", "KEYS", "TOUCH", "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL").map { TerminalItemConfig(it) }
 private fun defaultTerminalExtraKeyItems() = listOf("CTRL", "ALT", "SHIFT", "SEL", "KBD", "ESC", "TAB", "S-TAB", "UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "BKSP", "DEL", "ENTER", "C-C", "C-D", "C-Z", "C-L", "C-U", "C-W", "C-A", "C-E", "C-R", "COPY", "PASTE", "CLEAR", "TEST", "CLI").map { TerminalItemConfig(it) }
 
 private val TerminalStatusPresets = listOf(
@@ -299,6 +303,7 @@ private val TerminalStatusPresets = listOf(
     TerminalActionPreset("TOUCH", "TOUCH/MOUSE"), TerminalActionPreset("INPUT", "INPUT/MINI"), TerminalActionPreset("A-", "A-"),
     TerminalActionPreset("A+", "A+"), TerminalActionPreset("COPY", "COPY"), TerminalActionPreset("PASTE", "PASTE"),
     TerminalActionPreset("CLR", "CLR"), TerminalActionPreset("CTN", "CTN"), TerminalActionPreset("FULL", "FULL/EXIT"),
+    TerminalActionPreset("RENDER", "渲染方式"),
 )
 private val TerminalExtraKeyPresets = listOf(
     TerminalActionPreset("CTRL", "CTRL"), TerminalActionPreset("ALT", "ALT"), TerminalActionPreset("SHIFT", "SHIFT"), TerminalActionPreset("SEL", "SEL"), TerminalActionPreset("KBD", "KBD"),
@@ -891,6 +896,29 @@ private fun TerminalInteractivePanel(
         mutableStateOf(savedPreference?.customImeHeightDp?.coerceIn(TERMINAL_IME_HEIGHT_MIN_DP, TERMINAL_IME_HEIGHT_MAX_DP))
     }
     var terminalSettingsDialog by remember { mutableStateOf<String?>(null) }
+    val terminalRenderMode = remember(settings.terminalRenderPreferences, process.command) {
+        terminalRendererForCommand(settings.terminalRenderPreferences, process.command)
+    }
+    // Another panel for this command can change the preference. Defer tree changes until SEL
+    // exits too, so an external setting update cannot discard the current selection.
+    var appliedTerminalRenderMode by remember(processId) { mutableStateOf(terminalRenderMode) }
+    LaunchedEffect(terminalRenderMode, selectionMode) {
+        if (!selectionMode) appliedTerminalRenderMode = terminalRenderMode
+    }
+    var savingTerminalRenderMode by remember(processId) { mutableStateOf(false) }
+    var terminalRenderError by remember(processId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(settings.terminalRenderStatusItemMigrated) {
+        if (!settings.terminalRenderStatusItemMigrated) {
+            try {
+                settingsStore.migrateTerminalRendererStatusItem()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // The read-side migration still exposes RENDER; retry on the next panel visit.
+                terminalRenderError = "渲染按钮配置未能保存，下次进入将重试。"
+            }
+        }
+    }
     val imeVisible = WindowInsets.isImeVisible
     val density = LocalDensity.current
     val imeInsets = WindowInsets.ime
@@ -1603,6 +1631,12 @@ private fun TerminalInteractivePanel(
                     fullscreen = fullscreen,
                     terminalMuted = terminalMuted,
                     items = terminalStatusItems,
+                    renderMode = terminalRenderMode,
+                    effectiveRenderMode = effectiveTerminalRenderMode(appliedTerminalRenderMode, terminalHistoryChunkPlan.isNotEmpty()),
+                    onRenderModeClick = {
+                        terminalRenderError = null
+                        terminalSettingsDialog = "renderer"
+                    },
                     onEditItems = { editingTerminalItems = "status" },
                     onRawInputModeChange = {
                         rawInputMode = it
@@ -1824,13 +1858,13 @@ private fun TerminalInteractivePanel(
                             )
                     ) {
                     val terminalContent: @Composable () -> Unit = {
-                        TerminalRenderedTranscript(
+                        TerminalConfiguredTranscript(
                             rows = terminalRenderedRows.toList(),
                             style = terminalTextStyle,
                             historyChunks = terminalHistoryChunkPlan,
-                            // The same-run benchmark isolated this display-list boundary without
-                            // changing ScrollState, natural row geometry or viewport ownership.
-                            isolateChunkDrawing = true,
+                            // Only eager grouping/drawing changes. Preserve both ScrollStates,
+                            // the selection wrapper and the sole semantic scroll controller.
+                            mode = appliedTerminalRenderMode,
                         )
                     }
                     if (selectionMode) {
@@ -1932,6 +1966,36 @@ private fun TerminalInteractivePanel(
         )
     }
     when (terminalSettingsDialog) {
+        "renderer" -> TerminalRenderModeDialog(
+            value = terminalRenderMode,
+            appliedMode = appliedTerminalRenderMode,
+            hasHistoryChunks = terminalHistoryChunkPlan.isNotEmpty(),
+            usesTuiViewport = currentUsesTuiViewport,
+            selectionActive = selectionMode,
+            saving = savingTerminalRenderMode,
+            error = terminalRenderError,
+            onDismiss = { terminalSettingsDialog = null },
+            onSave = { mode ->
+                if (!savingTerminalRenderMode && !selectionMode) {
+                    savingTerminalRenderMode = true
+                    terminalRenderError = null
+                    scope.launch {
+                        try {
+                            // Persist only this command's renderer. Never write PTY input,
+                            // reset the frame/history, scroll, or change other preferences.
+                            settingsStore.setTerminalRenderer(process.command, mode)
+                            terminalSettingsDialog = null
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            terminalRenderError = "保存失败，当前渲染方式未更改。请重试。"
+                        } finally {
+                            savingTerminalRenderMode = false
+                        }
+                    }
+                }
+            },
+        )
         "scrollback" -> TerminalNumberSettingDialog(
             title = "终端历史行数",
             value = maxScrollbackLines,
@@ -2036,6 +2100,9 @@ private fun TerminalStatusBar(
     fullscreen: Boolean,
     terminalMuted: Color,
     items: List<TerminalItemConfig>,
+    renderMode: TerminalRenderMode,
+    effectiveRenderMode: TerminalRenderMode,
+    onRenderModeClick: () -> Unit,
     onEditItems: () -> Unit,
     onRawInputModeChange: (Boolean) -> Unit,
     onAutoScrollChange: (Boolean) -> Unit,
@@ -2102,6 +2169,7 @@ private fun TerminalStatusBar(
                 "CLR" -> TerminalStatusKey("CLR", onLongClick = onEditItems, onClick = onClear)
                 "CTN" -> TerminalStatusKey("CTN", onLongClick = onEditItems, onClick = onContainerManager)
                 "FULL" -> TerminalStatusKey(if (fullscreen) "EXIT" else "FULL", highlight = true, onLongClick = onEditItems, onClick = onFullscreenToggle)
+                "RENDER" -> TerminalRenderButton(renderMode, effectiveRenderMode, item.label, onEditItems, onRenderModeClick)
             }
         }
     }

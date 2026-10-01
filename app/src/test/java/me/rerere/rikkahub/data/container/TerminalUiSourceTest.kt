@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.container
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -49,6 +50,28 @@ class TerminalUiSourceTest {
         assertTrue(processSessionSource.contains("shiftLatch"))
         assertTrue(processSessionSource.contains("sequenceFor(key, shift = shiftLatch"))
         assertTrue(processSessionSource.contains("""placeholder = { Text("显示名") }"""))
+    }
+
+    @Test
+    fun rendererButtonIsAdditiveAndKeepsKeysUntouched() {
+        assertTrue(processSessionSource.contains("TerminalActionPreset(\"RENDER\", \"渲染方式\")"))
+        assertTrue(processSessionSource.contains("\"RENDER\" -> TerminalRenderButton"))
+        assertTrue(processSessionSource.contains("settingsStore.setTerminalRenderer(process.command, mode)"))
+        assertTrue(processSessionSource.contains("if (!selectionMode) appliedTerminalRenderMode = terminalRenderMode"))
+        assertTrue(processSessionSource.contains("TerminalConfiguredTranscript("))
+        assertTrue(processSessionSource.contains("\"GRID\", \"RENDER\", \"KEYS\""))
+        assertTrue(preferencesStoreSource.contains("preferences[TERMINAL_RENDER_PREFERENCES] = settings.terminalRenderPreferences"))
+        assertTrue(preferencesStoreSource.contains("settingsFlow.value = settingsFlow.value.copy(terminalRenderPreferences = nextRaw)"))
+        // Existing status actions and KEYS remain exactly one dispatch branch each.
+        for (id in listOf("RAW", "AUTO", "COLS", "HIST", "JUMP", "IME", "GRID", "KEYS", "TOUCH",
+            "INPUT", "A-", "A+", "COPY", "PASTE", "CLR", "CTN", "FULL")) {
+            assertEquals(1, Regex("\\\"$id\\\" -> TerminalStatus").findAll(processSessionSource).count())
+        }
+        for (id in listOf("CTRL", "ALT", "SHIFT", "SEL", "KBD", "ESC", "TAB", "S-TAB", "UP", "DOWN",
+            "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "BKSP", "DEL", "ENTER", "C-C", "C-D",
+            "C-Z", "C-L", "C-U", "C-W", "C-A", "C-E", "C-R", "COPY", "PASTE", "CLEAR", "TEST", "CLI")) {
+            assertEquals(1, Regex("\\\"$id\\\" -> TerminalKey").findAll(processSessionSource).count())
+        }
     }
 
     @Test

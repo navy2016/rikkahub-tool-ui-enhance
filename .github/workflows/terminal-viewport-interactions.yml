@@ -10,6 +10,7 @@ on:
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewport*.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalRender*.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewport*.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalLazyViewport*.kt'
       - 'app/src/test/java/me/rerere/rikkahub/data/container/TerminalLazyViewportMeasurementTest.kt'
@@ -81,7 +82,8 @@ jobs:
             --require-case-group 'widthIntrinsics=false:11' \
             --require-case-group 'widthIntrinsics=true:11' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalIntrinsicWidthInstrumentedTest \
-            --require-case-group 'intrinsicWidth:6'
+            --require-case-group 'intrinsicWidth:6' \
+            --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

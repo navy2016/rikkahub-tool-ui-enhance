@@ -22,6 +22,9 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.container.TerminalRenderMode
+import me.rerere.rikkahub.data.container.addTerminalRendererStatusItem
+import me.rerere.rikkahub.data.container.updatedTerminalRenderPreferences
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_DIALOGUE_COMPRESS_PROMPT
@@ -171,6 +174,8 @@ class SettingsStore(
         val TERMINAL_CUSTOM_TUI_COMMANDS = stringPreferencesKey("terminal_custom_tui_commands")
         val TERMINAL_FULL_GRID_COMMANDS = stringPreferencesKey("terminal_full_grid_commands")
         val TERMINAL_COMMAND_PREFERENCES = stringPreferencesKey("terminal_command_preferences")
+        val TERMINAL_RENDER_PREFERENCES = stringPreferencesKey("terminal_render_preferences")
+        val TERMINAL_RENDER_STATUS_ITEM_MIGRATED = booleanPreferencesKey("terminal_render_status_item_migrated")
 
         // 提示词注入
         val MODE_INJECTIONS = stringPreferencesKey("mode_injections")
@@ -298,11 +303,15 @@ class SettingsStore(
                 autoContinueAfterToolFailureMessage = preferences[AUTO_CONTINUE_AFTER_TOOL_FAILURE_MESSAGE] ?: "继续",
                 toolCallDelaySeconds = preferences[TOOL_CALL_DELAY_SECONDS] ?: 0,
                 terminalQuickCommands = preferences[TERMINAL_QUICK_COMMANDS] ?: "",
-                terminalStatusBarItems = preferences[TERMINAL_STATUS_BAR_ITEMS] ?: "",
+                terminalStatusBarItems = (preferences[TERMINAL_STATUS_BAR_ITEMS] ?: "").let {
+                    if (preferences[TERMINAL_RENDER_STATUS_ITEM_MIGRATED] == true) it else addTerminalRendererStatusItem(it)
+                },
                 terminalExtraKeyItems = preferences[TERMINAL_EXTRA_KEY_ITEMS] ?: "",
                 terminalCustomTuiCommands = preferences[TERMINAL_CUSTOM_TUI_COMMANDS] ?: "",
                 terminalFullGridCommands = preferences[TERMINAL_FULL_GRID_COMMANDS] ?: "",
                 terminalCommandPreferences = preferences[TERMINAL_COMMAND_PREFERENCES] ?: "",
+                terminalRenderPreferences = preferences[TERMINAL_RENDER_PREFERENCES] ?: "",
+                terminalRenderStatusItemMigrated = preferences[TERMINAL_RENDER_STATUS_ITEM_MIGRATED] == true,
                 backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: BackupReminderConfig(),
@@ -573,7 +582,16 @@ class SettingsStore(
             preferences[AUTO_CONTINUE_AFTER_TOOL_FAILURE_MESSAGE] = failureContinueMessage
             preferences[TOOL_CALL_DELAY_SECONDS] = settings.toolCallDelaySeconds.coerceAtLeast(0)
             if (settings.terminalQuickCommands.isBlank()) preferences.remove(TERMINAL_QUICK_COMMANDS) else preferences[TERMINAL_QUICK_COMMANDS] = settings.terminalQuickCommands
-            if (settings.terminalStatusBarItems.isBlank()) preferences.remove(TERMINAL_STATUS_BAR_ITEMS) else preferences[TERMINAL_STATUS_BAR_ITEMS] = settings.terminalStatusBarItems
+            // A settings update captured before the one-time migration must not erase the new
+            // button. Once migrated, an explicit editor deletion remains a deletion.
+            val renderStatusMigrated = settings.terminalRenderStatusItemMigrated ||
+                preferences[TERMINAL_RENDER_STATUS_ITEM_MIGRATED] == true
+            val statusItems = if (!settings.terminalRenderStatusItemMigrated && renderStatusMigrated) {
+                addTerminalRendererStatusItem(settings.terminalStatusBarItems)
+            } else settings.terminalStatusBarItems
+            if (statusItems.isBlank()) preferences.remove(TERMINAL_STATUS_BAR_ITEMS) else preferences[TERMINAL_STATUS_BAR_ITEMS] = statusItems
+            // The command-scoped setter publishes its successful atomic write into settingsFlow,
+            // so ordinary settings saves and backup restores preserve the latest renderer choice.
             if (settings.terminalExtraKeyItems.isBlank()) preferences.remove(TERMINAL_EXTRA_KEY_ITEMS) else preferences[TERMINAL_EXTRA_KEY_ITEMS] = settings.terminalExtraKeyItems
             if (settings.terminalCustomTuiCommands.isBlank()) preferences.remove(TERMINAL_CUSTOM_TUI_COMMANDS) else preferences[TERMINAL_CUSTOM_TUI_COMMANDS] = settings.terminalCustomTuiCommands.replace("\r\n", "\n").replace("\r", "\n").trim()
             preferences[TERMINAL_FULL_GRID_COMMANDS] = settings.terminalFullGridCommands
@@ -581,6 +599,8 @@ class SettingsStore(
                 .replace("\r", "\n")
                 .trim()
             if (settings.terminalCommandPreferences.isBlank()) preferences.remove(TERMINAL_COMMAND_PREFERENCES) else preferences[TERMINAL_COMMAND_PREFERENCES] = settings.terminalCommandPreferences
+            if (settings.terminalRenderPreferences.isBlank()) preferences.remove(TERMINAL_RENDER_PREFERENCES) else preferences[TERMINAL_RENDER_PREFERENCES] = settings.terminalRenderPreferences
+            preferences[TERMINAL_RENDER_STATUS_ITEM_MIGRATED] = renderStatusMigrated
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
@@ -589,6 +609,38 @@ class SettingsStore(
 
     suspend fun update(fn: (Settings) -> Settings) {
         update(fn(settingsFlow.value))
+    }
+
+    internal suspend fun setTerminalRenderer(command: String, mode: TerminalRenderMode) {
+        var nextRaw = ""
+        dataStore.edit { preferences ->
+            nextRaw = updatedTerminalRenderPreferences(
+                preferences[TERMINAL_RENDER_PREFERENCES] ?: "", command, mode,
+            )
+            preferences[TERMINAL_RENDER_PREFERENCES] = nextRaw
+        }
+        // Do this only after DataStore succeeds; a failed save must leave the visible mode alone.
+        settingsFlow.value = settingsFlow.value.copy(terminalRenderPreferences = nextRaw)
+    }
+
+    internal suspend fun migrateTerminalRendererStatusItem() {
+        var migrated = false
+        dataStore.edit { preferences ->
+            if (preferences[TERMINAL_RENDER_STATUS_ITEM_MIGRATED] != true) {
+                val raw = preferences[TERMINAL_STATUS_BAR_ITEMS] ?: ""
+                val migratedRaw = addTerminalRendererStatusItem(raw)
+                if (migratedRaw != raw) preferences[TERMINAL_STATUS_BAR_ITEMS] = migratedRaw
+                preferences[TERMINAL_RENDER_STATUS_ITEM_MIGRATED] = true
+                migrated = true
+            }
+        }
+        if (migrated) {
+            val latest = settingsFlow.value
+            settingsFlow.value = latest.copy(
+                terminalStatusBarItems = addTerminalRendererStatusItem(latest.terminalStatusBarItems),
+                terminalRenderStatusItemMigrated = true,
+            )
+        }
     }
 
     suspend fun updateAssistant(assistantId: Uuid) {
@@ -743,6 +795,8 @@ data class Settings(
     val terminalCustomTuiCommands: String = "",
     val terminalFullGridCommands: String = "",
     val terminalCommandPreferences: String = "",
+    val terminalRenderPreferences: String = "",
+    val terminalRenderStatusItemMigrated: Boolean = false,
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
