@@ -13,7 +13,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
@@ -142,24 +141,26 @@ private fun exactTranscriptWidth(
     val density = LocalDensity.current
     val direction = LocalLayoutDirection.current
     val resolver = LocalFontFamilyResolver.current
-    val mergedStyle = LocalTextStyle.current.merge(style)
+    // Material Text's explicit style replaces its LocalTextStyle default; it does NOT inherit
+    // unspecified typography fields from that local. Merging it here added bodyLarge's letter
+    // spacing to measured widths although production Text draws with the caller's exact style.
     // TerminalEmulator emits normal/bold × regular/italic spans. Observe each resolved typeface
     // so a delayed font resolution revokes scalar widths, even when the resolver object is stable.
     // Synthetic frames cannot use owned-history reuse and measure their arbitrary spans every time.
     val fonts = listOf(FontWeight.Normal, FontWeight.Bold).flatMap { weight ->
         listOf(FontStyle.Normal, FontStyle.Italic).map { fontStyle ->
-            resolver.resolve(mergedStyle.fontFamily, weight, fontStyle,
-                mergedStyle.fontSynthesis ?: FontSynthesis.All).value
+            resolver.resolve(style.fontFamily, weight, fontStyle,
+                style.fontSynthesis ?: FontSynthesis.All).value
         }
     }
-    val metricKey = WidthMetrics(mergedStyle, density, direction, resolver, fonts)
+    val metricKey = WidthMetrics(style, density, direction, resolver, fonts)
     val index = remember { TerminalBenchmarkWidthIndex() }
     // No history-sized paragraph cache: scalar history maxima live in the index, not TextMeasurer.
     val measurer = rememberTextMeasurer(cacheSize = 0)
     Trace.beginSection("Terminal.widthIndex")
     return try {
         index.width(frame, metricKey) { text ->
-            measurer.measure(text, mergedStyle, softWrap = false, maxLines = 1,
+            measurer.measure(text, style, softWrap = false, maxLines = 1,
                 layoutDirection = direction, density = density, fontFamilyResolver = resolver,
                 skipCache = true).size.width
         }.also {
