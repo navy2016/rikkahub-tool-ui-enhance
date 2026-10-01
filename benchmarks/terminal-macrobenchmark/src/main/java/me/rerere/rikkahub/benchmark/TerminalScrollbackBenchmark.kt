@@ -86,6 +86,8 @@ class TerminalScrollbackBenchmark(
             add(TraceSectionMetric("Terminal.draw", label = "draw"))
             add(TraceSectionMetric("Terminal.followTail", label = "followTail"))
             add(TraceSectionMetric("Terminal.eagerTailCorrection", label = "eagerTailCorrection"))
+            add(TraceSectionMetric("Terminal.widthIndex", label = "widthIndex"))
+            add(TraceSectionMetric("Terminal.widthIndex", TraceSectionMetric.Mode.Max, "widthIndex"))
             if (scenario == "initialCompose") {
                 add(TraceSectionMetric("Terminal.mountToDraw", TraceSectionMetric.Mode.First, "mountToDraw"))
             }

@@ -92,7 +92,7 @@ def load_results(root):
     return results, contexts[0]
 
 
-def validate_complete(results, suite="baseline"):
+def validate_complete(results, suite="baseline", require_width_index=False):
     if suite not in SUITE_RENDERERS:
         raise ValueError(f"Unknown benchmark suite: {suite}")
     renderers = SUITE_RENDERERS[suite]
@@ -127,6 +127,18 @@ def validate_complete(results, suite="baseline"):
             counts = single_runs(result, "followTailCount")
             if len(counts) != iterations or any(count != expected_count for count in counts):
                 raise ValueError(f"Incorrect follow-tail trace count for {key}")
+        if require_width_index and key[2] == "lazyHistory" and key[1] in (
+                "initialCompose", "activeRowUpdate", "appendAndTrim"):
+            # Width discovery lives in composition, not rowSync. Require the cost rather than
+            # reporting the old, horizontally incomplete candidate under a new compatibility label.
+            minimum_count = 1 if key[1] == "initialCompose" else 30
+            counts = single_runs(result, "widthIndexCount")
+            sums = single_runs(result, "widthIndexSumMs")
+            maxima = single_runs(result, "widthIndexMaxMs")
+            if (len(counts) != iterations or len(sums) != iterations or len(maxima) != iterations
+                    or any(count < minimum_count for count in counts)
+                    or any(value <= 0 for value in sums + maxima)):
+                raise ValueError(f"Missing/incomplete width-index traces for {key}")
 
 
 def format_number(value):
@@ -265,15 +277,21 @@ def render_summary(results, context, sha, environment):
         "", "## Trace phase details", "",
         "Per-call values below are medians of iteration averages. These traces do not measure all recomposition/placement work.",
         "Native frame scheduling, untraced work and GC also prevent subtracting these values from frame p95.", "",
-        "| History | Scenario | Renderer | Measure/call | Draw/call | row sync max¹ | lazy tail request/call | eager correction/call | Frames¹ |",
-        "| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| History | Scenario | Renderer | Measure/call | Draw/call | row sync max¹ | lazy tail request/call | eager correction/call | Frames¹ | Width index/call | Width index max¹ |",
+        "| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for (size, scenario, renderer), result in ordered_results(results):
         values = [str(size), scenario, renderer,
                   format_number(per_operation(result, "measure")), format_number(per_operation(result, "draw")),
                   format_number(median(result, "rowSyncMaxMs")), format_number(per_operation(result, "followTail")),
-                  format_number(per_operation(result, "eagerTailCorrection")), format_number(median(result, "frameCount"))]
+                  format_number(per_operation(result, "eagerTailCorrection")), format_number(median(result, "frameCount")),
+                  format_number(per_operation(result, "widthIndex")), format_number(median(result, "widthIndexMaxMs"))]
         lines.append("| " + " | ".join(values) + " |")
+    lines += [
+        "", "Width-index work, when present, runs inside composition and is included in mount-to-draw/CPU frames.",
+        "It is NOT part of rowSync. Width/call is not width/output: recomposition can cause multiple calls.",
+        "Cold/font/style/column invalidation scans history; owned warm updates only measure the new FIFO suffix and screen.",
+    ]
     lines += [
         "", "## Device context", "",
         "`context.compilationMode` describes the self-instrumenting test driver, not the separately compiled renderer target.",
@@ -332,12 +350,32 @@ def render_scenario_summary(results, scenario, sha, environment):
     return "\n".join(lines)
 
 
+def render_width_summary(results, sha, environment):
+    lines = [
+        f"Terminal width index — commit {sha}; environment={environment}",
+        "ms; medians of iteration values. Included in mount/CPU frames, NOT rowSync. Missing is not zero.",
+        "History | Scenario | Renderer | n | Width/call | Width max | Width calls | Width total",
+    ]
+    for (size, scenario, renderer), result in ordered_results(results):
+        if renderer != "lazyHistory" or scenario not in ("initialCompose", "activeRowUpdate", "appendAndTrim"):
+            continue
+        lines.append(" | ".join([
+            str(size), scenario, renderer, str(result.get("repeatIterations", "?")),
+            format_number(per_operation(result, "widthIndex")), format_number(median(result, "widthIndexMaxMs")),
+            format_number(median(result, "widthIndexCount")), format_number(median(result, "widthIndexSumMs")),
+        ]))
+    return "\n".join(lines)
+
+
 def github_annotations(results, sha, environment):
-    # Six notices, below GitHub's ten-notices-per-step limit. Never truncate away the 10k cases.
-    return [("Terminal rendering hot paths", render_hot_path_summary(results, sha, environment))] + [
+    # At most seven notices, below GitHub's ten-notices-per-step limit. Never truncate 10k cases.
+    notices = [("Terminal rendering hot paths", render_hot_path_summary(results, sha, environment))] + [
         (f"Terminal benchmark {scenario}", render_scenario_summary(results, scenario, sha, environment))
         for scenario in SCENARIOS
     ]
+    if any("widthIndexCount" in result.get("metrics", {}) for result in results.values()):
+        notices.append(("Terminal width index", render_width_summary(results, sha, environment)))
+    return notices
 
 
 def main():
@@ -348,6 +386,7 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--suite", choices=tuple(SUITE_RENDERERS), default="baseline")
     parser.add_argument("--require-complete", action="store_true")
+    parser.add_argument("--require-width-index", action="store_true")
     parser.add_argument("--github-annotation", action="store_true")
     args = parser.parse_args()
     results, context = load_results(args.root)
@@ -355,7 +394,7 @@ def main():
     if payload.get("sourceSha", args.sha) != args.sha or payload.get("suite", args.suite) != args.suite:
         raise ValueError("Source SHA/suite does not match the measurement payload")
     if args.require_complete:
-        validate_complete(results, args.suite)
+        validate_complete(results, args.suite, require_width_index=args.require_width_index)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(render_summary(results, context, args.sha, args.environment))
     if args.github_annotation:

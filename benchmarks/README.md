@@ -201,12 +201,26 @@ physical screen. It covers repeated FIFO trims, font/scale/row-resize changes, d
 styled tail updates, TUI/alternate/full-grid fallback and clearing history. Its synthetic large-font
 spans are explicitly a renderer stress case, not a claim that ANSI feed emits font-size spans.
 
-The offscreen-widest-row case is a **blocker characterization**, not a compatibility acceptance:
-the current lazy candidate only measures composed rows, while production horizontalScroll retains
-the maximum width of all history. The resulting difference must remain visible in the report.
-No fixed-height box, all-history width scan, eager geometry oracle or invented scroll maximum is
-fed to the lazy arm to hide this difference. These tests do not approve production migration,
-cross-item selection/clipboard, real IME, RTL or a complete variable-height controller integration.
+The original `8eb1ead` candidate's offscreen-widest-row case characterized a horizontal-range
+blocker: measuring only composed rows loses the maximum width of retained history. The current
+candidate now calculates exact scalar widths with the same TextStyle/density/direction/resolver as
+production Text. Cold, font/style/column/owner invalidations measure all history; owned warm updates
+measure only newly archived rows plus the physical screen. A monotonic deque expires trimmed widths
+and stores at most H scalar/ordinal candidates, no Paragraph or LayoutResult per history row.
+
+This is a deliberate O(H) cold-width cost, NOT free metadata. `Terminal.widthIndex` is included in
+mount-to-draw and CPU frames, reported separately from rowSync. CI requires its trace counts/sums/max
+for ordinary lazy updates and rejects timing data which omits the width calculation. The fixture
+checks that cold creation measures H history widths, screen-only updates measure zero history widths,
+and each one-line archival measures exactly one. Arbitrary synthetic frames use full measurement.
+Source font resolution is observed for all normal/bold × regular/italic variants emitted by the
+terminal. `TextMeasurer` uses no LRU paragraph cache. Width/span/RTL correctness is tested against the
+production tree, but reference measurements are never provided to the lazy arm.
+
+The 11 natural-layout cases now require offscreen-width equality and cover maximum-row trim,
+horizontal-offset clamping, font scale/RTL alignment, screen-to-history maximum-width migration and
+clear. These tests still do not approve production migration, cross-item selection/clipboard, real
+IME or a complete variable-height controller integration. Production remains eager chunks/layers.
 
 The opt-in lazy measurement tracker now retains only the immediately previous visible items,
 avoiding stale absolute positions and session-lifetime growth after browsing many rows. Its JVM

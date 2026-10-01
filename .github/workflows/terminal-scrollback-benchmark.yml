@@ -66,6 +66,13 @@ jobs:
           PYERROR
             exit "$result"
           fi
+      - name: Require benchmark fixture and width-index unit tests
+        if: always()
+        run: |
+          python3 .github/scripts/report-terminal-tests.py benchmarks/terminal-target/build/test-results \
+            --require-suite me.rerere.rikkahub.benchmark.TerminalBenchmarkWorkloadTest \
+            --require-suite me.rerere.rikkahub.benchmark.TerminalBenchmarkLayoutTest \
+            --require-suite me.rerere.rikkahub.benchmark.TerminalBenchmarkWidthIndexTest
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -94,7 +101,7 @@ jobs:
           if [ "$TERMINAL_BENCHMARK_CANDIDATE" = chunkedLayers ]; then suite=chunked-layers; fi
           if [ "$TERMINAL_BENCHMARK_CANDIDATE" = productionVsLazy ]; then suite=production-lazy; fi
           python3 benchmarks/summarize.py benchmarks/terminal-macrobenchmark/build/outputs \
-            --sha "$GITHUB_SHA" --environment ci-emulator --suite "$suite" --require-complete --github-annotation \
+            --sha "$GITHUB_SHA" --environment ci-emulator --suite "$suite" --require-complete --require-width-index --github-annotation \
             --output artifacts/terminal-scrollback/summary.md
           cat artifacts/terminal-scrollback/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload raw data, traces, logs and APKs

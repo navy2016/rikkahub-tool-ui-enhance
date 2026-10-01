@@ -65,6 +65,7 @@ val syncBenchmarkViewport by tasks.registering(SyncViewportSources::class) {
     includedPaths.set(listOf(
         "me/rerere/rikkahub/benchmark/TerminalBenchmarkLayout.kt",
         "me/rerere/rikkahub/benchmark/TerminalBenchmarkViewport.kt",
+        "me/rerere/rikkahub/benchmark/TerminalBenchmarkWidthIndex.kt",
     ))
     outputDirectory.set(layout.buildDirectory.dir("generated/benchmarkViewport"))
 }

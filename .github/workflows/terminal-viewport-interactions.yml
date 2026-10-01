@@ -16,6 +16,7 @@ on:
       - 'benchmarks/terminal-viewport-tests/**'
       - 'benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmarkViewport.kt'
       - 'benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmarkLayout.kt'
+      - 'benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmarkWidthIndex.kt'
       - '.github/workflows/terminal-viewport-interactions.yml'
       - '.github/scripts/*terminal*'
       - 'settings.gradle.kts'
@@ -76,7 +77,7 @@ jobs:
             --require-case-group 'chunkLayers=false:4' \
             --require-case-group 'chunkLayers=true:4' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalLazyNaturalGeometryInstrumentedTest \
-            --require-case-group 'naturalLazy:8'
+            --require-case-group 'naturalLazy:11'
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

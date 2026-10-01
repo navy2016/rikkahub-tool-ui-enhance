@@ -135,6 +135,33 @@ class SummaryTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             result_key("render[history=1000,scenario=initialCompose,renderer=typo]")
 
+    def test_width_index_traces_cannot_be_omitted_or_counted_as_row_sync(self):
+        results = matrix(SUITE_RENDERERS["production-lazy"])
+        validate_complete(results, "production-lazy")  # Archived pre-width runs remain readable.
+        with self.assertRaisesRegex(ValueError, "width-index"):
+            validate_complete(results, "production-lazy", require_width_index=True)
+        for (_, scenario, renderer), result in results.items():
+            if renderer == "lazyHistory" and scenario in ("initialCompose", "activeRowUpdate", "appendAndTrim"):
+                count = 1 if scenario == "initialCompose" else 30
+                result["metrics"].update({
+                    "widthIndexCount": {"runs": [count, count]},
+                    "widthIndexSumMs": {"runs": [12, 24]},
+                    "widthIndexMaxMs": {"runs": [3, 6]},
+                })
+        validate_complete(results, "production-lazy", require_width_index=True)
+        notices = github_annotations(results, "a" * 40, "ci-emulator")
+        self.assertEqual(7, len(notices))
+        self.assertEqual("Terminal width index", notices[-1][0])
+        width = notices[-1][1]
+        self.assertIn("NOT rowSync", width)
+        self.assertIn("10000 | initialCompose | lazyHistory | 2 | 18.00 | 4.50 | 1.00 | 18.00", width)
+        self.assertIn("10000 | appendAndTrim | lazyHistory | 2 | 0.60 | 4.50 | 30.00 | 18.00", width)
+        self.assertLess(len(width.replace("\n", "%0A").encode()), 3500)
+        self.assertIn("Width index/call", render_summary(results, {}, "sha", "ci-emulator"))
+        results[(10000, "appendAndTrim", "lazyHistory")]["metrics"]["widthIndexCount"]["runs"] = [1, 30]
+        with self.assertRaisesRegex(ValueError, "width-index"):
+            validate_complete(results, "production-lazy", require_width_index=True)
+
     def test_production_lazy_pair_cannot_substitute_the_old_flat_control(self):
         results = matrix(SUITE_RENDERERS["production-lazy"])
         validate_complete(results, "production-lazy")

@@ -103,9 +103,9 @@ To run just the geometry cases on an authorized SDK host/device:
 
 ## Natural lazy-history compatibility investigation
 
-Eight `naturalLazy*` cases run in `TerminalLazyNaturalGeometryInstrumentedTest`, in addition to the
-24 gesture and 8 chunk geometry cases (40 total). CI requires all cases, including the documented
-blocker characterization. The fixture imports the exact benchmark candidate/control source through
+Eleven `naturalLazy*` cases run in `TerminalLazyNaturalGeometryInstrumentedTest`, in addition to the
+24 gesture and 8 chunk geometry cases (43 total). CI requires all cases. The fixture imports the exact
+benchmark candidate/control/width-index source through
 a generated-source task; it never ships in the production APK. Reference geometry is measured in the
 eager production tree but is not supplied to the lazy arm. Lazy addressing uses stable IDs and real
 clipped offsets, not a full-list pixel height estimate.
@@ -116,9 +116,17 @@ clipped offsets, not a full-list pixel height estimate.
 - The whole physical screen stays one item; individual rows use measured internal offsets.
 - Styled output and archival use the same before-draw tail request as the benchmark.
 - TUI/alternate/full-grid fallback, empty history and disjoint/trimmed/cleared anchors are checked.
-- The widest offscreen row exposes the current candidate's **horizontal-range blocker**. That case
-  expects and documents the mismatch; passing it is not horizontal compatibility approval.
+- The widest offscreen row must preserve the production horizontal range, including when panning
+  away from it. Unlike the archived `8eb1ead` test, a mismatch now fails the test.
+- Trimming the maximum-width row must shrink the range and clamp the horizontal offset identically.
+- RTL row positions/ranges, font-scale changes, widest-screen-row archival and history clear are compared.
+
+The candidate measures cold history width using TextMeasurer and caches only scalar maximum
+candidates. This work is timed by Macrobenchmark; there is no eager-tree geometry oracle supplied
+to the candidate, no fixed-height box, no column-count width estimate, and no hidden history-sized
+Paragraph cache. Eight scalar-index JVM tests separately cover cold/incremental counts at 1k/5k/10k,
+metric/owner/style/column invalidation, synthetic/old frames, history hiding/clear, bounds and failure recovery.
 
 This suite does not replace the controller's fixed-grid capture with measured capture, claim a known
-global lazy scroll range, inject a real IME, test RTL or exercise selection handles/copy across lazy
+global lazy scroll range, inject a real IME or exercise selection handles/copy across lazy
 items. Those remain migration gates. Production still uses the user's tested eager chunks/layers.

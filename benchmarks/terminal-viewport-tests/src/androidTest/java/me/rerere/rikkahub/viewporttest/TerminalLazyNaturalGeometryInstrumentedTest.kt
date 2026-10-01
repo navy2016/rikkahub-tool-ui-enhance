@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
@@ -60,8 +62,8 @@ import kotlin.math.roundToInt
  * Exact Macrobenchmark candidate vs current production chunks/layers, with real production Text.
  * No fixed row boxes or total-height estimates. These are renderer/anchor tests, not a second
  * viewport controller: the existing gesture suite owns controller/cancellation coverage.
- * The final case deliberately characterizes the offscreen-width migration blocker; it does NOT
- * approve horizontal compatibility, real IME, cross-item selection/copy or a production switch.
+ * Width-index work stays in the candidate and is independently measured by Macrobenchmark. These
+ * cases do not approve real IME, cross-item selection/copy or a production controller switch.
  */
 class TerminalLazyNaturalGeometryInstrumentedTest {
     @get:Rule val compose = createComposeRule()
@@ -80,7 +82,9 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         }
     }
 
-    private data class Geometry(val text: AnnotatedString, val top: Float, val width: Int, val height: Int)
+    private data class Geometry(
+        val text: AnnotatedString, val left: Float, val top: Float, val width: Int, val height: Int,
+    )
 
     private fun idle(fixture: Fixture) {
         compose.waitForIdle()
@@ -113,7 +117,8 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         ).fetchSemanticsNodes().associate { node ->
             val text = node.config[SemanticsProperties.Text].single()
             val id = checkNotNull(byText[text]) { "Stale/mismatched Text: $text" }
-            id to Geometry(text, node.positionInRoot.y - fixture.viewportTop, node.size.width, node.size.height)
+            id to Geometry(text, node.positionInRoot.x - fixture.viewportLeft,
+                node.positionInRoot.y - fixture.viewportTop, node.size.width, node.size.height)
         }
     }
 
@@ -129,6 +134,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
             assertEquals("Text/spans for $id", expected.text, row.text)
             assertEquals("height for $id", expected.height, row.height)
             assertEquals("width for $id", expected.width, row.width)
+            assertEquals("viewport x for $id", expected.left, row.left, 0.1f)
             assertEquals("viewport y for $id", expected.top, row.top, 0.1f)
         }
     }
@@ -319,7 +325,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
     }
 
     @Test
-    fun naturalLazyOffscreenWidestRowIsAnExplicitHorizontalMigrationBlocker() {
+    fun naturalLazyOffscreenWidestRowRetainsTheProductionHorizontalRange() {
         val fixture = Fixture(wideFirst = true)
         mount(fixture)
         val productionRange = compose.runOnIdle { fixture.horizontal.maxValue }
@@ -329,13 +335,119 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         idle(fixture)
         compose.runOnIdle {
             val lazyRange = fixture.horizontal.maxValue
-            // Characterization, NOT compatibility acceptance. A lazy list cannot discover the
-            // widest uncomposed row, so the current candidate loses the production horizontal range.
-            assertTrue("Expected documented width blocker: production=$productionRange lazy=$lazyRange",
-                productionRange > lazyRange)
+            assertTrue(productionRange > 0)
+            assertEquals("Offscreen history must still determine horizontal range", productionRange, lazyRange)
             assertTrue(fixture.stats.historyRows < fixture.frame.historyCount)
-            Log.w("TerminalViewportProbe", "migration-blocker offscreen width: production=$productionRange lazy=$lazyRange")
+            fixture.runScroll { fixture.horizontal.scrollTo(productionRange / 2) }
         }
+        idle(fixture)
+        val pan = compose.runOnIdle { fixture.horizontal.value }
+        compose.runOnIdle { fixture.bottom() }
+        idle(fixture)
+        compose.runOnIdle {
+            assertEquals(productionRange, fixture.horizontal.maxValue)
+            assertEquals(pan, fixture.horizontal.value)
+        }
+    }
+
+    @Test
+    fun naturalLazyWidestTrimmedRowNoLongerInflatesHorizontalRange() {
+        val fixture = Fixture(wideFirst = true)
+        mount(fixture)
+        val originalRange = compose.runOnIdle { fixture.horizontal.maxValue }
+        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        compose.runOnIdle {
+            fixture.restoreHistory(ViewportAnchor(fixture.frame.historyLineIds[130], 7, null,
+                fixture.frame.historyGeneration))
+        }
+        idle(fixture)
+        compose.runOnIdle { fixture.runScroll { fixture.horizontal.scrollTo(originalRange) } }
+        idle(fixture)
+        compose.runOnIdle {
+            fixture.terminal.feed("\r\n" + fixture.line(40_000))
+            fixture.publish()
+        }
+        idle(fixture)
+        val trimmedRange = compose.runOnIdle {
+            assertTrue(fixture.horizontal.maxValue < originalRange)
+            assertEquals(fixture.horizontal.maxValue, fixture.horizontal.value)
+            fixture.horizontal.maxValue
+        }
+        use(fixture, BenchmarkRenderer.CHUNKED_LAYERS)
+        compose.runOnIdle {
+            assertEquals(trimmedRange, fixture.horizontal.maxValue)
+            assertEquals(trimmedRange, fixture.horizontal.value)
+        }
+    }
+
+    @Test
+    fun naturalLazyFontScaleAndRtlMatchHorizontalRangeAndRowPositions() {
+        val fixture = Fixture(wideFirst = true, stressSpans = true)
+        fixture.rtl = true
+        mount(fixture)
+        val anchor = ViewportAnchor(fixture.frame.historyLineIds[130], 7, null, fixture.frame.historyGeneration)
+        pairAtAnchor(fixture, anchor)
+        compose.runOnIdle {
+            fixture.fontScale = 1.3f
+            fixture.fontSp = 18
+        }
+        idle(fixture)
+        compose.runOnIdle { fixture.runScroll { fixture.horizontal.scrollTo(53) } }
+        idle(fixture)
+        val lazyRange = compose.runOnIdle {
+            assertEquals(53, fixture.horizontal.value)
+            fixture.horizontal.maxValue
+        }
+        pairAtAnchor(fixture, anchor)
+        compose.runOnIdle {
+            assertEquals(lazyRange, fixture.horizontal.maxValue)
+            assertEquals(53, fixture.horizontal.value)
+        }
+        // Also compare the complete physical-grid alignment, whose internal Column must use
+        // the transcript width under RTL rather than its own shorter visible-screen maximum.
+        use(fixture, BenchmarkRenderer.CHUNKED_LAYERS)
+        compose.runOnIdle { fixture.bottom() }
+        val reference = geometry(fixture)
+        val productionRange = fixture.horizontal.maxValue
+        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        compose.runOnIdle { fixture.bottom() }
+        assertRowsMatch(reference, geometry(fixture))
+        assertEquals(productionRange, fixture.horizontal.maxValue)
+    }
+
+    @Test
+    fun naturalLazyWidestLiveRowSurvivesArchivalAndExpiresWhenHistoryClears() {
+        val fixture = Fixture()
+        mount(fixture)
+        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        val initialRange = compose.runOnIdle { fixture.horizontal.maxValue }
+        compose.runOnIdle {
+            fixture.terminal.feed("\r\u001B[2Kwide live " + "W".repeat(68))
+            fixture.publish()
+        }
+        idle(fixture)
+        val wideRange = compose.runOnIdle {
+            assertTrue(fixture.horizontal.maxValue > initialRange)
+            fixture.horizontal.maxValue
+        }
+        compose.runOnIdle {
+            repeat(24) { fixture.terminal.feed("\r\n" + fixture.line(50_000 + it)) }
+            fixture.publish()
+        }
+        idle(fixture)
+        assertEquals(wideRange, fixture.horizontal.maxValue)
+        use(fixture, BenchmarkRenderer.CHUNKED_LAYERS)
+        assertEquals(wideRange, fixture.horizontal.maxValue)
+        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
+        compose.runOnIdle {
+            fixture.terminal.clearScrollbackOnly()
+            fixture.publish()
+        }
+        idle(fixture)
+        val clearedRange = fixture.horizontal.maxValue
+        assertTrue(clearedRange < wideRange)
+        use(fixture, BenchmarkRenderer.CHUNKED_LAYERS)
+        assertEquals(clearedRange, fixture.horizontal.maxValue)
     }
 
     private class Fixture(private val stressSpans: Boolean = false, private val wideFirst: Boolean = false) {
@@ -351,6 +463,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         var fullGrid by mutableStateOf(false)
         var fontScale by mutableStateOf(1f)
         var fontSp by mutableStateOf(14)
+        var rtl by mutableStateOf(false)
         var heightDp by mutableStateOf(260)
         val eager = ScrollState(0)
         val horizontal = ScrollState(0)
@@ -358,6 +471,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         val stats = LazyCompositionStats()
         val layout get() = TerminalBenchmarkLayout.fromFrame(frame, renderer, configuredTui, fullGrid)
         var viewportTop = 0f
+        var viewportLeft = 0f
         private lateinit var scope: CoroutineScope
         var operation: Job? = null
             private set
@@ -436,13 +550,19 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         fun Content() {
             scope = rememberCoroutineScope()
             val density = LocalDensity.current
-            CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density.density, fontScale),
+                LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
+            ) {
                 MaterialTheme {
                     val style = TextStyle(fontFamily = JetbrainsMono, fontSize = fontSp.sp, lineHeight = fontSp.sp,
                         platformStyle = PlatformTextStyle(includeFontPadding = false),
                         lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both))
-                    TerminalBenchmarkViewport(rows.toList(), layout, style, eager, horizontal, lazy, stats,
-                        Modifier.size(320.dp, heightDp.dp).onGloballyPositioned { viewportTop = it.positionInRoot().y })
+                    TerminalBenchmarkViewport(frame, rows.toList(), layout, style, eager, horizontal, lazy, stats,
+                        Modifier.size(320.dp, heightDp.dp).onGloballyPositioned {
+                            viewportTop = it.positionInRoot().y
+                            viewportLeft = it.positionInRoot().x
+                        })
                 }
             }
         }
