@@ -277,11 +277,17 @@ terminal regression workflow; it does not enable LazyColumn. The independent nat
 scroll ranges/offsets and selection-wrapper/resize/RTL transitions, in addition to the existing 24
 real-pointer gesture cases; it is still not complete end-to-end IME/selection-copy or real-device acceptance.
 
-CI publishes six bounded notices: the existing update hot paths plus one complete all-size/all-renderer
-table per scenario, including mount, CPU, measure/draw, frame count and memory. This keeps the full
+CI publishes six baseline notices (the existing update hot paths plus one complete all-size/all-renderer
+table per scenario) and a seventh width-index notice when measured, including mount, CPU,
+measure/draw, frame count, width cost and memory. This keeps the full
 matrix accessible via the check-run API when artifact/blob downloads fail. Missing values remain `—`.
 
 ## Recorded baselines
+
+- [2026-10-01: intrinsic width vs full width vs production](results/2026-10-01-75d1031-intrinsic-width-ci-emulator.md)
+  — 60 viewport/width tests, 19 fixture tests and 45 performance cases passed. Same-run 10k lazy
+  cold-width cost fell 908.41→423.87 ms, mount 1064.42→638.39 ms. Peak anonymous RSS was unchanged;
+  1k mount did not improve. Production status bar/KEYS and the entire app tree remain unchanged.
 
 - [2026-09-23: eager Column, 1k / 5k / 10k](results/2026-09-23-da85ea9-ci-emulator.md)
   — measured commit `da85ea9`, API 34 CI emulator, 3 repetitions for each of 15 cases;
