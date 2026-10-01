@@ -430,14 +430,28 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
             assertTrue(fixture.horizontal.maxValue > initialRange)
             fixture.horizontal.maxValue
         }
+        val liveId = fixture.frame.screenLineIds.last()
+        val liveText = fixture.frame.rows.last().text.text
+        assertEquals("wide live " + "W".repeat(68) + " ", liveText)
+        use(fixture, BenchmarkRenderer.CHUNKED_LAYERS)
+        assertEquals("Live row width must match production", wideRange, fixture.horizontal.maxValue)
+        use(fixture, BenchmarkRenderer.LAZY_HISTORY)
         compose.runOnIdle {
             repeat(24) { fixture.terminal.feed("\r\n" + fixture.line(50_000 + it)) }
             fixture.publish()
         }
         idle(fixture)
-        assertEquals(wideRange, fixture.horizontal.maxValue)
+        val archivedIndex = fixture.frame.historyLineIds.indexOf(liveId)
+        assertTrue("The same live row must now belong to history", archivedIndex >= 0)
+        // renderFrame includes the active cursor column even with an invisible cursor. Archiving
+        // removes that trailing blank. Compare each phase against production, not against an
+        // invalid assumption that the live/archived AnnotatedString widths are identical.
+        assertEquals(liveText.dropLast(1), fixture.frame.rows[archivedIndex].text.text)
+        val archivedRange = fixture.horizontal.maxValue
+        assertTrue(archivedRange > initialRange)
+        assertTrue(archivedRange < wideRange)
         use(fixture, BenchmarkRenderer.CHUNKED_LAYERS)
-        assertEquals(wideRange, fixture.horizontal.maxValue)
+        assertEquals("Archived row width must match production", archivedRange, fixture.horizontal.maxValue)
         use(fixture, BenchmarkRenderer.LAZY_HISTORY)
         compose.runOnIdle {
             fixture.terminal.clearScrollbackOnly()
@@ -445,7 +459,7 @@ class TerminalLazyNaturalGeometryInstrumentedTest {
         }
         idle(fixture)
         val clearedRange = fixture.horizontal.maxValue
-        assertTrue(clearedRange < wideRange)
+        assertTrue(clearedRange < archivedRange)
         use(fixture, BenchmarkRenderer.CHUNKED_LAYERS)
         assertEquals(clearedRange, fixture.horizontal.maxValue)
     }
