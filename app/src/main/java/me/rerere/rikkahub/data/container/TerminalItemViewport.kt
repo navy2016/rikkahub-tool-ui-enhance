@@ -90,6 +90,9 @@ internal data class TerminalItemViewport(
                 row.topPx + terminalScaledItemClip(target.anchor.clippedTopPx, target.capturedRowHeightPx, row.heightPx)
             }
         }
+        // A LazyList can be at its physical end while the semantic last nonblank row sits above
+        // the bottom edge. There is no further item to scroll to, so Follow is already satisfied.
+        if (target == TerminalItemScrollTarget.Follow && !canScrollForward) return true
         return delta == 0 || (delta < 0 && !canScrollBackward) || (delta > 0 && !canScrollForward)
     }
 

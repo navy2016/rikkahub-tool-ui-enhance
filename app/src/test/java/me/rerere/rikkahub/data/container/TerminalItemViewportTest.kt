@@ -50,6 +50,8 @@ class TerminalItemViewportTest {
         controller.scrollFinished(effect.id, 0, completed = true)
         assertNull(controller.state.value.scrollEffect)
         assertTrue(controller.state.value.autoScroll)
+        assertTrue(view(frame, index = 103, top = 4, height = 29, atBottom = true)
+            .isSatisfied(TerminalItemScrollTarget.Follow))
     }
 
     @Test fun savedAnchorRestoresWithoutEverKnowingTotalHeight() {
