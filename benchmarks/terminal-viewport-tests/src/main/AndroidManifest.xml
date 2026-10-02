@@ -3,5 +3,10 @@
         android:allowBackup="false"
         android:largeHeap="true"
         android:label="Terminal viewport compatibility tests"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity
+            android:name="me.rerere.rikkahub.viewporttest.TerminalViewportTestActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
 </manifest>

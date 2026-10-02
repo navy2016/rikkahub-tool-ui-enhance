@@ -27,6 +27,9 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -34,7 +37,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performClick
@@ -89,12 +92,20 @@ import org.junit.runner.Description
 
 /** Real Text heights + the production controller and sole executor. Never supplies a total height. */
 class TerminalItemViewportInstrumentedTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<TerminalViewportTestActivity>()
     @get:Rule val timeout = Timeout.seconds(45)
     @get:Rule val probe = object : TestWatcher() {
         override fun failed(e: Throwable, description: Description) {
             Log.e("TerminalViewportProbe", "item lazy=true failed ${description.methodName}", e)
         }
+    }
+
+    private fun showSystemKeyboard(f: Fixture) {
+        compose.onNodeWithTag("system-input").performClick()
+        compose.runOnIdle { f.inputFocus.requestFocus() }
+        compose.waitUntil(5_000) { f.inputFocused }
+        compose.runOnIdle { f.keyboard?.show() }
+        compose.waitUntil(10_000) { f.ime }
     }
 
     private fun mount(f: Fixture = Fixture()): Fixture {
@@ -342,8 +353,7 @@ class TerminalItemViewportInstrumentedTest {
     @Test fun itemNativeRealKeyboardInsetsRetainLockAndPermitExplicitRetry() {
         val f = mount(Fixture(stressSpans = false, systemIme = true))
         val initial = compose.runOnIdle { f.top().anchor }
-        compose.onNodeWithTag("system-input").performClick()
-        compose.waitUntil(10_000) { f.ime }
+        showSystemKeyboard(f)
         settle(f)
         compose.runOnIdle {
             assertFalse(f.isVirtual)
@@ -363,8 +373,7 @@ class TerminalItemViewportInstrumentedTest {
         compose.runOnIdle { f.controller.setFollow(true, f.inputPx()) }
         settle(f)
         val before = compose.runOnIdle { f.eager.value }
-        compose.onNodeWithTag("system-input").performClick()
-        compose.waitUntil(10_000) { f.ime }
+        showSystemKeyboard(f)
         settle(f)
         compose.runOnIdle {
             assertFalse(f.isVirtual)
@@ -433,6 +442,8 @@ class TerminalItemViewportInstrumentedTest {
         var showRendererDialog by mutableStateOf(false)
         var inputText by mutableStateOf("")
         var keyboard: SoftwareKeyboardController? = null
+        val inputFocus = FocusRequester()
+        @Volatile var inputFocused = false
         lateinit var bound: TerminalBoundViewport
         lateinit var policy: TerminalVirtualHistoryPolicy
         val isVirtual: Boolean get() = bound.virtualHistoryEnabled
@@ -514,7 +525,8 @@ class TerminalItemViewportInstrumentedTest {
                     Column(Modifier.fillMaxSize().imePadding()) {
                         output(Modifier.weight(1f).fillMaxWidth())
                         BasicTextField(inputText, { inputText = it },
-                            Modifier.fillMaxWidth().testTag("system-input"), textStyle = style)
+                            Modifier.fillMaxWidth().testTag("system-input")
+                                .focusRequester(inputFocus).onFocusChanged { inputFocused = it.isFocused }, textStyle = style)
                     }
                 } else output(Modifier.size(320.dp, heightDp.dp))
                 if (showRendererDialog) {
