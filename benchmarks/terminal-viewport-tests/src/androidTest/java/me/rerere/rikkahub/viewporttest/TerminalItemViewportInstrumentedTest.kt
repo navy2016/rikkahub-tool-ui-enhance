@@ -3,6 +3,7 @@ package me.rerere.rikkahub.viewporttest
 import android.util.Log
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.isImeVisible
@@ -472,6 +473,7 @@ class TerminalItemViewportInstrumentedTest {
             }
         }
 
+        @OptIn(ExperimentalLayoutApi::class)
         @Composable private fun Output() {
             val density = LocalDensity.current
             val actualIme = WindowInsets.isImeVisible
