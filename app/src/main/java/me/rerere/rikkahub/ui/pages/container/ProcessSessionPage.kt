@@ -1674,7 +1674,6 @@ private fun TerminalInteractivePanel(
                         terminalHistoryChunkPlan.isNotEmpty(),
                         virtualHistoryAllowed = virtualHistoryEnabled,
                     ),
-                    virtualHistoryAllowed = virtualHistoryEnabled,
                     onRenderModeClick = {
                         terminalRenderError = null
                         terminalSettingsDialog = "renderer"
