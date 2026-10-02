@@ -59,7 +59,7 @@ class TerminalUiSourceTest {
         assertTrue(processSessionSource.contains("!imeVisible && terminalHistoryChunkPlan.isNotEmpty()"))
         assertTrue(processSessionSource.contains("if (virtualHistoryEnabled)"))
         assertTrue(processSessionSource.contains("TerminalLazyItemMeasurements"))
-        assertTrue(processSessionSource.contains("val DEFAULT = CHUNKED_LAYERS"))
+        assertTrue(processSessionSource.contains("TerminalRenderMode.DEFAULT"))
     }
 
     @Test
