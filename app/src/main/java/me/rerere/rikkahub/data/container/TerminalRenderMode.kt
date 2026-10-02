@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.data.container
 
-/** User-facing eager renderers with identical Text, scroll, selection and input semantics. */
+/** Default eager renderers plus an explicitly requested, compatibility-gated virtual history. */
 internal enum class TerminalRenderMode(val id: String, val label: String, val shortLabel: String) {
     CHUNKED_LAYERS("chunkedLayers", "分块图层", "图层"),
     CHUNKED("chunkedEager", "轻量分块", "分块"),
@@ -19,9 +19,9 @@ internal enum class TerminalRenderMode(val id: String, val label: String, val sh
 internal fun effectiveTerminalRenderMode(
     preferred: TerminalRenderMode,
     hasHistoryChunks: Boolean,
-    virtualHistoryAllowed: Boolean = true,
+    virtualHistoryAllowed: Boolean = false,
 ): TerminalRenderMode = when {
-    preferred == TerminalRenderMode.VIRTUAL_HISTORY && virtualHistoryAllowed -> preferred
+    preferred == TerminalRenderMode.VIRTUAL_HISTORY && hasHistoryChunks && virtualHistoryAllowed -> preferred
     preferred == TerminalRenderMode.VIRTUAL_HISTORY && hasHistoryChunks -> TerminalRenderMode.DEFAULT
     hasHistoryChunks -> preferred
     else -> TerminalRenderMode.FLAT

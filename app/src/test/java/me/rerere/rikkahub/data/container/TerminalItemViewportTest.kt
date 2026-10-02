@@ -46,12 +46,49 @@ class TerminalItemViewportTest {
         controller.jumpToBottom(0)
         val effect = requireNotNull(controller.state.value.scrollEffect)
         assertEquals(TerminalItemScrollTarget.Follow, effect.itemTarget)
-        controller.observeItemViewport(view(frame, index = 103, top = 4, height = 29, atBottom = true))
+        controller.observeItemViewport(view(frame, index = 103, top = 63, height = 29, atBottom = true))
         controller.scrollFinished(effect.id, 0, completed = true)
         assertNull(controller.state.value.scrollEffect)
         assertTrue(controller.state.value.autoScroll)
-        assertTrue(view(frame, index = 103, top = 4, height = 29, atBottom = true)
+        assertTrue(view(frame, index = 103, top = 63, height = 29, atBottom = true)
             .isSatisfied(TerminalItemScrollTarget.Follow))
+    }
+
+    @Test fun structuralEndStillNeedsBackwardCorrectionForBlankScreenRows() {
+        val frame = frame()
+        assertFalse(view(frame, index = 103, top = 4, height = 29, atBottom = true)
+            .isSatisfied(TerminalItemScrollTarget.Follow))
+        assertTrue(view(frame, index = 103, top = 4, height = 29, atTop = true, atBottom = true)
+            .isSatisfied(TerminalItemScrollTarget.Follow))
+    }
+
+    @Test fun measuredEagerHandoffRestoresVariableHeightAnchorNotNominalGrid() {
+        val frame = frame()
+        val controller = TerminalViewportController(followInitially = false)
+        controller.updateItemViewport(frame, view(frame, index = 50, top = -7, height = 31))
+        val geometry = TerminalEagerViewportGeometry(frame, IntArray(frame.rows.size) { if (it == 50) 31 else 43 })
+        val metrics = TerminalViewportMetrics(geometry.contentHeightPx - 100, 100, 20, 8)
+        controller.updateViewport(frame, frame.rows.size, metrics, 0, null, true)
+        assertNull(controller.state.value.scrollEffect)
+        controller.updateViewport(frame, frame.rows.size, metrics, 0, geometry, true)
+        val effect = requireNotNull(controller.state.value.scrollEffect)
+        assertEquals(50 * 43 + 7, effect.targetScrollPx)
+        controller.scrollFinished(effect.id, effect.targetScrollPx, true)
+        assertNull(controller.state.value.scrollEffect)
+        assertEquals(150L, controller.state.value.anchor?.lineId)
+    }
+
+    @Test fun imeHoldAcrossDelayedEagerMeasurementUsesVirtualTopNotDormantScroll() {
+        val frame = frame()
+        val controller = TerminalViewportController()
+        controller.updateItemViewport(frame, view(frame, index = 50, top = -7, height = 31))
+        val geometry = TerminalEagerViewportGeometry(frame, IntArray(frame.rows.size) { if (it == 50) 31 else 43 })
+        val metrics = TerminalViewportMetrics(geometry.contentHeightPx - 100, 100, 20, 8,
+            imeVisible = true, avoidIme = false)
+        controller.updateViewport(frame, frame.rows.size, metrics, 123, null, true)
+        controller.updateViewport(frame, frame.rows.size, metrics, 123, geometry, true)
+        assertEquals(50 * 43 + 7, controller.state.value.scrollEffect?.targetScrollPx)
+        assertTrue(controller.state.value.autoScroll)
     }
 
     @Test fun savedAnchorRestoresWithoutEverKnowingTotalHeight() {

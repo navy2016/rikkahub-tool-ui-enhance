@@ -2,39 +2,41 @@ package me.rerere.rikkahub.viewporttest
 
 import android.util.Log
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.referentialEqualityPolicy
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.SoftwareKeyboardController
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeWithVelocity
 import androidx.compose.ui.text.PlatformTextStyle
@@ -44,30 +46,32 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import me.rerere.rikkahub.benchmark.TerminalBenchmarkWidthIndex
-import me.rerere.rikkahub.benchmark.TerminalIntrinsicWidthMeasurer
 import me.rerere.rikkahub.data.container.TerminalItemScrollTarget
 import me.rerere.rikkahub.data.container.TerminalItemViewport
+import me.rerere.rikkahub.data.container.TerminalRenderMode
+import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
 import me.rerere.rikkahub.data.container.TerminalViewportState
 import me.rerere.rikkahub.data.container.ViewportAnchor
 import me.rerere.rikkahub.data.container.ViewportMode
-import me.rerere.rikkahub.data.container.ViewportScrollOrigin
 import me.rerere.rikkahub.data.container.terminalScaledItemClip
 import me.rerere.rikkahub.ui.pages.container.TERMINAL_LAZY_SCREEN_KEY
-import me.rerere.rikkahub.ui.pages.container.TERMINAL_LAZY_TAIL_KEY
 import me.rerere.rikkahub.ui.pages.container.TerminalLazyItemMeasurements
-import me.rerere.rikkahub.ui.pages.container.TerminalLazyLayoutPass
 import me.rerere.rikkahub.ui.pages.container.TerminalViewportGestureConfig
+import me.rerere.rikkahub.ui.pages.container.TerminalBoundViewport
+import me.rerere.rikkahub.ui.pages.container.TerminalTranscriptViewport
+import me.rerere.rikkahub.ui.pages.container.TerminalVirtualHistoryPolicy
+import me.rerere.rikkahub.ui.pages.container.TerminalRenderModeDialog
+import me.rerere.rikkahub.ui.pages.container.rememberTerminalBoundViewport
+import me.rerere.rikkahub.ui.pages.container.rememberTerminalVirtualHistoryPolicy
+import me.rerere.rikkahub.ui.pages.container.terminalHistoryChunks
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRowsSyncState
-import me.rerere.rikkahub.ui.pages.container.executeTerminalLazyItemScroll
-import me.rerere.rikkahub.ui.pages.container.rememberTerminalViewportGestures
-import me.rerere.rikkahub.ui.pages.container.runTerminalViewportScrollEffects
 import me.rerere.rikkahub.ui.pages.container.synchronizeTerminalRenderedRows
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.TerminalEmulator
@@ -102,11 +106,12 @@ class TerminalItemViewportInstrumentedTest {
         compose.waitForIdle()
         compose.waitUntil(10_000) { f.controller.state.value.initialized && f.activeWriters == 0 }
         compose.waitForIdle()
-        f.failure?.let { throw AssertionError("Item executor failed", it) }
         compose.runOnIdle {
-            assertNotNull("missing completed item layout", f.observation())
+            if (f.isVirtual) assertNotNull("missing completed lazy layout", f.observation())
+            else if (f.bound.eagerMeasurement != null) assertNotNull("missing completed eager layout", f.bound.binding.eagerGeometry())
+            else assertTrue("unmeasured eager viewport", f.eager.maxValue != Int.MAX_VALUE)
             assertNull("unfinished scroll effect", f.controller.state.value.scrollEffect)
-            assertTrue("not virtualized: ${f.measurements.retainedRows}", f.measurements.retainedRows < 100)
+            if (f.isVirtual) assertTrue("not virtualized: ${f.measurements.retainedRows}", f.measurements.retainedRows < 100)
             assertTrue("overlapping writers: ${f.maximumWriters}", f.maximumWriters <= 1)
         }
     }
@@ -243,12 +248,163 @@ class TerminalItemViewportInstrumentedTest {
         }
     }
 
-    private class Fixture {
+    @Test fun itemNativeOffscreenWidestLineAndRtlMatchEagerRangeAfterTrim() {
+        val f = mount(Fixture(wideHead = true, stressSpans = false))
+        val wide = compose.runOnIdle { f.horizontal.maxValue }
+        assertTrue(wide > 0)
+        compose.runOnIdle { f.panHorizontal(41); f.controller.setFollow(true, f.inputPx()) }
+        settle(f)
+        compose.runOnIdle { assertEquals(wide, f.horizontal.maxValue) }
+        for (rtl in listOf(false, true)) {
+            compose.runOnIdle { f.rtl = rtl; f.mode = TerminalRenderMode.CHUNKED_LAYERS }
+            settle(f)
+            val reference = compose.runOnIdle { f.horizontal.maxValue }
+            compose.runOnIdle { f.mode = TerminalRenderMode.VIRTUAL_HISTORY }
+            settle(f)
+            compose.runOnIdle { assertEquals(reference, f.horizontal.maxValue); assertEquals(41, f.horizontal.value) }
+        }
+        compose.runOnIdle { f.append() }
+        settle(f)
+        val trimmed = compose.runOnIdle { f.horizontal.maxValue }
+        assertTrue("Offscreen widest row was not removed", trimmed < wide)
+        compose.runOnIdle { f.mode = TerminalRenderMode.CHUNKED_LAYERS }
+        settle(f)
+        compose.runOnIdle { assertEquals(trimmed, f.horizontal.maxValue) }
+    }
+
+    @Test fun itemNativeModeSwitchesKeepMeasuredTopAndBothOffsets() {
+        val f = mount()
+        val initial = compose.runOnIdle { f.top() }
+        compose.runOnIdle { f.panHorizontal(43) }
+        repeat(2) {
+            for (mode in listOf(TerminalRenderMode.FLAT, TerminalRenderMode.CHUNKED,
+                TerminalRenderMode.CHUNKED_LAYERS, TerminalRenderMode.VIRTUAL_HISTORY)) {
+                compose.runOnIdle { f.mode = mode }
+                settle(f)
+                compose.runOnIdle {
+                    assertEquals("mode=$mode", initial.anchor, f.top().anchor)
+                    assertEquals(43, f.horizontal.value)
+                    assertFalse(f.controller.state.value.autoScroll)
+                }
+            }
+        }
+    }
+
+    @Test fun itemNativeImeFallbackSameModeApplyRestoresVirtualWithoutResettingAnchor() {
+        val f = mount()
+        val initial = compose.runOnIdle { f.top() }
+        compose.runOnIdle { f.ime = true; f.heightDp = 140 }
+        settle(f)
+        compose.runOnIdle { assertFalse(f.isVirtual); assertEquals(initial.anchor, f.top().anchor) }
+        compose.runOnIdle { f.ime = false; f.heightDp = 220 }
+        settle(f)
+        compose.runOnIdle { assertFalse(f.isVirtual); f.showRendererDialog = true }
+        compose.waitForIdle()
+        compose.onNodeWithTag("terminal-render-apply").performClick()
+        settle(f)
+        compose.runOnIdle { assertTrue(f.isVirtual); assertEquals(initial.anchor, f.top().anchor) }
+    }
+
+    @Test fun itemNativeSelectionAndMouseFallbackPreserveReadingPosition() {
+        val f = mount()
+        val initial = compose.runOnIdle { f.top() }
+        for (selection in listOf(true, false)) {
+            compose.runOnIdle { f.config = f.config.copy(selectionMode = selection, panEnabled = selection) }
+            settle(f)
+            compose.runOnIdle { assertFalse(f.isVirtual); assertEquals(initial.anchor, f.top().anchor) }
+            compose.runOnIdle { f.config = f.config.copy(selectionMode = false, panEnabled = true) }
+            settle(f)
+            compose.runOnIdle { assertTrue(f.isVirtual); assertEquals(initial.anchor, f.top().anchor) }
+        }
+    }
+
+    @Test fun itemNativeSemanticTailCorrectsBlankScreenAndSettlesWithoutRetryLoop() {
+        val f = mount(Fixture(stressSpans = false))
+        compose.runOnIdle {
+            f.controller.setFollow(true, f.inputPx())
+            f.terminal.feed("\u001B[2J\u001B[Hshort")
+            f.publish()
+        }
+        settle(f)
+        val effects = compose.runOnIdle {
+            val observation = f.observation()!!
+            assertTrue(observation.isSatisfied(TerminalItemScrollTarget.Follow))
+            val last = observation.rows.first { it.index == observation.followRowIndex }
+            assertEquals(observation.viewportHeightPx, last.bottomPx + observation.tailPaddingPx)
+            f.bound.binding.effectCount
+        }
+        compose.mainClock.advanceTimeBy(800)
+        settle(f)
+        compose.runOnIdle { assertEquals(effects, f.bound.binding.effectCount) }
+    }
+
+    @Test fun itemNativeRealKeyboardInsetsRetainLockAndPermitExplicitRetry() {
+        val f = mount(Fixture(stressSpans = false, systemIme = true))
+        val initial = compose.runOnIdle { f.top().anchor }
+        compose.onNodeWithTag("system-input").performClick()
+        compose.waitUntil(10_000) { f.ime }
+        settle(f)
+        compose.runOnIdle {
+            assertFalse(f.isVirtual)
+            assertEquals(initial, f.top().anchor)
+            assertEquals(24, f.terminal.rows)
+            f.keyboard?.hide()
+        }
+        compose.waitUntil(10_000) { !f.ime }
+        settle(f)
+        compose.runOnIdle { assertFalse(f.isVirtual); f.policy.reapplied(false) }
+        settle(f)
+        compose.runOnIdle { assertTrue(f.isVirtual); assertEquals(initial, f.top().anchor) }
+    }
+
+    @Test fun itemNativeDefaultEagerRealImeUpdatesGeometryWithoutOutputOrVirtualMeasurements() {
+        val f = mount(Fixture(stressSpans = false, systemIme = true, initialMode = TerminalRenderMode.DEFAULT))
+        compose.runOnIdle { f.controller.setFollow(true, f.inputPx()) }
+        settle(f)
+        val before = compose.runOnIdle { f.eager.value }
+        compose.onNodeWithTag("system-input").performClick()
+        compose.waitUntil(10_000) { f.ime }
+        settle(f)
+        compose.runOnIdle {
+            assertFalse(f.isVirtual)
+            assertEquals(0, f.measurements.retainedRows)
+            assertTrue("IME did not adjust the idle terminal", f.eager.value > before)
+            assertTrue(f.controller.isNearBottom(f.eager.value))
+            f.keyboard?.hide()
+        }
+        compose.waitUntil(10_000) { !f.ime }
+        settle(f)
+        compose.runOnIdle { assertEquals(before, f.eager.value); assertEquals(24, f.terminal.rows) }
+    }
+
+    @Test fun itemNativeTuiAlternateScreenAndFullGridFallbackReturnWithoutChangingPreference() {
+        val f = mount(Fixture(stressSpans = false))
+        compose.runOnIdle { f.controller.setFollow(true, f.inputPx()); f.tui = true }
+        settle(f)
+        compose.runOnIdle { assertFalse(f.isVirtual); assertEquals(TerminalRenderMode.VIRTUAL_HISTORY, f.mode) }
+        compose.runOnIdle { f.tui = false }
+        settle(f)
+        compose.runOnIdle { assertTrue(f.isVirtual); f.terminal.feed("\u001B[?1049hAlternate"); f.publish() }
+        settle(f)
+        compose.runOnIdle { assertFalse(f.isVirtual); f.terminal.feed("\u001B[?1049l"); f.publish() }
+        settle(f)
+        compose.runOnIdle { assertTrue(f.isVirtual); assertTrue(f.controller.state.value.autoScroll) }
+    }
+
+    private class Fixture(
+        private val wideHead: Boolean = false,
+        private val stressSpans: Boolean = true,
+        private val systemIme: Boolean = false,
+        private val initialMode: TerminalRenderMode = TerminalRenderMode.VIRTUAL_HISTORY,
+    ) {
         val terminal = TerminalEmulator(initialColumns = 80, initialRows = 24, maxScrollbackLines = 1_000).apply {
-            feed("\u001B[?25l" + (0 until 1024).joinToString("\r\n") { "r$it 中文 e\u0301 " + "x".repeat(it % 20 + 20) })
+            feed("\u001B[?25l" + (0 until 1024).joinToString("\r\n") {
+                if (wideHead && it == 0) "W".repeat(79) else "r$it 中文 e\u0301 " + "x".repeat(it % 20 + 20)
+            })
         }
         private fun render(): TerminalEmulator.RenderFrame {
             val raw = terminal.renderFrame()
+            if (!stressSpans) return raw
             val ids = raw.historyLineIds + raw.screenLineIds
             return raw.copy(rows = raw.rows.mapIndexed { i, row ->
                 if (ids[i] % 7L != 0L) row else TerminalEmulator.RenderedRow(buildAnnotatedString {
@@ -265,31 +421,42 @@ class TerminalItemViewportInstrumentedTest {
         val lazy = LazyListState()
         val horizontal = ScrollState(0)
         val measurements = TerminalLazyItemMeasurements()
-        val widthIndex = TerminalBenchmarkWidthIndex()
+        val eager = ScrollState(0)
         var fontSp by mutableIntStateOf(14)
         var heightDp by mutableIntStateOf(220)
         var config by mutableStateOf(TerminalViewportGestureConfig(true, false, 2))
-        var pass: TerminalLazyLayoutPass? = null
+        var mode by mutableStateOf(initialMode)
+        var ime by mutableStateOf(false)
+        var tui by mutableStateOf(false)
+        var rtl by mutableStateOf(false)
+        var showRendererDialog by mutableStateOf(false)
+        var inputText by mutableStateOf("")
+        var keyboard: SoftwareKeyboardController? = null
+        lateinit var bound: TerminalBoundViewport
+        lateinit var policy: TerminalVirtualHistoryPolicy
+        val isVirtual: Boolean get() = bound.virtualHistoryEnabled
+        var viewportHeight by mutableIntStateOf(0)
+        var viewportWidth = 0
         var cellHeight = 1
         var tailPadding = 1
-        @Volatile var activeWriters = 0
-        @Volatile var maximumWriters = 0
-        @Volatile var failure: Throwable? = null
+        val activeWriters get() = if (::bound.isInitialized) bound.binding.activeWriters else 0
+        val maximumWriters get() = bound.binding.maximumWriters
         var outputDuringJump = false
         @Volatile var appendCount = 0
         private lateinit var scope: CoroutineScope
 
-        fun observation(): TerminalItemViewport? = pass?.takeIf { it.frame === frame }?.let {
-            measurements.read(it, lazy, cellHeight, tailPadding)
-        }
-
-        fun inputPx(): Int {
-            controller.observeItemViewport(observation())
-            return 0 // Intentionally no global pixel estimate; the item controller never uses this value.
-        }
+        fun observation(): TerminalItemViewport? = bound.binding.observation()
+        fun inputPx(): Int = bound.binding.currentScrollPx()
+        fun top() = if (isVirtual) requireNotNull(observation()).capture()!!
+            else requireNotNull(bound.binding.eagerGeometry()).capture(eager.value)
+        fun panHorizontal(px: Int) { scope.launch { horizontal.scrollTo(px) } }
 
         fun append() {
             terminal.feed("\r\nappend-${appendCount++} 中文")
+            publish()
+        }
+
+        fun publish() {
             val next = render()
             Snapshot.withMutableSnapshot {
                 synchronizeTerminalRenderedRows(rows, next, false, forcePendingGridBlanks = true,
@@ -300,61 +467,62 @@ class TerminalItemViewportInstrumentedTest {
 
         @Composable fun Content() {
             scope = rememberCoroutineScope()
+            CompositionLocalProvider(LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
+                Output()
+            }
+        }
+
+        @Composable private fun Output() {
             val density = LocalDensity.current
-            val direction = LocalLayoutDirection.current
-            val resolver = LocalFontFamilyResolver.current
+            val actualIme = WindowInsets.isImeVisible
+            keyboard = LocalSoftwareKeyboardController.current
+            SideEffect { if (systemIme) ime = actualIme }
             val style = TextStyle(fontFamily = JetbrainsMono, fontSize = fontSp.sp, lineHeight = fontSp.sp,
                 platformStyle = PlatformTextStyle(includeFontPadding = false),
                 lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both))
             val textMeasurer = rememberTextMeasurer()
             cellHeight = textMeasurer.measure("W", style).size.height.coerceAtLeast(1)
             tailPadding = with(density) { 8.dp.roundToPx() }
-            val nextPass = remember(frame.revision, style, density) { TerminalLazyLayoutPass(frame, style to density) }
-            pass = nextPass
-            // Same proven scalar-width index/intrinsics as the benchmark; no benchmark source fork.
-            // This fixture uses the bundled synchronous JetBrains font, not downloaded async fonts.
-            val widthMeasurer = remember(style, density, direction, resolver) {
-                TerminalIntrinsicWidthMeasurer(style, density, direction, resolver)
-            }
-            val width = widthIndex.width(frame, widthMeasurer) { widthMeasurer.width(it) }
-            val gestures = rememberTerminalViewportGestures(this, controller, config, lazy.interactionSource,
-                currentScrollPx = { inputPx() }, isScrollInProgress = { lazy.isScrollInProgress })
-            LaunchedEffect(controller) {
-                snapshotFlow { observation() }.collect { controller.updateItemViewport(frame, it) }
-            }
-            LaunchedEffect(controller) {
-                runTerminalViewportScrollEffects(controller, { inputPx() }, { error("No global range") },
-                    { lazy.isScrollInProgress }, scrollToItemTarget = { effect ->
-                        activeWriters++
-                        maximumWriters = maxOf(maximumWriters, activeWriters)
-                        try {
-                            if (effect.animated && outputDuringJump) {
-                                outputDuringJump = false
-                                scope.launch { repeat(30) { withFrameNanos { }; append() } }
-                            }
-                            executeTerminalLazyItemScroll(effect, lazy, { observation() }, { controller.isCurrent(effect) })
-                        } catch (e: kotlinx.coroutines.CancellationException) { throw e
-                        } catch (e: Throwable) { failure = e; throw e
-                        } finally { inputPx(); activeWriters-- }
-                    }) { _, _ -> error("Item target was sent to pixel executor") }
+            val chunks = terminalHistoryChunks(frame.historyCount, frame.historyStartSequence, tui || frame.isAlternateScreen)
+            policy = rememberTerminalVirtualHistoryPolicy(this, mode, ime)
+            val wants = mode == TerminalRenderMode.VIRTUAL_HISTORY &&
+                policy.allows(chunks.isNotEmpty(), config.panEnabled, config.selectionMode, tui || frame.isAlternateScreen, ime)
+            bound = rememberTerminalBoundViewport(this, controller, eager, lazy, measurements, frame, style, wants,
+                metrics = { TerminalViewportMetrics(eager.maxValue, viewportHeight, cellHeight, tailPadding,
+                    usesTuiViewport = tui || frame.isAlternateScreen, imeVisible = ime, avoidIme = ime) },
+                gestureConfig = config)
+            SideEffect {
+                bound.binding.onEffectStarted = { effect ->
+                    if (effect.animated && outputDuringJump) {
+                        outputDuringJump = false
+                        scope.launch { repeat(30) { withFrameNanos { }; append() } }
+                    }
+                }
             }
             MaterialTheme {
-                Box(Modifier.size(320.dp, heightDp.dp).testTag("item-output").nestedScroll(gestures.connection)) {
-                    LazyColumn(Modifier.size(320.dp, heightDp.dp).horizontalScroll(horizontal)
-                        .widthIn(min = with(density) { width.toDp() }), state = lazy,
-                        flingBehavior = gestures.flingBehavior, userScrollEnabled = config.panEnabled || config.selectionMode) {
-                        items(frame.historyCount, key = { rows[it].lineId }, contentType = { "history" }) { index ->
-                            measurements.Row(nextPass, rows[index], style)
-                        }
-                        item(key = TERMINAL_LAZY_SCREEN_KEY, contentType = "screen") {
-                            Column {
-                                for (index in frame.historyCount until rows.size) key(rows[index].lineId) {
-                                    measurements.Row(nextPass, rows[index], style)
-                                }
-                            }
-                        }
-                        item(key = TERMINAL_LAZY_TAIL_KEY, contentType = "tail") { Spacer(Modifier.height(8.dp)) }
+                val output: @Composable (Modifier) -> Unit = { modifier ->
+                    Box(modifier.testTag("item-output")
+                        .onSizeChanged { viewportHeight = it.height; viewportWidth = it.width }
+                        .nestedScroll(bound.gestures.connection)) {
+                        TerminalTranscriptViewport(frame, rows.toList(), style, chunks, mode, bound,
+                            horizontal, config.panEnabled, config.selectionMode, Modifier.fillMaxSize())
                     }
+                }
+                if (systemIme) {
+                    Column(Modifier.fillMaxSize().imePadding()) {
+                        output(Modifier.weight(1f).fillMaxWidth())
+                        BasicTextField(inputText, { inputText = it },
+                            Modifier.fillMaxWidth().testTag("system-input"), textStyle = style)
+                    }
+                } else output(Modifier.size(320.dp, heightDp.dp))
+                if (showRendererDialog) {
+                    TerminalRenderModeDialog(mode, chunks.isNotEmpty(), tui,
+                        virtualHistoryAllowed = isVirtual, virtualHistoryImeFallback = policy.imeFallback,
+                        onDismiss = { showRendererDialog = false }, onSave = {
+                            mode = it
+                            policy.reapplied(ime)
+                            showRendererDialog = false
+                        })
                 }
             }
         }

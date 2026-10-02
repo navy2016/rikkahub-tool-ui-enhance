@@ -20,6 +20,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,15 +48,20 @@ internal fun TerminalConfiguredTranscript(
     historyChunks: List<TerminalHistoryChunk>,
     mode: TerminalRenderMode,
     observer: TerminalTranscriptCompositionObserver? = null,
+    measurement: TerminalRowMeasurementScope? = null,
 ) {
     val effective = effectiveTerminalRenderMode(mode, historyChunks.isNotEmpty(), virtualHistoryAllowed = false)
-    TerminalRenderedTranscript(
-        rows = rows,
-        style = style,
-        historyChunks = if (effective == TerminalRenderMode.FLAT) emptyList() else historyChunks,
-        isolateChunkDrawing = effective == TerminalRenderMode.CHUNKED_LAYERS,
-        observer = observer,
-    )
+    val content: @Composable () -> Unit = {
+        TerminalRenderedTranscript(rows, style,
+            if (effective == TerminalRenderMode.FLAT) emptyList() else historyChunks,
+            isolateChunkDrawing = effective == TerminalRenderMode.CHUNKED_LAYERS, observer = observer)
+    }
+    if (measurement == null) content() else {
+        val decorator: @Composable (TerminalRenderedRowState, TextStyle) -> Unit = { row, textStyle ->
+            measurement.measurements.Row(measurement.pass, row, textStyle)
+        }
+        CompositionLocalProvider(LocalTerminalRowDecorator provides decorator) { content() }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -92,6 +98,7 @@ internal fun TerminalRenderModeDialog(
     hasHistoryChunks: Boolean,
     usesTuiViewport: Boolean,
     virtualHistoryAllowed: Boolean = false,
+    virtualHistoryImeFallback: Boolean = false,
     appliedMode: TerminalRenderMode = value,
     selectionActive: Boolean = false,
     saving: Boolean = false,
@@ -110,6 +117,11 @@ internal fun TerminalRenderModeDialog(
                     style = MaterialTheme.typography.bodySmall)
                 if (selectionActive) Text("请先退出 SEL 选择模式再切换，避免清除当前选区。",
                     style = MaterialTheme.typography.bodySmall)
+                if (virtualHistoryImeFallback && value == TerminalRenderMode.VIRTUAL_HISTORY) {
+                    Text("键盘交互后已保留兼容渲染。关闭键盘后，可再次应用“虚拟历史”恢复；无需先切换其它模式。",
+                        modifier = Modifier.testTag("terminal-render-ime-fallback"),
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 Text("已选：${value.label} · 实际：${effectiveTerminalRenderMode(appliedMode, hasHistoryChunks, virtualHistoryAllowed).label}",
                     modifier = Modifier.testTag("terminal-render-effective"), style = MaterialTheme.typography.bodySmall)
                 if (usesTuiViewport || !hasHistoryChunks) {

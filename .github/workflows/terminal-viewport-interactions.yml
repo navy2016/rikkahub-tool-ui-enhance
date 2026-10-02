@@ -10,6 +10,13 @@ on:
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewport*.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItem*.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalVirtual*.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptWidth.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptViewport.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderControls.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalEagerViewportGeometry.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndex.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalItemViewport.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalRender*.kt'
@@ -87,7 +94,7 @@ jobs:
             --require-case-group 'intrinsicWidth:6' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest \
-            --require-case-group 'itemNative:8'
+            --require-case-group 'itemNative:16'
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

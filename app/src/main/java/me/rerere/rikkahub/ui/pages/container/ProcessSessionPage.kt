@@ -7,7 +7,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,7 +31,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -125,7 +123,6 @@ import me.rerere.rikkahub.data.container.isConfiguredTerminalCommand
 import me.rerere.rikkahub.data.container.isTuiCommand
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
-import me.rerere.rikkahub.data.container.TerminalItemViewport
 import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.container.effectiveTerminalRenderMode
 import me.rerere.rikkahub.data.container.terminalRendererForCommand
@@ -242,12 +239,6 @@ private data class TerminalActionPreset(
 private data class TerminalPanelPlacement(
     val fullscreen: Boolean,
     val modifier: Modifier,
-)
-
-private data class TerminalViewportRenderSnapshot(
-    val frameRevision: Long,
-    val renderedRowCount: Int,
-    val metrics: TerminalViewportMetrics,
 )
 
 private fun shouldAvoidTerminalIme(
@@ -924,19 +915,8 @@ private fun TerminalInteractivePanel(
         }
     }
     val imeVisible = WindowInsets.isImeVisible
-    // Do not switch LazyList <-> ScrollState on every keyboard animation. Once IME has touched
-    // this virtual session, keep the original eager backend until the user explicitly selects a
-    // renderer again. This preserves the existing IME anchor/avoidance behavior end-to-end.
-    var virtualHistoryImeFallback by remember(processId, appliedTerminalRenderMode) { mutableStateOf(false) }
-    LaunchedEffect(imeVisible, appliedTerminalRenderMode) {
-        if (appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY && imeVisible) {
-            virtualHistoryImeFallback = true
-        }
-    }
+    val virtualHistoryPolicy = rememberTerminalVirtualHistoryPolicy(processId, appliedTerminalRenderMode, imeVisible)
     val density = LocalDensity.current
-    val lazyHistoryPass = remember(terminalViewportFrame.revision, terminalTextStyle, density) {
-        TerminalLazyLayoutPass(terminalViewportFrame, terminalTextStyle to density)
-    }
     val imeInsets = WindowInsets.ime
     val measuredCell = remember(terminalTextStyle, density) { textMeasurer.measure("W", style = terminalTextStyle) }
     val terminalCellWidthPx = measuredCell.size.width.coerceAtLeast(1)
@@ -1018,18 +998,9 @@ private fun TerminalInteractivePanel(
             usesTuiViewport = currentUsesTuiViewport,
         )
     }
-    val virtualHistoryEnabled = appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY &&
-        terminalPanMode && !selectionMode && !currentUsesTuiViewport &&
-        !terminalFrameIsAlternateScreen && !imeVisible && !virtualHistoryImeFallback &&
-        terminalHistoryChunkPlan.isNotEmpty()
-    fun terminalItemViewport(): TerminalItemViewport? = if (virtualHistoryEnabled) {
-        lazyHistoryMeasurements.read(
-            pass = lazyHistoryPass,
-            state = lazyHistoryState,
-            cellHeightPx = terminalCellHeightPx,
-            tailPaddingPx = terminalTailPaddingPx,
-        )
-    } else null
+    val wantsVirtualHistory = appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY &&
+        virtualHistoryPolicy.allows(terminalHistoryChunkPlan.isNotEmpty(), terminalPanMode, selectionMode,
+            currentUsesTuiViewport, imeVisible)
     val terminalContentHeightPx = if (currentUsesTuiViewport) {
         if (currentPreservePhysicalGrid) {
             terminalRows * terminalCellHeightPx + currentTerminalTailPaddingPx
@@ -1075,8 +1046,22 @@ private fun TerminalInteractivePanel(
         avoidIme = currentShouldAvoidIme,
     )
 
+    val boundViewport = rememberTerminalBoundViewport(
+        sessionKey = processId,
+        controller = viewportController,
+        eager = outputScroll,
+        lazy = lazyHistoryState,
+        measurements = lazyHistoryMeasurements,
+        frame = terminalViewportFrame,
+        style = terminalTextStyle,
+        wantsVirtual = wantsVirtualHistory,
+        metrics = { viewportMetrics() },
+        gestureConfig = TerminalViewportGestureConfig(terminalPanMode, selectionMode, fastFlingRequiredCount),
+    )
+    val viewportBinding = boundViewport.binding
+    val virtualHistoryEnabled = boundViewport.virtualHistoryEnabled
     fun setViewportFollow(enabled: Boolean) {
-        viewportController.setFollow(enabled, if (virtualHistoryEnabled) 0 else outputScroll.value)
+        viewportController.setFollow(enabled, viewportBinding.currentScrollPx())
     }
 
     fun recordImeTransition(visible: Boolean) {
@@ -1086,14 +1071,15 @@ private fun TerminalInteractivePanel(
     }
 
     fun saveTerminalViewport() {
+        val offset = viewportBinding.currentScrollPx()
         val state = viewportController.state.value
         if (!currentFullscreen || !state.initialized) return
         bgManager.saveTerminalViewportState(
             processId = processId,
-            verticalOffsetPx = if (virtualHistoryEnabled) 0 else outputScroll.value,
+            verticalOffsetPx = offset,
             horizontalOffsetPx = horizontalScroll.value,
             autoScroll = state.autoScroll,
-            atBottom = viewportController.isNearBottom(outputScroll.value),
+            atBottom = viewportController.isNearBottom(offset),
             viewportMode = state.mode,
             anchorLineId = state.anchor?.lineId,
             anchorClippedTopPx = state.anchor?.clippedTopPx ?: 0,
@@ -1538,17 +1524,15 @@ private fun TerminalInteractivePanel(
         }
     }
 
+    val latestSaveTerminalViewport by rememberUpdatedState<() -> Unit>({ saveTerminalViewport() })
     LaunchedEffect(processId, outputScroll, horizontalScroll, viewportController) {
         combine(
             snapshotFlow {
-                if (virtualHistoryEnabled) {
-                    lazyHistoryState.firstVisibleItemIndex to lazyHistoryState.firstVisibleItemScrollOffset
-                } else {
-                    outputScroll.value to horizontalScroll.value
-                }
+                listOf(viewportBinding.virtual, outputScroll.value, horizontalScroll.value,
+                    lazyHistoryState.firstVisibleItemIndex, lazyHistoryState.firstVisibleItemScrollOffset)
             },
             viewportController.state,
-        ) { _, state -> state }.collect { saveTerminalViewport() }
+        ) { _, state -> state }.collect { latestSaveTerminalViewport() }
     }
 
     DisposableEffect(processId) {
@@ -1560,64 +1544,7 @@ private fun TerminalInteractivePanel(
             placementHorizontalOffset.set(null)
             rawInputChannel.close()
             rawMouseChannel.close()
-            saveTerminalViewport()
-        }
-    }
-
-    if (virtualHistoryEnabled) {
-        LaunchedEffect(processId, lazyHistoryState, viewportController) {
-            snapshotFlow { terminalViewportFrame to terminalItemViewport() }.collect { snapshot ->
-                // Wait at most one frame, then use the latest completed LazyList layout.
-                withFrameNanos { }
-                viewportController.updateItemViewport(snapshot.first, snapshot.second)
-            }
-        }
-    } else {
-        LaunchedEffect(processId, outputScroll, viewportController) {
-            snapshotFlow {
-                TerminalViewportRenderSnapshot(
-                    terminalViewportFrame.revision,
-                    terminalRenderedRows.size,
-                    viewportMetrics(),
-                )
-            }.collect {
-                // Keep the original eager/IME reducer observation path unchanged.
-                withFrameNanos { }
-                viewportController.updateViewport(
-                    frame = terminalViewportFrame,
-                    renderedRows = terminalRenderedRows.size,
-                    metrics = viewportMetrics(),
-                    currentScrollPx = outputScroll.value,
-                )
-            }
-        }
-    }
-
-    LaunchedEffect(processId, outputScroll, lazyHistoryState, viewportController, virtualHistoryEnabled) {
-        // The sole vertical ScrollState writer. A newer effect or user gesture cancels the old one.
-        runTerminalViewportScrollEffects(
-            controller = viewportController,
-            currentScrollPx = { if (virtualHistoryEnabled) 0 else outputScroll.value },
-            maxScrollPx = { if (virtualHistoryEnabled) 0 else outputScroll.maxValue },
-            isScrollInProgress = { if (virtualHistoryEnabled) lazyHistoryState.isScrollInProgress else outputScroll.isScrollInProgress },
-            scrollToItemTarget = { effect ->
-                if (!virtualHistoryEnabled) {
-                    false
-                } else {
-                    val completed = executeTerminalLazyItemScroll(
-                        effect = effect,
-                        state = lazyHistoryState,
-                        current = { terminalItemViewport() },
-                        isCurrent = { viewportController.isCurrent(effect) },
-                    )
-                    // Reconcile against the layout produced by this scroll. Without this refresh
-                    // the controller can republish the same item target from a stale snapshot.
-                    viewportController.observeItemViewport(terminalItemViewport())
-                    completed
-                }
-            },
-        ) { effect, target ->
-            if (effect.animated) outputScroll.animateScrollTo(target) else outputScroll.scrollTo(target)
+            latestSaveTerminalViewport()
         }
     }
 
@@ -1638,15 +1565,7 @@ private fun TerminalInteractivePanel(
         }
     }
 
-    val viewportGestures = rememberTerminalViewportGestures(
-        sessionKey = processId,
-        controller = viewportController,
-        config = TerminalViewportGestureConfig(terminalPanMode, selectionMode, fastFlingRequiredCount),
-        interactionSource = if (virtualHistoryEnabled) lazyHistoryState.interactionSource else outputScroll.interactionSource,
-        currentScrollPx = { if (virtualHistoryEnabled) 0 else outputScroll.value },
-        isScrollInProgress = { if (virtualHistoryEnabled) lazyHistoryState.isScrollInProgress else outputScroll.isScrollInProgress },
-    )
-    val viewportFlingBehavior = viewportGestures.flingBehavior
+    val viewportGestures = boundViewport.gestures
     val fastFlingConnection = viewportGestures.connection
 
     Surface(
@@ -1911,56 +1830,19 @@ private fun TerminalInteractivePanel(
                     // in scroll-coordinate math; only the grid below it scrolls. This keeps the
                     // auto-scroll bottom anchor and grid rows consistent.
                     Spacer(modifier = Modifier.height(terminalVisualTopPadding))
-                    if (virtualHistoryEnabled) {
-                        TerminalVirtualHistoryTranscript(
-                            frame = terminalViewportFrame,
-                            // Keep the stable row view; copying the entire history on every
-                            // recomposition defeats virtualization and can trigger ANR on phones.
-                            rows = terminalRenderedRows,
-                            style = terminalTextStyle,
-                            pass = lazyHistoryPass,
-                            measurements = lazyHistoryMeasurements,
-                            state = lazyHistoryState,
-                            horizontalScroll = horizontalScroll,
-                            userScrollEnabled = terminalPanMode && !selectionMode,
-                            flingBehavior = viewportFlingBehavior,
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
-                        )
-                    } else {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .horizontalScroll(horizontalScroll, enabled = terminalPanMode || selectionMode)
-                                // Keep a tiny manual viewport pan available in TOUCH/selection modes. In
-                                // MOUSE mode, do not let Compose scroll gestures compete with xterm mouse
-                                // events intended for the TUI.
-                                .verticalScroll(
-                                    outputScroll,
-                                    enabled = terminalPanMode || selectionMode,
-                                    flingBehavior = viewportFlingBehavior,
-                                )
-                        ) {
-                            val terminalContent: @Composable () -> Unit = {
-                                TerminalConfiguredTranscript(
-                                    rows = terminalRenderedRows.toList(),
-                                    style = terminalTextStyle,
-                                    historyChunks = terminalHistoryChunkPlan,
-                                    // Only eager grouping/drawing changes. Preserve both ScrollStates,
-                                    // the selection wrapper and the sole semantic scroll controller.
-                                    mode = appliedTerminalRenderMode,
-                                )
-                            }
-                            if (selectionMode) {
-                                SelectionContainer {
-                                    Column { terminalContent() }
-                                }
-                            } else {
-                                terminalContent()
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                    }
+                    TerminalTranscriptViewport(
+                        frame = terminalViewportFrame,
+                        // O(1) immutable SnapshotStateList view, paired with this published frame.
+                        rows = terminalRenderedRows.toList(),
+                        style = terminalTextStyle,
+                        historyChunks = terminalHistoryChunkPlan,
+                        mode = appliedTerminalRenderMode,
+                        bound = boundViewport,
+                        horizontalScroll = horizontalScroll,
+                        panEnabled = terminalPanMode,
+                        selectionMode = selectionMode,
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                    )
                 }
             }
             }
@@ -2053,6 +1935,7 @@ private fun TerminalInteractivePanel(
             hasHistoryChunks = terminalHistoryChunkPlan.isNotEmpty(),
             usesTuiViewport = currentUsesTuiViewport,
             virtualHistoryAllowed = virtualHistoryEnabled,
+            virtualHistoryImeFallback = virtualHistoryPolicy.imeFallback,
             selectionActive = selectionMode,
             saving = savingTerminalRenderMode,
             error = terminalRenderError,
@@ -2066,6 +1949,8 @@ private fun TerminalInteractivePanel(
                             // Persist only this command's renderer. Never write PTY input,
                             // reset the frame/history, scroll, or change other preferences.
                             settingsStore.setTerminalRenderer(process.command, mode)
+                            // A successful Apply of the SAME mode is still an explicit retry.
+                            virtualHistoryPolicy.reapplied(currentImeVisible)
                             terminalSettingsDialog = null
                         } catch (error: CancellationException) {
                             throw error

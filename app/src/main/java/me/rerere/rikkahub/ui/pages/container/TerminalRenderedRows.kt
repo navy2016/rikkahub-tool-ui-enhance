@@ -10,6 +10,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -312,6 +313,8 @@ private fun synchronizeTerminalRowStructure(
     rows.addAll(replacement)
 }
 
+internal val LocalTerminalRowDecorator = staticCompositionLocalOf<(@Composable (TerminalRenderedRowState, TextStyle) -> Unit)?> { null }
+
 /** Eager physical rows; the parent owns scrolling, selection and all viewport coordinates. */
 @Composable
 internal fun TerminalRenderedRows(
@@ -321,16 +324,17 @@ internal fun TerminalRenderedRows(
     if (rows.isEmpty()) {
         Text(text = "等待输出...", style = style, softWrap = false, maxLines = 1)
     } else {
+        val decorate = LocalTerminalRowDecorator.current
         rows.forEach { row ->
             key(row.lineId) {
-                TerminalRenderedRow(state = row, style = style)
+                if (decorate == null) TerminalRenderedRow(state = row, style = style) else decorate(row, style)
             }
         }
     }
 }
 
 @Composable
-private fun TerminalRenderedRow(
+internal fun TerminalRenderedRow(
     state: TerminalRenderedRowState,
     style: TextStyle,
 ) {

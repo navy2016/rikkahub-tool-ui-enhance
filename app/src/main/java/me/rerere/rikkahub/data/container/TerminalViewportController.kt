@@ -87,6 +87,9 @@ internal class TerminalViewportController(
     private var itemViewport: TerminalItemViewport? = null
     private var pendingItemTop = false
     private var captureItemLock = false
+    private var eagerGeometry: TerminalEagerViewportGeometry? = null
+    private var requireEagerGeometry = false
+    private var pendingItemHandoff: TerminalItemScrollTarget.Anchor? = null
 
     private data class MeasuredAnchorResolution(
         val frameRevision: Long,
@@ -105,7 +108,12 @@ internal class TerminalViewportController(
         renderedRows: Int,
         metrics: TerminalViewportMetrics,
         currentScrollPx: Int,
+        measuredGeometry: TerminalEagerViewportGeometry? = null,
+        requireMeasuredGeometry: Boolean = false,
     ) {
+        if (usesItemViewport) pendingItemHandoff = itemViewport?.capture()
+        eagerGeometry = measuredGeometry?.takeIf { it.frame === frame }
+        requireEagerGeometry = requireMeasuredGeometry
         if (usesItemViewport) {
             usesItemViewport = false
             itemViewport = null
@@ -127,9 +135,12 @@ internal class TerminalViewportController(
         val activeBottomRow = activeBottomRow(frame, metrics)
         if (!metrics.imeVisible) {
             imeAnchor = null
-        } else if (previousMetrics?.imeVisible != true && state.value.autoScroll) {
+        } else if ((previousMetrics?.imeVisible != true || pendingItemHandoff != null) && state.value.autoScroll) {
             // Mode is authoritative. Do not infer user intent from an IME-clamped pixel position.
-            imeAnchor = ImeAnchor(scrollPx, frame.screenGeneration, activeBottomRow)
+            val handoffPx = pendingItemHandoff?.let {
+                eagerGeometry?.target(it.anchor, it.capturedRowHeightPx, anchorLookup)
+            }
+            imeAnchor = ImeAnchor(handoffPx ?: scrollPx, frame.screenGeneration, activeBottomRow)
         } else {
             imeAnchor = imeAnchor?.let { previous ->
                 if (previous.screenGeneration != frame.screenGeneration) {
@@ -140,6 +151,7 @@ internal class TerminalViewportController(
             }
         }
 
+        pendingItemHandoff = null
         val initial = !state.value.initialized
         if (initial) {
             if (!state.value.autoScroll && state.value.anchor == null) {
@@ -165,6 +177,9 @@ internal class TerminalViewportController(
      */
     fun updateItemViewport(frame: TerminalEmulator.RenderFrame, observation: TerminalItemViewport?) {
         val previous = itemViewport
+        eagerGeometry = null
+        requireEagerGeometry = false
+        pendingItemHandoff = null
         if (!usesItemViewport) {
             mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
             imeAnchor = null
@@ -198,6 +213,26 @@ internal class TerminalViewportController(
     /** Live layout refresh for consumed input/completion, without publishing a new scroll effect. */
     fun observeItemViewport(observation: TerminalItemViewport?) {
         if (usesItemViewport) itemViewport = observation?.takeIf { it.frame === frame && it.ready }
+    }
+
+    /** Refresh a just-consumed user layout without reconciling programmatic intent. */
+    fun observeItemViewport(frame: TerminalEmulator.RenderFrame, observation: TerminalItemViewport?) {
+        if (!usesItemViewport) return
+        this.frame = frame
+        renderedRows = frame.rows.size
+        observeItemViewport(observation)
+    }
+
+    fun observeEagerGeometry(frame: TerminalEmulator.RenderFrame, geometry: TerminalEagerViewportGeometry?) {
+        if (usesItemViewport || !requireEagerGeometry) return
+        this.frame = frame
+        renderedRows = frame.rows.size
+        eagerGeometry = geometry?.takeIf { it.frame === frame }
+    }
+
+    /** Switching a renderer invalidates the old writer token, never changes follow/lock intent. */
+    fun pauseScrollEffects() {
+        mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
     }
 
     /** Explicit semantic restore, including a renderer handoff; never consumes a guessed offset. */
@@ -343,6 +378,7 @@ internal class TerminalViewportController(
         if (usesItemViewport) return itemViewport?.let { it.frame === frame && it.ready } == true
         val frame = frame ?: return false
         val metrics = metrics ?: return false
+        if (requireEagerGeometry && eagerGeometry?.frame !== frame) return false
         return metrics.cellHeightPx > 0 && metrics.viewportHeightPx > 0 &&
             metrics.maxScrollPx >= 0 && metrics.maxScrollPx != Int.MAX_VALUE && renderedRows > 0 &&
             renderedRows == frame.rows.size && frame.historyCount >= 0 &&
@@ -362,6 +398,13 @@ internal class TerminalViewportController(
         }
         val frame = frame
         val metrics = metrics
+        val measured = eagerGeometry?.takeIf { ready() && it.frame === frame }?.capture(atScrollPx)
+        if (measured != null) {
+            legacyOffsetPx = null
+            mutableState.value = state.value.copy(mode = ViewportMode.LOCKED, anchor = measured.anchor,
+                anchorCellHeightPx = metrics?.cellHeightPx ?: 0, anchorRowHeightPx = measured.capturedRowHeightPx)
+            return
+        }
         val anchor = if (ready() && frame != null && metrics != null) {
             captureViewportAnchor(frame, renderedRows, atScrollPx.coerceIn(0, metrics.maxScrollPx), metrics.cellHeightPx)
         } else null
@@ -370,6 +413,7 @@ internal class TerminalViewportController(
             mode = ViewportMode.LOCKED,
             anchor = anchor,
             anchorCellHeightPx = metrics?.cellHeightPx ?: 0,
+            anchorRowHeightPx = 0,
         )
     }
 
@@ -383,6 +427,11 @@ internal class TerminalViewportController(
         val frame = requireNotNull(frame)
         val metrics = requireNotNull(metrics)
         if (!state.value.autoScroll && state.value.anchor == null) capture(legacyOffsetPx ?: scrollPx)
+        if (eagerGeometry != null && state.value.anchor != null) {
+            val resolved = resolveTerminalItemAnchor(frame, requireNotNull(state.value.anchor), anchorLookup)
+            mutableState.value = if (resolved == null) state.value.copy(mode = followMode(), anchor = null)
+                else state.value.copy(anchor = resolved)
+        }
         val anchor = state.value.anchor
         val captureHeight = state.value.anchorCellHeightPx.takeIf { it > 0 } ?: metrics.cellHeightPx
         val clippedTop = (((anchor?.clippedTopPx ?: 0).toLong() * metrics.cellHeightPx + captureHeight / 2) /
@@ -405,7 +454,9 @@ internal class TerminalViewportController(
                 tailScrollPx = followTarget,
                 screenScrollPx = followTarget,
                 fallbackMode = followMode(),
-                measuredAnchorScrollPx = measuredAnchorResolution?.takeIf { measured ->
+                measuredAnchorScrollPx = anchor?.let {
+                    eagerGeometry?.target(it, state.value.anchorRowHeightPx, anchorLookup)
+                } ?: measuredAnchorResolution?.takeIf { measured ->
                     measured.frameRevision == frame.revision &&
                         measured.anchor.lineId == anchor?.lineId &&
                         measured.anchor.clippedTopPx == anchor?.clippedTopPx &&
@@ -482,8 +533,13 @@ internal class TerminalViewportController(
             terminalEffectiveScreenBottomRow(frame.screenContentBounds, frame.cursorRow, frame.cursorVisible)
         }
 
-    private fun bottomTarget(frame: TerminalEmulator.RenderFrame, metrics: TerminalViewportMetrics): Int =
-        if (metrics.usesTuiViewport) {
+    private fun bottomTarget(frame: TerminalEmulator.RenderFrame, metrics: TerminalViewportMetrics): Int {
+        val geometry = eagerGeometry?.takeIf { it.frame === frame && !metrics.usesTuiViewport }
+        if (geometry != null) {
+            val last = frame.contentBounds.lastNonBlankRow?.takeIf { it in frame.rows.indices } ?: return 0
+            return (geometry.bottom(last) + metrics.tailPaddingPx - metrics.viewportHeightPx).coerceIn(0, metrics.maxScrollPx)
+        }
+        return if (metrics.usesTuiViewport) {
             terminalTuiViewportScrollTarget(
                 screenStartRow = frame.screenStartRow,
                 lastActiveScreenRow = listOfNotNull(activeBottomRow(frame, metrics), imeAnchor?.bottomScreenRow).maxOrNull(),
@@ -501,4 +557,5 @@ internal class TerminalViewportController(
                 maxScrollPx = metrics.maxScrollPx,
             )
         }
+    }
 }

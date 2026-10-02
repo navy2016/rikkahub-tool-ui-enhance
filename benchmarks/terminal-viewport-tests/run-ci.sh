@@ -8,6 +8,7 @@ adb logcat -c
 adb shell settings put global window_animation_scale 1
 adb shell settings put global transition_animation_scale 1
 adb shell settings put global animator_duration_scale 1
+adb shell settings put secure show_ime_with_hard_keyboard 1
 
 results_root="benchmarks/terminal-viewport-tests/build/outputs/androidTest-results"
 rm -rf "$results_root"

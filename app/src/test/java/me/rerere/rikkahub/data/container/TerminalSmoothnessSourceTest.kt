@@ -7,6 +7,13 @@ import org.junit.Test
 import java.io.File
 
 class TerminalSmoothnessSourceTest {
+    private fun terminalUiSource(name: String): String = listOf(
+        File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/$name.kt"),
+        File("src/main/java/me/rerere/rikkahub/ui/pages/container/$name.kt"),
+    ).first { it.isFile }.readText()
+    private val bindingSource = terminalUiSource("TerminalViewportBinding")
+    private val transcriptSource = terminalUiSource("TerminalTranscriptViewport")
+    private val policySource = terminalUiSource("TerminalVirtualHistoryPolicy")
     private val processSessionSource = listOf(
         File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt"),
         File("src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt")
@@ -92,7 +99,9 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("TERMINAL_RESIZE_RENDER_FALLBACK_MS"))
         assertTrue(processSessionSource.contains("resizeRenderFallbackJob.getAndSet(null)?.cancel()"))
         assertTrue(processSessionSource.contains("val renderJob = remember(processId) { AtomicReference<Job?>(null) }"))
-        assertTrue(processSessionSource.contains("TerminalViewportRenderSnapshot("))
+        assertTrue(processSessionSource.contains("metrics = { viewportMetrics() }"))
+        assertTrue(bindingSource.contains("current.metrics()"))
+        assertTrue(bindingSource.contains("snapshotFlow {"))
         assertFalse(processSessionSource.contains("LaunchedEffect(imeVisible, terminalRows, terminalRenderedRows.size, outputScroll.maxValue"))
         assertFalse(processSessionSource.contains("LaunchedEffect(processId, terminalRenderedRows.size, outputScroll.maxValue"))
         assertTrue(processSessionSource.contains("preserveBottomRows = currentUsesTuiViewport"))
@@ -111,7 +120,7 @@ class TerminalSmoothnessSourceTest {
         assertFalse(itemGeometrySource.contains("rowCount * cellHeight"))
         assertTrue(processSessionSource.contains("val currentActiveScreenBottomRow by rememberUpdatedState(terminalActiveScreenBottomRow)"))
         assertTrue(processSessionSource.contains("viewportHeightPx = outputViewportHeightPx"))
-        assertTrue(processSessionSource.contains("viewportController.updateViewport("))
+        assertTrue(bindingSource.contains("controller.updateViewport(current.pass.frame"))
         assertTrue(geometrySource.contains("lastContentBottomPx - viewportHeightPx"))
         assertTrue(processSessionSource.contains("isConfiguredTerminalCommand("))
         assertTrue(processSessionSource.contains("settings.terminalFullGridCommands"))
@@ -119,7 +128,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(controllerSource.contains("terminalTuiViewportScrollTarget("))
         assertTrue(processSessionSource.contains("Only the rendered terminal tail belongs to the scroll content. Input and extra-key bars"))
         assertTrue(processSessionSource.contains("val autoScroll = viewportState.autoScroll"))
-        assertTrue(processSessionSource.contains("The sole vertical ScrollState writer"))
+        assertEquals(1, bindingSource.split("runTerminalViewportScrollEffects(").size - 1)
         assertFalse(processSessionSource.contains("var terminalCellWidthPx by remember"))
     }
 
@@ -138,7 +147,8 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("synchronizeTerminalRenderedRows("))
         assertTrue(processSessionSource.contains("createTerminalRenderedRowsSyncState(initialTerminalRenderFrame, terminalRenderedRows)"))
         assertTrue(processSessionSource.contains("syncState = terminalRenderedRowsSyncState"))
-        assertTrue(processSessionSource.contains("TerminalConfiguredTranscript("))
+        assertTrue(processSessionSource.contains("TerminalTranscriptViewport("))
+        assertTrue(transcriptSource.contains("TerminalConfiguredTranscript("))
         assertTrue(renderedRowsSource.contains("val lineId: Long"))
         assertTrue(renderedRowsSource.contains("buildLineIdsFromFrame(frame, rendered.size)"))
         // Row identity through trim/reorder is checked behaviorally in TerminalRenderedRowsTest.
@@ -200,15 +210,12 @@ class TerminalSmoothnessSourceTest {
 
     @Test
     fun repeatedFastFlingJumpsToTopOrBottomConservatively() {
-        assertTrue(processSessionSource.contains("val viewportGestures = rememberTerminalViewportGestures("))
+        assertTrue(processSessionSource.contains("val viewportGestures = boundViewport.gestures"))
         assertTrue(processSessionSource.contains("TerminalViewportGestureConfig(terminalPanMode, selectionMode, fastFlingRequiredCount)"))
-        assertTrue(processSessionSource.contains("currentScrollPx = {"))
-        assertTrue(processSessionSource.contains("outputScroll.value"))
-        assertTrue(processSessionSource.contains("interactionSource = if (virtualHistoryEnabled)"))
-        assertTrue(processSessionSource.contains("outputScroll.interactionSource"))
-        assertTrue(processSessionSource.contains("isScrollInProgress = {"))
-        assertTrue(processSessionSource.contains("outputScroll.isScrollInProgress"))
-        assertTrue(processSessionSource.contains("val viewportFlingBehavior = viewportGestures.flingBehavior"))
+        assertTrue(bindingSource.contains("currentScrollPx = { binding.currentScrollPx() }"))
+        assertTrue(bindingSource.contains("if (virtual) lazy.interactionSource else eager.interactionSource"))
+        assertTrue(bindingSource.contains("if (binding.virtual) lazy.isScrollInProgress else eager.isScrollInProgress"))
+        assertTrue(transcriptSource.contains("flingBehavior = bound.gestures.flingBehavior"))
         assertTrue(processSessionSource.contains("val fastFlingConnection = viewportGestures.connection"))
         assertTrue(gestureSource.contains("NestedScrollConnection"))
         assertTrue(fastFlingSource.contains("TERMINAL_FAST_FLING_VELOCITY_PX = 3500f"))
@@ -219,25 +226,26 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("viewportGestures.resetFastFling()"))
         assertTrue(processSessionSource.contains("\"HIST\""))
         assertTrue(processSessionSource.contains("\"JUMP\""))
-        assertTrue(processSessionSource.contains("enabled = terminalPanMode || selectionMode,"))
+        assertTrue(transcriptSource.contains("enabled = panEnabled || selectionMode,"))
         assertTrue(gestureSource.contains("panEnabled && !selectionMode"))
         assertTrue(gestureSource.contains("controller.jumpToBottom(currentPx)"))
         assertTrue(gestureSource.contains("controller.jumpToTop(currentPx)"))
         assertTrue(gestureSource.contains("if (initialVelocity == 0f) return 0f"))
         assertTrue(processSessionSource.contains(".nestedScroll(fastFlingConnection)"))
-        assertTrue(processSessionSource.contains("flingBehavior = viewportFlingBehavior,"))
+        assertTrue(bindingSource.contains("rememberTerminalViewportGestures(sessionKey, controller, gestureConfig,"))
     }
 
     @Test
     fun controllerIsTheOnlyVerticalScrollOwnerAndCapturesConsumedUserDeltas() {
-        assertEquals(1, Regex("runTerminalViewportScrollEffects").findAll(processSessionSource).count())
+        assertEquals(1, bindingSource.split("runTerminalViewportScrollEffects(").size - 1)
+        assertEquals(0, processSessionSource.split("runTerminalViewportScrollEffects(").size - 1)
+        assertEquals(1, processSessionSource.split("rememberTerminalBoundViewport(").size - 1)
         assertTrue(scrollEffectsSource.contains("controller.state.map { it.scrollEffect }"))
         assertTrue(scrollEffectsSource.contains("controller.isCurrent(effect)"))
         assertTrue(scrollEffectsSource.contains("controller.scrollFinished(effect.id"))
         assertTrue(scrollEffectsSource.contains("withFrameNanos { }"))
         assertFalse(scrollEffectsSource.contains("snapshotFlow { isScrollInProgress() }.first { !it }"))
-        assertTrue(processSessionSource.contains("maxScrollPx = {"))
-        assertTrue(processSessionSource.contains("outputScroll.maxValue"))
+        assertTrue(bindingSource.contains("{ eager.maxValue }"))
         assertTrue(gestureSource.contains("override fun onPostScroll("))
         assertTrue(gestureSource.contains("consumed.y != 0f && userDelta"))
         assertTrue(gestureSource.contains("source == NestedScrollSource.UserInput"))
@@ -245,8 +253,9 @@ class TerminalSmoothnessSourceTest {
         assertTrue(gestureSource.contains("finally {\n            controller.endUserScroll(token)"))
         assertTrue(gestureSource.contains("collectIsDraggedAsState()"))
         assertTrue(gestureSource.contains("rememberUpdatedState(currentScrollPx)"))
-        assertEquals(1, Regex("""outputScroll\.scrollTo\(""").findAll(processSessionSource).count())
-        assertEquals(1, Regex("""outputScroll\.animateScrollTo\(""").findAll(processSessionSource).count())
+        assertEquals(0, Regex("""outputScroll\.(scrollTo|animateScrollTo)\(""").findAll(processSessionSource).count())
+        assertEquals(1, bindingSource.split("eager.scrollTo(").size - 1)
+        assertEquals(1, bindingSource.split("eager.animateScrollTo(").size - 1)
         assertFalse(Regex("""\.(scrollTo|animateScrollTo|scrollToItem|animateScrollToItem)\(""")
             .containsMatchIn(gestureSource))
         assertFalse(processSessionSource.contains("TerminalScrollOperation"))
@@ -262,7 +271,8 @@ class TerminalSmoothnessSourceTest {
         assertTrue(controllerSource.contains("measured.frameRevision == frame.revision"))
         assertTrue(controllerSource.contains("measured.anchor.clippedTopPx == anchor?.clippedTopPx"))
         assertTrue(controllerSource.contains("measured.anchor.historyGeneration == anchor?.historyGeneration"))
-        assertTrue(processSessionSource.contains("TerminalConfiguredTranscript("))
+        assertTrue(processSessionSource.contains("TerminalTranscriptViewport("))
+        assertTrue(transcriptSource.contains("TerminalConfiguredTranscript("))
         assertFalse(processSessionSource.contains("LazyColumn("))
     }
 
@@ -284,13 +294,14 @@ class TerminalSmoothnessSourceTest {
 
     @Test
     fun unverifiedLazyGeometryCannotAutoEnableInTheProductionTerminal() {
-        // The isolated gesture fixture is not permission to enable a production lazy viewport.
+        // Existence of a lazy component never makes it the default or bypasses compatibility gates.
         assertTrue(processSessionSource.contains("rememberLazyListState()"))
-        assertTrue(processSessionSource.contains("TerminalVirtualHistoryTranscript("))
-        assertTrue(processSessionSource.contains("executeTerminalLazyItemScroll("))
-        assertTrue(processSessionSource.contains("virtualHistoryEnabled = appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY"))
+        assertTrue(transcriptSource.contains("TerminalVirtualHistoryTranscript("))
+        assertTrue(bindingSource.contains("executeTerminalLazyItemScroll("))
+        assertTrue(processSessionSource.contains("wantsVirtualHistory = appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY"))
+        assertTrue(policySource.contains("historyAvailable && panEnabled && !selection && !tui && !ime && !imeFallback"))
         assertFalse(processSessionSource.contains("TERMINAL_LAZY_HISTORY_MIN_ROWS"))
-        assertTrue(processSessionSource.contains("TerminalConfiguredTranscript("))
+        assertTrue(transcriptSource.contains("TerminalConfiguredTranscript("))
     }
 
     @Test
@@ -303,8 +314,8 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("firstSequence = terminalHistoryStartSequence"))
         assertTrue(processSessionSource.contains("val currentUsesTuiViewport by rememberUpdatedState("))
         assertTrue(processSessionSource.contains("commandIsTui || terminalFrameIsAlternateScreen ||"))
-        assertTrue(processSessionSource.contains("SelectionContainer {"))
-        assertTrue(processSessionSource.contains(".verticalScroll("))
+        assertTrue(transcriptSource.contains("if (selectionMode) SelectionContainer {"))
+        assertTrue(transcriptSource.contains(".verticalScroll(bound.binding.eager,"))
         // Ordinary history uses the measured display-list isolation; grid modes still produce no
         // chunks and therefore use the unchanged flat path.
         assertTrue(processSessionSource.contains("mode = appliedTerminalRenderMode"))
@@ -336,8 +347,8 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("(!imeTransitionActive || fullOutputViewportHeightPx.get() == 0)"))
         assertTrue(processSessionSource.contains("shouldAvoidIme || customImeRequiresExtraAvoidance"))
         assertTrue(processSessionSource.contains("val transitionStillActive = currentImeVisible || currentActualImeHeightPx > 0"))
-        assertTrue(processSessionSource.contains("viewportController.isNearBottom(outputScroll.value)"))
-        assertTrue(processSessionSource.contains("atBottom = viewportController.isNearBottom(outputScroll.value)"))
+        assertTrue(processSessionSource.contains("val offset = viewportBinding.currentScrollPx()"))
+        assertTrue(processSessionSource.contains("atBottom = viewportController.isNearBottom(offset)"))
         assertFalse(processSessionSource.contains("contentRows * terminalCellHeightPx + terminalBottomRevealPadding"))
     }
 
@@ -346,7 +357,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("process.ptyMode.equals(\"raw\", ignoreCase = true)"))
         assertTrue(processSessionSource.contains("fun viewportMetrics() = TerminalViewportMetrics("))
         assertTrue(controllerSource.contains("else ViewportMode.LOCKED"))
-        assertTrue(processSessionSource.contains("viewportController.setFollow(enabled, if (virtualHistoryEnabled) 0 else outputScroll.value)"))
+        assertTrue(processSessionSource.contains("viewportController.setFollow(enabled, viewportBinding.currentScrollPx())"))
         assertFalse(processSessionSource.contains("pendingTuiCompensationPx"))
         assertFalse(processSessionSource.contains("tuiScreenStartRowAnchor"))
         assertTrue(processSessionSource.contains("modifier = Modifier.zIndex(1f)"))
@@ -418,8 +429,8 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("activeTerminalMouseButton.set(button)"))
         assertTrue(processSessionSource.contains("activeTerminalMouseButton.set(null)"))
         assertTrue(processSessionSource.contains("sequence != null || hadActivePress"))
-        assertTrue(processSessionSource.contains("enabled = terminalPanMode || selectionMode,"))
-        assertFalse(processSessionSource.contains("enabled = terminalPanMode || selectionMode || !rawInputMode"))
+        assertTrue(transcriptSource.contains("enabled = panEnabled || selectionMode,"))
+        assertFalse(transcriptSource.contains("|| !rawInputMode"))
         assertTrue(processSessionSource.contains("Channel<String>(Channel.UNLIMITED)"))
         assertTrue(processSessionSource.contains("rawInputChannel.trySend(sequence)"))
         assertTrue(backgroundProcessManagerSource.contains("val inputMutex: Mutex = Mutex()"))

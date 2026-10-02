@@ -4,11 +4,12 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.utils.TerminalEmulator
@@ -32,8 +33,12 @@ internal fun TerminalVirtualHistoryTranscript(
     flingBehavior: FlingBehavior,
     modifier: Modifier = Modifier,
 ) {
+    require(pass.frame === frame && rows.size == frame.rows.size)
+    val widthPx = rememberTerminalTranscriptWidth(frame, style)
+    val density = LocalDensity.current
     LazyColumn(
-        modifier = modifier.horizontalScroll(horizontalScroll, enabled = userScrollEnabled),
+        modifier = modifier.horizontalScroll(horizontalScroll, enabled = userScrollEnabled)
+            .widthIn(min = with(density) { widthPx.toDp() }),
         state = state,
         userScrollEnabled = userScrollEnabled,
         flingBehavior = flingBehavior,
