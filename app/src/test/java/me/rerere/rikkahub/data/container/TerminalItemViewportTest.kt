@@ -78,6 +78,47 @@ class TerminalItemViewportTest {
         assertEquals(150L, controller.state.value.anchor?.lineId)
     }
 
+    @Test fun topJumpSurvivesRendererHandoffAndTrimWhileWaitingForEagerGeometry() {
+        val initial = frame()
+        val controller = TerminalViewportController(followInitially = false)
+        controller.updateItemViewport(initial, view(initial))
+        controller.jumpToTop(0)
+        val oldJump = requireNotNull(controller.state.value.scrollEffect)
+        controller.pauseScrollEffects()
+        val next = frame(first = 130, revision = 2)
+        val geometry = TerminalEagerViewportGeometry(next, IntArray(next.rows.size) { 37 })
+        val metrics = TerminalViewportMetrics(geometry.contentHeightPx - 100, 100, 20, 8)
+        controller.updateViewport(next, next.rows.size, metrics, 1234, null, true)
+        assertNull(controller.state.value.scrollEffect)
+        controller.scrollFinished(oldJump.id, 999, false)
+        controller.updateViewport(next, next.rows.size, metrics, 1234, geometry, true)
+        val effect = requireNotNull(controller.state.value.scrollEffect)
+        assertEquals(0, effect.targetScrollPx)
+        assertEquals(130L, controller.state.value.anchor?.lineId)
+        assertFalse(controller.state.value.autoScroll)
+        controller.scrollFinished(effect.id, 0, true)
+        assertNull(controller.state.value.scrollEffect)
+    }
+
+    @Test fun newUserInputCancelsTopIntentDuringRendererHandoff() {
+        val frame = frame()
+        val controller = TerminalViewportController(followInitially = false)
+        controller.updateItemViewport(frame, view(frame))
+        controller.jumpToTop(0)
+        controller.pauseScrollEffects()
+        val geometry = TerminalEagerViewportGeometry(frame, IntArray(frame.rows.size) { 37 })
+        val metrics = TerminalViewportMetrics(geometry.contentHeightPx - 100, 100, 20, 8)
+        controller.updateViewport(frame, frame.rows.size, metrics, 1234, geometry, true)
+        val top = requireNotNull(controller.state.value.scrollEffect)
+        val drag = controller.beginUserScroll(ViewportScrollOrigin.USER_DRAG, 1234)
+        controller.userScrolled(drag, 1258)
+        controller.scrollFinished(top.id, 0, false)
+        controller.endUserScroll(drag)
+        assertEquals(134L, controller.state.value.anchor?.lineId)
+        assertEquals(0, controller.state.value.anchor?.clippedTopPx)
+        assertNull(controller.state.value.scrollEffect)
+    }
+
     @Test fun imeHoldAcrossDelayedEagerMeasurementUsesVirtualTopNotDormantScroll() {
         val frame = frame()
         val controller = TerminalViewportController()

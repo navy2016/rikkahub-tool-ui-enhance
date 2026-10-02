@@ -18,6 +18,7 @@ overall_status=0
 run_arm() {
   local arm="$1"
   local test_class="${2:-TerminalViewportGestureInstrumentedTest}"
+  local timeout_seconds="${3:-180}"
   local arm_status=0
   local stage="$results_root/viewport-$arm"
   local log="artifacts/terminal-validation/instrumentation-$arm.log"
@@ -29,7 +30,7 @@ run_arm() {
   mkdir -p "$stage"
 
   TERMINAL_TIMEOUT_LOG_PATH="$log" \
-    python3 .github/scripts/run-terminal-with-timeout.py 180 \
+    python3 .github/scripts/run-terminal-with-timeout.py "$timeout_seconds" \
     bash .github/scripts/run-terminal-gradle.sh -PterminalViewportTests=true \
       :benchmarks:terminal-viewport-tests:connectedReleaseAndroidTest \
       -Pandroid.testInstrumentationRunnerArguments.class="me.rerere.rikkahub.viewporttest.$test_class" \
@@ -53,4 +54,5 @@ run_arm natural-intrinsic TerminalLazyNaturalGeometryInstrumentedTest
 run_arm intrinsic TerminalIntrinsicWidthInstrumentedTest
 run_arm render-mode TerminalRenderModeInstrumentedTest
 run_arm item-viewport TerminalItemViewportInstrumentedTest
+run_arm stability TerminalViewportStabilityInstrumentedTest 240
 exit "$overall_status"

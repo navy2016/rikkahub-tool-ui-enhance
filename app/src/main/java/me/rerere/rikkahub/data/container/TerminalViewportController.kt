@@ -117,7 +117,8 @@ internal class TerminalViewportController(
         if (usesItemViewport) {
             usesItemViewport = false
             itemViewport = null
-            pendingItemTop = false
+            // Keep an explicit Top intent across a cancelled lazy animation and a delayed eager
+            // measurement. The dormant ScrollState position is not the user's requested target.
             captureItemLock = false
             mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
         }
@@ -426,6 +427,10 @@ internal class TerminalViewportController(
         }
         val frame = requireNotNull(frame)
         val metrics = requireNotNull(metrics)
+        if (pendingItemTop) {
+            capture(0)
+            pendingItemTop = false
+        }
         if (!state.value.autoScroll && state.value.anchor == null) capture(legacyOffsetPx ?: scrollPx)
         if (eagerGeometry != null && state.value.anchor != null) {
             val resolved = resolveTerminalItemAnchor(frame, requireNotNull(state.value.anchor), anchorLookup)

@@ -428,14 +428,18 @@ class TerminalItemViewportInstrumentedTest {
         }
     }
 
-    private class Fixture(
+    internal class Fixture(
         private val wideHead: Boolean = false,
         private val stressSpans: Boolean = true,
         private val systemIme: Boolean = false,
         private val initialMode: TerminalRenderMode = TerminalRenderMode.VIRTUAL_HISTORY,
+        private val historyRows: Int = 1_000,
+        terminalOverride: TerminalEmulator? = null,
+        restored: TerminalViewportState? = null,
     ) {
-        val terminal = TerminalEmulator(initialColumns = 80, initialRows = 24, maxScrollbackLines = 1_000).apply {
-            feed("\u001B[?25l" + (0 until 1024).joinToString("\r\n") {
+        val terminal = terminalOverride ?: TerminalEmulator(initialColumns = 80, initialRows = 24,
+            maxScrollbackLines = historyRows).apply {
+            feed("\u001B[?25l" + (0 until historyRows + 24).joinToString("\r\n") {
                 if (wideHead && it == 0) "W".repeat(79) else "r$it 中文 e\u0301 " + "x".repeat(it % 20 + 20)
             })
         }
@@ -450,15 +454,15 @@ class TerminalItemViewportInstrumentedTest {
             })
         }
         var frame by mutableStateOf(render(), referentialEqualityPolicy())
-        val saved = TerminalViewportState(autoScroll = false, anchorLineId = frame.historyLineIds[500],
+        val saved = restored ?: TerminalViewportState(autoScroll = false, anchorLineId = frame.historyLineIds[frame.historyCount / 2],
             anchorClippedTopPx = 7, anchorHistoryGeneration = frame.historyGeneration)
         val controller = TerminalViewportController(saved)
         val rows = createTerminalRenderedRows(frame)
         private val sync = createTerminalRenderedRowsSyncState(frame, rows)
         val lazy = LazyListState()
-        val horizontal = ScrollState(0)
+        val horizontal = ScrollState(saved.horizontalOffsetPx)
         val measurements = TerminalLazyItemMeasurements()
-        val eager = ScrollState(0)
+        val eager = ScrollState(if (saved.autoScroll) Int.MAX_VALUE else saved.verticalOffsetPx)
         var fontSp by mutableIntStateOf(14)
         var heightDp by mutableIntStateOf(220)
         var config by mutableStateOf(TerminalViewportGestureConfig(true, false, 2))
@@ -489,6 +493,25 @@ class TerminalItemViewportInstrumentedTest {
         fun top() = if (isVirtual) requireNotNull(observation()).capture()!!
             else requireNotNull(bound.binding.eagerGeometry()).capture(eager.value)
         fun panHorizontal(px: Int) { scope.launch { horizontal.scrollTo(px) } }
+
+        fun snapshotViewport(): TerminalViewportState {
+            val pixels = inputPx()
+            val state = controller.state.value
+            return TerminalViewportState(verticalOffsetPx = pixels, horizontalOffsetPx = horizontal.value,
+                autoScroll = state.autoScroll, atBottom = controller.isNearBottom(pixels), viewportMode = state.mode,
+                anchorLineId = state.anchor?.lineId, anchorClippedTopPx = state.anchor?.clippedTopPx ?: 0,
+                anchorCellHeightPx = state.anchorCellHeightPx, anchorRowHeightPx = state.anchorRowHeightPx,
+                anchorHistoryGeneration = state.anchor?.historyGeneration, anchorScreenGeneration = state.anchor?.screenGeneration)
+        }
+
+        fun stream(frames: Int, linesPerFrame: Int = 1, beforeFrame: (Int) -> Unit = {}) = scope.launch {
+            repeat(frames) { frameIndex ->
+                withFrameNanos { }
+                beforeFrame(frameIndex)
+                repeat(linesPerFrame) { terminal.feed("\r\nstream-${appendCount++} \u001B[32m中文\u001B[0m") }
+                publish()
+            }
+        }
 
         fun append() {
             terminal.feed("\r\nappend-${appendCount++} 中文")
