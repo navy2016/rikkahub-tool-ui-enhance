@@ -17,6 +17,7 @@ internal suspend fun runTerminalViewportScrollEffects(
     currentScrollPx: () -> Int,
     maxScrollPx: () -> Int,
     isScrollInProgress: () -> Boolean,
+    scrollToItemTarget: (suspend (TerminalViewportScrollEffect) -> Boolean)? = null,
     scrollTo: suspend (effect: TerminalViewportScrollEffect, targetPx: Int) -> Unit,
 ) {
     controller.state.map { it.scrollEffect }.distinctUntilChanged().collectLatest { effect ->
@@ -38,9 +39,13 @@ internal suspend fun runTerminalViewportScrollEffects(
             }
             // A new drag/jump can invalidate the effect during the handoff. Never replay stale intent.
             if (!controller.isCurrent(effect)) return@collectLatest
-            val target = effect.targetScrollPx.coerceIn(0, maxScrollPx())
-            scrollTo(effect, target)
-            completed = true
+            if (effect.itemTarget != null) {
+                completed = checkNotNull(scrollToItemTarget) { "Item target requires the measured executor" }(effect)
+            } else {
+                val target = effect.targetScrollPx.coerceIn(0, maxScrollPx())
+                scrollTo(effect, target)
+                completed = true
+            }
         } finally {
             controller.scrollFinished(effect.id, currentScrollPx(), completed)
         }

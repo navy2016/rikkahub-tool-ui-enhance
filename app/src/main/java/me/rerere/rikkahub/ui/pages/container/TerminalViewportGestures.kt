@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import me.rerere.rikkahub.data.container.TERMINAL_EDGE_THRESHOLD_PX
 import me.rerere.rikkahub.data.container.TerminalFastFlingTracker
 import me.rerere.rikkahub.data.container.TerminalJumpEdge
 import me.rerere.rikkahub.data.container.TerminalViewportController
@@ -132,7 +131,7 @@ internal class TerminalViewportNestedScrollConnection(
                 controller.jumpToBottom(currentPx)
             }
             TerminalJumpEdge.TOP -> {
-                if (currentPx <= TERMINAL_EDGE_THRESHOLD_PX) return Velocity.Zero
+                if (controller.isNearTop(currentPx)) return Velocity.Zero
                 controller.jumpToTop(currentPx)
             }
         }

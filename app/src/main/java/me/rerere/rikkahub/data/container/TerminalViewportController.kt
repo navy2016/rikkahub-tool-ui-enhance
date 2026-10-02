@@ -24,6 +24,8 @@ internal data class TerminalViewportScrollEffect(
     val targetScrollPx: Int,
     val origin: ViewportScrollOrigin,
     val animated: Boolean = false,
+    /** Non-null only for an explicitly attached measured/item backend; pixels are unused there. */
+    val itemTarget: TerminalItemScrollTarget? = null,
 )
 
 internal data class TerminalViewportControllerState(
@@ -34,6 +36,7 @@ internal data class TerminalViewportControllerState(
     val initialized: Boolean = false,
     val gesture: TerminalViewportGesture? = null,
     val scrollEffect: TerminalViewportScrollEffect? = null,
+    val anchorRowHeightPx: Int = 0,
 ) {
     val autoScroll: Boolean get() = mode != ViewportMode.LOCKED
 }
@@ -65,6 +68,7 @@ internal class TerminalViewportController(
                 }
             },
             anchorCellHeightPx = restored?.anchorCellHeightPx ?: 0,
+            anchorRowHeightPx = restored?.anchorRowHeightPx ?: 0,
         )
     )
     val state: StateFlow<TerminalViewportControllerState> = mutableState.asStateFlow()
@@ -79,6 +83,10 @@ internal class TerminalViewportController(
     private var imeAnchor: ImeAnchor? = null
     private var measuredAnchorResolution: MeasuredAnchorResolution? = null
     private val anchorLookup = TerminalViewportLineLookup()
+    private var usesItemViewport = false
+    private var itemViewport: TerminalItemViewport? = null
+    private var pendingItemTop = false
+    private var captureItemLock = false
 
     private data class MeasuredAnchorResolution(
         val frameRevision: Long,
@@ -98,6 +106,13 @@ internal class TerminalViewportController(
         metrics: TerminalViewportMetrics,
         currentScrollPx: Int,
     ) {
+        if (usesItemViewport) {
+            usesItemViewport = false
+            itemViewport = null
+            pendingItemTop = false
+            captureItemLock = false
+            mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
+        }
         val previousMetrics = lastValidMetrics
         this.frame = frame
         this.renderedRows = renderedRows
@@ -144,6 +159,58 @@ internal class TerminalViewportController(
     }
 
     /**
+     * Opt-in item-native geometry; current production eager callers keep updateViewport unchanged.
+     * Null/stale geometry pauses reconciliation. It must never revert to nominal-row arithmetic.
+     * The completed layout's frame is compared by identity, not revision alone (sessions can reuse it).
+     */
+    fun updateItemViewport(frame: TerminalEmulator.RenderFrame, observation: TerminalItemViewport?) {
+        val previous = itemViewport
+        if (!usesItemViewport) {
+            mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
+            imeAnchor = null
+            measuredAnchorResolution = null
+        }
+        usesItemViewport = true
+        this.frame = frame
+        renderedRows = frame.rows.size
+        itemViewport = observation?.takeIf { it.frame === frame && it.ready && !frame.isAlternateScreen }
+        if (itemViewport == null) {
+            // Do not disturb an explicit in-flight jump for each output frame. Its executor must
+            // re-read valid geometry before completion; the next completed layout reconciles it.
+            if (state.value.scrollEffect?.animated != true) mutableState.value = state.value.copy(scrollEffect = null)
+            return
+        }
+        val initial = !state.value.initialized
+        if (initial) {
+            if (!state.value.autoScroll && state.value.anchor == null) capture(0)
+            legacyOffsetPx = null // Item backends must restore semantic IDs, never interpret legacy pixels.
+            mutableState.value = state.value.copy(initialized = true)
+        }
+        val origin = when {
+            initial -> ViewportScrollOrigin.RESTORE
+            previous?.layoutKey != itemViewport?.layoutKey ||
+                previous?.viewportHeightPx != itemViewport?.viewportHeightPx -> ViewportScrollOrigin.RESIZE
+            else -> ViewportScrollOrigin.REDUCER
+        }
+        reconcile(origin)
+    }
+
+    /** Live layout refresh for consumed input/completion, without publishing a new scroll effect. */
+    fun observeItemViewport(observation: TerminalItemViewport?) {
+        if (usesItemViewport) itemViewport = observation?.takeIf { it.frame === frame && it.ready }
+    }
+
+    /** Explicit semantic restore, including a renderer handoff; never consumes a guessed offset. */
+    fun restoreItemAnchor(anchor: ViewportAnchor, rowHeightPx: Int) {
+        require(rowHeightPx >= 0)
+        pendingItemTop = false
+        captureItemLock = false
+        mutableState.value = state.value.copy(mode = ViewportMode.LOCKED, anchor = anchor,
+            anchorRowHeightPx = rowHeightPx, gesture = null, scrollEffect = null)
+        if (usesItemViewport) reconcile(ViewportScrollOrigin.RESTORE)
+    }
+
+    /**
      * Supplies an exact target from a measured LazyList layout. The line ID and frame revision are
      * part of the contract so a delayed layout observation cannot drive a newer terminal frame.
      * Eager/TUI callers never set it and retain the existing fixed-grid reducer behavior.
@@ -164,6 +231,8 @@ internal class TerminalViewportController(
         scrollPx = currentScrollPx.coerceAtLeast(0)
         imeAnchor = null
         measuredAnchorResolution = null
+        pendingItemTop = false
+        captureItemLock = false
         val gesture = state.value.gesture?.takeIf { it.origin == origin }
             ?: TerminalViewportGesture(++nextOperationId, origin)
         mutableState.value = state.value.copy(gesture = gesture, scrollEffect = null)
@@ -174,7 +243,14 @@ internal class TerminalViewportController(
     fun userScrolled(gestureId: Long, currentScrollPx: Int) {
         if (state.value.gesture?.id != gestureId) return
         scrollPx = currentScrollPx.coerceAtLeast(0)
-        if (!ready()) return
+        if (!ready()) {
+            if (usesItemViewport) {
+                // A consumed user delta is authoritative even between frame publication and layout.
+                captureItemLock = true
+                mutableState.value = state.value.copy(mode = ViewportMode.LOCKED, anchor = null)
+            }
+            return
+        }
         if (isNearBottom(scrollPx)) {
             mutableState.value = state.value.copy(mode = followMode(), anchor = null, anchorCellHeightPx = 0)
         } else {
@@ -193,10 +269,17 @@ internal class TerminalViewportController(
         scrollPx = currentScrollPx.coerceAtLeast(0)
         imeAnchor = null
         measuredAnchorResolution = null
+        pendingItemTop = false
+        captureItemLock = false
         mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
         if (enabled) {
             mutableState.value = state.value.copy(mode = followMode(), anchor = null, anchorCellHeightPx = 0)
         } else {
+            if (usesItemViewport && !ready()) {
+                captureItemLock = true
+                mutableState.value = state.value.copy(mode = ViewportMode.LOCKED, anchor = null)
+                return
+            }
             capture(scrollPx)
         }
         reconcile(ViewportScrollOrigin.JUMP)
@@ -210,7 +293,16 @@ internal class TerminalViewportController(
         scrollPx = currentScrollPx.coerceAtLeast(0)
         imeAnchor = null
         measuredAnchorResolution = null
+        pendingItemTop = false
+        captureItemLock = false
         mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
+        if (usesItemViewport) {
+            pendingItemTop = !toBottom
+            mutableState.value = state.value.copy(mode = if (toBottom) ViewportMode.TAIL else ViewportMode.LOCKED,
+                anchor = null, anchorCellHeightPx = 0, anchorRowHeightPx = 0)
+            reconcile(ViewportScrollOrigin.JUMP, animated = true)
+            return
+        }
         if (toBottom) {
             mutableState.value = state.value.copy(mode = followMode(), anchor = null, anchorCellHeightPx = 0)
         } else capture(0)
@@ -222,6 +314,12 @@ internal class TerminalViewportController(
 
     fun scrollFinished(effectId: Long, currentScrollPx: Int, completed: Boolean) {
         if (state.value.scrollEffect?.id != effectId) return
+        if (completed && pendingItemTop && state.value.scrollEffect?.itemTarget == TerminalItemScrollTarget.Top &&
+            itemViewport?.atTop == true
+        ) {
+            pendingItemTop = false
+            capture(0)
+        }
         scrollPx = currentScrollPx.coerceAtLeast(0)
         mutableState.value = state.value.copy(scrollEffect = null)
         // Frame/geometry changes during an explicit jump are deferred, not allowed to cancel it.
@@ -229,15 +327,20 @@ internal class TerminalViewportController(
     }
 
     fun isNearBottom(currentScrollPx: Int): Boolean {
+        if (usesItemViewport) return itemViewport?.nearFollow() == true
         val metrics = metrics ?: return false
         val frame = frame ?: return false
         return currentScrollPx >= bottomTarget(frame, metrics) - metrics.cellHeightPx * 2
     }
 
+    fun isNearTop(currentScrollPx: Int): Boolean = if (usesItemViewport) itemViewport?.nearTop() == true
+        else currentScrollPx <= TERMINAL_EDGE_THRESHOLD_PX
+
     private fun followMode(): ViewportMode =
-        if (metrics?.usesTuiViewport == true) ViewportMode.SCREEN else ViewportMode.TAIL
+        if (!usesItemViewport && metrics?.usesTuiViewport == true) ViewportMode.SCREEN else ViewportMode.TAIL
 
     private fun ready(): Boolean {
+        if (usesItemViewport) return itemViewport?.let { it.frame === frame && it.ready } == true
         val frame = frame ?: return false
         val metrics = metrics ?: return false
         return metrics.cellHeightPx > 0 && metrics.viewportHeightPx > 0 &&
@@ -248,6 +351,15 @@ internal class TerminalViewportController(
     }
 
     private fun capture(atScrollPx: Int) {
+        if (usesItemViewport) {
+            val observation = itemViewport ?: return
+            val captured = observation.capture() ?: return
+            legacyOffsetPx = null
+            captureItemLock = false
+            mutableState.value = state.value.copy(mode = ViewportMode.LOCKED, anchor = captured.anchor,
+                anchorCellHeightPx = observation.cellHeightPx, anchorRowHeightPx = captured.capturedRowHeightPx)
+            return
+        }
         val frame = frame
         val metrics = metrics
         val anchor = if (ready() && frame != null && metrics != null) {
@@ -264,6 +376,10 @@ internal class TerminalViewportController(
     private fun reconcile(origin: ViewportScrollOrigin, animated: Boolean = false) {
         if (!ready() || !state.value.initialized || state.value.gesture != null) return
         if (state.value.scrollEffect?.animated == true) return
+        if (usesItemViewport) {
+            reconcileItems(origin, animated)
+            return
+        }
         val frame = requireNotNull(frame)
         val metrics = requireNotNull(metrics)
         if (!state.value.autoScroll && state.value.anchor == null) capture(legacyOffsetPx ?: scrollPx)
@@ -315,6 +431,48 @@ internal class TerminalViewportController(
                 targetScrollPx = output.targetScrollPx,
                 origin = origin,
                 animated = animated,
+            ))
+        }
+    }
+
+    private fun reconcileItems(origin: ViewportScrollOrigin, animated: Boolean) {
+        val observation = itemViewport ?: return
+        if (pendingItemTop) {
+            if (observation.atTop) {
+                pendingItemTop = false
+                capture(0)
+            } else {
+                publishItemTarget(TerminalItemScrollTarget.Top, origin, animated)
+                return
+            }
+        }
+        if (captureItemLock) capture(0)
+        if (!state.value.autoScroll && state.value.anchor == null) capture(0)
+        val previousAnchor = state.value.anchor
+        val resolved = previousAnchor?.let { resolveTerminalItemAnchor(observation.frame, it, anchorLookup) }
+        val target = if (state.value.autoScroll || resolved == null) {
+            mutableState.value = state.value.copy(
+                mode = ViewportMode.TAIL, anchor = null, anchorCellHeightPx = 0, anchorRowHeightPx = 0,
+            )
+            TerminalItemScrollTarget.Follow
+        } else {
+            mutableState.value = state.value.copy(mode = ViewportMode.LOCKED, anchor = resolved)
+            TerminalItemScrollTarget.Anchor(resolved, state.value.anchorRowHeightPx)
+        }
+        publishItemTarget(target, origin, animated)
+    }
+
+    private fun publishItemTarget(target: TerminalItemScrollTarget, origin: ViewportScrollOrigin, animated: Boolean) {
+        val observation = itemViewport ?: return
+        if (observation.isSatisfied(target)) {
+            mutableState.value = state.value.copy(scrollEffect = null)
+        } else if (state.value.scrollEffect?.itemTarget != target) {
+            mutableState.value = state.value.copy(scrollEffect = TerminalViewportScrollEffect(
+                id = ++nextOperationId,
+                targetScrollPx = 0, // No global pixel coordinate exists for an unmeasured prefix.
+                origin = origin,
+                animated = animated,
+                itemTarget = target,
             ))
         }
     }

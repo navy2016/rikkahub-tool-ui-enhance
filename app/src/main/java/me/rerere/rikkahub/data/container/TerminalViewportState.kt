@@ -11,5 +11,6 @@ data class TerminalViewportState(
     val anchorCellHeightPx: Int = 0,
     val anchorScreenGeneration: Long? = null,
     val anchorHistoryGeneration: Long? = null,
+    val anchorRowHeightPx: Int = 0,
     val updatedAt: Long = System.currentTimeMillis()
 )
