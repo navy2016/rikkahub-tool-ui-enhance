@@ -53,6 +53,16 @@ class TerminalUiSourceTest {
     }
 
     @Test
+    fun virtualHistoryIsExplicitlyOptInAndDoesNotChangeDefaultRenderer() {
+        assertTrue(processSessionSource.contains("TerminalRenderMode.VIRTUAL_HISTORY"))
+        assertTrue(processSessionSource.contains("val virtualHistoryEnabled = appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY"))
+        assertTrue(processSessionSource.contains("!imeVisible && terminalHistoryChunkPlan.isNotEmpty()"))
+        assertTrue(processSessionSource.contains("if (virtualHistoryEnabled)"))
+        assertTrue(processSessionSource.contains("TerminalLazyItemMeasurements"))
+        assertTrue(processSessionSource.contains("val DEFAULT = CHUNKED_LAYERS"))
+    }
+
+    @Test
     fun rendererButtonIsAdditiveAndKeepsKeysUntouched() {
         assertTrue(processSessionSource.contains("TerminalActionPreset(\"RENDER\", \"渲染方式\")"))
         assertTrue(processSessionSource.contains("\"RENDER\" -> TerminalRenderButton"))
@@ -60,6 +70,10 @@ class TerminalUiSourceTest {
         assertTrue(processSessionSource.contains("if (!selectionMode) appliedTerminalRenderMode = terminalRenderMode"))
         assertTrue(processSessionSource.contains("TerminalConfiguredTranscript("))
         assertTrue(processSessionSource.contains("\"GRID\", \"RENDER\", \"KEYS\""))
+        assertTrue(processSessionSource.contains("TerminalVirtualHistoryTranscript("))
+        assertTrue(processSessionSource.contains("executeTerminalLazyItemScroll("))
+        assertTrue(processSessionSource.contains("virtualHistoryAllowed = virtualHistoryEnabled"))
+        assertTrue(processSessionSource.contains("!selectionMode && !currentUsesTuiViewport"))
         assertTrue(preferencesStoreSource.contains("preferences[TERMINAL_RENDER_PREFERENCES] = settings.terminalRenderPreferences"))
         assertTrue(preferencesStoreSource.contains("settingsFlow.value = settingsFlow.value.copy(terminalRenderPreferences = nextRaw)"))
         // Existing status actions and KEYS remain exactly one dispatch branch each.

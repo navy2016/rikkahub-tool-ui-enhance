@@ -40,7 +40,13 @@ class TerminalRenderPreferencesTest {
     fun gridFallbackDoesNotMutateThePreferredMode() {
         for (mode in TerminalRenderMode.entries) {
             assertEquals(mode, effectiveTerminalRenderMode(mode, hasHistoryChunks = true))
-            assertEquals(TerminalRenderMode.FLAT, effectiveTerminalRenderMode(mode, hasHistoryChunks = false))
+            assertEquals(
+                if (mode == TerminalRenderMode.VIRTUAL_HISTORY) mode else TerminalRenderMode.FLAT,
+                effectiveTerminalRenderMode(mode, hasHistoryChunks = false),
+            )
+            assertEquals(TerminalRenderMode.FLAT, effectiveTerminalRenderMode(
+                mode, hasHistoryChunks = false, virtualHistoryAllowed = false,
+            ))
         }
     }
 

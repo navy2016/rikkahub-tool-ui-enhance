@@ -2100,6 +2100,7 @@ class BackgroundProcessManager @Inject constructor(
         anchorLineId: Long? = null,
         anchorClippedTopPx: Int = 0,
         anchorCellHeightPx: Int = 0,
+        anchorRowHeightPx: Int = 0,
         anchorScreenGeneration: Long? = null,
         anchorHistoryGeneration: Long? = null,
     ) {
@@ -2112,6 +2113,7 @@ class BackgroundProcessManager @Inject constructor(
             anchorLineId = anchorLineId,
             anchorClippedTopPx = anchorClippedTopPx.coerceAtLeast(0),
             anchorCellHeightPx = anchorCellHeightPx.coerceAtLeast(0),
+            anchorRowHeightPx = anchorRowHeightPx.coerceAtLeast(0),
             anchorScreenGeneration = anchorScreenGeneration,
             anchorHistoryGeneration = anchorHistoryGeneration,
             updatedAt = System.currentTimeMillis()

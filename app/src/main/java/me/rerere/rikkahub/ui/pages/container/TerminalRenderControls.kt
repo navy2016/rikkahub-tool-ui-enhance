@@ -48,7 +48,7 @@ internal fun TerminalConfiguredTranscript(
     mode: TerminalRenderMode,
     observer: TerminalTranscriptCompositionObserver? = null,
 ) {
-    val effective = effectiveTerminalRenderMode(mode, historyChunks.isNotEmpty())
+    val effective = effectiveTerminalRenderMode(mode, historyChunks.isNotEmpty(), virtualHistoryAllowed = false)
     TerminalRenderedTranscript(
         rows = rows,
         style = style,
@@ -91,6 +91,7 @@ internal fun TerminalRenderModeDialog(
     value: TerminalRenderMode,
     hasHistoryChunks: Boolean,
     usesTuiViewport: Boolean,
+    virtualHistoryAllowed: Boolean = false,
     appliedMode: TerminalRenderMode = value,
     selectionActive: Boolean = false,
     saving: Boolean = false,
@@ -109,7 +110,7 @@ internal fun TerminalRenderModeDialog(
                     style = MaterialTheme.typography.bodySmall)
                 if (selectionActive) Text("请先退出 SEL 选择模式再切换，避免清除当前选区。",
                     style = MaterialTheme.typography.bodySmall)
-                Text("已选：${value.label} · 实际：${effectiveTerminalRenderMode(appliedMode, hasHistoryChunks).label}",
+                Text("已选：${value.label} · 实际：${effectiveTerminalRenderMode(appliedMode, hasHistoryChunks, virtualHistoryAllowed).label}",
                     modifier = Modifier.testTag("terminal-render-effective"), style = MaterialTheme.typography.bodySmall)
                 if (usesTuiViewport || !hasHistoryChunks) {
                     Text(if (usesTuiViewport) "当前为 TUI／全网格，沿用逐行兼容绘制；返回普通历史后使用所选模式。"
@@ -129,6 +130,7 @@ internal fun TerminalRenderModeDialog(
                                     TerminalRenderMode.CHUNKED_LAYERS -> "复用历史分块的绘制记录，适合长历史和连续输出；使用额外图层记录。"
                                     TerminalRenderMode.CHUNKED -> "保留历史分块，不使用独立绘制图层；适合实测图层收益较低的设备。"
                                     TerminalRenderMode.FLAT -> "逐行直接布局，无历史分块；便于短输出和兼容性对照，长历史成本较高。"
+                                    TerminalRenderMode.VIRTUAL_HISTORY -> "只组合当前可见历史行，按实测行高恢复稳定行 ID；TUI、鼠标和 SEL 场景会自动回退。"
                                 }, style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -136,7 +138,7 @@ internal fun TerminalRenderModeDialog(
                 }
                 TextButton(onClick = { pending = TerminalRenderMode.DEFAULT }, enabled = !saving && !selectionActive,
                     modifier = Modifier.testTag("terminal-render-reset")) { Text("恢复默认") }
-                Text("三种模式均保留完整历史、自然行高、选择与现有滚动。虚拟历史仍在验证滚动恢复／跨行选择／鼠标兼容，本版未开放。",
+                Text("所有模式均保留完整历史和自然行高。虚拟历史在 SEL、MOUSE、TUI／全网格场景自动回退，避免改变原有交互语义。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("已有同机测试显示长历史受益于分块图层；模拟器数据不是本机帧率保证。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
