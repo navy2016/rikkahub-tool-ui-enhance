@@ -401,6 +401,33 @@ class TerminalItemViewportInstrumentedTest {
         compose.runOnIdle { assertTrue(f.isVirtual); assertTrue(f.controller.state.value.autoScroll) }
     }
 
+    @Test fun itemNativeEagerFallbackDoesNotRecomposeArchivedHistoryOnActiveUpdates() {
+        val f = mount(Fixture(wideHead = true, stressSpans = false))
+        compose.runOnIdle { f.ime = true }
+        settle(f)
+        val history = compose.runOnIdle { f.frame.historyLineIds.toHashSet() }
+        var historyCompositions = 0
+        var screenCompositions = 0
+        compose.runOnIdle {
+            assertFalse(f.isVirtual)
+            f.measurements.onRowComposed = { id ->
+                if (id in history) historyCompositions++ else screenCompositions++
+            }
+        }
+        repeat(8) { update ->
+            compose.runOnIdle {
+                f.terminal.feed("\r\u001B[2Klive-$update")
+                f.publish()
+            }
+            settle(f)
+        }
+        compose.runOnIdle {
+            assertTrue("probe did not observe updated screen rows", screenCompositions > 0)
+            assertEquals("activity invalidated unchanged history chunks", 0, historyCompositions)
+            f.measurements.onRowComposed = null
+        }
+    }
+
     private class Fixture(
         private val wideHead: Boolean = false,
         private val stressSpans: Boolean = true,

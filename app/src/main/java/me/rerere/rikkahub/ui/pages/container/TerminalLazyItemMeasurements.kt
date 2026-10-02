@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.layout
@@ -36,6 +37,8 @@ internal class TerminalLazyItemMeasurements {
     private var eagerGeneration = -1L
     private var eagerMetricKey: Any? = null
     val retainedRows: Int get() = heights.size
+    /** Optional test probe; never observable state and never installed by the production page. */
+    var onRowComposed: ((Long) -> Unit)? = null
 
     private fun changed() {
         generation++
@@ -44,9 +47,10 @@ internal class TerminalLazyItemMeasurements {
     }
 
     @Composable
-    fun Row(pass: TerminalLazyLayoutPass, row: TerminalRenderedRowState, style: TextStyle) {
-        val token = remember(row.lineId, pass.metricKey) { Any() }
+    fun Row(metricKey: Any, row: TerminalRenderedRowState, style: TextStyle) {
+        val token = remember(row.lineId, metricKey) { Any() }
         val text = row.text
+        onRowComposed?.let { observer -> SideEffect { observer(row.lineId) } }
         DisposableEffect(token, row.lineId) {
             onDispose {
                 if (heights[row.lineId]?.owner === token) {
@@ -57,7 +61,7 @@ internal class TerminalLazyItemMeasurements {
         }
         Box(Modifier.layout { measurable, constraints ->
             val child = measurable.measure(constraints)
-            val measured = Height(token, pass.metricKey, text, child.height)
+            val measured = Height(token, metricKey, text, child.height)
             if (heights[row.lineId] != measured) {
                 heights[row.lineId] = measured
                 changed()

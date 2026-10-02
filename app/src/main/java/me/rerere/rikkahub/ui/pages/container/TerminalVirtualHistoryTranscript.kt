@@ -49,14 +49,14 @@ internal fun TerminalVirtualHistoryTranscript(
             contentType = { "terminal-history" },
         ) { index ->
             androidx.compose.runtime.key(pass.metricKey, rows[index].lineId) {
-                measurements.Row(pass, rows[index], style)
+                measurements.Row(pass.metricKey, rows[index], style)
             }
         }
         item(key = TERMINAL_LAZY_SCREEN_KEY, contentType = "terminal-screen") {
             androidx.compose.foundation.layout.Column {
                 for (index in frame.historyCount until rows.size) {
                     androidx.compose.runtime.key(pass.metricKey, rows[index].lineId) {
-                        measurements.Row(pass, rows[index], style)
+                        measurements.Row(pass.metricKey, rows[index], style)
                     }
                 }
             }

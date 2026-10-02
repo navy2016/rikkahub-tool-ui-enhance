@@ -57,8 +57,12 @@ internal fun TerminalConfiguredTranscript(
             isolateChunkDrawing = effective == TerminalRenderMode.CHUNKED_LAYERS, observer = observer)
     }
     if (measurement == null) content() else {
-        val decorator: @Composable (TerminalRenderedRowState, TextStyle) -> Unit = { row, textStyle ->
-            measurement.measurements.Row(measurement.pass, row, textStyle)
+        val measurements = measurement.measurements
+        val metricKey = measurement.pass.metricKey
+        // A new output frame must not replace a static CompositionLocal callback and invalidate
+        // every archived chunk. Retain metrics only, not the frame or its history rows.
+        val decorator: @Composable (TerminalRenderedRowState, TextStyle) -> Unit = remember(measurements, metricKey) {
+            { row, textStyle -> measurements.Row(metricKey, row, textStyle) }
         }
         CompositionLocalProvider(LocalTerminalRowDecorator provides decorator) { content() }
     }
