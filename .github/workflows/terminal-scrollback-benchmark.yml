@@ -64,10 +64,22 @@ jobs:
             });
             if (redirect.status !== 302) throw new Error(`Log redirect status ${redirect.status}`);
             const location = redirect.headers.get('location');
+            // Azure Blob does not support HTTP suffix ranges (bytes=-N). Resolve the explicit
+            // interval from HEAD, then enforce both status and length before reading any body.
+            const head = await fetch(location, {method: 'HEAD',
+              headers: {'Accept-Encoding': 'identity'}, signal: AbortSignal.timeout(30000)});
+            const length = Number(head.headers.get('content-length'));
+            if (!head.ok || !Number.isSafeInteger(length) || length <= 0) {
+              throw new Error(`Cannot determine log length (${head.status})`);
+            }
+            const start = Math.max(0, length - 16384);
+            const range = `bytes=${start}-${length - 1}`;
             const tail = await fetch(location, {
-              headers: {Range: 'bytes=-16384'}, signal: AbortSignal.timeout(30000)
+              headers: {Range: range, 'x-ms-range': range, 'x-ms-version': '2023-11-03',
+                'Accept-Encoding': 'identity'}, signal: AbortSignal.timeout(30000)
             });
-            if (tail.status !== 206) {
+            const contentLength = Number(tail.headers.get('content-length'));
+            if (tail.status !== 206 || !Number.isSafeInteger(contentLength) || contentLength > 16384) {
               await tail.body?.cancel();
               throw new Error(`Range unavailable (${tail.status}); refusing full log download`);
             }
