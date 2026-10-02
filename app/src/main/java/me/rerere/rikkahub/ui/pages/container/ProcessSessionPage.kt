@@ -924,9 +924,18 @@ private fun TerminalInteractivePanel(
         }
     }
     val imeVisible = WindowInsets.isImeVisible
+    // Do not switch LazyList <-> ScrollState on every keyboard animation. Once IME has touched
+    // this virtual session, keep the original eager backend until the user explicitly selects a
+    // renderer again. This preserves the existing IME anchor/avoidance behavior end-to-end.
+    var virtualHistoryImeFallback by remember(processId, appliedTerminalRenderMode) { mutableStateOf(false) }
+    LaunchedEffect(imeVisible, appliedTerminalRenderMode) {
+        if (appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY && imeVisible) {
+            virtualHistoryImeFallback = true
+        }
+    }
     val density = LocalDensity.current
-    val lazyHistoryPass = remember(terminalViewportFrame, terminalTextStyle, density) {
-        TerminalLazyLayoutPass(terminalViewportFrame, terminalTextStyle)
+    val lazyHistoryPass = remember(terminalViewportFrame.revision, terminalTextStyle, density) {
+        TerminalLazyLayoutPass(terminalViewportFrame, terminalTextStyle to density)
     }
     val imeInsets = WindowInsets.ime
     val measuredCell = remember(terminalTextStyle, density) { textMeasurer.measure("W", style = terminalTextStyle) }
@@ -1011,7 +1020,8 @@ private fun TerminalInteractivePanel(
     }
     val virtualHistoryEnabled = appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY &&
         terminalPanMode && !selectionMode && !currentUsesTuiViewport &&
-        !terminalFrameIsAlternateScreen && !imeVisible && terminalHistoryChunkPlan.isNotEmpty()
+        !terminalFrameIsAlternateScreen && !imeVisible && !virtualHistoryImeFallback &&
+        terminalHistoryChunkPlan.isNotEmpty()
     fun terminalItemViewport(): TerminalItemViewport? = if (virtualHistoryEnabled) {
         lazyHistoryMeasurements.read(
             pass = lazyHistoryPass,
@@ -1904,7 +1914,9 @@ private fun TerminalInteractivePanel(
                     if (virtualHistoryEnabled) {
                         TerminalVirtualHistoryTranscript(
                             frame = terminalViewportFrame,
-                            rows = terminalRenderedRows.toList(),
+                            // Keep the stable row view; copying the entire history on every
+                            // recomposition defeats virtualization and can trigger ANR on phones.
+                            rows = terminalRenderedRows,
                             style = terminalTextStyle,
                             pass = lazyHistoryPass,
                             measurements = lazyHistoryMeasurements,

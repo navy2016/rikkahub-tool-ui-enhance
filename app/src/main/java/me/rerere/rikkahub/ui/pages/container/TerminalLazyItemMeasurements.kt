@@ -27,7 +27,7 @@ internal class TerminalLazyLayoutPass(val frame: TerminalEmulator.RenderFrame, v
  * This adapter neither publishes viewport intent nor writes the scroll state.
  */
 internal class TerminalLazyItemMeasurements {
-    private data class Height(val pass: TerminalLazyLayoutPass, val pixels: Int)
+    private data class Height(val metricKey: Any, val pixels: Int)
     // This is UI-thread layout bookkeeping, not UI state. A Compose state map here caused writes
     // from measure to invalidate the same LazyColumn that snapshotFlow was reading.
     private val heights = mutableMapOf<Long, Height>()
@@ -36,9 +36,9 @@ internal class TerminalLazyItemMeasurements {
 
     @Composable
     fun Row(pass: TerminalLazyLayoutPass, row: TerminalRenderedRowState, style: TextStyle) {
-        DisposableEffect(pass, row.lineId) {
+        DisposableEffect(pass.metricKey, row.lineId) {
             onDispose {
-                if (heights[row.lineId]?.pass === pass) {
+                if (heights[row.lineId]?.metricKey == pass.metricKey) {
                     heights.remove(row.lineId)
                     measurementVersion++
                 }
@@ -46,8 +46,8 @@ internal class TerminalLazyItemMeasurements {
         }
         Box(Modifier.onSizeChanged { size ->
             val height = size.height
-            if (height > 0 && heights[row.lineId] != Height(pass, height)) {
-                heights[row.lineId] = Height(pass, height)
+            if (height > 0 && heights[row.lineId] != Height(pass.metricKey, height)) {
+                heights[row.lineId] = Height(pass.metricKey, height)
                 measurementVersion++
             }
         }) {
@@ -55,7 +55,15 @@ internal class TerminalLazyItemMeasurements {
         }
     }
 
-    fun read(pass: TerminalLazyLayoutPass, state: LazyListState, cellHeightPx: Int, tailPaddingPx: Int): TerminalItemViewport? {
+    fun read(pass: TerminalLazyLayoutPass, state: LazyListState, cellHeightPx: Int, tailPaddingPx: Int): TerminalItemViewport? =
+        runCatching { readMeasured(pass, state, cellHeightPx, tailPaddingPx) }.getOrNull()
+
+    private fun readMeasured(
+        pass: TerminalLazyLayoutPass,
+        state: LazyListState,
+        cellHeightPx: Int,
+        tailPaddingPx: Int,
+    ): TerminalItemViewport? {
         // Subscribe snapshotFlow to layout callbacks without making the height map observable.
         measurementVersion
         val frame = pass.frame
@@ -71,12 +79,12 @@ internal class TerminalLazyItemMeasurements {
                 val id = frame.historyLineIds[item.index]
                 if (item.key != id) return null // Stable key has not yet moved after FIFO head trim.
                 val measured = heights[id] ?: return null
-                if (measured.pass !== pass || measured.pixels != item.size || item.size <= 0) return null
+                if (measured.metricKey != pass.metricKey || measured.pixels != item.size || item.size <= 0) return null
                 rows += TerminalVisibleRow(item.index, item.offset - info.viewportStartOffset, item.size)
             } else if (item.index == frame.historyCount) {
                 if (item.key != TERMINAL_LAZY_SCREEN_KEY) return null
                 val measured = frame.screenLineIds.map { id ->
-                    heights[id]?.takeIf { it.pass === pass && it.pixels > 0 }?.pixels ?: return null
+                    heights[id]?.takeIf { it.metricKey == pass.metricKey && it.pixels > 0 }?.pixels ?: return null
                 }
                 if (measured.sum() != item.size) return null
                 var top = item.offset - info.viewportStartOffset

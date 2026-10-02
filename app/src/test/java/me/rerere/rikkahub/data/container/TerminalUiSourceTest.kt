@@ -55,18 +55,25 @@ class TerminalUiSourceTest {
 
     @Test
     fun virtualHistoryIsExplicitlyOptInAndDoesNotChangeDefaultRenderer() {
-        assertTrue(processSessionSource.contains("TerminalRenderMode.VIRTUAL_HISTORY"))
-        assertTrue(processSessionSource.contains("val virtualHistoryEnabled = appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY"))
-        assertTrue(processSessionSource.contains("!imeVisible && terminalHistoryChunkPlan.isNotEmpty()"))
-        assertTrue(processSessionSource.contains("if (virtualHistoryEnabled)"))
-        assertTrue(processSessionSource.contains("TerminalLazyItemMeasurements"))
-        assertTrue(processSessionSource.contains("effectiveRenderMode = effectiveTerminalRenderMode"))
-        assertTrue(processSessionSource.contains("!terminalFrameIsAlternateScreen && !imeVisible"))
-        assertTrue(processSessionSource.contains("observeItemViewport(terminalItemViewport())"))
         val lazyMeasurementsSource = listOf(
             File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt"),
             File("src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt"),
         ).first { it.isFile }.readText()
+        assertTrue(processSessionSource.contains("TerminalRenderMode.VIRTUAL_HISTORY"))
+        assertTrue(processSessionSource.contains("val virtualHistoryEnabled = appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY"))
+        assertTrue(processSessionSource.contains("!imeVisible && !virtualHistoryImeFallback"))
+        assertTrue(processSessionSource.contains("if (virtualHistoryEnabled)"))
+        assertTrue(processSessionSource.contains("TerminalLazyItemMeasurements"))
+        assertTrue(processSessionSource.contains("effectiveRenderMode = effectiveTerminalRenderMode"))
+        assertTrue(processSessionSource.contains("!terminalFrameIsAlternateScreen && !imeVisible"))
+        assertTrue(processSessionSource.contains("virtualHistoryImeFallback"))
+        assertTrue(processSessionSource.contains("remember(processId, appliedTerminalRenderMode)"))
+        assertTrue(processSessionSource.contains("observeItemViewport(terminalItemViewport())"))
+        assertTrue(processSessionSource.contains("remember(terminalViewportFrame.revision, terminalTextStyle, density)"))
+        assertTrue(processSessionSource.contains("rows = terminalRenderedRows,"))
+        assertTrue(lazyMeasurementsSource.contains("metricKey"))
+        assertFalse(lazyMeasurementsSource.contains("measured.pass !== pass"))
+        assertTrue(lazyMeasurementsSource.contains("DisposableEffect(pass.metricKey, row.lineId)"))
         assertFalse(lazyMeasurementsSource.contains("mutableStateMapOf"))
         assertFalse(lazyMeasurementsSource.contains("Snapshot.withoutReadObservation"))
         assertTrue(lazyMeasurementsSource.contains("measurementVersion"))
