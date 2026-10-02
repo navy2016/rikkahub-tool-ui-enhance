@@ -60,6 +60,12 @@ class TerminalUiSourceTest {
         assertTrue(processSessionSource.contains("if (virtualHistoryEnabled)"))
         assertTrue(processSessionSource.contains("TerminalLazyItemMeasurements"))
         assertTrue(processSessionSource.contains("effectiveRenderMode = effectiveTerminalRenderMode"))
+        assertTrue(processSessionSource.contains("!terminalFrameIsAlternateScreen && !imeVisible"))
+        assertTrue(processSessionSource.contains("observeItemViewport(terminalItemViewport())"))
+        val lazyMeasurementsSource = File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt").readText()
+        assertFalse(lazyMeasurementsSource.contains("mutableStateMapOf"))
+        assertFalse(lazyMeasurementsSource.contains("Snapshot.withoutReadObservation"))
+        assertTrue(lazyMeasurementsSource.contains("measurementVersion"))
     }
 
     @Test

@@ -1554,16 +1554,25 @@ private fun TerminalInteractivePanel(
         }
     }
 
-    LaunchedEffect(processId, outputScroll, lazyHistoryState, viewportController, virtualHistoryEnabled) {
-        snapshotFlow {
-            terminalViewportFrame to terminalItemViewport()
-        }.collect {
-            // Wait at most one frame, without restarting the wait for every output/IME update.
-            // Read the latest complete frame and measurements when the wait finishes.
-            withFrameNanos { }
-            if (virtualHistoryEnabled) {
-                viewportController.updateItemViewport(terminalViewportFrame, it.second)
-            } else {
+    if (virtualHistoryEnabled) {
+        LaunchedEffect(processId, lazyHistoryState, viewportController) {
+            snapshotFlow { terminalViewportFrame to terminalItemViewport() }.collect { snapshot ->
+                // Wait at most one frame, then use the latest completed LazyList layout.
+                withFrameNanos { }
+                viewportController.updateItemViewport(snapshot.first, snapshot.second)
+            }
+        }
+    } else {
+        LaunchedEffect(processId, outputScroll, viewportController) {
+            snapshotFlow {
+                TerminalViewportRenderSnapshot(
+                    terminalViewportFrame.revision,
+                    terminalRenderedRows.size,
+                    viewportMetrics(),
+                )
+            }.collect {
+                // Keep the original eager/IME reducer observation path unchanged.
+                withFrameNanos { }
                 viewportController.updateViewport(
                     frame = terminalViewportFrame,
                     renderedRows = terminalRenderedRows.size,
@@ -1582,12 +1591,20 @@ private fun TerminalInteractivePanel(
             maxScrollPx = { if (virtualHistoryEnabled) 0 else outputScroll.maxValue },
             isScrollInProgress = { if (virtualHistoryEnabled) lazyHistoryState.isScrollInProgress else outputScroll.isScrollInProgress },
             scrollToItemTarget = { effect ->
-                if (!virtualHistoryEnabled) false else executeTerminalLazyItemScroll(
-                    effect = effect,
-                    state = lazyHistoryState,
-                    current = { terminalItemViewport() },
-                    isCurrent = { viewportController.isCurrent(effect) },
-                )
+                if (!virtualHistoryEnabled) {
+                    false
+                } else {
+                    val completed = executeTerminalLazyItemScroll(
+                        effect = effect,
+                        state = lazyHistoryState,
+                        current = { terminalItemViewport() },
+                        isCurrent = { viewportController.isCurrent(effect) },
+                    )
+                    // Reconcile against the layout produced by this scroll. Without this refresh
+                    // the controller can republish the same item target from a stale snapshot.
+                    viewportController.observeItemViewport(terminalItemViewport())
+                    completed
+                }
             },
         ) { effect, target ->
             if (effect.animated) outputScroll.animateScrollTo(target) else outputScroll.scrollTo(target)

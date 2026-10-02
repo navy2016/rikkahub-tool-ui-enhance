@@ -39,6 +39,19 @@ class TerminalItemViewportTest {
         assertNull(controller.state.value.scrollEffect)
     }
 
+    @Test fun completedItemScrollReconcilesAgainstTheNewMeasuredViewport() {
+        val frame = frame()
+        val controller = TerminalViewportController()
+        controller.updateItemViewport(frame, view(frame, index = 50, top = -7))
+        controller.jumpToBottom(0)
+        val effect = requireNotNull(controller.state.value.scrollEffect)
+        assertEquals(TerminalItemScrollTarget.Follow, effect.itemTarget)
+        controller.observeItemViewport(view(frame, index = 103, top = 4, height = 29, atBottom = true))
+        controller.scrollFinished(effect.id, 0, completed = true)
+        assertNull(controller.state.value.scrollEffect)
+        assertTrue(controller.state.value.autoScroll)
+    }
+
     @Test fun savedAnchorRestoresWithoutEverKnowingTotalHeight() {
         val frame = frame()
         val controller = TerminalViewportController(TerminalViewportState(autoScroll = false,

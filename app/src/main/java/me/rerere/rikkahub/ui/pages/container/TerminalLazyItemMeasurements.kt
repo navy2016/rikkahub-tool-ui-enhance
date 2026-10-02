@@ -4,10 +4,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextStyle
 import me.rerere.rikkahub.data.container.TerminalItemViewport
 import me.rerere.rikkahub.data.container.TerminalVisibleRow
@@ -27,27 +28,36 @@ internal class TerminalLazyLayoutPass(val frame: TerminalEmulator.RenderFrame, v
  */
 internal class TerminalLazyItemMeasurements {
     private data class Height(val pass: TerminalLazyLayoutPass, val pixels: Int)
-    private val heights = mutableStateMapOf<Long, Height>()
+    // This is UI-thread layout bookkeeping, not UI state. A Compose state map here caused writes
+    // from measure to invalidate the same LazyColumn that snapshotFlow was reading.
+    private val heights = mutableMapOf<Long, Height>()
+    private var measurementVersion by mutableIntStateOf(0)
     val retainedRows: Int get() = heights.size
 
     @Composable
     fun Row(pass: TerminalLazyLayoutPass, row: TerminalRenderedRowState, style: TextStyle) {
         DisposableEffect(pass, row.lineId) {
             onDispose {
-                if (heights[row.lineId]?.pass === pass) heights.remove(row.lineId)
+                if (heights[row.lineId]?.pass === pass) {
+                    heights.remove(row.lineId)
+                    measurementVersion++
+                }
             }
         }
-        Box(Modifier.layout { measurable, constraints ->
-            val child = measurable.measure(constraints)
-            // Updating one row must not subscribe its measure block to every other row's map write.
-            Snapshot.withoutReadObservation { heights[row.lineId] = Height(pass, child.height) }
-            layout(child.width, child.height) { child.place(0, 0) }
+        Box(Modifier.onSizeChanged { size ->
+            val height = size.height
+            if (height > 0 && heights[row.lineId] != Height(pass, height)) {
+                heights[row.lineId] = Height(pass, height)
+                measurementVersion++
+            }
         }) {
             TerminalRenderedRows(listOf(row), style)
         }
     }
 
     fun read(pass: TerminalLazyLayoutPass, state: LazyListState, cellHeightPx: Int, tailPaddingPx: Int): TerminalItemViewport? {
+        // Subscribe snapshotFlow to layout callbacks without making the height map observable.
+        measurementVersion
         val frame = pass.frame
         if (frame.isAlternateScreen || frame.historyCount !in 0..frame.rows.size ||
             frame.historyLineIds.size != frame.historyCount ||
