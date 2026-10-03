@@ -113,7 +113,29 @@ def safe_diagnostic(path, args, timeout=15):
     try:
         path.write_text(command(args, timeout))
     except (OSError, subprocess.SubprocessError) as error:
-        path.write_text(f"Diagnostic unavailable: {type(error).__name__}\n")
+        partial = getattr(error, "output", "") or ""
+        if isinstance(partial, bytes):
+            partial = partial.decode(errors="replace")
+        path.write_text(f"Diagnostic unavailable: {type(error).__name__}\n{partial[-2400:]}")
+
+
+def install_apk(role, out):
+    # Explicit transfer + PackageManager install avoids the ADB streaming handshake and locates
+    # timeout failures precisely. All staging paths below belong to the disposable Android guest.
+    remote = f"/data/local/tmp/production-{role}.apk"
+    phases = (("transfer", ["adb", "push", str(BUNDLE / f"{role}.apk"), remote]),
+              ("install", ["adb", "shell", "pm", "install", "-r", "-t", remote]))
+    for phase, args in phases:
+        log = out / f"{role}-{phase}.log"
+        print(f"{role}: {phase}", flush=True)
+        try:
+            with log.open("w") as stream:
+                result = subprocess.run(args, stdout=stream, stderr=subprocess.STDOUT, timeout=180, check=False)
+            if result.returncode != 0 or (phase == "install" and "Success" not in log.read_text()):
+                raise ValueError(f"{role} {phase} failed (exit {result.returncode})")
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            partial = log.read_text(errors="replace")[-2000:] if log.exists() else ""
+            raise ValueError(f"{role} {phase}: {type(error).__name__}\n{partial}") from error
 
 
 def require_instrumentation_success(log, expected):
@@ -152,9 +174,7 @@ def run_group(scenario, iterations, smoke):
             ("getprop", "ro.build.fingerprint"), ("wm", "size"), ("wm", "density"),
             ("getprop", "dalvik.vm.heapsize"), ("settings", "get", "secure", "default_input_method"))))
         for role in ("target", "driver"):
-            result = adb("install", "-r", "-t", str(BUNDLE / f"{role}.apk"), timeout=90)
-            if "Success" not in result:
-                raise ValueError(f"{role} APK installation failed")
+            install_apk(role, out)
         args = ["adb", "shell", "am", "instrument", "-w", "-r", "-e", "class", CLASS,
                 "-e", "productionScenario", scenario, "-e", "productionSmoke", str(smoke).lower(),
                 "-e", "terminalIterations", str(iterations), "-e", "additionalTestOutputDir", device_output,

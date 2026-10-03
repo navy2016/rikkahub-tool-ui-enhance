@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -9,6 +10,35 @@ import production_ci as ci
 
 
 class ProductionCiTest(unittest.TestCase):
+    def test_install_separates_transfer_and_guest_package_manager(self):
+        with tempfile.TemporaryDirectory() as directory:
+            def complete(args, **kwargs):
+                kwargs['stdout'].write('Success\n' if 'pm' in args else '1 file pushed\n')
+                return subprocess.CompletedProcess(args, 0)
+            with patch.object(ci.subprocess, 'run', side_effect=complete) as run:
+                ci.install_apk('target', Path(directory))
+                calls = [call.args[0] for call in run.call_args_list]
+                self.assertEqual(['adb', 'push'], calls[0][:2])
+                self.assertEqual(['adb', 'shell', 'pm', 'install', '-r', '-t'], calls[1][:6])
+                self.assertEqual(calls[0][-1], calls[1][-1])
+            self.assertTrue(Path(directory, 'target-install.log').exists())
+
+    def test_transfer_timeout_prevents_install_and_preserves_phase(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(ci.subprocess, 'run', side_effect=subprocess.TimeoutExpired('adb', 180)) as run:
+                with self.assertRaisesRegex(ValueError, 'target transfer: TimeoutExpired'):
+                    ci.install_apk('target', Path(directory))
+                self.assertEqual(1, run.call_count)
+
+    def test_package_manager_rejection_is_not_treated_as_successful_adb(self):
+        with tempfile.TemporaryDirectory() as directory:
+            def reject(args, **kwargs):
+                kwargs['stdout'].write('Failure [INSTALL_FAILED_TEST_ONLY]\n' if 'pm' in args else 'pushed\n')
+                return subprocess.CompletedProcess(args, 0)
+            with patch.object(ci.subprocess, 'run', side_effect=reject):
+                with self.assertRaisesRegex(ValueError, 'INSTALL_FAILED_TEST_ONLY'):
+                    ci.install_apk('target', Path(directory))
+
     def test_native_runner_must_finish_the_exact_case_count_without_errors(self):
         with tempfile.TemporaryDirectory() as directory:
             log = Path(directory, 'run.log')
