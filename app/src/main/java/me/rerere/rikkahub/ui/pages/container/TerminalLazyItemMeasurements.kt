@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.container
 
+import android.os.Trace
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
@@ -54,6 +55,9 @@ internal class TerminalLazyItemMeasurements {
 
     /** A virtual/unmeasured backend must not retain an eager frame or its full historical prefix. */
     fun clearEagerCache() = eagerCache.clear()
+
+    fun peekEager(pass: TerminalLazyLayoutPass): TerminalEagerViewportGeometry? =
+        eagerCache.peek(pass.frame, pass.metricKey)
 
     @Composable
     fun Row(metricKey: Any, row: TerminalRenderedRowState, style: TextStyle) {
@@ -126,9 +130,12 @@ internal class TerminalLazyItemMeasurements {
 
     /** Only used for a renderer handoff/fallback, never adds an O(H) cache to the default renderer. */
     fun readEager(pass: TerminalLazyLayoutPass): TerminalEagerViewportGeometry? {
-        return eagerCache.read(pass.frame, pass.metricKey) { index ->
-            height(pass, index, contributeHistory = true)
-        }
+        Trace.beginSection("Terminal.productionEagerGeometry")
+        return try {
+            eagerCache.read(pass.frame, pass.metricKey) { index ->
+                height(pass, index, contributeHistory = true)
+            }
+        } finally { Trace.endSection() }
     }
 }
 

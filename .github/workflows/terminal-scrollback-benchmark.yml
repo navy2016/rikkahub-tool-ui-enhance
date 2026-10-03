@@ -17,20 +17,8 @@ on:
         required: false
         default: ''
         type: string
-  push:
-    branches: [fix/terminal-viewport-semantic-reducer]
-    paths:
-      - 'benchmarks/**'
-      - '!benchmarks/results/**'
-      - '!benchmarks/README.md'
-      - '!benchmarks/terminal-viewport-tests/**'
-      - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
-      - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt'
-      - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportReducer.kt'
-      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt'
-      - '.github/workflows/terminal-scrollback-benchmark.yml'
-      - 'settings.gradle.kts'
-      - 'gradle/libs.versions.toml'
+  # Archived renderer-only experiments stay manually runnable. Automatic regression now uses
+  # terminal-production-benchmark.yml and the actual production viewport/controller.
 
 permissions:
   contents: read

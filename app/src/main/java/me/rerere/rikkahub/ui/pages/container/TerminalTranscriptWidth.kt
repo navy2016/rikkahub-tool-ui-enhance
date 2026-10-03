@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.container
 
+import android.os.Trace
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
@@ -62,11 +63,14 @@ internal fun rememberTerminalTranscriptWidth(frame: TerminalEmulator.RenderFrame
     val metrics = terminalTextMetrics(style)
     val index = remember { TerminalTranscriptWidthIndex() }
     return remember(TerminalFrameReference(frame), metrics) {
-        val resolved = resolveDefaults(style, metrics.direction)
-        index.width(frame, metrics) { text ->
-            ceil(MultiParagraphIntrinsics(annotatedString = text, style = resolved, placeholders = emptyList(),
-                density = metrics.density, fontFamilyResolver = metrics.resolver)
-                .maxIntrinsicWidth).toInt()
-        }
+        Trace.beginSection("Terminal.productionWidth")
+        try {
+            val resolved = resolveDefaults(style, metrics.direction)
+            index.width(frame, metrics) { text ->
+                ceil(MultiParagraphIntrinsics(annotatedString = text, style = resolved, placeholders = emptyList(),
+                    density = metrics.density, fontFamilyResolver = metrics.resolver)
+                    .maxIntrinsicWidth).toInt()
+            }
+        } finally { Trace.endSection() }
     }
 }

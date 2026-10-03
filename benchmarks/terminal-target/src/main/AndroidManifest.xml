@@ -9,5 +9,10 @@
       android:name="me.rerere.rikkahub.benchmark.TerminalBenchmarkActivity"
       android:exported="true"
       android:screenOrientation="portrait" />
+    <activity
+      android:name="me.rerere.rikkahub.benchmark.ProductionTerminalBenchmarkActivity"
+      android:exported="true"
+      android:windowSoftInputMode="adjustResize"
+      android:screenOrientation="portrait" />
   </application>
 </manifest>

@@ -197,6 +197,22 @@ class TerminalEagerGeometryCacheTest {
         assertEquals(0, cache.retainedHistoryRows)
     }
 
+    @Test fun passiveDiagnosticsNeverPopulateOrReturnInvalidatedGeometry() {
+        val frame = seeded().renderFrame()
+        val cache = TerminalEagerGeometryCache()
+        assertNull(cache.peek(frame, 1))
+        assertEquals(0L, cache.visitedHistoryRows)
+        val geometry = requireNotNull(cache.read(frame, 1) { 20 })
+        assertSame(geometry, cache.peek(frame, 1))
+        assertNull(cache.peek(frame.copy(), 1))
+        assertNull(cache.peek(frame, 2))
+        cache.invalidate(historyChanged = false)
+        assertNull(cache.peek(frame, 1))
+        assertEquals(frame.historyCount.toLong(), cache.visitedHistoryRows)
+        cache.clear()
+        assertNull(cache.peek(frame, 1))
+    }
+
     @Test fun prefixRejectsInvalidHeightsAndOverflowInsteadOfWrappingCoordinates() {
         assertNull(TerminalMeasuredHeightPrefix.measure(3) { if (it == 1) 0 else 20 })
         assertNull(TerminalMeasuredHeightPrefix.measure(3) { if (it == 1) -1 else 20 })

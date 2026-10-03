@@ -1,0 +1,144 @@
+name: Terminal Production Viewport Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Each scenario keeps both production modes and all selected sizes on one device'
+        type: choice
+        options: [all, initialCompose, activeRowUpdate, appendAndTrim, semanticJump, imeRoundTrip, detachRestore]
+        default: all
+      smoke:
+        description: '1k / one repeat only: fixture validation, not a performance baseline'
+        type: boolean
+        default: true
+      iterations:
+        description: 'Repetitions per case for a full run (1-50); smoke always uses 1'
+        default: '3'
+        required: true
+  push:
+    branches: [fix/terminal-viewport-semantic-reducer]
+    paths:
+      - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/Terminal*.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/Terminal*.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/theme/Type.kt'
+      - 'app/src/main/res/font/jetbrains_mono.ttf'
+      - 'app/compose_compiler_config.conf'
+      - 'benchmarks/terminal-target/**'
+      - 'benchmarks/terminal-macrobenchmark/**'
+      - 'benchmarks/production-contract/**'
+      - 'benchmarks/production*.py'
+      - 'benchmarks/test_production*.py'
+      - '.github/workflows/terminal-production-benchmark.yml'
+      - 'settings.gradle.kts'
+      - 'gradle/libs.versions.toml'
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      scenarios: ${{ steps.plan.outputs.scenarios }}
+      bundle_name: ${{ steps.bundle.outputs.bundle_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select scenario groups
+        id: plan
+        env:
+          SCENARIO: ${{ inputs.scenario || 'all' }}
+        run: python3 benchmarks/production_ci.py plan --scenario "$SCENARIO"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test report validation and execution safeguards
+        run: python3 -m unittest discover -s benchmarks -p 'test_*.py'
+      - name: Build one Release-derived target and driver and run fixture unit tests
+        run: |
+          chmod +x gradlew
+          bash .github/scripts/run-terminal-gradle.sh -PterminalBenchmarks=true \
+            :benchmarks:terminal-target:testBenchmarkUnitTest \
+            :benchmarks:terminal-target:assembleBenchmark \
+            :benchmarks:terminal-macrobenchmark:assembleBenchmark --stacktrace
+      - name: Require complete host fixture suites
+        if: always()
+        run: |
+          python3 .github/scripts/report-terminal-tests.py benchmarks/terminal-target/build/test-results \
+            --require-suite me.rerere.rikkahub.benchmark.TerminalBenchmarkWorkloadTest \
+            --require-suite me.rerere.rikkahub.benchmark.TerminalBenchmarkLayoutTest \
+            --require-suite me.rerere.rikkahub.benchmark.TerminalBenchmarkWidthIndexTest \
+            --require-suite me.rerere.rikkahub.benchmark.ProductionBenchmarkSpecTest
+      - name: Verify APKs and bind hashes to actual production source files
+        id: bundle
+        run: python3 benchmarks/production_ci.py package
+      - name: Publish the single verified APK pair
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.bundle.outputs.bundle_name }}
+          path: artifacts/production-build/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Preserve build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-benchmark-build-evidence-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-validation/
+            benchmarks/terminal-target/build/test-results/
+          retention-days: 14
+
+  scenario:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        scenario: ${{ fromJSON(needs.build.outputs.scenarios) }}
+    env:
+      SCENARIO: ${{ matrix.scenario }}
+      SMOKE: ${{ github.event_name == 'push' && 'true' || format('{0}', inputs.smoke) }}
+      ITERATIONS: ${{ inputs.iterations || '3' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the same verified pair for each scenario
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.bundle_name }}
+          path: artifacts/production-build/
+      - name: Select repetition count
+        run: |
+          if [ "$SMOKE" = true ]; then echo 'ITERATIONS=1' >> "$GITHUB_ENV"; fi
+      - name: Run and validate one bounded paired scenario
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: default
+          profile: Nexus 6
+          cores: 2
+          ram-size: 4096M
+          heap-size: 768M
+          disable-animations: false
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -accel on -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: python3 benchmarks/production_ci.py run --scenario "$SCENARIO" --iterations "$ITERATIONS" --smoke "$SMOKE"
+      - name: Upload this scenario immediately, including partial evidence on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-viewport-${{ matrix.scenario }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/terminal-production/
+          if-no-files-found: warn
+          retention-days: 14

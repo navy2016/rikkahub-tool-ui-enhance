@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.container
 
+import android.os.Trace
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
@@ -79,12 +80,15 @@ internal class TerminalViewportBinding(
     }
 
     fun updateViewport() {
-        val current = input()
-        attachedBackend = current.virtual
-        if (current.virtual) controller.updateItemViewport(current.pass.frame, observation()) else {
-            controller.updateViewport(current.pass.frame, current.pass.frame.rows.size, current.metrics(), eager.value,
-                measuredGeometry = eagerGeometry(), requireMeasuredGeometry = current.measureEager)
-        }
+        Trace.beginSection("Terminal.productionViewportUpdate")
+        try {
+            val current = input()
+            attachedBackend = current.virtual
+            if (current.virtual) controller.updateItemViewport(current.pass.frame, observation()) else {
+                controller.updateViewport(current.pass.frame, current.pass.frame.rows.size, current.metrics(), eager.value,
+                    measuredGeometry = eagerGeometry(), requireMeasuredGeometry = current.measureEager)
+            }
+        } finally { Trace.endSection() }
     }
 
     suspend fun runEffects() {
@@ -95,11 +99,13 @@ internal class TerminalViewportBinding(
                     activeWriters++
                     maximumWriters = maxOf(maximumWriters, activeWriters)
                     effectCount++
+                    Trace.beginAsyncSection("Terminal.productionScrollEffect", effect.id.toInt())
                     try {
                         onEffectStarted?.invoke(effect)
                         executeTerminalLazyItemScroll(effect, lazy, { observation() },
                             { virtual && controller.isCurrent(effect) })
                     } finally {
+                        Trace.endAsyncSection("Terminal.productionScrollEffect", effect.id.toInt())
                         currentScrollPx()
                         activeWriters--
                     }
@@ -109,10 +115,14 @@ internal class TerminalViewportBinding(
                 activeWriters++
                 maximumWriters = maxOf(maximumWriters, activeWriters)
                 effectCount++
+                Trace.beginAsyncSection("Terminal.productionScrollEffect", effect.id.toInt())
                 try {
                     onEffectStarted?.invoke(effect)
                     if (effect.animated) eager.animateScrollTo(target) else eager.scrollTo(target)
-                } finally { activeWriters-- }
+                } finally {
+                    Trace.endAsyncSection("Terminal.productionScrollEffect", effect.id.toInt())
+                    activeWriters--
+                }
             }
         }
     }

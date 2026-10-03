@@ -1,5 +1,11 @@
 # Terminal scrollback rendering benchmark
 
+> Current production viewport/controller measurements use [PRODUCTION.md](PRODUCTION.md) and the
+> `Terminal Production Viewport Benchmark` workflow. The renderer-only experiments and historical
+> decisions below are archived context, not a description of today's virtual-history integration.
+> In particular, production now offers explicit virtual history; its current interaction/IME/height
+> binding is measured only by the new suite. Do not mix the two contracts or their measurements.
+
 ## Scope
 
 Measure **1,000 / 5,000 / 10,000 history rows + 24 active rows** on one device/APK. Current default

@@ -39,6 +39,28 @@ val syncTerminalSources by tasks.registering(SyncTerminalFiles::class) {
         "me/rerere/rikkahub/utils/TerminalEmulator.kt",
         "me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt",
         "me/rerere/rikkahub/data/container/TerminalViewportReducer.kt",
+        "me/rerere/rikkahub/data/container/TerminalViewportController.kt",
+        "me/rerere/rikkahub/data/container/TerminalViewportGeometry.kt",
+        "me/rerere/rikkahub/data/container/TerminalViewportItemGeometry.kt",
+        "me/rerere/rikkahub/data/container/TerminalViewportState.kt",
+        "me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt",
+        "me/rerere/rikkahub/data/container/TerminalItemViewport.kt",
+        "me/rerere/rikkahub/data/container/TerminalEagerViewportGeometry.kt",
+        "me/rerere/rikkahub/data/container/TerminalEagerGeometryCache.kt",
+        "me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndex.kt",
+        "me/rerere/rikkahub/data/container/TerminalRenderMode.kt",
+        "me/rerere/rikkahub/data/container/TerminalLazyViewportAdapter.kt",
+        "me/rerere/rikkahub/data/container/TerminalLazyViewportMeasurement.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalViewportGestures.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalViewportScrollEffects.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalLazyItemExecutor.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalVirtualHistoryTranscript.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalVirtualHistoryPolicy.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalTranscriptWidth.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalTranscriptViewport.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalRenderControls.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt",
         "me/rerere/rikkahub/ui/theme/Type.kt",
     ))
@@ -76,6 +98,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+    sourceSets.getByName("main").java.srcDir("../production-contract/src/main/kotlin")
 }
 androidComponents {
     beforeVariants { it.enable = it.buildType == "benchmark" }

@@ -38,6 +38,10 @@ internal class TerminalEagerGeometryCache {
 
     fun clear() = invalidate(historyChanged = true)
 
+    /** Passive diagnostics must not populate a cache before the production layout observer does. */
+    fun peek(frame: TerminalEmulator.RenderFrame, metricKey: Any): TerminalEagerViewportGeometry? =
+        geometry?.takeIf { it.frame === frame && geometryMetricKey == metricKey }
+
     fun read(
         frame: TerminalEmulator.RenderFrame,
         metricKey: Any,
@@ -50,7 +54,7 @@ internal class TerminalEagerGeometryCache {
             clear()
             return null
         }
-        geometry?.takeIf { it.frame === frame && geometryMetricKey == metricKey }?.let { return it }
+        peek(frame, metricKey)?.let { return it }
         geometry = null
         geometryMetricKey = null
         val owned = frame.ownedRows()
