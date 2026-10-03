@@ -13,6 +13,7 @@ import androidx.compose.ui.text.TextStyle
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import me.rerere.rikkahub.data.container.TerminalEagerGeometryCache
 import me.rerere.rikkahub.data.container.TerminalEagerViewportGeometry
 import me.rerere.rikkahub.data.container.TerminalItemViewport
 import me.rerere.rikkahub.data.container.TerminalVisibleRow
@@ -28,23 +29,31 @@ internal class TerminalLazyLayoutPass(val frame: TerminalEmulator.RenderFrame, v
  * old node is disposed. Text and font metrics, not frame revisions, prove height reuse.
  */
 internal class TerminalLazyItemMeasurements {
-    private data class Height(val owner: Any, val metricKey: Any, val text: AnnotatedString, val pixels: Int)
+    private data class Height(val owner: Any, val metricKey: Any, val text: AnnotatedString, val pixels: Int) {
+        // Set only after a successful validation contributes to an eager history prefix. Not part
+        // of data equality: a same-size callback must not reset a contributor's invalidation flag.
+        var usedByHistory = false
+    }
     private val heights = mutableMapOf<Long, Height>()
     private val mutableChanges = MutableSharedFlow<Unit>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val changes = mutableChanges.asSharedFlow()
-    private var generation = 0L
-    private var eagerCache: TerminalEagerViewportGeometry? = null
-    private var eagerGeneration = -1L
-    private var eagerMetricKey: Any? = null
+    private val eagerCache = TerminalEagerGeometryCache()
     val retainedRows: Int get() = heights.size
+    val retainedEagerHistoryRows: Int get() = eagerCache.retainedHistoryRows
+    val eagerHistoryBuildCount: Long get() = eagerCache.historyBuildCount
+    val eagerVisitedHistoryRows: Long get() = eagerCache.visitedHistoryRows
+    val eagerVisitedScreenRows: Long get() = eagerCache.visitedScreenRows
     /** Optional test probe; never observable state and never installed by the production page. */
     var onRowComposed: ((Long) -> Unit)? = null
 
-    private fun changed() {
-        generation++
-        eagerCache = null
+    private fun changed(previous: Height?) {
+        eagerCache.invalidate(historyChanged = previous?.usedByHistory == true)
+        if (heights.isEmpty()) eagerCache.clear()
         mutableChanges.tryEmit(Unit)
     }
+
+    /** A virtual/unmeasured backend must not retain an eager frame or its full historical prefix. */
+    fun clearEagerCache() = eagerCache.clear()
 
     @Composable
     fun Row(metricKey: Any, row: TerminalRenderedRowState, style: TextStyle) {
@@ -54,17 +63,18 @@ internal class TerminalLazyItemMeasurements {
         DisposableEffect(token, row.lineId) {
             onDispose {
                 if (heights[row.lineId]?.owner === token) {
-                    heights.remove(row.lineId)
-                    changed()
+                    val previous = heights.remove(row.lineId)
+                    changed(previous)
                 }
             }
         }
         Box(Modifier.layout { measurable, constraints ->
             val child = measurable.measure(constraints)
             val measured = Height(token, metricKey, text, child.height)
-            if (heights[row.lineId] != measured) {
+            val previous = heights[row.lineId]
+            if (previous != measured) {
                 heights[row.lineId] = measured
-                changed()
+                changed(previous)
             }
             layout(child.width, child.height) { child.place(0, 0) }
         }) { TerminalRenderedRow(row, style) }
@@ -75,12 +85,14 @@ internal class TerminalLazyItemMeasurements {
             frame.historyLineIds.size == frame.historyCount &&
             frame.screenLineIds.size == frame.rows.size - frame.historyCount
 
-    private fun height(pass: TerminalLazyLayoutPass, index: Int): Int? {
+    private fun height(pass: TerminalLazyLayoutPass, index: Int, contributeHistory: Boolean = false): Int? {
         val frame = pass.frame
         val id = if (index < frame.historyCount) frame.historyLineIds[index]
             else frame.screenLineIds[index - frame.historyCount]
         return heights[id]?.takeIf {
             it.metricKey == pass.metricKey && it.text == frame.rows[index].text && it.pixels > 0
+        }?.also {
+            if (contributeHistory && index < frame.historyCount) it.usedByHistory = true
         }?.pixels
     }
 
@@ -114,16 +126,8 @@ internal class TerminalLazyItemMeasurements {
 
     /** Only used for a renderer handoff/fallback, never adds an O(H) cache to the default renderer. */
     fun readEager(pass: TerminalLazyLayoutPass): TerminalEagerViewportGeometry? {
-        val frame = pass.frame
-        if (!validFrame(frame) || frame.rows.isEmpty()) return null
-        eagerCache?.takeIf { it.frame === frame && eagerGeneration == generation && eagerMetricKey == pass.metricKey }
-            ?.let { return it }
-        val rowHeights = IntArray(frame.rows.size)
-        for (index in rowHeights.indices) rowHeights[index] = height(pass, index) ?: return null
-        return TerminalEagerViewportGeometry(frame, rowHeights).also {
-            eagerGeneration = generation
-            eagerMetricKey = pass.metricKey
-            eagerCache = it
+        return eagerCache.read(pass.frame, pass.metricKey) { index ->
+            height(pass, index, contributeHistory = true)
         }
     }
 }

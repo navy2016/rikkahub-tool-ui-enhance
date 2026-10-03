@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import me.rerere.rikkahub.data.container.TerminalItemScrollTarget
 import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
+import me.rerere.rikkahub.data.container.terminalScaledItemClip
 import me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest.Fixture
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -40,6 +41,7 @@ class TerminalViewportStabilityInstrumentedTest {
             assertTrue("overlapping scroll writers", f.maximumWriters <= 1)
             if (f.isVirtual) {
                 assertTrue("unbounded retained row measurements", f.measurements.retainedRows < 100)
+                assertEquals("virtual backend retained an eager history prefix", 0, f.measurements.retainedEagerHistoryRows)
                 assertTrue("missing completed layout", f.observation() != null)
             }
         }
@@ -151,6 +153,107 @@ class TerminalViewportStabilityInstrumentedTest {
         compose.mainClock.advanceTimeBy(800)
         settle(f)
         compose.runOnIdle { assertEquals(effects, f.bound.binding.effectCount) }
+    }
+
+    @Test fun stabilityTenThousandRowFallbackSharesHistoryAndReleasesPrefixOnReturn() {
+        val f = Fixture(wideHead = true, stressSpans = false, historyRows = 10_000)
+        compose.setContent { f.Content() }
+        settle(f)
+        val original = compose.runOnIdle { f.top() }
+        compose.runOnIdle { f.ime = true }
+        settle(f)
+        val before = compose.runOnIdle {
+            assertFalse(f.isVirtual)
+            assertEquals(10_000, f.measurements.retainedEagerHistoryRows)
+            requireNotNull(f.bound.binding.eagerGeometry())
+        }
+        val totalHeight = before.contentHeightPx
+        val visits = compose.runOnIdle { f.measurements.eagerVisitedHistoryRows }
+        val builds = compose.runOnIdle { f.measurements.eagerHistoryBuildCount }
+        repeat(12) { update ->
+            compose.runOnIdle {
+                f.terminal.feed("\r\u001B[2Kactive-$update 中文")
+                f.publish()
+            }
+            settle(f)
+            compose.runOnIdle {
+                val current = requireNotNull(f.bound.binding.eagerGeometry())
+                assertTrue(before.historyPrefix === current.historyPrefix)
+                assertEquals(visits, f.measurements.eagerVisitedHistoryRows)
+                assertEquals(builds, f.measurements.eagerHistoryBuildCount)
+                assertEquals(original.anchor, f.top().anchor)
+            }
+        }
+        compose.runOnIdle {
+            assertEquals("published old geometry was mutated", totalHeight, before.contentHeightPx)
+            f.ime = false
+            f.policy.reapplied(false)
+        }
+        settle(f)
+        compose.runOnIdle {
+            assertTrue(f.isVirtual)
+            assertEquals(0, f.measurements.retainedEagerHistoryRows)
+            assertEquals(original.anchor, f.top().anchor)
+        }
+    }
+
+    @Test fun stabilityEagerPrefixRebuildsOnFontResizeAndTrimWithoutAnchorDrift() {
+        val f = Fixture(stressSpans = false)
+        compose.setContent { f.Content() }
+        settle(f)
+        compose.runOnIdle { f.controller.setFollow(false, f.inputPx()); f.ime = true }
+        settle(f)
+        val original = compose.runOnIdle { f.top() }
+        val initialPrefix = compose.runOnIdle { f.bound.binding.eagerGeometry()!!.historyPrefix }
+        val builds = compose.runOnIdle { f.measurements.eagerHistoryBuildCount }
+        compose.runOnIdle { f.fontSp = 21 }
+        settle(f)
+        compose.runOnIdle {
+            assertTrue(initialPrefix !== f.bound.binding.eagerGeometry()!!.historyPrefix)
+            assertTrue(f.measurements.eagerHistoryBuildCount > builds)
+            val resized = f.top()
+            assertEquals(original.anchor.lineId, resized.anchor.lineId)
+            assertEquals(terminalScaledItemClip(original.anchor.clippedTopPx, original.capturedRowHeightPx,
+                resized.capturedRowHeightPx), resized.anchor.clippedTopPx)
+            f.fontSp = 14
+        }
+        settle(f)
+        val beforeTrim = compose.runOnIdle { f.bound.binding.eagerGeometry()!!.historyPrefix }
+        compose.runOnIdle { repeat(10) { f.append() } }
+        settle(f)
+        compose.runOnIdle {
+            assertTrue(beforeTrim !== f.bound.binding.eagerGeometry()!!.historyPrefix)
+            assertEquals(original.anchor, f.top().anchor)
+            f.terminal.feed("\u001B[3J")
+            f.publish()
+        }
+        settle(f)
+        compose.runOnIdle {
+            assertEquals(0, f.frame.historyCount)
+            assertEquals(0, f.measurements.retainedEagerHistoryRows)
+            assertTrue(f.controller.state.value.autoScroll)
+        }
+    }
+
+    @Test fun stabilityEagerFallbackDisposalReleasesAllMeasurementAndPrefixEntries() {
+        val f = Fixture(stressSpans = false)
+        var shown by mutableStateOf(true)
+        compose.setContent { if (shown) f.Content() }
+        settle(f)
+        compose.runOnIdle { f.ime = true }
+        settle(f)
+        compose.runOnIdle {
+            assertFalse(f.isVirtual)
+            assertEquals(f.frame.historyCount, f.measurements.retainedEagerHistoryRows)
+            assertEquals(f.frame.rows.size, f.measurements.retainedRows)
+            shown = false
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(0, f.measurements.retainedRows)
+            assertEquals(0, f.measurements.retainedEagerHistoryRows)
+            assertEquals(0, f.activeWriters)
+        }
     }
 
     @Test fun stabilityDisposalDuringJumpReleasesRowsAndStopsTheWriter() {

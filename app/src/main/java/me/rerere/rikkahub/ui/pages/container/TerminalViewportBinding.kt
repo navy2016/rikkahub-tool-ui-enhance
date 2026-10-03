@@ -54,6 +54,7 @@ internal class TerminalViewportBinding(
     fun backendCommitted() {
         if (previousBackend != null && previousBackend != virtual) controller.pauseScrollEffects()
         previousBackend = virtual
+        if (!measureEager) measurements.clearEagerCache()
     }
 
     fun observation(): TerminalItemViewport? {

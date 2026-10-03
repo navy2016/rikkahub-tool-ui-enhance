@@ -406,6 +406,10 @@ class TerminalItemViewportInstrumentedTest {
         compose.runOnIdle { f.ime = true }
         settle(f)
         val history = compose.runOnIdle { f.frame.historyLineIds.toHashSet() }
+        val prefix = compose.runOnIdle { requireNotNull(f.bound.binding.eagerGeometry()).historyPrefix }
+        val historyVisits = compose.runOnIdle { f.measurements.eagerVisitedHistoryRows }
+        val historyBuilds = compose.runOnIdle { f.measurements.eagerHistoryBuildCount }
+        val screenVisits = compose.runOnIdle { f.measurements.eagerVisitedScreenRows }
         var historyCompositions = 0
         var screenCompositions = 0
         compose.runOnIdle {
@@ -424,6 +428,10 @@ class TerminalItemViewportInstrumentedTest {
         compose.runOnIdle {
             assertTrue("probe did not observe updated screen rows", screenCompositions > 0)
             assertEquals("activity invalidated unchanged history chunks", 0, historyCompositions)
+            assertTrue("history prefix was copied", prefix === f.bound.binding.eagerGeometry()!!.historyPrefix)
+            assertEquals("activity rescanned historical heights", historyVisits, f.measurements.eagerVisitedHistoryRows)
+            assertEquals("activity rebuilt historical prefix", historyBuilds, f.measurements.eagerHistoryBuildCount)
+            assertTrue("activity did not validate screen heights", f.measurements.eagerVisitedScreenRows > screenVisits)
             f.measurements.onRowComposed = null
         }
     }
