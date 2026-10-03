@@ -23,7 +23,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     targetProjectPath = ":benchmarks:terminal-target"
-    sourceSets.getByName("main").java.srcDir("../production-contract/src/main/kotlin")
+    sourceSets.getByName("main").kotlin.srcDir("../production-contract/src/main/kotlin")
     experimentalProperties["android.experimental.self-instrumenting"] = true
 }
 androidComponents {

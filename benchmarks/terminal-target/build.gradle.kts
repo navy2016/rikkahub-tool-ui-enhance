@@ -98,7 +98,8 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
-    sourceSets.getByName("main").java.srcDir("../production-contract/src/main/kotlin")
+    // AGP 9's built-in Kotlin source provider does not inherit extra Java source directories.
+    sourceSets.getByName("main").kotlin.srcDir("../production-contract/src/main/kotlin")
 }
 androidComponents {
     beforeVariants { it.enable = it.buildType == "benchmark" }
