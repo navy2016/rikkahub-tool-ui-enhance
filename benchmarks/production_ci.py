@@ -40,7 +40,7 @@ def source_files():
         "benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/ProductionTerminalBenchmarkActivity.kt",
         "benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmarkWorkload.kt",
         "benchmarks/terminal-macrobenchmark/src/main/java/me/rerere/rikkahub/benchmark/ProductionTerminalBenchmark.kt",
-        "benchmarks/production_ci.py", "benchmarks/production_summary.py",
+        "benchmarks/production_ci.py", "benchmarks/production_summary.py", "benchmarks/production_emulator.py",
     ))
     if len(copied) < 20 or any(not path.is_file() for path in paths):
         raise ValueError("Missing shared production source or source-copy contract")
@@ -193,7 +193,8 @@ def run_group(scenario, iterations, smoke):
         safe_diagnostic(out / "pull.log", ["adb", "pull", device_output, str(out / "measurements")], timeout=90)
         # Preserve partial JSON/traces but never validate them as a completed scenario.
         safe_diagnostic(out / "logcat.txt", ["adb", "logcat", "-d", "-v", "threadtime", "-s",
-            "ProductionTerminalBenchmark:I", "AndroidRuntime:E", "TestRunner:E", "Benchmark:I", "*:S"])
+            "ProductionTerminalBenchmark:I", "AndroidRuntime:E", "TestRunner:E", "Benchmark:I",
+            "art:I", "artd:I", "dex2oat:I", "PackageDexOptimizer:I", "installd:I", "PackageManager:I", "*:S"])
         safe_diagnostic(out / "meminfo-after.txt", ["adb", "shell", "dumpsys", "meminfo", target])
         if error is not None:
             safe_diagnostic(out / "stop.log", ["adb", "shell", "am", "force-stop", driver])

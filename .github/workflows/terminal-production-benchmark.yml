@@ -99,7 +99,7 @@ jobs:
 
   scenario:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -121,19 +121,7 @@ jobs:
         run: |
           if [ "$SMOKE" = true ]; then echo 'ITERATIONS=1' >> "$GITHUB_ENV"; fi
       - name: Run and validate one bounded paired scenario
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          arch: x86_64
-          target: default
-          profile: Nexus 6
-          cores: 2
-          ram-size: 4096M
-          heap-size: 768M
-          disable-animations: false
-          emulator-boot-timeout: 900
-          emulator-options: -no-window -accel on -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: python3 benchmarks/production_ci.py run --scenario "$SCENARIO" --iterations "$ITERATIONS" --smoke "$SMOKE"
+        run: python3 benchmarks/production_emulator.py --scenario "$SCENARIO" --iterations "$ITERATIONS" --smoke "$SMOKE"
       - name: Upload this scenario immediately, including partial evidence on failure
         if: always()
         uses: actions/upload-artifact@v4

@@ -77,8 +77,11 @@ bundle; a new source SHA requires a new build. No background Actions monitoring 
 
 Only the selected test class is invoked directly through ADB with benchmark `CompilationMode.Full()`;
 there is no Gradle rebuild on the scenario runners. The emulator requires hardware acceleration and
-only the `EMULATOR` benchmark warning is suppressed. No system permission changes are part of this
-workflow. Separate scenario runners isolate crashes/shutdowns; they do not make cross-run comparisons valid.
+only the `EMULATOR` benchmark warning is suppressed. The emulator stays under the non-root runner UID,
+using the runner's existing `kvm` group for that process via sudo. A successful `-accel-check` is mandatory;
+the launcher uses `-accel on` with no automatic software downgrade. No device modes or group membership
+files are changed. Startup/acceleration logs are retained and guest shutdown is bounded. Separate scenario
+runners isolate crashes/shutdowns; they do not make cross-run comparisons valid.
 
 ## Not covered yet
 
