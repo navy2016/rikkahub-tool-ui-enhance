@@ -101,3 +101,18 @@ runners isolate crashes/shutdowns; they do not make cross-run comparisons valid.
 Full `ProcessSessionPage`, actual shell/PTY scheduling, input-to-echo delay, selection/clipboard,
 process-death recovery, representative physical-device memory/GC and 30-minute stress remain follow-up
 work. This benchmark does not claim those end-to-end checks or change any status/KEYS behavior.
+
+## Verified checkpoints
+
+- [16ab7c0 full baseline](results/16ab7c0-production-viewport-ci.md), run `37172835069`:
+  all 36 cases / 108 measured iterations passed. Each scenario has its own device/invocation;
+  the archive preserves rounded validated notices and their source check-run links.
+- `7a1d711` immutable history blocks: 322 application Release JVM tests, 87 viewport instrumented
+  tests and 12 production-scenario smoke cases passed. This establishes behavior and incremental
+  source-read counts, not a controlled before/after timing or memory improvement. Its snapshot
+  directory remains O(H / 128), and cold/style invalidations still read all required rows.
+
+Next measured optimization: retain the scalar width index across an IME compatibility fallback
+without retaining full Text layouts or changing the explicit retry policy. A hidden widest row,
+FIFO trim, font/density/direction changes, source replacement and page disposal must remain valid.
+This is a follow-up plan, not implemented by the block-sharing checkpoint.

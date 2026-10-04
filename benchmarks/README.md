@@ -293,6 +293,11 @@ matrix accessible via the check-run API when artifact/blob downloads fail. Missi
 
 ## Recorded baselines
 
+- [16ab7c0: complete production viewport/controller baseline](results/16ab7c0-production-viewport-ci.md)
+  — 36 cases / 108 measured iterations across six independently paired scenario groups passed.
+  Includes real IME fallback/retry and remount; predates immutable historical block sharing.
+  The archived CSV/JSON contain validated, rounded check-run notices, not raw Perfetto samples.
+
 - [2026-10-01: intrinsic width vs full width vs production](results/2026-10-01-75d1031-intrinsic-width-ci-emulator.md)
   — 60 viewport/width tests, 19 fixture tests and 45 performance cases passed. Same-run 10k lazy
   cold-width cost fell 908.41→423.87 ms, mount 1064.42→638.39 ms. Peak anonymous RSS was unchanged;
