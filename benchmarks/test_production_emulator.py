@@ -13,9 +13,12 @@ class ProductionEmulatorTest(unittest.TestCase):
                                              'ANDROID_AVD_HOME', 'ANDROID_USER_HOME')}
         env['GITHUB_TOKEN'] = 'never-pass-this'
         command = emulator.group_command(Path('/sdk/emulator'), ['-accel', 'on'], env, 'runner')
-        self.assertEqual(['sudo', '-n', '-u', 'runner', '-g', 'kvm', '--', 'env'], command[:8])
+        self.assertEqual(['sudo', '-n', '--', 'setpriv', '--reuid=runner', '--regid=kvm',
+                          '--init-groups', '--no-new-privs', '--', 'env', '-i'], command[:11])
+        self.assertIn('LC_ALL=C', command)
         self.assertEqual(['/sdk/emulator', '-accel', 'on'], command[-3:])
         self.assertNotIn('never-pass-this', str(command))
+        self.assertNotIn('--reuid=root', command)
         for user in ('root', ''):
             with self.assertRaises(ValueError):
                 emulator.group_command(Path('/sdk/emulator'), [], env, user)

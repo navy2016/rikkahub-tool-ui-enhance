@@ -21,10 +21,13 @@ SERIAL = 'emulator-5554'
 def group_command(emulator, arguments, env, user):
     if not user or user == 'root':
         raise ValueError('The CI emulator must retain the non-root runner user')
-    # sudo changes this PROCESS group only. No device modes, group membership or host policy
-    # files are edited. Pass only SDK/AVD variables, not GitHub credentials, through sudo.
+    # Hosted runners authorize sudo to root, not arbitrary Runas groups. Use that existing grant
+    # only to set this child's UID/GID, then drop privileges BEFORE executing the emulator.
+    # No device modes, group membership or host policy files are edited. The clean environment
+    # passes only SDK/AVD variables; neither root nor GitHub credentials reach the emulator.
     names = ('HOME', 'ANDROID_HOME', 'ANDROID_SDK_ROOT', 'ANDROID_AVD_HOME', 'ANDROID_USER_HOME')
-    return ['sudo', '-n', '-u', user, '-g', 'kvm', '--', 'env',
+    return ['sudo', '-n', '--', 'setpriv', f'--reuid={user}', '--regid=kvm', '--init-groups',
+            '--no-new-privs', '--', 'env', '-i', 'PATH=/usr/bin:/bin', 'LC_ALL=C',
             *(f'{name}={env[name]}' for name in names), str(emulator), *arguments]
 
 
