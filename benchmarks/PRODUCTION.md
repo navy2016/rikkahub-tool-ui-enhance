@@ -112,7 +112,13 @@ work. This benchmark does not claim those end-to-end checks or change any status
   source-read counts, not a controlled before/after timing or memory improvement. Its snapshot
   directory remains O(H / 128), and cold/style invalidations still read all required rows.
 
-Next measured optimization: retain the scalar width index across an IME compatibility fallback
-without retaining full Text layouts or changing the explicit retry policy. A hidden widest row,
-FIFO trim, font/density/direction changes, source replacement and page disposal must remain valid.
-This is a follow-up plan, not implemented by the block-sharing checkpoint.
+The scalar width index now belongs to the mounted production viewport binding. Compatibility
+fallback retains only width candidates and source/font validity metadata; it measures no virtual
+widths. Committed fallback frames prune retired FIFO candidates but do not advance the measured
+end past unmeasured output. Explicit retry measures surviving new archives and the active screen;
+unchanged history requires zero additional measurements. Owner/generation/render revision/columns,
+font resolution/style/density/direction changes and replaced rows revoke reuse. Disposing the binding
+clears its retained state. No full Text layout or Paragraph is cached, and IME fallback remains latched
+until explicit retry. Production IME and detach scenarios assert these properties through cumulative
+work counters and disposal checks; `Prod.widthMeasuredHistory` / `Prod.widthMeasuredScreen` are trace
+counters, not timing estimates. Cold mount and remount still require a full width scan.

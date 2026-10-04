@@ -31,7 +31,7 @@ internal fun TerminalTranscriptViewport(
     if (bound.virtualHistoryEnabled) {
         TerminalVirtualHistoryTranscript(frame, rows, style, bound.pass, bound.binding.measurements,
             bound.binding.lazy, horizontalScroll, panEnabled && !selectionMode,
-            bound.gestures.flingBehavior, modifier)
+            bound.gestures.flingBehavior, bound.binding.widthIndex, modifier)
     } else {
         Column(modifier.horizontalScroll(horizontalScroll, enabled = panEnabled || selectionMode)
             .verticalScroll(bound.binding.eager, enabled = panEnabled || selectionMode,

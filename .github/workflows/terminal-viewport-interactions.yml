@@ -95,7 +95,7 @@ jobs:
             --require-case-group 'intrinsicWidth:6' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest \
-            --require-case-group 'itemNative:17' \
+            --require-case-group 'itemNative:20' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest \
             --require-case-group 'stability:8'
       - name: Upload fixture APKs, JUnit and logcat

@@ -260,6 +260,9 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
 
     private suspend fun imeRoundTrip(viewport: Viewport) {
         val saved = viewport.save()
+        val widthIndex = viewport.bound.binding.widthIndex
+        val measuredHistory = widthIndex.measuredHistoryRows
+        val measuredScreen = widthIndex.measuredScreenRows
         val fullHeight = viewport.viewportHeight
         productionAsyncTrace("Prod.imeShow") {
             focus.requestFocus()
@@ -287,6 +290,9 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             awaitCondition { !imeVisible && viewport.viewportHeight == fullHeight }
             awaitSettled(viewport)
             check(!viewport.bound.virtualHistoryEnabled) { "IME fallback must remain latched" }
+            check(widthIndex.measuredHistoryRows == measuredHistory && widthIndex.measuredScreenRows == measuredScreen) {
+                "Compatibility fallback measured virtual widths"
+            }
             viewport.checkSavedAnchor(saved)
             validate(viewport)
         }
@@ -298,6 +304,11 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             viewport.checkSavedAnchor(saved)
             validate(viewport)
         }
+        check(viewport.bound.binding.widthIndex === widthIndex)
+        check(widthIndex.measuredHistoryRows == measuredHistory) { "IME retry rescanned unchanged history widths" }
+        if (mode == TerminalRenderMode.VIRTUAL_HISTORY) {
+            check(widthIndex.measuredScreenRows > measuredScreen) { "IME retry did not measure updated screen widths" }
+        }
         check(terminal.rows == TerminalBenchmarkWorkload.SCREEN_ROWS)
     }
 
@@ -308,7 +319,8 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         productionAsyncTrace("Prod.detach") {
             current = null
             awaitCondition { !viewport.attached && viewport.measurements.retainedRows == 0 &&
-                viewport.measurements.retainedEagerHistoryRows == 0 && viewport.bound.binding.activeWriters == 0 }
+                viewport.measurements.retainedEagerHistoryRows == 0 && viewport.bound.binding.activeWriters == 0 &&
+                !viewport.bound.binding.widthIndex.hasRetainedState }
         }
         return saved
     }
@@ -358,7 +370,11 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             check(viewport.measurements.retainedEagerHistoryRows == 0)
         } else if (mode == TerminalRenderMode.DEFAULT) {
             check(viewport.measurements.retainedRows == 0) { "Default eager added virtual measurements" }
+            check(!viewport.bound.binding.widthIndex.hasRetainedState)
+            check(viewport.bound.binding.widthIndex.measuredHistoryRows == 0L)
         }
+        Trace.setCounter("Prod.widthMeasuredHistory", viewport.bound.binding.widthIndex.measuredHistoryRows)
+        Trace.setCounter("Prod.widthMeasuredScreen", viewport.bound.binding.widthIndex.measuredScreenRows)
         Trace.setCounter("Prod.retainedMeasurements", viewport.measurements.retainedRows.toLong())
         Trace.setCounter("Prod.eagerHistoryRows", viewport.measurements.retainedEagerHistoryRows.toLong())
         Trace.setCounter("Prod.scrollEffects", viewport.bound.binding.effectCount.toLong())

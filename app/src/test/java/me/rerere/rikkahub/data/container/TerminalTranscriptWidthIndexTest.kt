@@ -3,9 +3,11 @@ package me.rerere.rikkahub.data.container
 import androidx.compose.ui.text.AnnotatedString
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import kotlin.random.Random
 
 class TerminalTranscriptWidthIndexTest {
     private fun terminal(size: Int = 100) = TerminalEmulator(80, 6, size).apply {
@@ -67,5 +69,132 @@ class TerminalTranscriptWidthIndexTest {
         assertThrows(IllegalStateException::class.java) { index.width(frame, 1) { error("font failure") } }
         assertEquals(expected(frame), index.width(frame, 1, ::measure))
         assertEquals(frame.historyCount, index.lastMeasuredHistoryRows)
+    }
+
+    @Test fun dormantScreenUpdatesAtAllSizesKeepWidthsWithoutMeasuringText() {
+        for (size in listOf(1000, 5000, 10000)) {
+            val terminal = terminal(size)
+            val index = TerminalTranscriptWidthIndex()
+            index.width(terminal.renderFrame(), 1, ::measure)
+            repeat(8) {
+                terminal.feed("\r\u001B[2Khidden-$it")
+                index.retainFor(terminal.renderFrame(), 1)
+            }
+            assertEquals(size.toLong(), index.measuredHistoryRows)
+            assertEquals(6L, index.measuredScreenRows)
+            assertTrue(index.hasRetainedState)
+            val next = terminal.renderFrame()
+            assertEquals(expected(next), index.width(next, 1, ::measure))
+            assertEquals(0, index.lastMeasuredHistoryRows)
+            assertEquals(6, index.lastMeasuredScreenRows)
+        }
+    }
+
+    @Test fun dormantArchivesMeasureEveryMissingSurvivorAndRemoveTheOffscreenMaximum() {
+        for (size in listOf(129, 1000)) for (added in listOf(3, 128, size + 5)) {
+            val terminal = terminal(size)
+            val index = TerminalTranscriptWidthIndex()
+            val wide = index.width(terminal.renderFrame(), 1, ::measure)
+            repeat(added) {
+                terminal.feed("\r\nhidden-$it")
+                index.retainFor(terminal.renderFrame(), 1)
+                assertTrue(index.retainedCandidates <= size)
+            }
+            assertEquals(size.toLong(), index.measuredHistoryRows)
+            assertEquals(6L, index.measuredScreenRows)
+            val frame = terminal.renderFrame()
+            assertEquals(expected(frame), index.width(frame, 1, ::measure))
+            assertEquals(minOf(added, size), index.lastMeasuredHistoryRows)
+            assertTrue(index.width(frame, 1, ::measure) < wide)
+        }
+    }
+
+    @Test fun dormantHeadTrimNeedsNoNewMeasurementAndCannotProveARetiredFrame() {
+        val terminal = terminal(260)
+        val original = terminal.renderFrame()
+        val index = TerminalTranscriptWidthIndex()
+        val wide = index.width(original, 1, ::measure)
+        terminal.setMaxScrollbackLines(128)
+        val trimmed = terminal.renderFrame()
+        index.retainFor(trimmed, 1)
+        assertTrue(index.retainedCandidates <= 128)
+        assertEquals(expected(trimmed), index.width(trimmed, 1, ::measure))
+        assertEquals(0, index.lastMeasuredHistoryRows)
+        // The previously widest row was removed. Older/speculative frames must revoke the cache.
+        assertEquals(wide, index.width(original, 1, ::measure))
+        assertEquals(260, index.lastMeasuredHistoryRows)
+    }
+
+    @Test fun dormantInvalidationsReleaseRetainedStateBeforeAnyRetry() {
+        val edits: List<(TerminalEmulator) -> TerminalEmulator.RenderFrame> = listOf(
+            { it.feed("\u001B[?5h"); it.renderFrame() },
+            { it.feed("\u001B]4;2;rgb:ffff/0000/0000\u0007"); it.renderFrame() },
+            { it.resize(40, 6); it.renderFrame() },
+            { it.clearScrollbackOnly(); it.feed("\r\nnew"); it.renderFrame() },
+            { it.renderFrame(includeScrollback = false) },
+            { it.feed("\u001B[?1049hALT"); it.renderFrame() },
+            { terminal().renderFrame() },
+            { it.renderFrame().let { frame -> frame.copy(rows = frame.rows.toList()) } },
+        )
+        for (edit in edits) {
+            val terminal = terminal()
+            val index = TerminalTranscriptWidthIndex()
+            index.width(terminal.renderFrame(), 1, ::measure)
+            val frame = edit(terminal)
+            index.retainFor(frame, 1)
+            assertFalse(index.hasRetainedState)
+            assertEquals(0, index.retainedCandidates)
+            assertEquals(100L, index.measuredHistoryRows)
+            assertEquals(expected(frame), index.width(frame, 1, ::measure))
+            assertEquals(frame.historyCount, index.lastMeasuredHistoryRows)
+        }
+        val frame = terminal().renderFrame()
+        val index = TerminalTranscriptWidthIndex()
+        index.width(frame, 1, ::measure)
+        index.retainFor(frame, 2)
+        assertFalse(index.hasRetainedState)
+        assertEquals(expected(frame), index.width(frame, 2, ::measure))
+        assertEquals(frame.historyCount, index.lastMeasuredHistoryRows)
+    }
+
+    @Test fun disposalAndPartialMeasurementFailureRevokeAllCacheOwnership() {
+        val terminal = terminal()
+        val index = TerminalTranscriptWidthIndex()
+        val frame = terminal.renderFrame()
+        index.width(frame, 1, ::measure)
+        index.clear()
+        assertFalse(index.hasRetainedState)
+        assertEquals(0, index.retainedCandidates)
+        assertEquals(expected(frame), index.width(frame, 1, ::measure))
+        assertEquals(100, index.lastMeasuredHistoryRows)
+        terminal.feed("\r\na\r\nb\r\nc")
+        val next = terminal.renderFrame()
+        var calls = 0
+        assertThrows(IllegalStateException::class.java) {
+            index.width(next, 1) { if (++calls == 2) error("font failure") else measure(it) }
+        }
+        index.retainFor(next, 1)
+        assertFalse(index.hasRetainedState)
+        assertEquals(expected(next), index.width(next, 1, ::measure))
+        assertEquals(100, index.lastMeasuredHistoryRows)
+    }
+
+    @Test fun randomizedDormantFifoBurstsMatchAFullWidthOracle() {
+        val random = Random(924)
+        val terminal = terminal(129)
+        val index = TerminalTranscriptWidthIndex()
+        index.width(terminal.renderFrame(), 1, ::measure)
+        repeat(100) {
+            val added = random.nextInt(0, 180)
+            val historyWork = index.measuredHistoryRows
+            repeat(added) {
+                terminal.feed("\r\n" + "W".repeat(random.nextInt(1, 79)))
+                index.retainFor(terminal.renderFrame(), 1)
+            }
+            val next = terminal.renderFrame()
+            assertEquals(historyWork, index.measuredHistoryRows)
+            assertEquals(expected(next), index.width(next, 1, ::measure))
+            assertEquals(minOf(added, 129), index.lastMeasuredHistoryRows)
+        }
     }
 }

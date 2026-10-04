@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndex
 import me.rerere.rikkahub.utils.TerminalEmulator
 
 /**
@@ -31,10 +32,11 @@ internal fun TerminalVirtualHistoryTranscript(
     horizontalScroll: androidx.compose.foundation.ScrollState,
     userScrollEnabled: Boolean,
     flingBehavior: FlingBehavior,
+    widthIndex: TerminalTranscriptWidthIndex,
     modifier: Modifier = Modifier,
 ) {
     require(pass.frame === frame && rows.size == frame.rows.size)
-    val widthPx = rememberTerminalTranscriptWidth(frame, style)
+    val widthPx = rememberTerminalTranscriptWidth(frame, style, widthIndex)
     val density = LocalDensity.current
     LazyColumn(
         modifier = modifier.horizontalScroll(horizontalScroll, enabled = userScrollEnabled)

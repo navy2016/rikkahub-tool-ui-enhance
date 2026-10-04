@@ -47,9 +47,11 @@ import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
@@ -353,19 +355,119 @@ class TerminalItemViewportInstrumentedTest {
     @Test fun itemNativeRealKeyboardInsetsRetainLockAndPermitExplicitRetry() {
         val f = mount(Fixture(stressSpans = false, systemIme = true))
         val initial = compose.runOnIdle { f.top().anchor }
+        val widths = compose.runOnIdle { f.bound.binding.widthIndex }
+        val historyWork = compose.runOnIdle { widths.measuredHistoryRows }
+        val screenWork = compose.runOnIdle { widths.measuredScreenRows }
         showSystemKeyboard(f)
         settle(f)
+        repeat(3) { update ->
+            compose.runOnIdle { f.terminal.feed("\r\u001B[2Kime-$update"); f.publish() }
+            settle(f)
+        }
         compose.runOnIdle {
             assertFalse(f.isVirtual)
             assertEquals(initial, f.top().anchor)
             assertEquals(24, f.terminal.rows)
+            assertTrue(widths === f.bound.binding.widthIndex)
+            assertTrue(widths.hasRetainedState)
+            assertEquals(historyWork, widths.measuredHistoryRows)
+            assertEquals(screenWork, widths.measuredScreenRows)
             f.keyboard?.hide()
         }
         compose.waitUntil(10_000) { !f.ime }
         settle(f)
         compose.runOnIdle { assertFalse(f.isVirtual); f.policy.reapplied(false) }
         settle(f)
-        compose.runOnIdle { assertTrue(f.isVirtual); assertEquals(initial, f.top().anchor) }
+        compose.runOnIdle {
+            assertTrue(f.isVirtual)
+            assertEquals(initial, f.top().anchor)
+            assertTrue(widths === f.bound.binding.widthIndex)
+            assertEquals(historyWork, widths.measuredHistoryRows)
+            assertEquals(screenWork + 24, widths.measuredScreenRows)
+        }
+    }
+
+    @Test fun itemNativeDormantWidthIndexTrimsHiddenMaximumAndMeasuresOnlyNewArchives() {
+        val f = mount(Fixture(wideHead = true, stressSpans = false))
+        val widths = compose.runOnIdle { f.bound.binding.widthIndex }
+        val historyWork = compose.runOnIdle { widths.measuredHistoryRows }
+        val screenWork = compose.runOnIdle { widths.measuredScreenRows }
+        val wide = compose.runOnIdle { f.horizontal.maxValue }
+        val anchor = compose.runOnIdle { f.top().anchor }
+        compose.runOnIdle { f.ime = true }
+        settle(f)
+        repeat(3) { compose.runOnIdle { f.append() }; settle(f) }
+        val eagerRange = compose.runOnIdle {
+            assertFalse(f.isVirtual)
+            assertEquals(historyWork, widths.measuredHistoryRows)
+            assertEquals(screenWork, widths.measuredScreenRows)
+            assertEquals(anchor, f.top().anchor)
+            f.ime = false
+            f.horizontal.maxValue
+        }
+        settle(f)
+        compose.runOnIdle { assertFalse(f.isVirtual); f.policy.reapplied(false) }
+        settle(f)
+        compose.runOnIdle {
+            assertTrue(f.isVirtual)
+            assertTrue(widths === f.bound.binding.widthIndex)
+            assertEquals(historyWork + 3, widths.measuredHistoryRows)
+            assertEquals(screenWork + 24, widths.measuredScreenRows)
+            assertEquals(anchor, f.top().anchor)
+            assertTrue(f.horizontal.maxValue < wide)
+            assertEquals(eagerRange, f.horizontal.maxValue)
+        }
+    }
+
+    @Test fun itemNativeDormantFontDensityAndDirectionChangesInvalidateBeforeRetry() {
+        val f = mount(Fixture(wideHead = true, stressSpans = false, historyRows = 256))
+        val widths = compose.runOnIdle { f.bound.binding.widthIndex }
+        val changes: List<() -> Unit> = listOf(
+            { f.fontSp = 19 }, { f.fontFamily = FontFamily.Serif },
+            { f.densityOverride = Density(1.33f, 1.15f) }, { f.rtl = true },
+        )
+        for (change in changes) {
+            val historyWork = compose.runOnIdle { widths.measuredHistoryRows }
+            val screenWork = compose.runOnIdle { widths.measuredScreenRows }
+            compose.runOnIdle { f.ime = true }
+            settle(f)
+            compose.runOnIdle { change() }
+            settle(f)
+            val eagerRange = compose.runOnIdle {
+                assertFalse(f.isVirtual)
+                assertFalse(widths.hasRetainedState)
+                assertEquals(historyWork, widths.measuredHistoryRows)
+                assertEquals(screenWork, widths.measuredScreenRows)
+                f.ime = false
+                f.horizontal.maxValue
+            }
+            settle(f)
+            compose.runOnIdle { f.policy.reapplied(false) }
+            settle(f)
+            compose.runOnIdle {
+                assertTrue(f.isVirtual)
+                assertTrue(widths === f.bound.binding.widthIndex)
+                assertEquals(historyWork + f.frame.historyCount, widths.measuredHistoryRows)
+                assertEquals(eagerRange, f.horizontal.maxValue)
+            }
+        }
+    }
+
+    @Test fun itemNativeSessionReplacementReleasesPreviousWidthOwnership() {
+        val first = Fixture(stressSpans = false, historyRows = 256)
+        var shown by mutableStateOf(first, referentialEqualityPolicy())
+        compose.setContent { shown.Content() }
+        settle(first)
+        val oldWidths = compose.runOnIdle { first.bound.binding.widthIndex }
+        val replacement = Fixture(stressSpans = false, historyRows = 128)
+        compose.runOnIdle { assertTrue(oldWidths.hasRetainedState); shown = replacement }
+        settle(replacement)
+        compose.runOnIdle {
+            assertFalse(oldWidths.hasRetainedState)
+            assertEquals(0, oldWidths.retainedCandidates)
+            assertTrue(oldWidths !== replacement.bound.binding.widthIndex)
+            assertEquals(128L, replacement.bound.binding.widthIndex.measuredHistoryRows)
+        }
     }
 
     @Test fun itemNativeDefaultEagerRealImeUpdatesGeometryWithoutOutputOrVirtualMeasurements() {
@@ -378,6 +480,9 @@ class TerminalItemViewportInstrumentedTest {
         compose.runOnIdle {
             assertFalse(f.isVirtual)
             assertEquals(0, f.measurements.retainedRows)
+            assertFalse(f.bound.binding.widthIndex.hasRetainedState)
+            assertEquals(0L, f.bound.binding.widthIndex.measuredHistoryRows)
+            assertEquals(0L, f.bound.binding.widthIndex.measuredScreenRows)
             assertTrue("IME did not adjust the idle terminal", f.eager.value > before)
             assertTrue(f.controller.isNearBottom(f.eager.value))
             f.keyboard?.hide()
@@ -472,6 +577,8 @@ class TerminalItemViewportInstrumentedTest {
         val measurements = TerminalLazyItemMeasurements()
         val eager = ScrollState(if (saved.autoScroll) Int.MAX_VALUE else saved.verticalOffsetPx)
         var fontSp by mutableIntStateOf(14)
+        var fontFamily by mutableStateOf<FontFamily>(JetbrainsMono)
+        var densityOverride by mutableStateOf<Density?>(null)
         var heightDp by mutableIntStateOf(220)
         var config by mutableStateOf(TerminalViewportGestureConfig(true, false, 2))
         var mode by mutableStateOf(initialMode)
@@ -537,7 +644,10 @@ class TerminalItemViewportInstrumentedTest {
 
         @Composable fun Content() {
             scope = rememberCoroutineScope()
-            CompositionLocalProvider(LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr) {
+            CompositionLocalProvider(
+                LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
+                LocalDensity provides (densityOverride ?: LocalDensity.current),
+            ) {
                 Output()
             }
         }
@@ -548,7 +658,7 @@ class TerminalItemViewportInstrumentedTest {
             val actualIme = WindowInsets.isImeVisible
             keyboard = LocalSoftwareKeyboardController.current
             SideEffect { if (systemIme) ime = actualIme }
-            val style = TextStyle(fontFamily = JetbrainsMono, fontSize = fontSp.sp, lineHeight = fontSp.sp,
+            val style = TextStyle(fontFamily = fontFamily, fontSize = fontSp.sp, lineHeight = fontSp.sp,
                 platformStyle = PlatformTextStyle(includeFontPadding = false),
                 lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both))
             val textMeasurer = rememberTextMeasurer()

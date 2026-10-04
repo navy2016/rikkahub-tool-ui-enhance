@@ -246,6 +246,7 @@ class TerminalViewportStabilityInstrumentedTest {
             assertFalse(f.isVirtual)
             assertEquals(f.frame.historyCount, f.measurements.retainedEagerHistoryRows)
             assertEquals(f.frame.rows.size, f.measurements.retainedRows)
+            assertTrue(f.bound.binding.widthIndex.hasRetainedState)
             shown = false
         }
         compose.waitForIdle()
@@ -253,6 +254,8 @@ class TerminalViewportStabilityInstrumentedTest {
             assertEquals(0, f.measurements.retainedRows)
             assertEquals(0, f.measurements.retainedEagerHistoryRows)
             assertEquals(0, f.activeWriters)
+            assertFalse(f.bound.binding.widthIndex.hasRetainedState)
+            assertEquals(0, f.bound.binding.widthIndex.retainedCandidates)
         }
     }
 
@@ -273,6 +276,8 @@ class TerminalViewportStabilityInstrumentedTest {
             assertEquals(0, f.measurements.retainedRows)
             assertEquals(0, f.activeWriters)
             assertNull(f.controller.state.value.scrollEffect)
+            assertFalse(f.bound.binding.widthIndex.hasRetainedState)
+            assertEquals(0, f.bound.binding.widthIndex.retainedCandidates)
         }
     }
 }

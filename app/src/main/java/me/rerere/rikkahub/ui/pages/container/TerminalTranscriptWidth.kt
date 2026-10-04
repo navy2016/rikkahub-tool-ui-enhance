@@ -59,10 +59,13 @@ internal fun rememberTerminalLazyLayoutPass(
 
 /** Exact natural width of ALL surviving rows, including an offscreen widest history line. */
 @Composable
-internal fun rememberTerminalTranscriptWidth(frame: TerminalEmulator.RenderFrame, style: TextStyle): Int {
+internal fun rememberTerminalTranscriptWidth(
+    frame: TerminalEmulator.RenderFrame,
+    style: TextStyle,
+    index: TerminalTranscriptWidthIndex,
+): Int {
     val metrics = terminalTextMetrics(style)
-    val index = remember { TerminalTranscriptWidthIndex() }
-    return remember(TerminalFrameReference(frame), metrics) {
+    return remember(index, TerminalFrameReference(frame), metrics) {
         Trace.beginSection("Terminal.productionWidth")
         try {
             val resolved = resolveDefaults(style, metrics.direction)

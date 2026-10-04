@@ -4,6 +4,7 @@ import android.os.Trace
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import me.rerere.rikkahub.data.container.TerminalItemViewport
+import me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndex
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
@@ -39,6 +41,8 @@ internal class TerminalViewportBinding(
     val measurements: TerminalLazyItemMeasurements,
     private val input: () -> TerminalViewportBindingInput,
 ) {
+    // This binding outlives backend branches, but is scoped to one mounted session/controller.
+    val widthIndex = TerminalTranscriptWidthIndex()
     val virtual: Boolean get() = input().virtual
     val pass: TerminalLazyLayoutPass get() = input().pass
     val measureEager: Boolean get() = input().measureEager
@@ -56,6 +60,7 @@ internal class TerminalViewportBinding(
         if (previousBackend != null && previousBackend != virtual) controller.pauseScrollEffects()
         previousBackend = virtual
         if (!measureEager) measurements.clearEagerCache()
+        if (!virtual) widthIndex.retainFor(pass.frame, pass.metricKey)
     }
 
     fun observation(): TerminalItemViewport? {
@@ -161,6 +166,9 @@ internal fun rememberTerminalBoundViewport(
     val latestWants by rememberUpdatedState(wantsVirtual)
     val binding = remember(sessionKey, controller, eager, lazy, measurements) {
         TerminalViewportBinding(controller, eager, lazy, measurements) { latestInput }
+    }
+    DisposableEffect(binding) {
+        onDispose { binding.widthIndex.clear() }
     }
     SideEffect {
         binding.backendCommitted()
