@@ -47,10 +47,36 @@ class ProductionCiTest(unittest.TestCase):
             ci.require_instrumentation_success(log, 6)
             for bad in (good.replace('6 tests', '5 tests'), good.replace('-1', '0'),
                         good + 'INSTRUMENTATION_FAILED', good + 'FAILURES!!!',
-                        good + 'INSTRUMENTATION_RESULT: shortMsg=Process crashed'):
+                        good + 'INSTRUMENTATION_RESULT: shortMsg=Process crashed',
+                        good + 'INSTRUMENTATION_STATUS_CODE: -2', good + 'INSTRUMENTATION_STATUS_CODE: -3',
+                        good + 'INSTRUMENTATION_STATUS_CODE: -4', good.replace('OK (6 tests)', 'xOK (6 tests)y'),
+                        good.replace('INSTRUMENTATION_CODE: -1', 'INSTRUMENTATION_CODE: -10')):
                 log.write_text(bad)
                 with self.subTest(bad=bad), self.assertRaises(ValueError):
                     ci.require_instrumentation_success(log, 6)
+
+    def test_long_command_does_not_displace_the_failure(self):
+        timeout = subprocess.TimeoutExpired(['adb', 'shell', 'am', 'instrument', 'x' * 9000], 900)
+        self.assertEqual('Command timed out after 900s (adb)', ci.describe_error(timeout))
+        failed = subprocess.CalledProcessError(1, ['adb', 'x' * 9000], output=b'compile failure')
+        self.assertEqual('Command exited 1 (adb): compile failure', ci.describe_error(failed))
+
+    def test_error_excerpt_retains_real_error_and_final_progress_with_bounded_memory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory, 'run.log')
+            log.write_text('preamble\n' * 3000 +
+                'Error in production[history=1000,scenario=initialCompose]\n'
+                'java.lang.IllegalStateException: Failed to compile\ncompiler detail\n' +
+                'ordinary progress\n' * 3000 + 'INSTRUMENTATION_STATUS: current=2\n')
+            result = ci.failure_excerpt(log)
+            self.assertIn('Failed to compile', result)
+            self.assertIn('compiler detail', result)
+            self.assertIn('current=2', result)
+            self.assertLess(len(result), 2500)
+
+    def test_missing_instrumentation_log_is_explicit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertIn('No instrumentation output', ci.failure_excerpt(Path(directory, 'missing.log')))
 
     def test_source_manifest_covers_production_rendering_controller_measurement_and_font(self):
         sources = ci.source_files()

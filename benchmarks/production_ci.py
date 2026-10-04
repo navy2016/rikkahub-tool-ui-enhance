@@ -28,6 +28,39 @@ def annotation(level, title, message):
     print(f"::{level} title={title}::{text}", flush=True)
 
 
+def describe_error(error):
+    """A long instrument command must never displace the actual failure in a check annotation."""
+    if isinstance(error, subprocess.TimeoutExpired):
+        return f"Command timed out after {error.timeout:g}s ({Path(error.cmd[0]).name})"
+    if isinstance(error, subprocess.CalledProcessError):
+        output = error.output or ''
+        if isinstance(output, bytes):
+            output = output.decode(errors='replace')
+        return f"Command exited {error.returncode} ({Path(error.cmd[0]).name}): {output[-1200:]}"
+    return str(error)
+
+
+def failure_excerpt(path):
+    """Bounded-memory error contexts plus final progress, without reading a whole log into RAM."""
+    if not path.exists():
+        return 'No instrumentation output was produced.'
+    tail = deque(maxlen=12)
+    errors = deque(maxlen=20)
+    following = 0
+    markers = ('Error in production[', 'Caused by:', 'Failed to compile', 'FATAL EXCEPTION',
+               'Fixture failed:', 'INSTRUMENTATION_STATUS_CODE: -2', 'INSTRUMENTATION_FAILED', 'shortMsg=')
+    with path.open(errors='replace') as stream:
+        for line in stream:
+            line = line.rstrip()[:500]
+            tail.append(line)
+            if any(marker in line for marker in markers):
+                following = 5
+            if following:
+                errors.append(line)
+                following -= 1
+    return '\n'.join(errors)[-1600:] + '\nLast progress:\n' + '\n'.join(tail)[-800:]
+
+
 def source_files():
     build = ROOT / "benchmarks/terminal-target/build.gradle.kts"
     copied = re.findall(r'"(me/rerere/rikkahub/[^"\n]+\.kt)"', build.read_text())
@@ -139,9 +172,17 @@ def install_apk(role, out):
 
 
 def require_instrumentation_success(log, expected):
-    text = log.read_text(errors="replace")
-    if (f"OK ({expected} tests)" not in text or "INSTRUMENTATION_CODE: -1" not in text or
-            any(marker in text for marker in ("FAILURES!!!", "INSTRUMENTATION_FAILED", "Process crashed", "shortMsg="))):
+    completed = False
+    successful_exit = False
+    failed = False
+    with log.open(errors='replace') as stream:
+        for line in stream:
+            completed |= line.strip() == f'OK ({expected} tests)'
+            successful_exit |= line.strip() == 'INSTRUMENTATION_CODE: -1'
+            failed |= any(marker in line for marker in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed',
+                'shortMsg=', 'INSTRUMENTATION_STATUS_CODE: -2', 'INSTRUMENTATION_STATUS_CODE: -3',
+                'INSTRUMENTATION_STATUS_CODE: -4'))
+    if not completed or not successful_exit or failed:
         raise ValueError(f"Instrumentation did not complete {expected} successful tests")
 
 
@@ -199,11 +240,8 @@ def run_group(scenario, iterations, smoke):
         if error is not None:
             safe_diagnostic(out / "stop.log", ["adb", "shell", "am", "force-stop", driver])
     if error is not None:
-        tail = ""
-        if log.exists():
-            with log.open(errors="replace") as stream:
-                tail = "".join(deque(stream, maxlen=25))[-2200:]
-        annotation("error", "Production benchmark instrumentation failed", f"{scenario}: {error}\n{tail}")
+        annotation("error", "Production benchmark instrumentation failed",
+                   f"{scenario}: {describe_error(error)}\n{failure_excerpt(log)}")
         with (out / "logcat.txt").open(errors="replace") as stream:
             annotation("error", "Production benchmark fixture diagnostics", "".join(deque(stream, maxlen=30))[-2800:])
         raise error
@@ -244,5 +282,5 @@ if __name__ == "__main__":
     try:
         main()
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        annotation("error", "Production benchmark validation failed", str(error))
+        annotation("error", "Production benchmark validation failed", describe_error(error))
         sys.exit(1)

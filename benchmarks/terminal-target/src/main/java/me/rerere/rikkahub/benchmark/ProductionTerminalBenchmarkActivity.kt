@@ -206,6 +206,12 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
     }
 
     private suspend fun runScenario() = productionAsyncTrace("Prod.operation") {
+        // Do not spill the old Viewport into this caller's suspended continuation while a new
+        // viewport is mounted. The detach path returns only scalar saved viewport state.
+        if (scenario == "detachRestore") {
+            detachRestore()
+            return@productionAsyncTrace
+        }
         val viewport = checkNotNull(current)
         when (scenario) {
             "activeRowUpdate", "appendAndTrim" -> repeat(ProductionBenchmarkSpec.UPDATE_COUNT) { index ->
@@ -247,7 +253,6 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
                 }
             }
             "imeRoundTrip" -> imeRoundTrip(viewport)
-            "detachRestore" -> detachRestore(viewport)
             else -> error("Unsupported production operation: $scenario")
         }
     }
@@ -295,13 +300,20 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         check(terminal.rows == TerminalBenchmarkWorkload.SCREEN_ROWS)
     }
 
-    private suspend fun detachRestore(viewport: Viewport) {
+    /** Complete the old-owner continuation before creating the replacement row tree/controller. */
+    private suspend fun detachAndCapture(): TerminalViewportState {
+        val viewport = checkNotNull(current)
         val saved = viewport.save()
         productionAsyncTrace("Prod.detach") {
             current = null
             awaitCondition { !viewport.attached && viewport.measurements.retainedRows == 0 &&
                 viewport.measurements.retainedEagerHistoryRows == 0 && viewport.bound.binding.activeWriters == 0 }
         }
+        return saved
+    }
+
+    private suspend fun detachRestore() {
+        val saved = detachAndCapture()
         productionTrace("Prod.feed") {
             repeat(ProductionBenchmarkSpec.BACKGROUND_LINES) { index ->
                 terminal.feed("\r\n" + TerminalBenchmarkWorkload.line(size + TerminalBenchmarkWorkload.SCREEN_ROWS + index))

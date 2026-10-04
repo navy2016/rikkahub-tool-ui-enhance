@@ -37,6 +37,10 @@ callbacks are not proof of GPU presentation. Default eager retains its existing 
 semantics; no benchmark-only real-height table is added to the control. Existing natural-height
 instrumented tests remain separate acceptance coverage.
 
+The detach continuation completes before the replacement is allocated; only the scalar saved viewport
+state crosses that boundary. The harness does not intentionally retain the old row tree/controller
+through the remount. This is not a forced-GC or object-collection proof; heap acceptance stays separate.
+
 ## Metrics and provenance
 
 - Frame CPU duration and overrun samples (including the small native fixture controls).

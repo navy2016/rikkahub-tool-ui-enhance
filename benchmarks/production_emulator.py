@@ -143,7 +143,7 @@ def run(scenario, iterations, smoke):
             os.environ.update(PATH=env['PATH'], ANDROID_SERIAL=SERIAL)
             ci.run_group(scenario, iterations, smoke)
     except (OSError, ValueError, subprocess.SubprocessError) as error:
-        ci.annotation('error', 'Production benchmark environment failed', str(error))
+        ci.annotation('error', 'Production benchmark environment failed', ci.describe_error(error))
         if emulator_log.exists():
             with emulator_log.open('rb') as stream:
                 stream.seek(max(0, emulator_log.stat().st_size - 8192))
