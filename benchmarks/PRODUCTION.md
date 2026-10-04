@@ -43,6 +43,13 @@ through the remount. This is not a forced-GC or object-collection proof; heap ac
 
 ## Metrics and provenance
 
+The frame-history builder now shares immutable 128-ordinal blocks. A normal one-line archive reads
+one new source row; a head-only trim reads none. Changed head/tail blocks copy at most 256 retained/new
+entries, while directory construction and exact content-bound aggregation still visit O(H / 128)
+blocks. Cold creation, color/style/column invalidation and disjoint bursts still read all required
+rows. Persistent UI-list edits and eager height-prefix changes have separate costs; this does not
+make the entire append pipeline O(1). The baseline at `16ab7c0` predates this block sharing.
+
 - Frame CPU duration and overrun samples (including the small native fixture controls).
 - Cold mount and full operation latency; output-to-settled-draw, top/tail jump, keyboard show/hide,
   explicit retry, detach and restore async traces, with required per-iteration counts.

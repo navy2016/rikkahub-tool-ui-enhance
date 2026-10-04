@@ -262,8 +262,9 @@ class TerminalBenchmarkActivity : ComponentActivity() {
                             check(checkNotNull(rowSyncState).lastUsedFifoFastPath)
                             check(checkNotNull(rowSyncState).lastVisitedTextRows == TerminalBenchmarkWorkload.SCREEN_ROWS + 1)
                             check(checkNotNull(rowSyncState).lastSkippedHistoryRows == frame.historyCount - 1)
-                            // History snapshot rebuild remains O(history) on append/trim.
-                            check(terminal.lastRenderHistoryVisits == frame.historyCount)
+                            // Only the new archival source row is read; directory/boundary-block
+                            // copying still occurs inside renderFrame and remains in this timing.
+                            check(terminal.lastRenderHistoryVisits == 1)
                         }
                         "alternateScreenUpdate" -> {
                             check(terminal.lastRenderHistoryVisits == 0)

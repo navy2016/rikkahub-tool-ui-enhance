@@ -228,6 +228,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
                         check(viewport.sync.lastUsedMetadataFastPath)
                         check(viewport.sync.lastVisitedTextRows == TerminalBenchmarkWorkload.SCREEN_ROWS)
                     } else {
+                        check(terminal.lastRenderHistoryVisits == 1)
                         check(viewport.sync.lastUsedFifoFastPath)
                         check(viewport.sync.lastVisitedTextRows == TerminalBenchmarkWorkload.SCREEN_ROWS + 1)
                     }

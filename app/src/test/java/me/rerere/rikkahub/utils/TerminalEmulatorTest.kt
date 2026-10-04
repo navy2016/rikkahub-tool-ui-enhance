@@ -986,6 +986,109 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun archivalSnapshotAppendsShareBlocksAndReadOnlyNewSourceRowsAtAllSizes() {
+        for (size in listOf(1, 127, 128, 129, 1_000, 5_000, 10_000)) {
+            val terminal = TerminalEmulator(initialColumns = 40, initialRows = 6, maxScrollbackLines = size)
+            terminal.feed((0 until size + 6).joinToString("\r\n") { if (it % 7 == 0) "" else "row$it 中文" })
+            var frame = terminal.renderFrame()
+            val original = frame
+            val originalRows = frame.rows.toList()
+            val originalIds = frame.historyLineIds.toList()
+            repeat(140) { update ->
+                val old = requireNotNull(frame.ownedRows()).history
+                terminal.feed("\r\n" + if (update % 5 == 0) "" else "append$update")
+                frame = terminal.renderFrame()
+                val next = requireNotNull(frame.ownedRows()).history
+                assertEquals(1, terminal.lastRenderHistoryVisits)
+                assertEquals(size, next.size)
+                assertEquals(old.firstSequence + 1, next.firstSequence)
+                val prior = old.blocks.associateBy { it.firstSequence }
+                assertTrue(next.blocks.count { prior[it.firstSequence] !== it } <= 2)
+                if (size > 1) assertSame(old.rows.last(), next.rows[size - 2])
+                assertEquals(size, next.blocks.sumOf { it.size })
+                if (update % 32 == 0) {
+                    assertEquals(terminal.render().text, frame.rows.joinToString("\n") { it.text.text })
+                    assertEquals(terminal.contentBounds(), frame.contentBounds)
+                }
+            }
+            assertEquals(originalRows, original.rows)
+            assertEquals(originalIds, original.historyLineIds)
+        }
+    }
+
+    @Test
+    fun archivalLimitTrimsReadNoSourceRowsAndDoNotRetainRemovedPrefixes() {
+        val terminal = TerminalEmulator(initialRows = 6, maxScrollbackLines = 1_000)
+        terminal.feed((0 until 1_006).joinToString("\r\n") { "line$it" })
+        val before = terminal.renderFrame()
+        for (limit in listOf(999, 873, 872, 871, 129, 128, 127, 1)) {
+            terminal.setMaxScrollbackLines(limit)
+            val next = terminal.renderFrame()
+            val snapshot = requireNotNull(next.ownedRows()).history
+            assertEquals(0, terminal.lastRenderHistoryVisits)
+            assertEquals(before.historyLineIds.takeLast(limit), next.historyLineIds)
+            assertEquals(limit, snapshot.blocks.sumOf { it.size })
+            assertTrue(snapshot.blocks.all { it.firstSequence >= snapshot.firstSequence })
+            assertEquals(terminal.contentBounds(), next.contentBounds)
+        }
+        assertEquals(1_000, before.historyCount)
+    }
+
+    @Test
+    fun archivalStyleAndColumnChangesRebuildEveryRowButPreservePublishedSnapshots() {
+        val terminal = TerminalEmulator(initialColumns = 40, initialRows = 6, maxScrollbackLines = 260)
+        terminal.feed((0 until 266).joinToString("\r\n") { "\u001B[32mrow$it\u001B[0m" })
+        val edits: List<(TerminalEmulator) -> Unit> = listOf(
+            { it.feed("\u001B[?5h") }, { it.feed("\u001B[?5l") },
+            { it.feed("\u001B]10;rgb:ffff/0000/0000\u0007") },
+            { it.feed("\u001B]4;2;rgb:0000/0000/ffff\u0007") },
+            { it.feed("\u001B]104;2\u0007") },
+            { it.resize(20, 6) }, { it.resize(60, 8) },
+        )
+        for (edit in edits) {
+            val before = terminal.renderFrame()
+            val old = requireNotNull(before.ownedRows()).history
+            val oldRows = before.rows.toList()
+            edit(terminal)
+            val next = terminal.renderFrame()
+            assertEquals(next.historyCount, terminal.lastRenderHistoryVisits)
+            assertEquals(oldRows, before.rows)
+            assertEquals(before.historyLineIds, next.historyLineIds)
+            assertTrue(requireNotNull(next.ownedRows()).history.blocks.none { block -> old.blocks.any { it === block } })
+            assertEquals(terminal.render().text, next.rows.joinToString("\n") { it.text.text })
+            assertEquals(terminal.contentBounds(), next.contentBounds)
+        }
+    }
+
+    @Test
+    fun archivalClearAndBurstResetOwnershipWithoutLosingNonMonotonicIds() {
+        val terminal = TerminalEmulator(initialColumns = 20, initialRows = 6, maxScrollbackLines = 129)
+        terminal.feed("\u001B[H\u001BM\u001B[6;1H" + (0 until 132).joinToString("\r\n") { "r$it" })
+        val before = terminal.renderFrame()
+        terminal.feed((0 until 400).joinToString("\r\n", prefix = "\r\n") { "burst$it" })
+        val burst = terminal.renderFrame()
+        assertEquals(129, terminal.lastRenderHistoryVisits)
+        assertEquals(before.historyGeneration, burst.historyGeneration)
+        assertEquals(terminal.render().text, burst.rows.joinToString("\n") { it.text.text })
+        terminal.clearScrollbackOnly()
+        val cleared = terminal.renderFrame()
+        assertEquals(0, cleared.historyCount)
+        assertTrue(requireNotNull(cleared.ownedRows()).history.blocks.isEmpty())
+        assertTrue(cleared.historyGeneration != burst.historyGeneration)
+        terminal.feed("\r\none")
+        val new = terminal.renderFrame()
+        assertEquals(1, terminal.lastRenderHistoryVisits)
+        assertEquals(1, new.historyCount)
+        assertEquals(129, before.historyCount)
+        terminal.feed("\u001B[?1049hALT")
+        assertEquals(0, terminal.renderFrame().historyCount)
+        assertEquals(0, terminal.lastRenderHistoryVisits)
+        terminal.feed("\u001B[?1049l")
+        assertSame(requireNotNull(new.ownedRows()).history, requireNotNull(terminal.renderFrame().ownedRows()).history)
+        assertEquals(0, terminal.lastRenderHistoryVisits)
+    }
+
+    @Test
     fun oldFramesRemainImmutableAcrossEveryHistoryInvalidation() {
         val terminal = TerminalEmulator(initialColumns = 40, initialRows = 6, maxScrollbackLines = 140)
         terminal.feed((0 until 150).joinToString("\r\n") { if (it % 5 == 0) "" else "row $it" })

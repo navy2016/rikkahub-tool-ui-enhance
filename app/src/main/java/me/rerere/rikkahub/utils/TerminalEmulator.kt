@@ -767,30 +767,17 @@ class TerminalEmulator(
 
     private fun historySnapshot(): TerminalHistorySnapshot {
         val firstSequence = scrollback.firstOrNull()?.archiveSequence ?: nextHistorySequence
-        cachedHistorySnapshot?.let { cached ->
-            if (cached.generation == historyGeneration && cached.renderRevision == scrollbackRenderStyleRevision &&
-                cached.firstSequence == firstSequence && cached.rows.size == scrollback.size
-            ) return cached
-        }
-        val rendered = ArrayList<RenderedRow>(scrollback.size)
-        val ids = ArrayList<Long>(scrollback.size)
-        var first: Int? = null
-        var last: Int? = null
-        var count = 0
-        scrollback.forEachIndexed { index, line ->
-            lastRenderHistoryVisits++
-            rendered.add(renderScrollbackLine(line))
-            ids.add(line.id)
-            if (line.isNotBlank) {
-                if (first == null) first = index
-                last = index
-                count++
-            }
-        }
-        return TerminalHistorySnapshot(
+        return TerminalHistorySnapshot.build(
             frameOwner, historyGeneration, scrollbackRenderStyleRevision, firstSequence,
-            rendered, ids, ContentBounds(first, last, count),
-        ).also { cachedHistorySnapshot = it }
+            scrollback.size, cachedHistorySnapshot,
+        ) { index ->
+            // Kotlin ArrayDeque has O(1) indexed access. The builder requests only new ordinals;
+            // retained blocks and boundary rows come from the previous immutable snapshot.
+            val line = scrollback[index]
+            check(line.archiveSequence == firstSequence + index)
+            lastRenderHistoryVisits++
+            TerminalHistorySnapshotRow(renderScrollbackLine(line), line.id, line.isNotBlank)
+        }.also { cachedHistorySnapshot = it }
     }
 
     /** Alternate-scroll wheel maps to cursor key sequences (still ASCII/keyboard emulation). */
@@ -832,9 +819,8 @@ class TerminalEmulator(
     fun renderFrame(includeScrollback: Boolean = true): RenderFrame {
         val includeHistory = includeScrollback && !alternateScreen
         lastRenderHistoryVisits = 0
-        val history = if (includeHistory) historySnapshot() else TerminalHistorySnapshot(
+        val history = if (includeHistory) historySnapshot() else TerminalHistorySnapshot.empty(
             frameOwner, historyGeneration, scrollbackRenderStyleRevision, nextHistorySequence,
-            emptyList(), emptyList(), ContentBounds(null, null, 0),
         )
         val screenStartRow = history.rows.size
         val screenRows = ArrayList<RenderedRow>(rows)

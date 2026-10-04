@@ -5,6 +5,9 @@
 > decisions below are archived context, not a description of today's virtual-history integration.
 > In particular, production now offers explicit virtual history; its current interaction/IME/height
 > binding is measured only by the new suite. Do not mix the two contracts or their measurements.
+> After the `16ab7c0` baseline, the frame-history builder gained immutable block sharing: normal
+> single-line archives read one source row, not H. Older O(H) frame-scan descriptions below refer
+> to the recorded implementation at that time; current complexity is documented in PRODUCTION.md.
 
 ## Scope
 
