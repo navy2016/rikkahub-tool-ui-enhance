@@ -2,13 +2,19 @@ package me.rerere.rikkahub.data.container
 
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import me.rerere.rikkahub.ui.pages.container.TERMINAL_HISTORY_CHUNK_ROWS
 import me.rerere.rikkahub.ui.pages.container.terminalHistoryChunks
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRowsSyncState
 import me.rerere.rikkahub.ui.pages.container.synchronizeTerminalRenderedRows
+import me.rerere.rikkahub.ui.pages.container.terminalUsesBasicText
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,6 +25,34 @@ import org.junit.Test
 import kotlin.random.Random
 
 class TerminalRenderedRowsTest {
+    @Test fun basicTextGateKeepsContentColorBrushAndComposeLinksOnMaterial() {
+        val text = AnnotatedString("sample")
+        val explicit = TextStyle(color = Color.Green)
+        assertTrue(terminalUsesBasicText(text, explicit))
+        assertTrue(terminalUsesBasicText(text, explicit.copy(color = Color.Transparent)))
+        assertFalse(terminalUsesBasicText(text, TextStyle.Default))
+        assertFalse(terminalUsesBasicText(text, TextStyle(brush = Brush.linearGradient(listOf(Color.Red, Color.Blue)))))
+        val linked = buildAnnotatedString {
+            withLink(LinkAnnotation.Url("https://example.invalid/terminal")) { append("sample") }
+        }
+        assertFalse(terminalUsesBasicText(linked, explicit))
+        assertFalse(terminalUsesBasicText(linked, TextStyle.Default))
+        assertTrue(terminalUsesBasicText(AnnotatedString(""), explicit))
+    }
+
+    @Test fun preStyledEmulatorUrlAnnotationsKeepTheirFastPathAndMetadata() {
+        val terminal = TerminalEmulator(80, 6)
+        terminal.feed("\u001B[?25l\u001B[1;31mANSI\u001B[0m " +
+            "\u001B]8;;https://example.invalid/terminal\u001B\\link\u001B]8;;\u001B\\")
+        val text = terminal.renderFrame().rows.first().text
+        val urls = text.getStringAnnotations("URL", 0, text.length)
+        assertEquals(1, urls.size)
+        assertEquals("https://example.invalid/terminal", urls.single().item)
+        assertFalse(text.hasLinkAnnotations(0, text.length))
+        assertTrue(text.spanStyles.isNotEmpty())
+        assertTrue(terminalUsesBasicText(text, TextStyle(color = Color.Green)))
+    }
+
     @Test
     fun unchangedIdsOnlyUpdateTextWithoutReplacingTheListOrRows() {
         val rows = createTerminalRenderedRows(frame(10L to "history", 30L to "prompt"))

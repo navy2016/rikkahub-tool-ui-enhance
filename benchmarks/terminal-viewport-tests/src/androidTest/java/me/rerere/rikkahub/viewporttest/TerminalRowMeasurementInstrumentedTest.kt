@@ -3,6 +3,7 @@ package me.rerere.rikkahub.viewporttest
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReusableContent
@@ -14,6 +15,7 @@ import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -56,7 +58,7 @@ class TerminalRowMeasurementInstrumentedTest {
     @get:Rule val timeout = Timeout.seconds(45)
 
     private val base = TerminalEmulator(80, 6).renderFrame()
-    private val style = TextStyle(fontFamily = JetbrainsMono, fontSize = 14.sp, lineHeight = 14.sp,
+    private val style = TextStyle(color = Color.Green, fontFamily = JetbrainsMono, fontSize = 14.sp, lineHeight = 14.sp,
         platformStyle = PlatformTextStyle(includeFontPadding = false),
         lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both))
 
@@ -82,7 +84,7 @@ class TerminalRowMeasurementInstrumentedTest {
         Box(Modifier.layout { measurable, constraints ->
             val child = measurable.measure(constraints)
             layout(child.width, child.height) { child.place(0, 0) }
-        }) { TerminalRenderedRow(row, textStyle) }
+        }) { Text(text = row.text, style = textStyle, softWrap = false, maxLines = 1) }
     }
 
     @Test fun measurementNodeMatchesLegacyMinimumConstraintsRtlAndStyledTextGeometry() {

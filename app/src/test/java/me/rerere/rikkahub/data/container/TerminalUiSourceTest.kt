@@ -86,8 +86,9 @@ class TerminalUiSourceTest {
         assertFalse(lazyMeasurementsSource.contains("Snapshot.withoutReadObservation"))
         assertTrue(lazyMeasurementsSource.contains("MutableSharedFlow<Unit>"))
         assertFalse(lazyMeasurementsSource.contains("runCatching"))
-        assertTrue(renderedRowsSource.contains("BasicText(text = state.text"))
-        assertFalse(renderedRowsSource.lines().any { it.trimStart().startsWith("Text(text = state.text") })
+        assertTrue(renderedRowsSource.contains("if (terminalUsesBasicText(text, style))"))
+        assertTrue(renderedRowsSource.contains("BasicText(text = text, modifier = modifier"))
+        assertTrue(renderedRowsSource.contains("Text(text = text, modifier = modifier"))
         assertEquals(TerminalRenderMode.CHUNKED_LAYERS, TerminalRenderMode.DEFAULT)
     }
 

@@ -15,6 +15,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import me.rerere.rikkahub.data.container.buildLineIdsFromFrame
@@ -334,18 +335,25 @@ internal fun TerminalRenderedRows(
     }
 }
 
+/** Keep Material's content-color fallback and LinkAnnotation styling/interaction when needed. */
+internal fun terminalUsesBasicText(text: AnnotatedString, style: TextStyle): Boolean =
+    style.color.isSpecified && !text.hasLinkAnnotations(0, text.length)
+
 @Composable
 internal fun TerminalRenderedRow(
     state: TerminalRenderedRowState,
     style: TextStyle,
     modifier: Modifier = Modifier,
 ) {
-    // TerminalEmulator already encodes hyperlink color/underline in SpanStyle and keeps URL as a
-    // plain StringAnnotation. Material Text's AnnotatedString overload installs link-style
-    // machinery for LinkAnnotation and a non-null layout callback even when terminal rows do not
-    // contain LinkAnnotation. BasicText preserves the exact AnnotatedString geometry/semantics
-    // while avoiding that per-row Material wrapper on the hot eager and lazy paths.
-    BasicText(text = state.text, modifier = modifier, style = style, softWrap = false, maxLines = 1)
+    // Emulator URLs are already styled spans + StringAnnotation, not Compose LinkAnnotation.
+    // The hot path uses the same underlying text renderer without Material's per-row link-style
+    // wrapper/empty layout callback. Do not replace Material's unspecified-color or link behavior.
+    val text = state.text
+    if (terminalUsesBasicText(text, style)) {
+        BasicText(text = text, modifier = modifier, style = style, softWrap = false, maxLines = 1)
+    } else {
+        Text(text = text, modifier = modifier, style = style, softWrap = false, maxLines = 1)
+    }
 }
 
 internal const val TERMINAL_HISTORY_CHUNK_ROWS = 128

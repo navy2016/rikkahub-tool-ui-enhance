@@ -96,6 +96,8 @@ jobs:
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest \
             --require-case-group 'measurementNode:5' \
+            --require-suite me.rerere.rikkahub.viewporttest.TerminalTextCompatibilityInstrumentedTest \
+            --require-case-group 'terminalText:3' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest \
             --require-case-group 'itemNative:20' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest \
