@@ -120,6 +120,17 @@ work. This benchmark does not claim those end-to-end checks or change any status
   tests and 12 production-scenario smoke cases passed. This establishes behavior and incremental
   source-read counts, not a controlled before/after timing or memory improvement. Its snapshot
   directory remains O(H / 128), and cold/style invalidations still read all required rows.
+- [7a1d711 full V1 baseline](results/7a1d711-production-viewport-ci.md), run `37219099548`:
+  36 cases / 108 measured iterations passed. The JSON archive includes each scenario's original
+  manifest, source/APK hashes, AndroidX device context and input-method identity, recovered by a
+  read-only evidence workflow and integrity-checked before archiving. Do not mix it with V2.
+- `11d96be` mounted-session width retention: 328 application Release JVM tests, 90 viewport
+  instrumented tests and 12 production V1 smoke cases passed. Real-keyboard tests assert unchanged
+  history is not remeasured after explicit retry, fallback performs no virtual width measurement,
+  new archives are measured once, and disposal releases candidates/font/source ownership.
+- `64df33d` changes only benchmark/diagnostic code relative to `11d96be`; production app and build
+  inputs are unchanged. Its V2 completion protocol passes 25 fixture JVM cases and 12 production
+  smoke cases. The Release APK also passed independent manifest/signature/ZIP/ABI/hash verification.
 
 The scalar width index now belongs to the mounted production viewport binding. Compatibility
 fallback retains only width candidates and source/font validity metadata; it measures no virtual

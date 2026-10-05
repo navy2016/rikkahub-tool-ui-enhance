@@ -293,6 +293,11 @@ matrix accessible via the check-run API when artifact/blob downloads fail. Missi
 
 ## Recorded baselines
 
+- [7a1d711: immutable snapshot blocks, complete production V1 baseline](results/7a1d711-production-viewport-ci.md)
+  — 36 cases / 108 measured iterations passed, including original per-scenario source/APK hashes
+  and device/input-method context in the JSON archive. This is not a V2 completion-protocol baseline
+  and cannot be used for a cross-run percentage comparison.
+
 - [16ab7c0: complete production viewport/controller baseline](results/16ab7c0-production-viewport-ci.md)
   — 36 cases / 108 measured iterations across six independently paired scenario groups passed.
   Includes real IME fallback/retry and remount; predates immutable historical block sharing.

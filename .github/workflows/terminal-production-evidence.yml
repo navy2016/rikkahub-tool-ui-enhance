@@ -79,13 +79,17 @@ jobs:
               assert request['sourceSha'] == manifest['sourceSha'] == os.environ['SOURCE_SHA']
               assert request['runId'] == manifest['buildRun'] == os.environ['SOURCE_RUN']
               contexts = []
+              result_files = {}
               for path in folder.rglob('*-benchmarkData.json'):
                   doc = json.loads(path.read_text())
+                  result_files[str(path.relative_to(folder))] = hashlib.sha256(path.read_bytes()).hexdigest()
                   if doc.get('context') not in contexts:
                       contexts.append(doc.get('context'))
               validated = folder / 'validated.json'
+              summary = folder / 'summary.md'
               evidence = dict(request=request, manifest=manifest, device=(folder / 'device.txt').read_text(),
-                  contexts=contexts, validated=json.loads(validated.read_text()) if validated.exists() else None)
+                  contexts=contexts, validated=json.loads(validated.read_text()) if validated.exists() else None,
+                  result_files=result_files, summary=summary.read_text() if summary.exists() else None)
               group = request['groupId']
               (output / (group + '.json')).write_text(json.dumps(evidence, indent=2) + '\n')
               data = json.dumps(evidence, separators=(',', ':')).encode()
