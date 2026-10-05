@@ -1,17 +1,18 @@
 name: Terminal Production Evidence
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       run_id:
         description: Completed production benchmark workflow run
         required: true
+        type: string
       source_sha:
         description: Exact source SHA from that run
         required: true
+        type: string
       scenario:
-        type: choice
-        options: [all, initialCompose, activeRowUpdate, appendAndTrim, semanticJump, imeRoundTrip, detachRestore]
+        type: string
         default: all
 
 permissions:
@@ -37,6 +38,8 @@ jobs:
           run_id, sha = os.environ['SOURCE_RUN'], os.environ['SOURCE_SHA']
           assert re.fullmatch(r'[0-9]+', run_id)
           assert re.fullmatch(r'[a-f0-9]{40}', sha)
+          assert os.environ['SCENARIO'] in ('all', 'initialCompose', 'activeRowUpdate', 'appendAndTrim',
+              'semanticJump', 'imeRoundTrip', 'detachRestore')
           run = json.loads(subprocess.check_output(['gh', 'api',
               f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{run_id}']))
           assert run['head_sha'] == sha and run['status'] == 'completed'

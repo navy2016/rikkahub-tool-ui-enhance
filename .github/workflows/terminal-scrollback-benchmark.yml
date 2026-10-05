@@ -17,6 +17,18 @@ on:
         required: false
         default: ''
         type: string
+      evidence_run_id:
+        description: 'Optional: read original scenario provenance and bounded failure excerpts; skips building'
+        type: string
+        default: ''
+      evidence_sha:
+        description: 'Exact 40-character source SHA of evidence_run_id'
+        type: string
+        default: ''
+      evidence_scenario:
+        type: choice
+        options: [all, initialCompose, activeRowUpdate, appendAndTrim, semanticJump, imeRoundTrip, detachRestore]
+        default: all
   # Archived renderer-only experiments stay manually runnable. Automatic regression now uses
   # terminal-production-benchmark.yml and the actual production viewport/controller.
 
@@ -25,6 +37,13 @@ permissions:
   actions: read
 
 jobs:
+  evidence:
+    if: ${{ inputs.evidence_run_id != '' }}
+    uses: ./.github/workflows/terminal-production-evidence.yml
+    with:
+      run_id: ${{ inputs.evidence_run_id }}
+      source_sha: ${{ inputs.evidence_sha }}
+      scenario: ${{ inputs.evidence_scenario }}
   diagnose:
     if: ${{ inputs.diagnose_job_id != '' }}
     runs-on: ubuntu-latest
@@ -87,7 +106,7 @@ jobs:
               core.notice(text.slice(-2800), {title: `Benchmark bounded job ${section}`});
             }
   benchmark:
-    if: ${{ inputs.diagnose_job_id == '' }}
+    if: ${{ inputs.diagnose_job_id == '' && inputs.evidence_run_id == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
