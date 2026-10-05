@@ -43,6 +43,10 @@ class TerminalUiSourceTest {
         File("app/src/main/java/me/rerere/rikkahub/data/container/BackgroundProcessManager.kt"),
         File("src/main/java/me/rerere/rikkahub/data/container/BackgroundProcessManager.kt")
     ).first { it.isFile }.readText()
+    private val renderedRowsSource = listOf(
+        File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt"),
+        File("src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt"),
+    ).first { it.isFile }.readText()
 
     @Test
     fun terminalKeysSupportCustomLabelsAndShiftLatch() {
