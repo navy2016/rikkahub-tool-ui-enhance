@@ -159,3 +159,9 @@ clears its retained state. No full Text layout or Paragraph is cached, and IME f
 until explicit retry. Production IME and detach scenarios assert these properties through cumulative
 work counters and disposal checks; `Prod.widthMeasuredHistory` / `Prod.widthMeasuredScreen` are trace
 counters, not timing estimates. Cold mount and remount still require a full width scan.
+
+The follow-up measurement-node optimization is recorded in [419636a IME results](results/419636a-ime-v2.md).
+It removes the per-row eager measurement wrapper and passes 95 viewport tests, including geometry,
+intrinsic, owner replacement and pooled-content release. Its 10k IME run reports 0.55 ms width work,
+but 6122.77 ms show/fallback and 8360.06 ms total virtual operation on an independent Runner. The
+remaining bottleneck is the eager fallback row-tree measurement/layout and handoff, not the width index.

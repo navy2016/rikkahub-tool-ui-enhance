@@ -293,6 +293,11 @@ matrix accessible via the check-run API when artifact/blob downloads fail. Missi
 
 ## Recorded baselines
 
+- [419636a: reusable row measurement node](results/419636a-ime-v2.md)
+  — 95 viewport tests and a complete 1k/5k/10k IME scenario passed. The per-row eager measurement
+  wrapper was replaced while preserving natural geometry and owner-release semantics. The report is
+  a diagnostic single-scenario run, not a cross-Runner performance comparison.
+
 - [64df33d: session width retention, complete production V2 baseline](results/64df33d-production-viewport-ci.md)
   — 36 cases / 108 measured iterations passed, with launch-bound completion receipts and original
   per-scenario phase/transition tables and provenance. Unchanged history is not remeasured on IME
