@@ -82,6 +82,8 @@ class TerminalUiSourceTest {
         assertFalse(lazyMeasurementsSource.contains("Snapshot.withoutReadObservation"))
         assertTrue(lazyMeasurementsSource.contains("MutableSharedFlow<Unit>"))
         assertFalse(lazyMeasurementsSource.contains("runCatching"))
+        assertTrue(renderedRowsSource.contains("BasicText(text = state.text"))
+        assertFalse(renderedRowsSource.contains("Text(text = state.text"))
         assertEquals(TerminalRenderMode.CHUNKED_LAYERS, TerminalRenderMode.DEFAULT)
     }
 

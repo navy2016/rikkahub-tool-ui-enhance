@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.container
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -339,7 +340,12 @@ internal fun TerminalRenderedRow(
     style: TextStyle,
     modifier: Modifier = Modifier,
 ) {
-    Text(text = state.text, modifier = modifier, style = style, softWrap = false, maxLines = 1)
+    // TerminalEmulator already encodes hyperlink color/underline in SpanStyle and keeps URL as a
+    // plain StringAnnotation. Material Text's AnnotatedString overload installs link-style
+    // machinery for LinkAnnotation and a non-null layout callback even when terminal rows do not
+    // contain LinkAnnotation. BasicText preserves the exact AnnotatedString geometry/semantics
+    // while avoiding that per-row Material wrapper on the hot eager and lazy paths.
+    BasicText(text = state.text, modifier = modifier, style = style, softWrap = false, maxLines = 1)
 }
 
 internal const val TERMINAL_HISTORY_CHUNK_ROWS = 128
