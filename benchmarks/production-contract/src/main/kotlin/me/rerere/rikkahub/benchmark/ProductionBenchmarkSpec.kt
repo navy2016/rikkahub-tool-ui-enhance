@@ -2,8 +2,13 @@ package me.rerere.rikkahub.benchmark
 
 /** Shared by the target and its driver; no Android or renderer implementation lives here. */
 internal object ProductionBenchmarkSpec {
-    const val VERSION = "production-viewport-v1"
+    const val VERSION = "production-viewport-v2"
+    const val PHASE_TOKEN = "production.phase.token"
+    const val PHASE_VALUE = "production.phase.value"
     const val PACKAGE = "me.rerere.rikkahub.terminalbenchmark"
+    const val DRIVER_PACKAGE = "$PACKAGE.test"
+    const val PHASE_ACTION = "$PACKAGE.PROGRESS"
+    const val PHASE_PERMISSION = "$PACKAGE.permission.PROGRESS"
     const val ACTIVITY = "me.rerere.rikkahub.benchmark.ProductionTerminalBenchmarkActivity"
     const val UPDATE_COUNT = 30
     const val IME_UPDATE_COUNT = 8

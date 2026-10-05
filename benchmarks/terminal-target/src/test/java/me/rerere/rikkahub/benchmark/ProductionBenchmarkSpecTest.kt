@@ -37,4 +37,41 @@ class ProductionBenchmarkSpecTest {
         assertThrows(IllegalArgumentException::class.java) { ProductionBenchmarkSpec.validate(1000, "old", "lazyHistory") }
         assertThrows(IllegalArgumentException::class.java) { ProductionBenchmarkSpec.validate(1000, "initialCompose", "eager") }
     }
+
+    @Test fun phaseReceiptsAreDurableBeforeWaitAndCannotAcceptAnotherLaunch() {
+        val progress = ProductionBenchmarkProgress("new-launch")
+        assertTrue(!progress.accept("old-launch", "done"))
+        assertTrue(!progress.await("prepared", 0))
+        for (phase in listOf("prepared", "mounted", "done")) {
+            assertTrue(progress.accept("new-launch", phase))
+            assertTrue(progress.accept("new-launch", phase)) // Duplicate delivery does not advance.
+        }
+        for (phase in listOf("prepared", "mounted", "done")) assertTrue(progress.await(phase, 0))
+        assertEquals("done", progress.currentPhase)
+    }
+
+    @Test fun missingOutOfOrderAndFailedPhasesNeverReportCompletion() {
+        for (bad in listOf("done", "mounted", "unknown", "failed:viewport assertion")) {
+            val progress = ProductionBenchmarkProgress("launch")
+            assertTrue(progress.accept("launch", bad))
+            for (phase in listOf("prepared", "mounted", "done")) {
+                assertThrows(IllegalStateException::class.java) { progress.await(phase, 0) }
+            }
+        }
+        val progress = ProductionBenchmarkProgress("launch")
+        assertTrue(progress.accept("launch", "prepared"))
+        assertTrue(!progress.await("mounted", 0))
+        progress.accept("launch", "failed:layout")
+        assertThrows(IllegalStateException::class.java) { progress.await("prepared", 0) }
+    }
+
+    @Test fun asynchronousReceiptWakesTheDriverWithoutPollingTheUiTree() {
+        val progress = ProductionBenchmarkProgress("launch")
+        val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val result = executor.submit<Boolean> { progress.await("prepared", 5_000) }
+            assertTrue(progress.accept("launch", "prepared"))
+            assertTrue(result.get(5, java.util.concurrent.TimeUnit.SECONDS))
+        } finally { executor.shutdownNow() }
+    }
 }

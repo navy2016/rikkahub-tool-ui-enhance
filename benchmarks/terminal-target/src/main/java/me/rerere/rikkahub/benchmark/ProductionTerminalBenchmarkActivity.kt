@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.benchmark
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import android.os.Trace
@@ -101,6 +102,7 @@ import kotlin.coroutines.resume
 class ProductionTerminalBenchmarkActivity : ComponentActivity() {
     private lateinit var terminal: TerminalEmulator
     private lateinit var status: TextView
+    private lateinit var phaseToken: String
     private lateinit var output: ComposeView
     private var current by mutableStateOf<Viewport?>(null, referentialEqualityPolicy())
     private var busy = true
@@ -122,6 +124,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         scenario = intent.getStringExtra("scenario") ?: "initialCompose"
         val modeId = intent.getStringExtra("renderer") ?: "chunkedLayers"
         ProductionBenchmarkSpec.validate(size, scenario, modeId)
+        phaseToken = checkNotNull(intent.getStringExtra(ProductionBenchmarkSpec.PHASE_TOKEN))
         mode = TerminalRenderMode.fromId(modeId)
         val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         status = TextView(this).apply { id = R.id.benchmark_status; text = "preparing" }
@@ -159,7 +162,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         lifecycleScope.launch {
             terminal = withContext(Dispatchers.Default) { TerminalBenchmarkWorkload.prepare(size) }
             busy = false
-            status.text = "prepared"
+            publishPhase("prepared")
         }
     }
 
@@ -170,7 +173,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         lifecycleScope.launch(AndroidUiDispatcher.Main) {
             try {
                 withTimeout(120_000) { block() }
-                status.text = done
+                publishPhase(done)
                 Log.i("ProductionTerminalBenchmark", "validated size=$size scenario=$scenario mode=${mode.id} phase=$done")
             } catch (error: TimeoutCancellationException) {
                 fail(error)
@@ -184,7 +187,16 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
 
     private fun fail(error: Exception) {
         Log.e("ProductionTerminalBenchmark", "Fixture failed: size=$size scenario=$scenario mode=${mode.id}", error)
-        status.text = "failed:${error.javaClass.simpleName}:${error.message}"
+        publishPhase("failed:${error.javaClass.simpleName}:${error.message}")
+    }
+
+    /** A receipt reports completed validation; it never drives or substitutes for viewport work. */
+    private fun publishPhase(phase: String) {
+        status.text = phase // Visible diagnostics remain useful, but accessibility is not a latch.
+        sendBroadcast(Intent(ProductionBenchmarkSpec.PHASE_ACTION)
+            .setPackage(ProductionBenchmarkSpec.DRIVER_PACKAGE)
+            .putExtra(ProductionBenchmarkSpec.PHASE_TOKEN, phaseToken)
+            .putExtra(ProductionBenchmarkSpec.PHASE_VALUE, phase), ProductionBenchmarkSpec.PHASE_PERMISSION)
     }
 
     private suspend fun mount() = productionAsyncTrace("Prod.mountToSettledDraw") {

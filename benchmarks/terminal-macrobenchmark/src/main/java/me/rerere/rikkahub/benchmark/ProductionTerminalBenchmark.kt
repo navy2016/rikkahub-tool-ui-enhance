@@ -1,7 +1,13 @@
 package me.rerere.rikkahub.benchmark
 
+import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.benchmark.macro.CompilationMode
 import androidx.benchmark.macro.ExperimentalMetricApi
 import androidx.benchmark.macro.FrameTimingMetric
@@ -13,11 +19,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
-import java.util.regex.Pattern
+import java.util.UUID
 
 /** Each invocation is one complete scenario, ALL selected sizes and BOTH actual production modes. */
 @LargeTest
@@ -35,6 +42,38 @@ class ProductionTerminalBenchmark(private val history: Int, private val scenario
     }
 
     @get:Rule val benchmark = MacrobenchmarkRule()
+    private lateinit var progress: ProductionBenchmarkProgress
+    private var phaseReceiver: BroadcastReceiver? = null
+
+    @After fun closePhaseReceiver() {
+        phaseReceiver?.let { InstrumentationRegistry.getInstrumentation().context.unregisterReceiver(it) }
+        phaseReceiver = null
+    }
+
+    private fun newPhaseReceiver(token: String) {
+        closePhaseReceiver()
+        val receipt = ProductionBenchmarkProgress(token)
+        progress = receipt
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == ProductionBenchmarkSpec.PHASE_ACTION) receipt.accept(
+                    intent.getStringExtra(ProductionBenchmarkSpec.PHASE_TOKEN),
+                    intent.getStringExtra(ProductionBenchmarkSpec.PHASE_VALUE))
+            }
+        }
+        val context = InstrumentationRegistry.getInstrumentation().context
+        check(context.packageName == ProductionBenchmarkSpec.DRIVER_PACKAGE)
+        val filter = IntentFilter(ProductionBenchmarkSpec.PHASE_ACTION)
+        val handler = Handler(Looper.getMainLooper())
+        if (Build.VERSION.SDK_INT >= 33) {
+            context.registerReceiver(receiver, filter, ProductionBenchmarkSpec.PHASE_PERMISSION, handler,
+                Context.RECEIVER_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            context.registerReceiver(receiver, filter, ProductionBenchmarkSpec.PHASE_PERMISSION, handler)
+        }
+        phaseReceiver = receiver
+    }
 
     @Test fun production() {
         val arguments = InstrumentationRegistry.getArguments()
@@ -78,22 +117,26 @@ class ProductionTerminalBenchmark(private val history: Int, private val scenario
             iterations = iterations,
             setupBlock = {
                 killProcess()
+                // Fresh receiver + nonce per Activity launch: old or cached completion cannot pass.
+                val token = UUID.randomUUID().toString()
+                newPhaseReceiver(token)
                 startActivityAndWait(Intent().apply {
                     component = ComponentName(ProductionBenchmarkSpec.PACKAGE, ProductionBenchmarkSpec.ACTIVITY)
                     putExtra("history_rows", history)
                     putExtra("scenario", scenario)
                     putExtra("renderer", mode)
+                    putExtra(ProductionBenchmarkSpec.PHASE_TOKEN, token)
                 })
-                device.awaitPhase("prepared")
+                awaitPhase("prepared")
                 if (scenario != "initialCompose") {
                     device.clickControl("benchmark_mount")
-                    device.awaitPhase("mounted")
+                    awaitPhase("mounted")
                 }
                 device.waitForIdle()
             },
             measureBlock = {
                 device.clickControl(if (scenario == "initialCompose") "benchmark_mount" else "benchmark_run")
-                device.awaitPhase(if (scenario == "initialCompose") "mounted" else "done")
+                awaitPhase(if (scenario == "initialCompose") "mounted" else "done")
                 device.waitForIdle()
             },
         )
@@ -105,12 +148,9 @@ class ProductionTerminalBenchmark(private val history: Int, private val scenario
         }.click()
     }
 
-    private fun UiDevice.awaitPhase(phase: String) {
-        val expected = Pattern.compile(Pattern.quote(phase) + "|failed:.*", Pattern.DOTALL)
-        val status = checkNotNull(wait(Until.findObject(
-            By.res(ProductionBenchmarkSpec.PACKAGE, "benchmark_status").text(expected)), 150_000)) {
-            "Production viewport timed out: $history/$scenario/$mode/$phase"
+    private fun awaitPhase(phase: String) {
+        check(progress.await(phase, 150_000)) {
+            "Production viewport timed out: $history/$scenario/$mode/$phase; last=${progress.currentPhase}"
         }
-        check(status.text == phase) { "Production viewport failed: $history/$scenario/$mode/${status.text}" }
     }
 }

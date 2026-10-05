@@ -1,7 +1,7 @@
 # Production viewport benchmark
 
 This is the current production-component benchmark, distinct from the archived renderer-only
-experiments in README.md. Contract: `production-viewport-v1`. No old measurements are relabelled.
+experiments in README.md. Contract: `production-viewport-v2`. No old measurements are relabelled.
 
 ## What is measured
 
@@ -36,6 +36,15 @@ draw confirmations. The wait/validation cost is included equally and is not subt
 callbacks are not proof of GPU presentation. Default eager retains its existing cell-based position
 semantics; no benchmark-only real-height table is added to the control. Existing natural-height
 instrumented tests remain separate acceptance coverage.
+
+V2 observes completion with a per-launch, nonce-bound, signature-permission-protected broadcast to
+the driver. The receiver is installed before launch and removed between launches and after the test;
+its durable latches reject out-of-order phases, stale launches and fixture failures. Only validated
+completion sends `mounted` / `done`; UIAutomator still clicks the native controls, but an accessibility
+cache can no longer hide a completed status text. This changes completion-observer overhead and
+requires a separate V2 baseline. V1 run `37220612385` failed its 5k IME case even though target PID 4037
+logged `done` at 17:46:16.811 and the driver timed out at 17:48:36.477. That failed invocation remains
+diagnostic evidence, not an accepted baseline. No timeout, production scroll or IME policy was changed.
 
 The detach continuation completes before the replacement is allocated; only the scalar saved viewport
 state crosses that boundary. The harness does not intentionally retain the old row tree/controller

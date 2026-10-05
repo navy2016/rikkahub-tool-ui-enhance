@@ -8,7 +8,7 @@ from pathlib import Path
 
 from summarize import format_number, median, overrun_percent, per_operation, percentile
 
-VERSION = "production-viewport-v1"
+VERSION = "production-viewport-v2"
 SIZES = (1000, 5000, 10000)
 MODES = ("chunkedLayers", "lazyHistory")
 SCENARIOS = ("initialCompose", "activeRowUpdate", "appendAndTrim", "semanticJump", "imeRoundTrip", "detachRestore")

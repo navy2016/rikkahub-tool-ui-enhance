@@ -45,6 +45,23 @@ class ProductionContractTest(unittest.TestCase):
         self.assertIn('compilationMode = CompilationMode.Full()', driver)
         self.assertNotIn('CompilationMode.None', driver)
 
+    def test_completion_uses_launch_scoped_receipts_after_actual_validation(self):
+        source = TARGET.read_text()
+        driver = (ROOT / 'terminal-macrobenchmark/src/main/java/me/rerere/rikkahub/benchmark/ProductionTerminalBenchmark.kt').read_text()
+        self.assertIn('withTimeout(120_000) { block() }\n                publishPhase(done)', source)
+        self.assertIn('awaitSettled(viewport)', source)
+        self.assertIn('val token = UUID.randomUUID().toString()', driver)
+        self.assertIn('val receipt = ProductionBenchmarkProgress(token)', driver)
+        self.assertIn('receipt.accept(', driver)
+        self.assertIn('progress.await(phase, 150_000)', driver)
+        self.assertNotIn('benchmark_status', driver)
+        self.assertIn('closePhaseReceiver()', driver)
+        self.assertIn('ProductionBenchmarkSpec.PHASE_PERMISSION, handler', driver)
+        self.assertIn('.setPackage(ProductionBenchmarkSpec.DRIVER_PACKAGE)', source)
+        self.assertNotIn('ResultReceiver', source + driver)  # am start drops Parcelable extras.
+        manifest = (ROOT / 'terminal-target/src/main/AndroidManifest.xml').read_text()
+        self.assertIn('android:protectionLevel="signature"', manifest)
+
 
 if __name__ == '__main__':
     unittest.main()

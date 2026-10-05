@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <permission
+    android:name="me.rerere.rikkahub.terminalbenchmark.permission.PROGRESS"
+    android:protectionLevel="signature" />
+  <uses-permission android:name="me.rerere.rikkahub.terminalbenchmark.permission.PROGRESS" />
   <application
     android:allowBackup="false"
     android:largeHeap="true"

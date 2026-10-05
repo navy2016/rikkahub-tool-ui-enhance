@@ -23,11 +23,16 @@ jobs:
   evidence:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        scenario: ${{ fromJSON(inputs.scenario == 'all' && '["initialCompose","activeRowUpdate","appendAndTrim","semanticJump","imeRoundTrip","detachRestore"]' || format('["{0}"]', inputs.scenario)) }}
     env:
       GH_TOKEN: ${{ github.token }}
       SOURCE_RUN: ${{ inputs.run_id }}
       SOURCE_SHA: ${{ inputs.source_sha }}
-      SCENARIO: ${{ inputs.scenario }}
+      SCENARIO: ${{ matrix.scenario }}
     steps:
       - uses: actions/checkout@v4
       - name: Bind evidence request to the original workflow and source
@@ -38,13 +43,13 @@ jobs:
           run_id, sha = os.environ['SOURCE_RUN'], os.environ['SOURCE_SHA']
           assert re.fullmatch(r'[0-9]+', run_id)
           assert re.fullmatch(r'[a-f0-9]{40}', sha)
-          assert os.environ['SCENARIO'] in ('all', 'initialCompose', 'activeRowUpdate', 'appendAndTrim',
+          assert os.environ['SCENARIO'] in ('initialCompose', 'activeRowUpdate', 'appendAndTrim',
               'semanticJump', 'imeRoundTrip', 'detachRestore')
           run = json.loads(subprocess.check_output(['gh', 'api',
               f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{run_id}']))
           assert run['head_sha'] == sha and run['status'] == 'completed'
           assert run['path'] == '.github/workflows/terminal-production-benchmark.yml'
-          scenario = '*' if os.environ['SCENARIO'] == 'all' else os.environ['SCENARIO']
+          scenario = os.environ['SCENARIO']
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f'pattern=production-viewport-{scenario}-{sha}-*\n')
           PY
@@ -58,12 +63,12 @@ jobs:
       - name: Export bounded diagnostics and original provenance
         run: |
           python3 - <<'PY'
-          import json, os, pathlib, re
+          import base64, hashlib, json, os, pathlib, zlib
           root = pathlib.Path('artifacts/source-evidence')
           output = pathlib.Path('artifacts/compact-evidence')
           output.mkdir(parents=True)
           def notice(title, text):
-              assert len(text) < 60000
+              assert len(text.encode()) <= 3800  # GitHub truncates each annotation at 4096 bytes.
               print('::notice title=' + title + '::' + text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
           groups = list(root.rglob('request.json'))
           assert groups, 'No requested scenario evidence'
@@ -83,25 +88,32 @@ jobs:
                   contexts=contexts, validated=json.loads(validated.read_text()) if validated.exists() else None)
               group = request['groupId']
               (output / (group + '.json')).write_text(json.dumps(evidence, indent=2) + '\n')
-              notice('Production original provenance ' + group, json.dumps(evidence))
+              data = json.dumps(evidence, separators=(',', ':')).encode()
+              digest = hashlib.sha256(data).hexdigest()
+              encoded = base64.b64encode(zlib.compress(data, 9)).decode()
+              parts = [encoded[i:i + 3200] for i in range(0, len(encoded), 3200)]
+              assert len(parts) <= 6, 'Unexpectedly large provenance'
+              for index, part in enumerate(parts):
+                  notice(f'Production provenance {group} part {index + 1}/{len(parts)}',
+                      f'zlib-base64 sha256={digest}\n{part}')
               logcat = (folder / 'logcat.txt').read_text(errors='replace').splitlines()
-              selected = set()
-              for i, line in enumerate(logcat):
-                  if 'ProductionTerminalBenchmark' in line or re.search(r'Error in production|FATAL EXCEPTION|ANR in', line):
-                      selected.update(range(max(0, i - 2), min(len(logcat), i + 12)))
-              # Fixed-size chunks preserve relevant middle-of-run failures, not only final progress.
-              lines = [logcat[i][:650] for i in sorted(selected)]
-              for start in range(0, len(lines), 25):
-                  notice(f'Production fixture excerpt {group} part {start // 25 + 1}', '\n'.join(lines[start:start + 25]))
+              # Success provenance is compact; failures also retain target completion timestamps
+              # and focused exceptions. Do not fill the step's ten-annotation budget with ART logs.
+              if not validated.exists():
+                  lines = [line[:350] for line in logcat if 'I ProductionTerminalBenchmark:' in line]
+                  notice('Production target completions ' + group, '\n'.join(lines)[-3700:])
+                  errors = [line[:350] for line in logcat if 'E ProductionTerminalBenchmark:' in line]
+                  if errors:
+                      notice('Production target failure ' + group, '\n'.join(errors)[:3700])
               instrument = (folder / 'instrumentation.log').read_text(errors='replace').splitlines()
               for i, line in enumerate(instrument):
                   if 'Error in production[' in line:
-                      notice('Production driver failure ' + group, '\n'.join(instrument[max(0, i - 4):i + 16]))
+                      notice('Production driver failure ' + group, '\n'.join(instrument[max(0, i - 4):i + 16])[:3700])
           PY
       - name: Preserve compact original evidence
         uses: actions/upload-artifact@v4
         with:
-          name: production-evidence-${{ inputs.run_id }}-${{ inputs.scenario }}
+          name: production-evidence-${{ inputs.run_id }}-${{ matrix.scenario }}-${{ github.run_id }}
           path: artifacts/compact-evidence/
           if-no-files-found: error
           retention-days: 30
