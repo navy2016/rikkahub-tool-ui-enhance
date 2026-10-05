@@ -1,16 +1,22 @@
 package me.rerere.rikkahub.ui.pages.container
 
 import android.os.Trace
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.IntrinsicMeasurable
+import androidx.compose.ui.layout.IntrinsicMeasureScope
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.node.LayoutModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.invalidateMeasurement
+import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Constraints
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -44,6 +50,12 @@ internal class TerminalLazyItemMeasurements {
     val eagerHistoryBuildCount: Long get() = eagerCache.historyBuildCount
     val eagerVisitedHistoryRows: Long get() = eagerCache.visitedHistoryRows
     val eagerVisitedScreenRows: Long get() = eagerCache.visitedScreenRows
+    var createdRowNodes = 0L
+        private set
+    var measuredRowCount = 0L
+        private set
+    var changedRowMeasurements = 0L
+        private set
     /** Optional test probe; never observable state and never installed by the production page. */
     var onRowComposed: ((Long) -> Unit)? = null
 
@@ -61,27 +73,98 @@ internal class TerminalLazyItemMeasurements {
 
     @Composable
     fun Row(metricKey: Any, row: TerminalRenderedRowState, style: TextStyle) {
-        val token = remember(row.lineId, metricKey) { Any() }
         val text = row.text
         onRowComposed?.let { observer -> SideEffect { observer(row.lineId) } }
-        DisposableEffect(token, row.lineId) {
-            onDispose {
-                if (heights[row.lineId]?.owner === token) {
-                    val previous = heights.remove(row.lineId)
-                    changed(previous)
-                }
-            }
+        TerminalRenderedRow(row, style, RowMeasurementElement(this, metricKey, row.lineId, text))
+    }
+
+    private fun record(owner: Any, metricKey: Any, lineId: Long, text: AnnotatedString, pixels: Int) {
+        measuredRowCount++
+        val previous = heights[lineId]
+        val measured = Height(owner, metricKey, text, pixels)
+        if (previous != measured) {
+            heights[lineId] = measured
+            changedRowMeasurements++
+            changed(previous)
         }
-        Box(Modifier.layout { measurable, constraints ->
-            val child = measurable.measure(constraints)
-            val measured = Height(token, metricKey, text, child.height)
-            val previous = heights[row.lineId]
-            if (previous != measured) {
-                heights[row.lineId] = measured
-                changed(previous)
+    }
+
+    private fun release(owner: Any, lineId: Long) {
+        // An old lazy item can detach AFTER its replacement has already registered the same ID.
+        if (heights[lineId]?.owner === owner) changed(heights.remove(lineId))
+    }
+
+    private data class RowMeasurementElement(
+        val measurements: TerminalLazyItemMeasurements,
+        val metricKey: Any,
+        val lineId: Long,
+        val text: AnnotatedString,
+    ) : ModifierNodeElement<RowMeasurementNode>() {
+        override fun create(): RowMeasurementNode {
+            measurements.createdRowNodes++
+            return RowMeasurementNode(measurements, metricKey, lineId, text)
+        }
+
+        override fun update(node: RowMeasurementNode) = node.update(measurements, metricKey, lineId, text)
+
+        override fun InspectorInfo.inspectableProperties() {
+            name = "terminalRowMeasurement"
+            properties["lineId"] = lineId // Do not retain/export transcript text to inspectors.
+        }
+    }
+
+    /**
+     * Measure the existing Text node instead of allocating a Box/LayoutNode + DisposableEffect
+     * for every eager fallback row. The scalar registry owns a token, NEVER this UI node. Keep
+     * the former Box's min-constraint stripping, TopStart placement and outer measured size.
+     */
+    private class RowMeasurementNode(
+        private var measurements: TerminalLazyItemMeasurements,
+        private var metricKey: Any,
+        private var lineId: Long,
+        private var text: AnnotatedString,
+    ) : Modifier.Node(), LayoutModifierNode {
+        private var owner = Any()
+
+        fun update(measurements: TerminalLazyItemMeasurements, metricKey: Any, lineId: Long, text: AnnotatedString) {
+            if (this.measurements !== measurements || this.metricKey != metricKey ||
+                this.lineId != lineId || this.text != text
+            ) {
+                this.measurements.release(owner, this.lineId)
+                this.measurements = measurements
+                this.metricKey = metricKey
+                this.lineId = lineId
+                this.text = text
             }
-            layout(child.width, child.height) { child.place(0, 0) }
-        }) { TerminalRenderedRow(row, style) }
+            // Element updates use the default automatic measurement invalidation. No cached height
+            // is republished until this node measures the current Text with current constraints.
+        }
+
+        override fun onAttach() { invalidateMeasurement() }
+        override fun onDetach() { measurements.release(owner, lineId) }
+        override fun onReset() {
+            measurements.release(owner, lineId)
+            owner = Any()
+        }
+
+        override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
+            val child = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+            val width = maxOf(constraints.minWidth, child.width)
+            val height = maxOf(constraints.minHeight, child.height)
+            measurements.record(owner, metricKey, lineId, text, height)
+            return layout(width, height) { child.placeRelative(0, 0) }
+        }
+
+        // Intrinsic queries use synthetic Placeables. They must never register a phantom height
+        // or invalidate a previously completed production layout.
+        override fun IntrinsicMeasureScope.minIntrinsicWidth(measurable: IntrinsicMeasurable, height: Int): Int =
+            measurable.minIntrinsicWidth(height)
+        override fun IntrinsicMeasureScope.maxIntrinsicWidth(measurable: IntrinsicMeasurable, height: Int): Int =
+            measurable.maxIntrinsicWidth(height)
+        override fun IntrinsicMeasureScope.minIntrinsicHeight(measurable: IntrinsicMeasurable, width: Int): Int =
+            measurable.minIntrinsicHeight(width)
+        override fun IntrinsicMeasureScope.maxIntrinsicHeight(measurable: IntrinsicMeasurable, width: Int): Int =
+            measurable.maxIntrinsicHeight(width)
     }
 
     private fun validFrame(frame: TerminalEmulator.RenderFrame): Boolean =

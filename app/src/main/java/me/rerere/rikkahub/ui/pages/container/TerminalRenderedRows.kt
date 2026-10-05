@@ -337,8 +337,9 @@ internal fun TerminalRenderedRows(
 internal fun TerminalRenderedRow(
     state: TerminalRenderedRowState,
     style: TextStyle,
+    modifier: Modifier = Modifier,
 ) {
-    Text(text = state.text, style = style, softWrap = false, maxLines = 1)
+    Text(text = state.text, modifier = modifier, style = style, softWrap = false, maxLines = 1)
 }
 
 internal const val TERMINAL_HISTORY_CHUNK_ROWS = 128

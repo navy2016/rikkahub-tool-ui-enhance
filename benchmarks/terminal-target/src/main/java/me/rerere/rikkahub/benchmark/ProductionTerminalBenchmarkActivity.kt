@@ -384,7 +384,12 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             check(viewport.measurements.retainedRows == 0) { "Default eager added virtual measurements" }
             check(!viewport.bound.binding.widthIndex.hasRetainedState)
             check(viewport.bound.binding.widthIndex.measuredHistoryRows == 0L)
+            check(viewport.measurements.createdRowNodes == 0L)
+            check(viewport.measurements.measuredRowCount == 0L)
         }
+        Trace.setCounter("Prod.createdRowNodes", viewport.measurements.createdRowNodes)
+        Trace.setCounter("Prod.measuredRowCount", viewport.measurements.measuredRowCount)
+        Trace.setCounter("Prod.changedRowMeasurements", viewport.measurements.changedRowMeasurements)
         Trace.setCounter("Prod.widthMeasuredHistory", viewport.bound.binding.widthIndex.measuredHistoryRows)
         Trace.setCounter("Prod.widthMeasuredScreen", viewport.bound.binding.widthIndex.measuredScreenRows)
         Trace.setCounter("Prod.retainedMeasurements", viewport.measurements.retainedRows.toLong())

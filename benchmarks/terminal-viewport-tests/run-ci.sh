@@ -53,6 +53,7 @@ run_arm natural-layout TerminalLazyNaturalGeometryInstrumentedTest
 run_arm natural-intrinsic TerminalLazyNaturalGeometryInstrumentedTest
 run_arm intrinsic TerminalIntrinsicWidthInstrumentedTest
 run_arm render-mode TerminalRenderModeInstrumentedTest
+run_arm measurement-node TerminalRowMeasurementInstrumentedTest
 run_arm item-viewport TerminalItemViewportInstrumentedTest
 run_arm stability TerminalViewportStabilityInstrumentedTest 240
 exit "$overall_status"
