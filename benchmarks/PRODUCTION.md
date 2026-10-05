@@ -131,6 +131,23 @@ work. This benchmark does not claim those end-to-end checks or change any status
 - `64df33d` changes only benchmark/diagnostic code relative to `11d96be`; production app and build
   inputs are unchanged. Its V2 completion protocol passes 25 fixture JVM cases and 12 production
   smoke cases. The Release APK also passed independent manifest/signature/ZIP/ABI/hash verification.
+- [64df33d full V2 baseline](results/64df33d-production-viewport-ci.md), run `37255295641`:
+  all 36 cases / 108 measured iterations passed, including the formerly missed 5k IME completion.
+  The archive includes original phase/transition tables, result-file hashes and all six device
+  contexts, verified through evidence run `37256826428`. At 10k, virtual IME retry width calculation
+  is 0.97 ms per call and the unchanged-history measurement counter does not advance. The full
+  IME operation is still 12435.12 ms: show/fallback is 9246.28 ms and explicit retry is 570.21 ms
+  (each reported separately as an iteration median; do not add/subtract to decompose the total).
+  The default control's IME operation is 4297.59 ms on that same scenario device. Width retention
+  alone therefore does not resolve the expensive eager fallback mount or justify enabling virtual
+  history by default. Future work should instrument that handoff before changing its layout work.
+
+The verified application APK for `64df33d` is available in [Release run 37254521258](
+https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37254521258/artifacts/11322680567).
+Its SHA-256 is `fd8bd1f60dda05ce25a14cec2694f447fa8a37f35e08c6fcf54d5695b7866252`;
+[verification run 37255299199](https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37255299199)
+confirms release signing, non-debuggable manifest, ZIP integrity and arm64-v8a. This is the app APK,
+not the separate profileable benchmark target. Actions artifact download requires GitHub sign-in.
 
 The scalar width index now belongs to the mounted production viewport binding. Compatibility
 fallback retains only width candidates and source/font validity metadata; it measures no virtual

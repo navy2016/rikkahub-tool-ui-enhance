@@ -293,6 +293,12 @@ matrix accessible via the check-run API when artifact/blob downloads fail. Missi
 
 ## Recorded baselines
 
+- [64df33d: session width retention, complete production V2 baseline](results/64df33d-production-viewport-ci.md)
+  — 36 cases / 108 measured iterations passed, with launch-bound completion receipts and original
+  per-scenario phase/transition tables and provenance. Unchanged history is not remeasured on IME
+  retry; the 10k width call is 0.97 ms, while show/eager-fallback remains expensive (9246.28 ms).
+  No cross-run improvement percentage or real-device FPS claim is made. Default rendering is unchanged.
+
 - [7a1d711: immutable snapshot blocks, complete production V1 baseline](results/7a1d711-production-viewport-ci.md)
   — 36 cases / 108 measured iterations passed, including original per-scenario source/APK hashes
   and device/input-method context in the JSON archive. This is not a V2 completion-protocol baseline
