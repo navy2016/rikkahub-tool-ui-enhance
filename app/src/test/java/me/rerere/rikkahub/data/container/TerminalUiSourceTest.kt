@@ -87,7 +87,7 @@ class TerminalUiSourceTest {
         assertTrue(lazyMeasurementsSource.contains("MutableSharedFlow<Unit>"))
         assertFalse(lazyMeasurementsSource.contains("runCatching"))
         assertTrue(renderedRowsSource.contains("BasicText(text = state.text"))
-        assertFalse(renderedRowsSource.contains("Text(text = state.text"))
+        assertFalse(renderedRowsSource.lines().any { it.trimStart().startsWith("Text(text = state.text") })
         assertEquals(TerminalRenderMode.CHUNKED_LAYERS, TerminalRenderMode.DEFAULT)
     }
 
