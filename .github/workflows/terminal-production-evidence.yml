@@ -1,0 +1,104 @@
+name: Terminal Production Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Completed production benchmark workflow run
+        required: true
+      source_sha:
+        description: Exact source SHA from that run
+        required: true
+      scenario:
+        type: choice
+        options: [all, initialCompose, activeRowUpdate, appendAndTrim, semanticJump, imeRoundTrip, detachRestore]
+        default: all
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: ${{ inputs.run_id }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      SCENARIO: ${{ inputs.scenario }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bind evidence request to the original workflow and source
+        id: source
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          run_id, sha = os.environ['SOURCE_RUN'], os.environ['SOURCE_SHA']
+          assert re.fullmatch(r'[0-9]+', run_id)
+          assert re.fullmatch(r'[a-f0-9]{40}', sha)
+          run = json.loads(subprocess.check_output(['gh', 'api',
+              f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{run_id}']))
+          assert run['head_sha'] == sha and run['status'] == 'completed'
+          assert run['path'] == '.github/workflows/terminal-production-benchmark.yml'
+          scenario = '*' if os.environ['SCENARIO'] == 'all' else os.environ['SCENARIO']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'pattern=production-viewport-{scenario}-{sha}-*\n')
+          PY
+      - name: Read only the selected scenario artifacts on the runner
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run_id }}
+          pattern: ${{ steps.source.outputs.pattern }}
+          path: artifacts/source-evidence
+      - name: Export bounded diagnostics and original provenance
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          root = pathlib.Path('artifacts/source-evidence')
+          output = pathlib.Path('artifacts/compact-evidence')
+          output.mkdir(parents=True)
+          def notice(title, text):
+              assert len(text) < 60000
+              print('::notice title=' + title + '::' + text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
+          groups = list(root.rglob('request.json'))
+          assert groups, 'No requested scenario evidence'
+          for request_path in sorted(groups):
+              folder = request_path.parent
+              request = json.loads(request_path.read_text())
+              manifest = json.loads((folder / 'manifest.json').read_text())
+              assert request['sourceSha'] == manifest['sourceSha'] == os.environ['SOURCE_SHA']
+              assert request['runId'] == manifest['buildRun'] == os.environ['SOURCE_RUN']
+              contexts = []
+              for path in folder.rglob('*-benchmarkData.json'):
+                  doc = json.loads(path.read_text())
+                  if doc.get('context') not in contexts:
+                      contexts.append(doc.get('context'))
+              validated = folder / 'validated.json'
+              evidence = dict(request=request, manifest=manifest, device=(folder / 'device.txt').read_text(),
+                  contexts=contexts, validated=json.loads(validated.read_text()) if validated.exists() else None)
+              group = request['groupId']
+              (output / (group + '.json')).write_text(json.dumps(evidence, indent=2) + '\n')
+              notice('Production original provenance ' + group, json.dumps(evidence))
+              logcat = (folder / 'logcat.txt').read_text(errors='replace').splitlines()
+              selected = set()
+              for i, line in enumerate(logcat):
+                  if 'ProductionTerminalBenchmark' in line or re.search(r'Error in production|FATAL EXCEPTION|ANR in', line):
+                      selected.update(range(max(0, i - 2), min(len(logcat), i + 12)))
+              # Fixed-size chunks preserve relevant middle-of-run failures, not only final progress.
+              lines = [logcat[i][:650] for i in sorted(selected)]
+              for start in range(0, len(lines), 25):
+                  notice(f'Production fixture excerpt {group} part {start // 25 + 1}', '\n'.join(lines[start:start + 25]))
+              instrument = (folder / 'instrumentation.log').read_text(errors='replace').splitlines()
+              for i, line in enumerate(instrument):
+                  if 'Error in production[' in line:
+                      notice('Production driver failure ' + group, '\n'.join(instrument[max(0, i - 4):i + 16]))
+          PY
+      - name: Preserve compact original evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-evidence-${{ inputs.run_id }}-${{ inputs.scenario }}
+          path: artifacts/compact-evidence/
+          if-no-files-found: error
+          retention-days: 30
