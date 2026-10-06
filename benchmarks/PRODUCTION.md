@@ -124,6 +124,16 @@ work. This benchmark does not claim those end-to-end checks or change any status
 
 ## Verified checkpoints
 
+- [a79e7b6 complete V3 baseline](results/a79e7b6-production-viewport-ci.md), run `37456883236`:
+  all 54 cases / 162 measured iterations passed across six independent scenario groups; original
+  manifests, six device/input-method contexts, result-file hashes and all 42 source/font/build hashes
+  were checked through evidence run `37459976695`. The application and benchmark inputs are identical
+  to `2b0f259`; `a79e7b6` adds documentation only. At 10k, stable virtual IME is 3708.66 ms versus
+  default 3778.21 ms and original virtual 10658.95 ms. Stable virtual also reduces default's cold mount,
+  append/trim, semantic-jump and remount cost in this run, but default remains faster for active-row
+  updates (153.64 vs 163.22 ms/output). Cold/remount exact-width work remains 711.68 / 1359.00 ms.
+  Do not pool independent scenario runners or interpret this component benchmark as real-device FPS.
+
 - [2b0f259 opt-in stable IME and notification coalescing](results/2b0f259-ime-v3.md):
   341 application Release JVM cases, 106 viewport instrumentation cases, 25 fixture JVM cases and
   18 three-mode smoke cases passed. Full V3 IME run `37454340924` passed all 9 cases / 27 iterations,

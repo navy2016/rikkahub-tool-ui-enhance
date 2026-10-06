@@ -293,6 +293,15 @@ matrix accessible via the check-run API when artifact/blob downloads fail. Missi
 
 ## Recorded baselines
 
+- [a79e7b6: complete production V3 three-mode baseline](results/a79e7b6-production-viewport-ci.md)
+  — all six scenarios, three sizes and three production modes passed: 54 cases / 162 measured
+  iterations, with six original device contexts and 42 source/font/build hashes verified. At 10k,
+  `lazyHistoryIme` is close to default for IME (3708.66 vs 3778.21 ms), while original `lazyHistory`
+  is 10658.95 ms because it mounts eager history. Virtual modes improve cold mount, semantic jumps,
+  append/trim and remount in this component harness, but default remains faster for active-row updates.
+  Cold exact-width work remains expensive. The app/benchmark inputs are identical to `2b0f259`;
+  `a79e7b6` adds only archived evidence. This is not a full-page/PTY or real-device FPS result.
+
 - [2b0f259: keyboard-stable virtual history, complete three-mode IME scenario](results/2b0f259-ime-v3.md)
   — 341 application JVM tests, 106 viewport tests, 18 production smoke cases and 9 full IME cases /
   27 measured iterations passed. The opt-in `lazyHistoryIme` keeps virtual rows through IME avoidance;
