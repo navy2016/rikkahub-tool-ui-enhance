@@ -59,6 +59,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.container.TerminalItemScrollTarget
 import me.rerere.rikkahub.data.container.TerminalItemViewport
 import me.rerere.rikkahub.data.container.TerminalRenderMode
+import me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndex
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
@@ -550,6 +551,7 @@ class TerminalItemViewportInstrumentedTest {
         private val historyRows: Int = 1_000,
         terminalOverride: TerminalEmulator? = null,
         restored: TerminalViewportState? = null,
+        val sessionWidthIndex: TerminalTranscriptWidthIndex? = null,
     ) {
         val terminal = terminalOverride ?: TerminalEmulator(initialColumns = 80, initialRows = 24,
             maxScrollbackLines = historyRows).apply {
@@ -672,6 +674,7 @@ class TerminalItemViewportInstrumentedTest {
                 policy.allows(chunks.isNotEmpty(), config.panEnabled, config.selectionMode,
                     tui || frame.isAlternateScreen, ime, avoidIme)
             bound = rememberTerminalBoundViewport(this, controller, eager, lazy, measurements, frame, style, wants,
+                sessionWidthIndex = sessionWidthIndex,
                 metrics = { TerminalViewportMetrics(eager.maxValue, viewportHeight, cellHeight, tailPadding,
                     usesTuiViewport = tui || frame.isAlternateScreen, imeVisible = ime, avoidIme = ime && avoidIme) },
                 gestureConfig = config)

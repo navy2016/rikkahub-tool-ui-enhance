@@ -28,7 +28,12 @@ import me.rerere.rikkahub.utils.TerminalEmulator
 
 internal const val TERMINAL_LAZY_SCREEN_KEY = "terminal-active-screen"
 internal const val TERMINAL_LAZY_TAIL_KEY = "terminal-tail"
-internal class TerminalLazyLayoutPass(val frame: TerminalEmulator.RenderFrame, val metricKey: Any)
+internal class TerminalLazyLayoutPass(
+    val frame: TerminalEmulator.RenderFrame,
+    val metricKey: Any,
+    /** Same exact-width identity used by virtual measurement and eager fallback retention. */
+    val widthMetricKey: Any = metricKey,
+)
 
 /**
  * Single UI-thread observer, level-triggered invalidation. An entire eager measure/dispose burst

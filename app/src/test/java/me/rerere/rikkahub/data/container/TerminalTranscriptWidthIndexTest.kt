@@ -18,6 +18,60 @@ class TerminalTranscriptWidthIndexTest {
     private fun measure(text: AnnotatedString): Int = text.length * 7 + text.spanStyles.size
     private fun expected(frame: TerminalEmulator.RenderFrame) = frame.rows.maxOf { measure(it.text) }
 
+    private class Identity
+    private fun metric(
+        metadata: Any,
+        family: Any? = Identity(),
+        resolver: Any = Identity(),
+        fonts: List<Any> = List(4) { Identity() },
+    ) = TerminalTranscriptWidthMetricKey(metadata, family, resolver, fonts)
+
+    @Test fun freshCrossMountMetricKeysReuseOnlyTheSameLiveFontIdentities() {
+        val frame = terminal().renderFrame()
+        val index = TerminalTranscriptWidthIndex()
+        val family = Identity()
+        val resolver = Identity()
+        val fonts = List(4) { Identity() }
+        index.width(frame, metric("style-14-ltr-density-1", family, resolver, fonts), ::measure)
+        assertEquals(frame.historyCount, index.lastMeasuredHistoryRows)
+
+        // A remounted page creates a new key object. Equal scalar metadata plus identical live font
+        // ownership is the only condition that may reuse the session's scalar candidates.
+        index.width(frame, metric("style-14-ltr-density-1", family, resolver, fonts), ::measure)
+        assertEquals(0, index.lastMeasuredHistoryRows)
+        assertEquals(frame.rows.size - frame.historyCount, index.lastMeasuredScreenRows)
+
+        for (changed in listOf(
+            metric("style-21-ltr-density-1", family, resolver, fonts),
+            metric("style-14-ltr-density-1", Identity(), resolver, fonts),
+            metric("style-14-ltr-density-1", family, Identity(), fonts),
+            metric("style-14-ltr-density-1", family, resolver, fonts.toMutableList().also { it[2] = Identity() }),
+        )) {
+            index.width(frame, changed, ::measure)
+            assertEquals(frame.historyCount, index.lastMeasuredHistoryRows)
+        }
+    }
+
+    @Test fun crossMountReuseMeasuresOnlyBackgroundArchivesAndCurrentScreen() {
+        val terminal = terminal(1_000)
+        val index = TerminalTranscriptWidthIndex()
+        val family = Identity()
+        val resolver = Identity()
+        val fonts = List(4) { Identity() }
+        val firstKey = metric("same-width-style", family, resolver, fonts)
+        index.width(terminal.renderFrame(), firstKey, ::measure)
+        val historyWork = index.measuredHistoryRows
+        val screenWork = index.measuredScreenRows
+        repeat(12) { terminal.feed("\r\nbackground-$it") }
+        val next = terminal.renderFrame()
+        val remountedKey = metric("same-width-style", family, resolver, fonts)
+        assertEquals(expected(next), index.width(next, remountedKey, ::measure))
+        assertEquals(12, index.lastMeasuredHistoryRows)
+        assertEquals(6, index.lastMeasuredScreenRows)
+        assertEquals(historyWork + 12, index.measuredHistoryRows)
+        assertEquals(screenWork + 6, index.measuredScreenRows)
+    }
+
     @Test fun ownedActivityUpdatesDoNotMeasureHistoryAtOneFiveAndTenThousandRows() {
         for (size in listOf(1000, 5000, 10000)) {
             val terminal = terminal(size)

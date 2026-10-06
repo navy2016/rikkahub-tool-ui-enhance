@@ -42,6 +42,14 @@ class ProductionContractTest(unittest.TestCase):
         self.assertNotIn('val viewport', restore)
         self.assertNotIn('System.gc', source)
 
+    def test_remount_reuses_only_session_scalar_width_state_and_measures_background_delta(self):
+        source = TARGET.read_text()
+        self.assertIn('private val sessionWidthIndex = TerminalTranscriptWidthIndex()', source)
+        self.assertIn('sessionWidthIndex = sessionWidthIndex', source)
+        self.assertIn('sessionWidthIndex.lastMeasuredHistoryRows == ProductionBenchmarkSpec.BACKGROUND_LINES', source)
+        self.assertIn('sessionWidthIndex.measuredHistoryRows == measuredHistory + ProductionBenchmarkSpec.BACKGROUND_LINES', source)
+        self.assertIn('sessionWidthIndex.clear()\n        super.onDestroy()', source)
+
     def test_kotlin_and_report_contracts_stay_in_sync(self):
         source = (ROOT / 'production-contract/src/main/kotlin/me/rerere/rikkahub/benchmark/ProductionBenchmarkSpec.kt').read_text()
         self.assertIn(f'const val VERSION = "{VERSION}"', source)

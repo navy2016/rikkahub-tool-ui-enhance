@@ -3,6 +3,35 @@ package me.rerere.rikkahub.data.container
 import androidx.compose.ui.text.AnnotatedString
 import me.rerere.rikkahub.utils.TerminalEmulator
 import me.rerere.rikkahub.utils.ownedRows
+import java.lang.ref.WeakReference
+
+/**
+ * Exact cross-mount validity without owning page fonts. [styleMetadata] must exclude FontFamily but
+ * include every other width-affecting style/density/direction value. Font family, resolver and each
+ * resolved typeface are identity-checked through weak references; collection means a safe cache miss.
+ */
+internal class TerminalTranscriptWidthMetricKey(
+    private val styleMetadata: Any,
+    fontFamily: Any?,
+    resolver: Any,
+    resolvedFonts: List<Any>,
+) {
+    private val fontFamily = fontFamily?.let(::WeakReference)
+    private val resolver = WeakReference(resolver)
+    private val resolvedFonts = resolvedFonts.map(::WeakReference)
+
+    fun matches(other: TerminalTranscriptWidthMetricKey): Boolean =
+        styleMetadata == other.styleMetadata &&
+            weakIdentity(fontFamily, other.fontFamily) &&
+            weakIdentity(resolver, other.resolver) &&
+            resolvedFonts.size == other.resolvedFonts.size &&
+            resolvedFonts.indices.all { weakIdentity(resolvedFonts[it], other.resolvedFonts[it]) }
+
+    private fun weakIdentity(first: WeakReference<out Any>?, second: WeakReference<out Any>?): Boolean = when {
+        first == null || second == null -> first == null && second == null
+        else -> first.get()?.let { it === second.get() } == true
+    }
+}
 
 /**
  * Scalar-only FIFO maximum, promoted from the controlled width experiment. History reuse requires
@@ -26,11 +55,11 @@ internal class TerminalTranscriptWidthIndex {
         private set
     var measuredScreenRows = 0L
         private set
-    val retainedCandidates: Int get() = widest.size
-    val hasRetainedState: Boolean get() = source != null || metrics != null || widest.isNotEmpty()
+    @get:Synchronized val retainedCandidates: Int get() = widest.size
+    @get:Synchronized val hasRetainedState: Boolean get() = source != null || metrics != null || widest.isNotEmpty()
 
     /** Release fonts/owner tokens as well as scalar candidates; work counters remain cumulative. */
-    fun clear() {
+    @Synchronized fun clear() {
         widest.clear()
         source = null
         metrics = null
@@ -44,8 +73,13 @@ internal class TerminalTranscriptWidthIndex {
                 it.history.firstSequence, it.history.endSequence)
         }
 
+    private fun sameMetrics(previous: Any?, next: Any): Boolean = when {
+        previous is TerminalTranscriptWidthMetricKey && next is TerminalTranscriptWidthMetricKey -> previous.matches(next)
+        else -> previous == next
+    }
+
     private fun canReuse(previous: Source?, next: Source?, metricKey: Any): Boolean =
-        previous != null && next != null && metrics == metricKey &&
+        previous != null && next != null && sameMetrics(metrics, metricKey) &&
             previous.owner === next.owner && previous.generation == next.generation &&
             previous.renderRevision == next.renderRevision && previous.columns == next.columns &&
             previous.first >= 0 && next.first >= previous.first && next.end >= previous.end &&
@@ -57,7 +91,7 @@ internal class TerminalTranscriptWidthIndex {
      * Advancing the first ordinal also prevents a later older/speculative frame reusing lost maxima.
      * No frame, rows, measure callback or layout survives this call.
      */
-    fun retainFor(frame: TerminalEmulator.RenderFrame, metricKey: Any) {
+    @Synchronized fun retainFor(frame: TerminalEmulator.RenderFrame, metricKey: Any) {
         val previous = source
         val next = sourceOf(frame)
         if (frame.historyCount == 0 || !canReuse(previous, next, metricKey)) {
@@ -69,7 +103,7 @@ internal class TerminalTranscriptWidthIndex {
         source = checkNotNull(previous).copy(first = first, end = maxOf(first, previous.end))
     }
 
-    fun width(frame: TerminalEmulator.RenderFrame, metricKey: Any, measure: (AnnotatedString) -> Int): Int {
+    @Synchronized fun width(frame: TerminalEmulator.RenderFrame, metricKey: Any, measure: (AnnotatedString) -> Int): Int {
         require(frame.historyCount in 0..frame.rows.size)
         lastMeasuredHistoryRows = 0
         lastMeasuredScreenRows = 0

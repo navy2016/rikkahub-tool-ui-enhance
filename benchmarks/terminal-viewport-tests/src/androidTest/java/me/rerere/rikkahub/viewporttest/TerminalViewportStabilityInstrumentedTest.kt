@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import me.rerere.rikkahub.data.container.TerminalItemScrollTarget
 import me.rerere.rikkahub.data.container.TerminalRenderMode
+import me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndex
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
 import me.rerere.rikkahub.data.container.terminalScaledItemClip
 import me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest.Fixture
@@ -100,7 +101,8 @@ class TerminalViewportStabilityInstrumentedTest {
     }
 
     @Test fun stabilityDetachAndRecreateRestoresMeasuredAnchorAfterBackgroundTrim() {
-        val f = Fixture()
+        val sharedWidthIndex = TerminalTranscriptWidthIndex()
+        val f = Fixture(stressSpans = false, sessionWidthIndex = sharedWidthIndex)
         var shown by mutableStateOf<Fixture?>(f, referentialEqualityPolicy())
         compose.setContent { shown?.Content() }
         settle(f)
@@ -108,13 +110,18 @@ class TerminalViewportStabilityInstrumentedTest {
         settle(f)
         val saved = compose.runOnIdle { f.snapshotViewport() }
         val oldAnchor = compose.runOnIdle { f.top().anchor }
+        val widthIndex = compose.runOnIdle { f.bound.binding.widthIndex }
+        val measuredHistory = compose.runOnIdle { widthIndex.measuredHistoryRows }
+        val measuredScreen = compose.runOnIdle { widthIndex.measuredScreenRows }
         compose.runOnIdle { shown = null }
         compose.waitForIdle()
         val recreated = compose.runOnIdle {
             assertEquals(0, f.measurements.retainedRows)
             assertEquals(0, f.activeWriters)
+            assertTrue("session width state was cleared with the page", widthIndex.hasRetainedState)
             f.terminal.feed((0 until 120).joinToString("\r\n", prefix = "\r\n") { "background-$it" })
-            Fixture(terminalOverride = f.terminal, restored = saved).also { shown = it }
+            Fixture(stressSpans = false, terminalOverride = f.terminal, restored = saved,
+                sessionWidthIndex = sharedWidthIndex).also { shown = it }
         }
         settle(recreated)
         compose.runOnIdle {
@@ -122,6 +129,11 @@ class TerminalViewportStabilityInstrumentedTest {
             assertEquals(47, recreated.horizontal.value)
             assertFalse(recreated.controller.state.value.autoScroll)
             assertEquals(0, f.measurements.retainedRows)
+            assertTrue(widthIndex === recreated.bound.binding.widthIndex)
+            assertEquals(120, widthIndex.lastMeasuredHistoryRows)
+            assertEquals(24, widthIndex.lastMeasuredScreenRows)
+            assertEquals(measuredHistory + 120, widthIndex.measuredHistoryRows)
+            assertEquals(measuredScreen + 24, widthIndex.measuredScreenRows)
         }
     }
 

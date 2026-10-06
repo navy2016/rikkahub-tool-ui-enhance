@@ -39,10 +39,9 @@ internal class TerminalViewportBinding(
     val eager: ScrollState,
     val lazy: LazyListState,
     val measurements: TerminalLazyItemMeasurements,
+    val widthIndex: TerminalTranscriptWidthIndex,
     private val input: () -> TerminalViewportBindingInput,
 ) {
-    // This binding outlives backend branches, but is scoped to one mounted session/controller.
-    val widthIndex = TerminalTranscriptWidthIndex()
     val virtual: Boolean get() = input().virtual
     val pass: TerminalLazyLayoutPass get() = input().pass
     val measureEager: Boolean get() = input().measureEager
@@ -60,7 +59,7 @@ internal class TerminalViewportBinding(
         if (previousBackend != null && previousBackend != virtual) controller.pauseScrollEffects()
         previousBackend = virtual
         if (!measureEager) measurements.clearEagerCache()
-        if (!virtual) widthIndex.retainFor(pass.frame, pass.metricKey)
+        if (!virtual) widthIndex.retainFor(pass.frame, pass.widthMetricKey)
     }
 
     fun observation(): TerminalItemViewport? {
@@ -152,6 +151,7 @@ internal fun rememberTerminalBoundViewport(
     frame: TerminalEmulator.RenderFrame,
     style: androidx.compose.ui.text.TextStyle,
     wantsVirtual: Boolean,
+    sessionWidthIndex: TerminalTranscriptWidthIndex? = null,
     metrics: () -> TerminalViewportMetrics,
     gestureConfig: TerminalViewportGestureConfig,
 ): TerminalBoundViewport {
@@ -164,11 +164,15 @@ internal fun rememberTerminalBoundViewport(
     val measuredEager = !virtual && !metrics().usesTuiViewport && (wantsVirtual || visitedVirtual)
     val latestInput by rememberUpdatedState(TerminalViewportBindingInput(pass, virtual, measuredEager, metrics))
     val latestWants by rememberUpdatedState(wantsVirtual)
-    val binding = remember(sessionKey, controller, eager, lazy, measurements) {
-        TerminalViewportBinding(controller, eager, lazy, measurements) { latestInput }
+    val localWidthIndex = remember(sessionKey) { TerminalTranscriptWidthIndex() }
+    val widthIndex = sessionWidthIndex ?: localWidthIndex
+    val binding = remember(sessionKey, controller, eager, lazy, measurements, widthIndex) {
+        TerminalViewportBinding(controller, eager, lazy, measurements, widthIndex) { latestInput }
     }
-    DisposableEffect(binding) {
-        onDispose { binding.widthIndex.clear() }
+    DisposableEffect(binding, sessionWidthIndex) {
+        // A page-local fallback releases everything. A manager/session-owned index deliberately
+        // survives navigation and is cleared only when that interactive process record is removed.
+        onDispose { if (sessionWidthIndex == null) widthIndex.clear() }
     }
     SideEffect {
         binding.backendCommitted()

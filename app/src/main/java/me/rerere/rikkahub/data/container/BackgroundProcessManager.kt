@@ -1287,6 +1287,7 @@ class BackgroundProcessManager @Inject constructor(
         val outputFlow: MutableSharedFlow<ByteArray>,
         val outputBuffer: SessionOutputBuffer,
         val terminalEmulator: TerminalEmulator,
+        val terminalTranscriptWidthIndex: TerminalTranscriptWidthIndex = TerminalTranscriptWidthIndex(),
         var columns: Int = 80,
         var rows: Int = 24,
         var stdoutJob: Job? = null,
@@ -1716,6 +1717,10 @@ class BackgroundProcessManager @Inject constructor(
     fun getInteractiveTerminalEmulator(processId: String): TerminalEmulator? {
         return interactiveSessions[processId]?.terminalEmulator
     }
+
+    /** UI-thread width owner for this parsed terminal session; no Text layout/font is strongly retained. */
+    internal fun getInteractiveTerminalWidthIndex(processId: String): TerminalTranscriptWidthIndex? =
+        interactiveSessions[processId]?.terminalTranscriptWidthIndex
 
     fun readInteractiveOutput(
         processId: String,
@@ -2211,6 +2216,7 @@ class BackgroundProcessManager @Inject constructor(
             interactive.waiterJob?.cancel()
             interactive.inputActorJob?.cancel()
             interactive.inputChannel.close()
+            interactive.terminalTranscriptWidthIndex.clear()
             interactiveSessions.remove(processId)
             interactiveReadOffsets.remove(processId)
             terminalViewportStates.remove(processId)
@@ -2275,6 +2281,7 @@ class BackgroundProcessManager @Inject constructor(
                     record.waiterJob?.cancel()
                     record.inputActorJob?.cancel()
                     record.inputChannel.close()
+                    record.terminalTranscriptWidthIndex.clear()
                 }
                 interactiveSessions.remove(processId)
                 interactiveReadOffsets.remove(processId)
@@ -2326,6 +2333,7 @@ class BackgroundProcessManager @Inject constructor(
                 interactiveSessions[processId]?.waiterJob?.cancel()
                 interactiveSessions[processId]?.inputActorJob?.cancel()
                 interactiveSessions[processId]?.inputChannel?.close()
+                interactiveSessions[processId]?.terminalTranscriptWidthIndex?.clear()
                 interactiveSessions.remove(processId)
                 interactiveReadOffsets.remove(processId)
                 terminalViewportStates.remove(processId)
@@ -2415,6 +2423,7 @@ class BackgroundProcessManager @Inject constructor(
             record.waiterJob?.cancel()
             record.inputActorJob?.cancel()
             record.inputChannel.close()
+            record.terminalTranscriptWidthIndex.clear()
         }
 
         processes.clear()

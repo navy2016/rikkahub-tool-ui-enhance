@@ -784,6 +784,7 @@ private fun TerminalInteractivePanel(
     var showContainerManager by remember { mutableStateOf(false) }
     val sizeHint = remember(processId, process.command) { bgManager.getTerminalSizeHint(process.command) }
     val sessionTerminalEmulator = remember(processId) { bgManager.getInteractiveTerminalEmulator(processId) }
+    val sessionTerminalWidthIndex = remember(processId) { bgManager.getInteractiveTerminalWidthIndex(processId) }
     val initialTerminalColumns = remember(processId) {
         (sessionTerminalEmulator?.columns ?: process.terminalColumns.takeIf { it > 0 } ?: sizeHint?.columns ?: 80)
             .coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
@@ -1055,6 +1056,7 @@ private fun TerminalInteractivePanel(
         frame = terminalViewportFrame,
         style = terminalTextStyle,
         wantsVirtual = wantsVirtualHistory,
+        sessionWidthIndex = sessionTerminalWidthIndex,
         metrics = { viewportMetrics() },
         gestureConfig = TerminalViewportGestureConfig(terminalPanMode, selectionMode, fastFlingRequiredCount),
     )

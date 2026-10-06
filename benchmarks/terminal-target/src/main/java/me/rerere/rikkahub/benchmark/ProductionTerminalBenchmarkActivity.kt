@@ -73,6 +73,7 @@ import kotlinx.coroutines.withTimeout
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.container.TerminalItemScrollTarget
 import me.rerere.rikkahub.data.container.TerminalRenderMode
+import me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndex
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportLineLookup
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
@@ -100,6 +101,7 @@ import kotlin.coroutines.resume
  * supplies measurement/width corrections. This is not ProcessSessionPage, a PTY or app startup.
  */
 class ProductionTerminalBenchmarkActivity : ComponentActivity() {
+    private val sessionWidthIndex = TerminalTranscriptWidthIndex()
     private lateinit var terminal: TerminalEmulator
     private lateinit var status: TextView
     private lateinit var phaseToken: String
@@ -164,6 +166,11 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             busy = false
             publishPhase("prepared")
         }
+    }
+
+    override fun onDestroy() {
+        sessionWidthIndex.clear()
+        super.onDestroy()
     }
 
     private fun runOperation(done: String, block: suspend () -> Unit) {
@@ -245,6 +252,13 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
                         check(viewport.sync.lastVisitedTextRows == TerminalBenchmarkWorkload.SCREEN_ROWS + 1)
                     }
                     awaitSettled(viewport)
+                    if (mode.isVirtualHistory) {
+                        val expectedHistory = if (scenario == "appendAndTrim") 1 else 0
+                        check(sessionWidthIndex.lastMeasuredHistoryRows == expectedHistory) {
+                            "$scenario scanned ${sessionWidthIndex.lastMeasuredHistoryRows} history rows"
+                        }
+                        check(sessionWidthIndex.lastMeasuredScreenRows == TerminalBenchmarkWorkload.SCREEN_ROWS)
+                    }
                     validate(viewport)
                 }
                 delay((deadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
@@ -353,12 +367,15 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             current = null
             awaitCondition { !viewport.attached && viewport.measurements.retainedRows == 0 &&
                 viewport.measurements.retainedEagerHistoryRows == 0 && viewport.bound.binding.activeWriters == 0 &&
-                !viewport.bound.binding.widthIndex.hasRetainedState }
+                viewport.bound.binding.widthIndex === sessionWidthIndex &&
+                (mode == TerminalRenderMode.DEFAULT || sessionWidthIndex.hasRetainedState) }
         }
         return saved
     }
 
     private suspend fun detachRestore() {
+        val measuredHistory = sessionWidthIndex.measuredHistoryRows
+        val measuredScreen = sessionWidthIndex.measuredScreenRows
         val saved = detachAndCapture()
         productionTrace("Prod.feed") {
             repeat(ProductionBenchmarkSpec.BACKGROUND_LINES) { index ->
@@ -373,6 +390,14 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             restored.checkSavedAnchor(saved)
             check(restored.horizontal.value == saved.horizontalOffsetPx)
             validate(restored)
+            if (mode.isVirtualHistory) {
+                check(restored.bound.binding.widthIndex === sessionWidthIndex)
+                check(sessionWidthIndex.lastMeasuredHistoryRows == ProductionBenchmarkSpec.BACKGROUND_LINES) {
+                    "Remount did not reuse surviving session width summaries"
+                }
+                check(sessionWidthIndex.measuredHistoryRows == measuredHistory + ProductionBenchmarkSpec.BACKGROUND_LINES)
+                check(sessionWidthIndex.measuredScreenRows == measuredScreen + TerminalBenchmarkWorkload.SCREEN_ROWS)
+            }
         }
     }
 
@@ -457,6 +482,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             val wants = mode.isVirtualHistory &&
                 policy.allows(chunks.isNotEmpty(), true, false, false, ime, avoidIme = ime)
             bound = rememberTerminalBoundViewport(this, controller, eager, lazy, measurements, frame, style, wants,
+                sessionWidthIndex = sessionWidthIndex,
                 metrics = { TerminalViewportMetrics(eager.maxValue, viewportHeight, cellHeight, tailPadding,
                     imeVisible = ime, avoidIme = ime) },
                 gestureConfig = TerminalViewportGestureConfig(true, false, 2))

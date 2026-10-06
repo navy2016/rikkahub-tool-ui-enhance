@@ -63,12 +63,36 @@ class TerminalUiSourceTest {
             File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt"),
             File("src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt"),
         ).first { it.isFile }.readText()
+        val widthSource = listOf(
+            File("app/src/main/java/me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndex.kt"),
+            File("src/main/java/me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndex.kt"),
+        ).first { it.isFile }.readText()
+        val widthUiSource = listOf(
+            File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptWidth.kt"),
+            File("src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptWidth.kt"),
+        ).first { it.isFile }.readText()
         assertTrue(processSessionSource.contains("val wantsVirtualHistory = appliedTerminalRenderMode.isVirtualHistory"))
         assertTrue(processSessionSource.contains("virtualHistoryPolicy.allows(terminalHistoryChunkPlan.isNotEmpty(), terminalPanMode, selectionMode,"))
         assertTrue(processSessionSource.contains("currentUsesTuiViewport, imeVisible, shouldAvoidIme)"))
         assertTrue(processSessionSource.contains("TerminalLazyItemMeasurements"))
         assertTrue(processSessionSource.contains("effectiveRenderMode = effectiveTerminalRenderMode"))
         assertTrue(processSessionSource.contains("rememberTerminalBoundViewport("))
+        assertTrue(processSessionSource.contains("sessionWidthIndex = sessionTerminalWidthIndex"))
+        assertTrue(backgroundProcessManagerSource.contains("val terminalTranscriptWidthIndex: TerminalTranscriptWidthIndex"))
+        assertTrue(backgroundProcessManagerSource.contains("getInteractiveTerminalWidthIndex(processId: String)"))
+        assertTrue(backgroundProcessManagerSource.contains("interactive.terminalTranscriptWidthIndex.clear()"))
+        assertTrue(backgroundProcessManagerSource.contains("record.terminalTranscriptWidthIndex.clear()"))
+        assertEquals(3, backgroundProcessManagerSource.split(".terminalTranscriptWidthIndex.clear()").size - 1)
+        assertEquals(1, backgroundProcessManagerSource
+            .split("?.terminalTranscriptWidthIndex?.clear()").size - 1)
+        assertTrue(widthSource.contains("fontFamily?.let(::WeakReference)"))
+        assertTrue(widthSource.contains("private val resolver = WeakReference(resolver)"))
+        assertTrue(widthSource.contains("resolvedFonts.map(::WeakReference)"))
+        assertFalse(widthSource.contains("private val fontFamily: Any"))
+        assertTrue(widthUiSource.contains("style.copy(fontFamily = null)"))
+        assertTrue(widthUiSource.contains("TerminalLazyLayoutPass(frame, metrics, metrics.widthKey())"))
+        assertTrue(bindingSource.contains("widthIndex.retainFor(pass.frame, pass.widthMetricKey)"))
+        assertTrue(bindingSource.contains("onDispose { if (sessionWidthIndex == null) widthIndex.clear() }"))
         assertTrue(processSessionSource.contains("rememberTerminalVirtualHistoryPolicy(processId, appliedTerminalRenderMode, imeVisible)"))
         assertTrue(processSessionSource.contains("virtualHistoryPolicy.reapplied(currentImeVisible)"))
         assertTrue(processSessionSource.contains("latestSaveTerminalViewport"))

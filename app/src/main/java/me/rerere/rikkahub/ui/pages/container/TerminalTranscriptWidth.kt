@@ -16,6 +16,7 @@ import androidx.compose.ui.text.resolveDefaults
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndex
+import me.rerere.rikkahub.data.container.TerminalTranscriptWidthMetricKey
 import me.rerere.rikkahub.utils.TerminalEmulator
 import kotlin.math.ceil
 
@@ -31,6 +32,25 @@ private data class TerminalTextMetrics(
     val direction: LayoutDirection,
     val resolver: FontFamily.Resolver,
     val resolvedFonts: List<Any>,
+) {
+    /** The session index must never strongly retain page resolver/typeface ownership. */
+    fun widthKey(): TerminalTranscriptWidthMetricKey = TerminalTranscriptWidthMetricKey(
+        styleMetadata = TerminalTextWidthMetadata(
+            style = style.copy(fontFamily = null),
+            density = density,
+            direction = direction,
+        ),
+        fontFamily = style.fontFamily,
+        resolver = resolver,
+        resolvedFonts = resolvedFonts,
+    )
+}
+
+/** Strongly retained scalar/value metadata; FontFamily is deliberately removed above. */
+private data class TerminalTextWidthMetadata(
+    val style: TextStyle,
+    val density: Density,
+    val direction: LayoutDirection,
 )
 
 @Composable
@@ -54,7 +74,9 @@ internal fun rememberTerminalLazyLayoutPass(
     style: TextStyle,
 ): TerminalLazyLayoutPass {
     val metrics = terminalTextMetrics(style)
-    return remember(TerminalFrameReference(frame), metrics) { TerminalLazyLayoutPass(frame, metrics) }
+    return remember(TerminalFrameReference(frame), metrics) {
+        TerminalLazyLayoutPass(frame, metrics, metrics.widthKey())
+    }
 }
 
 /** Exact natural width of ALL surviving rows, including an offscreen widest history line. */
@@ -69,7 +91,7 @@ internal fun rememberTerminalTranscriptWidth(
         Trace.beginSection("Terminal.productionWidth")
         try {
             val resolved = resolveDefaults(style, metrics.direction)
-            index.width(frame, metrics) { text ->
+            index.width(frame, metrics.widthKey()) { text ->
                 ceil(MultiParagraphIntrinsics(annotatedString = text, style = resolved, placeholders = emptyList(),
                     density = metrics.density, fontFamilyResolver = metrics.resolver)
                     .maxIntrinsicWidth).toInt()
