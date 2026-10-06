@@ -583,6 +583,7 @@ class TerminalItemViewportInstrumentedTest {
         var config by mutableStateOf(TerminalViewportGestureConfig(true, false, 2))
         var mode by mutableStateOf(initialMode)
         var ime by mutableStateOf(false)
+        var avoidIme by mutableStateOf(true)
         var tui by mutableStateOf(false)
         var rtl by mutableStateOf(false)
         var showRendererDialog by mutableStateOf(false)
@@ -666,11 +667,12 @@ class TerminalItemViewportInstrumentedTest {
             tailPadding = with(density) { 8.dp.roundToPx() }
             val chunks = terminalHistoryChunks(frame.historyCount, frame.historyStartSequence, tui || frame.isAlternateScreen)
             policy = rememberTerminalVirtualHistoryPolicy(this, mode, ime)
-            val wants = mode == TerminalRenderMode.VIRTUAL_HISTORY &&
-                policy.allows(chunks.isNotEmpty(), config.panEnabled, config.selectionMode, tui || frame.isAlternateScreen, ime)
+            val wants = mode.isVirtualHistory &&
+                policy.allows(chunks.isNotEmpty(), config.panEnabled, config.selectionMode,
+                    tui || frame.isAlternateScreen, ime, avoidIme)
             bound = rememberTerminalBoundViewport(this, controller, eager, lazy, measurements, frame, style, wants,
                 metrics = { TerminalViewportMetrics(eager.maxValue, viewportHeight, cellHeight, tailPadding,
-                    usesTuiViewport = tui || frame.isAlternateScreen, imeVisible = ime, avoidIme = ime) },
+                    usesTuiViewport = tui || frame.isAlternateScreen, imeVisible = ime, avoidIme = ime && avoidIme) },
                 gestureConfig = config)
             SideEffect {
                 bound.binding.onEffectStarted = { effect ->

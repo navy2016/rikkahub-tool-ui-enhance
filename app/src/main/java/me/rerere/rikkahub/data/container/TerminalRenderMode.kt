@@ -5,7 +5,10 @@ internal enum class TerminalRenderMode(val id: String, val label: String, val sh
     CHUNKED_LAYERS("chunkedLayers", "分块图层", "图层"),
     CHUNKED("chunkedEager", "轻量分块", "分块"),
     FLAT("eager", "逐行兼容", "逐行"),
-    VIRTUAL_HISTORY("lazyHistory", "虚拟历史", "虚拟");
+    VIRTUAL_HISTORY("lazyHistory", "虚拟历史", "虚拟"),
+    VIRTUAL_HISTORY_IME("lazyHistoryIme", "虚拟历史·键盘稳定", "稳虚拟");
+
+    val isVirtualHistory: Boolean get() = this == VIRTUAL_HISTORY || this == VIRTUAL_HISTORY_IME
 
     companion object {
         val DEFAULT = CHUNKED_LAYERS
@@ -21,8 +24,8 @@ internal fun effectiveTerminalRenderMode(
     hasHistoryChunks: Boolean,
     virtualHistoryAllowed: Boolean = false,
 ): TerminalRenderMode = when {
-    preferred == TerminalRenderMode.VIRTUAL_HISTORY && hasHistoryChunks && virtualHistoryAllowed -> preferred
-    preferred == TerminalRenderMode.VIRTUAL_HISTORY && hasHistoryChunks -> TerminalRenderMode.DEFAULT
+    preferred.isVirtualHistory && hasHistoryChunks && virtualHistoryAllowed -> preferred
+    preferred.isVirtualHistory && hasHistoryChunks -> TerminalRenderMode.DEFAULT
     hasHistoryChunks -> preferred
     else -> TerminalRenderMode.FLAT
 }

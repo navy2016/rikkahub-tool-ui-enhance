@@ -31,6 +31,36 @@ internal const val TERMINAL_LAZY_TAIL_KEY = "terminal-tail"
 internal class TerminalLazyLayoutPass(val frame: TerminalEmulator.RenderFrame, val metricKey: Any)
 
 /**
+ * Single UI-thread observer, level-triggered invalidation. An entire eager measure/dispose burst
+ * needs one wake-up, not one SharedFlow emission per row. The binding acknowledges AFTER its frame
+ * wait and BEFORE reading live geometry; acknowledging after the read could swallow newer changes.
+ * Replay keeps a pending wake-up across collection startup/cancellation. This retains no row/frame
+ * or collector scope, posts no callbacks and adds no delay. Cache invalidation remains synchronous.
+ */
+internal class TerminalMeasurementInvalidations {
+    private val mutableChanges = MutableSharedFlow<Unit>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val changes = mutableChanges.asSharedFlow()
+    var pending = false
+        private set
+    var publishedNotifications = 0L
+        private set
+    var coalescedChanges = 0L
+        private set
+
+    fun invalidate() {
+        if (pending) {
+            coalescedChanges++
+            return
+        }
+        pending = true // Set before emission: an immediate collector may acknowledge/re-invalidate.
+        publishedNotifications++
+        check(mutableChanges.tryEmit(Unit)) // DROP_OLDEST never needs a suspending producer.
+    }
+
+    fun acknowledge() { pending = false }
+}
+
+/**
  * UI-thread bookkeeping, not Compose state. Publishing a conflated notification never subscribes
  * a measure block to its own writes. Ownership tokens protect a row archiving/recomposing while its
  * old node is disposed. Text and font metrics, not frame revisions, prove height reuse.
@@ -42,8 +72,10 @@ internal class TerminalLazyItemMeasurements {
         var usedByHistory = false
     }
     private val heights = mutableMapOf<Long, Height>()
-    private val mutableChanges = MutableSharedFlow<Unit>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-    val changes = mutableChanges.asSharedFlow()
+    private val invalidations = TerminalMeasurementInvalidations()
+    val changes = invalidations.changes
+    val publishedNotifications: Long get() = invalidations.publishedNotifications
+    val coalescedChanges: Long get() = invalidations.coalescedChanges
     private val eagerCache = TerminalEagerGeometryCache()
     val retainedRows: Int get() = heights.size
     val retainedEagerHistoryRows: Int get() = eagerCache.retainedHistoryRows
@@ -56,14 +88,19 @@ internal class TerminalLazyItemMeasurements {
         private set
     var changedRowMeasurements = 0L
         private set
+    var createdHeightRecords = 0L
+        private set
     /** Optional test probe; never observable state and never installed by the production page. */
     var onRowComposed: ((Long) -> Unit)? = null
 
     private fun changed(previous: Height?) {
         eagerCache.invalidate(historyChanged = previous?.usedByHistory == true)
         if (heights.isEmpty()) eagerCache.clear()
-        mutableChanges.tryEmit(Unit)
+        invalidations.invalidate()
     }
+
+    /** Sole binding calls this after yielding for a frame, before any live geometry read. */
+    fun acknowledgeChanges() = invalidations.acknowledge()
 
     /** A virtual/unmeasured backend must not retain an eager frame or its full historical prefix. */
     fun clearEagerCache() = eagerCache.clear()
@@ -81,12 +118,16 @@ internal class TerminalLazyItemMeasurements {
     private fun record(owner: Any, metricKey: Any, lineId: Long, text: AnnotatedString, pixels: Int) {
         measuredRowCount++
         val previous = heights[lineId]
+        // Parent constraint/IME passes can remeasure a row without changing its registration.
+        // Keep its history-contributor proof and avoid allocating a throwaway Height record.
+        if (previous != null && previous.owner === owner && previous.metricKey == metricKey &&
+            previous.text == text && previous.pixels == pixels
+        ) return
         val measured = Height(owner, metricKey, text, pixels)
-        if (previous != measured) {
-            heights[lineId] = measured
-            changedRowMeasurements++
-            changed(previous)
-        }
+        createdHeightRecords++
+        heights[lineId] = measured
+        changedRowMeasurements++
+        changed(previous)
     }
 
     private fun release(owner: Any, lineId: Long) {

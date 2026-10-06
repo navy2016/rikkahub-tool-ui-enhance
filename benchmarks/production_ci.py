@@ -12,7 +12,7 @@ import zipfile
 from collections import deque
 from pathlib import Path
 
-from production_summary import CLASS, SCENARIOS, VERSION, load, notices, report, validate
+from production_summary import CLASS, MODES, SCENARIOS, SIZES, VERSION, load, notices, report, validate
 
 ROOT = Path(__file__).resolve().parent.parent
 BUNDLE = ROOT / "artifacts/production-build"
@@ -229,7 +229,7 @@ def run_group(scenario, iterations, smoke):
             result = subprocess.run(args, stdout=stream, stderr=subprocess.STDOUT, timeout=900, check=False)
         if result.returncode != 0:
             raise ValueError(f"ADB instrumentation exited {result.returncode}")
-        require_instrumentation_success(log, 2 if smoke else 6)
+        require_instrumentation_success(log, len(MODES) * (1 if smoke else len(SIZES)))
     except (OSError, ValueError, subprocess.SubprocessError) as caught:
         error = caught
     finally:

@@ -6,6 +6,39 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TerminalVirtualHistoryPolicyTest {
+    @Test fun stableKeyboardIsExplicitAndKeepsTheLegacyImeLatchUnchanged() {
+        val legacy = TerminalVirtualHistoryPolicy()
+        val stable = TerminalVirtualHistoryPolicy(keepVirtualOnIme = true)
+        repeat(3) {
+            legacy.observeIme(true)
+            stable.observeIme(true)
+            assertFalse(legacy.allows(true, true, false, false, true, avoidIme = true))
+            assertTrue(stable.allows(true, true, false, false, true, avoidIme = true))
+            legacy.observeIme(false)
+            stable.observeIme(false)
+            assertFalse(legacy.allows(true, true, false, false, false))
+            assertTrue(stable.allows(true, true, false, false, false))
+            assertFalse(stable.imeFallback)
+        }
+        stable.reapplied(true)
+        assertTrue(stable.allows(true, true, false, false, true, avoidIme = true))
+        assertFalse(stable.imeFallback)
+    }
+
+    @Test fun stableKeyboardRetainsAllOtherCompatibilityGatesAndOffsetPreservation() {
+        val policy = TerminalVirtualHistoryPolicy(keepVirtualOnIme = true)
+        for (ime in listOf(false, true)) {
+            assertFalse(policy.allows(false, true, false, false, ime, avoidIme = true))
+            assertFalse(policy.allows(true, false, false, false, ime, avoidIme = true))
+            assertFalse(policy.allows(true, true, true, false, ime, avoidIme = true))
+            assertFalse(policy.allows(true, true, false, true, ime, avoidIme = true))
+        }
+        assertFalse(policy.allows(true, true, false, false, true))
+        assertFalse(policy.allows(true, true, false, false, true, avoidIme = false))
+        assertTrue(policy.allows(true, true, false, false, true, avoidIme = true))
+        assertTrue(policy.allows(true, true, false, false, false, avoidIme = false))
+    }
+
     @Test fun applyingSameModeAfterKeyboardHideReleasesFallback() {
         val policy = TerminalVirtualHistoryPolicy()
         policy.observeIme(true)

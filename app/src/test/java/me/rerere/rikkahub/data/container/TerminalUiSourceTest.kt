@@ -63,10 +63,9 @@ class TerminalUiSourceTest {
             File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt"),
             File("src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt"),
         ).first { it.isFile }.readText()
-        assertTrue(processSessionSource.contains("TerminalRenderMode.VIRTUAL_HISTORY"))
-        assertTrue(processSessionSource.contains("val wantsVirtualHistory = appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY"))
+        assertTrue(processSessionSource.contains("val wantsVirtualHistory = appliedTerminalRenderMode.isVirtualHistory"))
         assertTrue(processSessionSource.contains("virtualHistoryPolicy.allows(terminalHistoryChunkPlan.isNotEmpty(), terminalPanMode, selectionMode,"))
-        assertTrue(processSessionSource.contains("currentUsesTuiViewport, imeVisible)"))
+        assertTrue(processSessionSource.contains("currentUsesTuiViewport, imeVisible, shouldAvoidIme)"))
         assertTrue(processSessionSource.contains("TerminalLazyItemMeasurements"))
         assertTrue(processSessionSource.contains("effectiveRenderMode = effectiveTerminalRenderMode"))
         assertTrue(processSessionSource.contains("rememberTerminalBoundViewport("))
@@ -85,6 +84,15 @@ class TerminalUiSourceTest {
         assertFalse(lazyMeasurementsSource.contains("mutableStateMapOf"))
         assertFalse(lazyMeasurementsSource.contains("Snapshot.withoutReadObservation"))
         assertTrue(lazyMeasurementsSource.contains("MutableSharedFlow<Unit>"))
+        assertTrue(lazyMeasurementsSource.contains("if (pending)"))
+        assertTrue(lazyMeasurementsSource.contains("fun acknowledgeChanges()"))
+        val bindingSource = listOf(
+            File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt"),
+            File("src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt"),
+        ).first { it.isFile }.readText().substringAfter(").conflate().collect {")
+        val acknowledged = bindingSource.indexOf("measurements.acknowledgeChanges()")
+        assertTrue(acknowledged > bindingSource.indexOf("withFrameNanos { }"))
+        assertTrue(acknowledged < bindingSource.indexOf("binding.eagerGeometry()"))
         assertFalse(lazyMeasurementsSource.contains("runCatching"))
         assertTrue(renderedRowsSource.contains("if (terminalUsesBasicText(text, style))"))
         assertTrue(renderedRowsSource.contains("BasicText(text = text, modifier = modifier"))

@@ -26,7 +26,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import java.util.UUID
 
-/** Each invocation is one complete scenario, ALL selected sizes and BOTH actual production modes. */
+/** One complete scenario, ALL selected sizes and ALL THREE adjacent production modes per size. */
 @LargeTest
 @OptIn(ExperimentalMetricApi::class)
 @RunWith(Parameterized::class)

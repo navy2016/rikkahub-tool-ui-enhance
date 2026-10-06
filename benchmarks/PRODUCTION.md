@@ -1,20 +1,20 @@
 # Production viewport benchmark
 
 This is the current production-component benchmark, distinct from the archived renderer-only
-experiments in README.md. Contract: `production-viewport-v2`. No old measurements are relabelled.
+experiments in README.md. Contract: `production-viewport-v3`. No old measurements are relabelled.
 
 ## What is measured
 
 The target compiles the actual production `TerminalTranscriptViewport`, `TerminalViewportBinding`,
 compatibility policy, gestures, row synchronizer, width index and height measurements from app sources.
-It runs either the default `chunkedLayers` or explicitly selected `lazyHistory` preference. All follow,
+It runs the default `chunkedLayers`, original `lazyHistory`, and opt-in `lazyHistoryIme` preferences. All follow,
 top/tail jumps, IME fallback and restore scrolling is performed by the production controller's sole
 executor. The harness never calls ScrollState/LazyListState scrolling APIs or updates the controller's
 layout observer. Completion checks read the eager cache without populating it.
 
-Six scenario groups each contain an adjacent pair of modes at 1k, 5k and 10k historical rows. Pair
-order alternates. One workflow builds a single non-debuggable, profileable, unminified Release-derived
-target and a benchmark test driver. Each scenario runs both modes in ONE instrumentation invocation,
+Six scenario groups each contain three adjacent modes at 1k, 5k and 10k historical rows. The starting
+mode rotates by size/scenario. One workflow builds a non-debuggable, profileable, unminified Release-derived
+target and a benchmark test driver. Each scenario runs all modes in ONE instrumentation invocation,
 APK pair and emulator; different scenarios can run on different runners and must NOT be pooled.
 
 | Scenario | Operation inside timing |
@@ -23,7 +23,7 @@ APK pair and emulator; different scenarios can run on different runners and must
 | `activeRowUpdate` | 30 separately drawn last-line rewrites; history identity stays unchanged. |
 | `appendAndTrim` | 30 separately drawn single-line archives at the scrollback cap; production follows the evolving semantic tail. |
 | `semanticJump` | Production animated top jump and tail jump, including exact final positioning. Not an equal-distance/equal-duration fling comparison. |
-| `imeRoundTrip` | Actual system keyboard show, 8 active updates in compatibility fallback, hide, explicit same-mode retry. A mid-history ID and clip are captured during setup; positions and unchanged physical terminal rows are checked. |
+| `imeRoundTrip` | Actual system keyboard show, 8 active updates, hide, explicit same-mode Apply. Original `lazyHistory` retains eager fallback/retry; `lazyHistoryIme` stays virtual and its final Apply is a no-op. A mid-history ID and clip are captured during setup; positions and physical terminal rows are checked. |
 | `detachRestore` | Dispose viewport; append/trim 12 lines while detached; recreate row states/controller/rendering and restore a captured mid-history anchor. This is composition recreation, NOT Android process death. |
 
 Geometry is 80 columns / 24 physical rows, JetBrains Mono 14sp, mixed ASCII/CJK/ANSI, 8dp tail padding.
@@ -37,7 +37,7 @@ callbacks are not proof of GPU presentation. Default eager retains its existing 
 semantics; no benchmark-only real-height table is added to the control. Existing natural-height
 instrumented tests remain separate acceptance coverage.
 
-V2 observes completion with a per-launch, nonce-bound, signature-permission-protected broadcast to
+V3 keeps V2's completion protocol: a per-launch, nonce-bound, signature-permission-protected broadcast to
 the driver. The receiver is installed before launch and removed between launches and after the test;
 its durable latches reject out-of-order phases, stale launches and fixture failures. Only validated
 completion sends `mounted` / `done`; UIAutomator still clicks the native controls, but an accessibility
@@ -45,6 +45,13 @@ cache can no longer hide a completed status text. This changes completion-observ
 requires a separate V2 baseline. V1 run `37220612385` failed its 5k IME case even though target PID 4037
 logged `done` at 17:46:16.811 and the driver timed out at 17:48:36.477. That failed invocation remains
 diagnostic evidence, not an accepted baseline. No timeout, production scroll or IME policy was changed.
+
+V3 adds the third mode and rotates three-mode order. Old two-mode results remain V2 evidence; a V3
+result is accepted only if every selected size contains all three modes. No old results are relabelled.
+The new preference does not replace the default or change original `lazyHistory` behavior. It retains
+virtual rows during IME only when the production policy permits avoidance; SEL, MOUSE, TUI, alternate
+screen and offset-preserving/no-avoidance paths remain eager. Status/KEYS, PTY input/resize and natural
+text geometry are unchanged. Real-keyboard tests separately cover follow, lock, font/RTL and disposal.
 
 The detach continuation completes before the replacement is allocated; only the scalar saved viewport
 state crosses that boundary. The harness does not intentionally retain the old row tree/controller
@@ -69,8 +76,12 @@ make the entire append pipeline O(1). The baseline at `16ab7c0` predates this bl
   remain absent. `meminfo-after.txt` is a post-run diagnostic, not a per-case peak measurement.
 - Source SHA, run ID, attempt/scenario group ID, target APK hash, copied production source/font hashes,
   AndroidX device context, display size/density, heap and input-method identity.
+- `Prod.createdHeightRecords`, `Prod.measurementNotifications` and `Prod.coalescedMeasurements` are
+  cumulative work counters, not time samples. `IME_WORK` log lines bind per-round node/notification
+  deltas to the Activity's launch token. Stable IME requires zero eager history builds and fewer than
+  256 newly created measurement nodes per round; the original mode must coalesce its bulk fallback.
 
-Results are accepted only with the complete pair/size matrix for that invocation, matching positive
+Results are accepted only with the complete three-mode/size matrix for that invocation, matching positive
 repetition count, successful instrumentation, required traces and exact provenance. Exact duplicate
 JSON copies are accepted; different documents, checkpoint prefixes or independent runs are rejected.
 Trace durations overlap and cannot be subtracted from frame percentiles. Emulator results are not FPS
@@ -78,8 +89,8 @@ or a percentage speedup relative to an earlier build on another runner.
 
 ## CI
 
-`Terminal Production Viewport Benchmark` automatically runs a **smoke-only** 1k/one-repeat pair for
-each scenario on relevant pushes (12 cases). This validates the fixture and trace contract, not a
+`Terminal Production Viewport Benchmark` automatically runs a **smoke-only** 1k/one-repeat triple for
+each scenario on relevant pushes (18 cases). This validates the fixture and trace contract, not a
 performance baseline. The original `Terminal Scrollback Benchmark` stays manually runnable.
 
 After smoke and existing regression tests pass, request all sizes / three repeats:
@@ -90,7 +101,7 @@ gh workflow run terminal-production-benchmark.yml \
   -f scenario=all -f smoke=false -f iterations=3
 ```
 
-Full collection is 36 cases / 108 measured iterations; each scenario has a 15-minute instrumentation
+Full V3 collection is 54 cases / 162 measured iterations; each scenario has a 15-minute instrumentation
 bound and uploads its raw JSON/traces/summary immediately when its job ends. Partial artifacts remain
 diagnostics, never a passed baseline. Failed-job reruns reuse the build job's original named/hash-checked
 bundle; a new source SHA requires a new build. No background Actions monitoring service is used.
@@ -107,7 +118,7 @@ runners isolate crashes/shutdowns; they do not make cross-run comparisons valid.
 
 ## Not covered yet
 
-Full `ProcessSessionPage`, actual shell/PTY scheduling, input-to-echo delay, selection/clipboard,
+Full `ProcessSessionPage`, actual shell/PTY scheduling, input-to-echo delay, full-page selection/clipboard,
 process-death recovery, representative physical-device memory/GC and 30-minute stress remain follow-up
 work. This benchmark does not claim those end-to-end checks or change any status/KEYS behavior.
 

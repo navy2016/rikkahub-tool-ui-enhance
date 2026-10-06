@@ -42,11 +42,13 @@ import me.rerere.rikkahub.ui.pages.container.TerminalLazyItemMeasurements
 import me.rerere.rikkahub.ui.pages.container.TerminalLazyLayoutPass
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRow
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRowState
+import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRows
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -274,5 +276,110 @@ class TerminalRowMeasurementInstrumentedTest {
         }
         compose.waitForIdle()
         compose.runOnIdle { assertEquals(0, measurements.retainedRows) }
+    }
+
+    @Test fun measurementNodeEqualRemeasureKeepsHistoryProofWithoutAllocatingOrNotifying() {
+        val terminal = TerminalEmulator(80, 6, 1).apply {
+            feed("\u001B[?25l" + (0..6).joinToString("\r\n") { "row-$it" })
+        }
+        val frame = terminal.renderFrame()
+        assertEquals(1, frame.historyCount)
+        val rows = createTerminalRenderedRows(frame)
+        val measurements = TerminalLazyItemMeasurements()
+        val pass = TerminalLazyLayoutPass(frame, style)
+        var maximum by mutableStateOf(700)
+        var minimumHeight by mutableStateOf(0)
+        var visible by mutableStateOf(true)
+        compose.setContent {
+            MaterialTheme {
+                if (visible) Layout(content = {
+                    rows.forEach { row -> key(row.lineId) { measurements.Row(style, row, style) } }
+                }) { measurables, _ ->
+                    val children = measurables.map {
+                        it.measure(Constraints(maxWidth = maximum, minHeight = minimumHeight, maxHeight = 200))
+                    }
+                    layout(children.maxOf { it.width }, children.sumOf { it.height }) {
+                        var top = 0
+                        children.forEach { it.placeRelative(0, top); top += it.height }
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        val original = compose.runOnIdle { requireNotNull(measurements.readEager(pass)) }
+        val allocations = measurements.createdHeightRecords
+        val notifications = measurements.publishedNotifications
+        val measured = measurements.measuredRowCount
+        val oldHeight = original.height(0)
+        compose.runOnIdle { measurements.acknowledgeChanges() }
+        repeat(8) {
+            // Different constraints force a real node measure but do not change this short text.
+            compose.runOnIdle { maximum++ }
+            compose.waitForIdle()
+            compose.runOnIdle {
+                assertSame(original, measurements.peekEager(pass))
+                assertEquals(allocations, measurements.createdHeightRecords)
+                assertEquals(notifications, measurements.publishedNotifications)
+                assertEquals(1, measurements.retainedEagerHistoryRows)
+            }
+        }
+        compose.runOnIdle {
+            assertTrue("test failed to remeasure real text", measurements.measuredRowCount >= measured + 8 * rows.size)
+            minimumHeight = oldHeight + 40
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertNull(measurements.peekEager(pass))
+            assertEquals("unchanged remeasure lost contributor invalidation", 0, measurements.retainedEagerHistoryRows)
+            assertEquals(notifications + 1, measurements.publishedNotifications)
+            assertEquals(oldHeight + 40, requireNotNull(measurements.readEager(pass)).height(0))
+            assertEquals("published geometry was mutated", oldHeight, original.height(0))
+            measurements.acknowledgeChanges()
+            visible = false
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(0, measurements.retainedRows)
+            assertEquals(0, measurements.retainedEagerHistoryRows)
+            assertNull(measurements.peekEager(pass))
+            assertEquals(notifications + 2, measurements.publishedNotifications)
+        }
+    }
+
+    @Test fun measurementNodeBulkMeasureMetricChangeAndDisposalPublishOneWakeupPerBatch() {
+        val measurements = TerminalLazyItemMeasurements()
+        val rows = List(128) { TerminalRenderedRowState(it.toLong(), AnnotatedString("row-$it")) }
+        var metric by mutableStateOf(0)
+        var visible by mutableStateOf(true)
+        compose.setContent {
+            MaterialTheme {
+                if (visible) Column {
+                    rows.forEach { row -> key(row.lineId) { measurements.Row(metric, row, style) } }
+                }
+            }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(128, measurements.retainedRows)
+            assertEquals(1L, measurements.publishedNotifications)
+            assertTrue(measurements.coalescedChanges >= 127L)
+            measurements.acknowledgeChanges()
+            metric++
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(128, measurements.retainedRows)
+            assertEquals(2L, measurements.publishedNotifications)
+            assertTrue(measurements.createdHeightRecords >= 256L)
+            assertTrue(measurements.coalescedChanges >= 382L) // record + release + record, minus two wakes.
+            measurements.acknowledgeChanges()
+            visible = false
+        }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertEquals(0, measurements.retainedRows)
+            assertEquals(3L, measurements.publishedNotifications)
+            assertTrue(measurements.coalescedChanges >= 509L)
+        }
     }
 }

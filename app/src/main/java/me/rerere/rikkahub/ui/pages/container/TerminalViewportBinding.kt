@@ -189,6 +189,9 @@ internal fun rememberTerminalBoundViewport(
                 .distinctUntilChanged().filter { latestWants && !binding.virtual }.map { Unit },
         ).conflate().collect {
             withFrameNanos { }
+            // Cover every mutation during the frame wait with this refresh. Rearm BEFORE reading
+            // live layout, so a subsequent measure/disposal always schedules the next refresh.
+            measurements.acknowledgeChanges()
             // Never apply a layout captured before yielding; all frame/metrics reads are live.
             if (latestWants && !binding.virtual) {
                 val geometry = binding.eagerGeometry()

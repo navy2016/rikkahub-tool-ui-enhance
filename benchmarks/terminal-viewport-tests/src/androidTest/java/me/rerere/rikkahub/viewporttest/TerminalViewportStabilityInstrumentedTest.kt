@@ -165,11 +165,15 @@ class TerminalViewportStabilityInstrumentedTest {
         val before = compose.runOnIdle {
             assertFalse(f.isVirtual)
             assertEquals(10_000, f.measurements.retainedEagerHistoryRows)
+            assertTrue("full fallback did not coalesce row invalidations", f.measurements.coalescedChanges >= 9_000)
+            assertTrue("row notifications remain proportional to history",
+                f.measurements.publishedNotifications < f.measurements.coalescedChanges / 10)
             requireNotNull(f.bound.binding.eagerGeometry())
         }
         val totalHeight = before.contentHeightPx
         val visits = compose.runOnIdle { f.measurements.eagerVisitedHistoryRows }
         val builds = compose.runOnIdle { f.measurements.eagerHistoryBuildCount }
+        var notifications = compose.runOnIdle { f.measurements.publishedNotifications }
         repeat(12) { update ->
             compose.runOnIdle {
                 f.terminal.feed("\r\u001B[2Kactive-$update 中文")
@@ -181,6 +185,8 @@ class TerminalViewportStabilityInstrumentedTest {
                 assertTrue(before.historyPrefix === current.historyPrefix)
                 assertEquals(visits, f.measurements.eagerVisitedHistoryRows)
                 assertEquals(builds, f.measurements.eagerHistoryBuildCount)
+                assertTrue("later frame lost its measurement wakeup", f.measurements.publishedNotifications > notifications)
+                notifications = f.measurements.publishedNotifications
                 assertEquals(original.anchor, f.top().anchor)
             }
         }

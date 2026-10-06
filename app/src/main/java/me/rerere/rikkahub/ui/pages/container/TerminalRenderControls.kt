@@ -146,7 +146,8 @@ internal fun TerminalRenderModeDialog(
                                     TerminalRenderMode.CHUNKED_LAYERS -> "复用历史分块的绘制记录，适合长历史和连续输出；使用额外图层记录。"
                                     TerminalRenderMode.CHUNKED -> "保留历史分块，不使用独立绘制图层；适合实测图层收益较低的设备。"
                                     TerminalRenderMode.FLAT -> "逐行直接布局，无历史分块；便于短输出和兼容性对照，长历史成本较高。"
-                                    TerminalRenderMode.VIRTUAL_HISTORY -> "只组合当前可见历史行，按实测行高恢复稳定行 ID；TUI、鼠标和 SEL 场景会自动回退。"
+                                    TerminalRenderMode.VIRTUAL_HISTORY -> "只组合当前可见历史行；键盘交互后保留兼容渲染，可再次应用恢复虚拟历史。"
+                                    TerminalRenderMode.VIRTUAL_HISTORY_IME -> "实验选项：长历史在键盘显示时保留虚拟行树；自动跟随、锁定阅读和 IME 高度设置不变。短内容需要保留原位时仍回退。"
                                 }, style = MaterialTheme.typography.bodySmall)
                             }
                         }

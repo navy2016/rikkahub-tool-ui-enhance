@@ -28,6 +28,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
@@ -123,16 +124,21 @@ class TerminalRenderModeInstrumentedTest {
         }
         compose.onNodeWithTag("terminal-render-button").assertIsDisplayed().performClick()
         compose.onNodeWithTag("terminal-render-option-chunkedLayers").assertIsSelected()
-        compose.onNodeWithTag("terminal-render-option-eager").performClick().assertIsSelected()
+        compose.onNodeWithTag("terminal-render-option-eager").performScrollTo().performClick().assertIsSelected()
         compose.onNodeWithTag("terminal-render-cancel").performClick()
         assertEquals(TerminalRenderMode.DEFAULT, value)
         assertEquals(null, applied)
         compose.onNodeWithTag("terminal-render-button").performClick()
-        compose.onNodeWithTag("terminal-render-option-eager").assertIsNotSelected().performClick()
+        compose.onNodeWithTag("terminal-render-option-eager").performScrollTo().assertIsNotSelected().performClick()
         compose.onNodeWithTag("terminal-render-apply").performClick()
         assertEquals(TerminalRenderMode.FLAT, applied)
         compose.onNodeWithTag("terminal-render-button").performClick()
-        compose.onNodeWithTag("terminal-render-reset").performClick()
+        compose.onNodeWithTag("terminal-render-option-lazyHistoryIme").performScrollTo().performClick().assertIsSelected()
+        compose.onNodeWithTag("terminal-render-apply").performClick()
+        assertEquals(TerminalRenderMode.VIRTUAL_HISTORY_IME, applied)
+        compose.onNodeWithTag("terminal-render-button").performClick()
+        compose.onNodeWithTag("terminal-render-reset").performScrollTo().performClick()
+        compose.onNodeWithTag("terminal-render-option-chunkedLayers").performScrollTo()
         compose.onNodeWithTag("terminal-render-option-chunkedLayers").assertIsSelected()
         compose.onNodeWithTag("terminal-render-apply").performClick()
         assertEquals(TerminalRenderMode.DEFAULT, applied)

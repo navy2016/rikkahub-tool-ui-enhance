@@ -6,6 +6,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TerminalRenderPreferencesTest {
+    @Test fun keyboardStableModeIsAnIndependentPerCommandChoiceWithTheOriginalDefault() {
+        val stable = TerminalRenderMode.VIRTUAL_HISTORY_IME
+        val legacy = TerminalRenderMode.VIRTUAL_HISTORY
+        val raw = updatedTerminalRenderPreferences(
+            updatedTerminalRenderPreferences("", "bash", stable), "legacy", legacy)
+        assertEquals(stable, TerminalRenderMode.fromId("lazyHistoryIme"))
+        assertEquals(legacy, TerminalRenderMode.fromId("lazyHistory"))
+        assertEquals(stable, terminalRendererForCommand(raw, "bash"))
+        assertEquals(legacy, terminalRendererForCommand(raw, "legacy"))
+        assertEquals(TerminalRenderMode.CHUNKED_LAYERS, terminalRendererForCommand(raw, "new command"))
+        assertEquals(TerminalRenderMode.CHUNKED_LAYERS, effectiveTerminalRenderMode(stable, true, false))
+        assertEquals(stable, effectiveTerminalRenderMode(stable, true, true))
+        assertEquals(TerminalRenderMode.FLAT, effectiveTerminalRenderMode(stable, false, true))
+    }
+
     @Test
     fun missingCorruptAndUnknownPreferencesKeepTheCurrentDefault() {
         for (raw in listOf("", "not json", "[]", "{\"other\":\"eager\"}")) {

@@ -998,9 +998,6 @@ private fun TerminalInteractivePanel(
             usesTuiViewport = currentUsesTuiViewport,
         )
     }
-    val wantsVirtualHistory = appliedTerminalRenderMode == TerminalRenderMode.VIRTUAL_HISTORY &&
-        virtualHistoryPolicy.allows(terminalHistoryChunkPlan.isNotEmpty(), terminalPanMode, selectionMode,
-            currentUsesTuiViewport, imeVisible)
     val terminalContentHeightPx = if (currentUsesTuiViewport) {
         if (currentPreservePhysicalGrid) {
             terminalRows * terminalCellHeightPx + currentTerminalTailPaddingPx
@@ -1019,6 +1016,9 @@ private fun TerminalInteractivePanel(
         imeVisible = imeVisible,
         outputViewportHeightPx = outputViewportHeightPx,
     )
+    val wantsVirtualHistory = appliedTerminalRenderMode.isVirtualHistory &&
+        virtualHistoryPolicy.allows(terminalHistoryChunkPlan.isNotEmpty(), terminalPanMode, selectionMode,
+            currentUsesTuiViewport, imeVisible, shouldAvoidIme)
     // The status bar is a floating overlay (zIndex above the terminal). Reserve its full strip
     // whenever it is visible so terminal content is never hidden underneath it, for both short
     // transcript output and full-height TUI/physical-grid content. (Previously the strip was only

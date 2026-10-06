@@ -10,6 +10,15 @@ TARGET = ROOT / 'terminal-target/src/main/java/me/rerere/rikkahub/benchmark/Prod
 
 
 class ProductionContractTest(unittest.TestCase):
+    def test_stable_ime_uses_production_policy_and_checks_bounded_nodes_without_eager_history(self):
+        source = TARGET.read_text()
+        self.assertIn('val wants = mode.isVirtualHistory', source)
+        self.assertIn('policy.allows(chunks.isNotEmpty(), true, false, false, ime, avoidIme = ime)', source)
+        self.assertIn('check(viewport.bound.virtualHistoryEnabled == stableIme)', source)
+        self.assertIn('check(measurements.eagerHistoryBuildCount == 0L)', source)
+        self.assertIn('check(measurements.createdRowNodes - nodesBefore < 256)', source)
+        self.assertIn('viewport.policy.reapplied(false)', source)
+
     def test_harness_never_drives_backend_scroll_or_populates_eager_geometry(self):
         source = TARGET.read_text()
         for call in ('.scrollTo(', '.animateScrollTo(', '.scrollToItem(', '.animateScrollToItem(',

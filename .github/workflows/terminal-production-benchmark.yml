@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: 'Each scenario keeps both production modes and all selected sizes on one device'
+        description: 'Each scenario keeps all three production modes and all selected sizes on one device'
         type: choice
         options: [all, initialCompose, activeRowUpdate, appendAndTrim, semanticJump, imeRoundTrip, detachRestore]
         default: all
@@ -120,7 +120,7 @@ jobs:
       - name: Select repetition count
         run: |
           if [ "$SMOKE" = true ]; then echo 'ITERATIONS=1' >> "$GITHUB_ENV"; fi
-      - name: Run and validate one bounded paired scenario
+      - name: Run and validate one bounded three-mode scenario
         run: python3 benchmarks/production_emulator.py --scenario "$SCENARIO" --iterations "$ITERATIONS" --smoke "$SMOKE"
       - name: Upload this scenario immediately, including partial evidence on failure
         if: always()

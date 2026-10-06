@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate ONE production-viewport scenario/pair invocation; never merge independent runs."""
+"""Validate ONE three-mode production-viewport invocation; never merge independent runs."""
 import argparse
 import json
 import math
@@ -8,9 +8,9 @@ from pathlib import Path
 
 from summarize import format_number, median, overrun_percent, per_operation, percentile
 
-VERSION = "production-viewport-v2"
+VERSION = "production-viewport-v3"
 SIZES = (1000, 5000, 10000)
-MODES = ("chunkedLayers", "lazyHistory")
+MODES = ("chunkedLayers", "lazyHistory", "lazyHistoryIme")
 SCENARIOS = ("initialCompose", "activeRowUpdate", "appendAndTrim", "semanticJump", "imeRoundTrip", "detachRestore")
 CLASS = "me.rerere.rikkahub.benchmark.ProductionTerminalBenchmark"
 
@@ -79,7 +79,7 @@ def validate(results, context, sha, run_id, group_id, scenario, iterations, smok
         raise ValueError(f"Missing/mismatched provenance payload; expected {expected_payload}")
     expected = {(size, scenario, mode) for size in ((1000,) if smoke else SIZES) for mode in MODES}
     if set(results) != expected:
-        raise ValueError(f"Incomplete production pair matrix: missing={expected - set(results)}, extra={set(results) - expected}")
+        raise ValueError(f"Incomplete production mode matrix: missing={expected - set(results)}, extra={set(results) - expected}")
     for (_, _, mode), case in results.items():
         if type(case.get("repeatIterations")) is not int or case["repeatIterations"] != iterations or iterations <= 0:
             raise ValueError(f"Repetition mismatch: {case['name']}")
@@ -119,12 +119,15 @@ def validate(results, context, sha, run_id, group_id, scenario, iterations, smok
             trace(case, prefix, count=int(scenario == owner))
         if scenario == "semanticJump":
             trace(case, "scrollEffect", minimum=2)
-        if mode == "lazyHistory":
+        if mode in ("lazyHistory", "lazyHistoryIme"):
             if scenario in ("initialCompose", "activeRowUpdate", "appendAndTrim", "imeRoundTrip", "detachRestore"):
-                minimum = 30 if scenario in ("activeRowUpdate", "appendAndTrim") else 1
+                minimum = (30 if scenario in ("activeRowUpdate", "appendAndTrim") else
+                           8 if mode == "lazyHistoryIme" and scenario == "imeRoundTrip" else 1)
                 trace(case, "width", minimum=minimum)
-            if scenario == "imeRoundTrip":
+            if scenario == "imeRoundTrip" and mode == "lazyHistory":
                 trace(case, "eagerGeometry", minimum=1)
+            if mode == "lazyHistoryIme":
+                trace(case, "eagerGeometry", count=0)
         else:
             trace(case, "width", count=0)
             trace(case, "eagerGeometry", count=0)
@@ -137,7 +140,7 @@ def ordered(results):
 def report(results, context, sha, scenario, smoke):
     lines = [f"# Production viewport: {scenario}", "",
              f"Commit: `{sha}`. Contract: `{VERSION}`. Smoke-only: `{str(smoke).lower()}`.", "",
-             "Both actual production modes share one APK, device and instrumentation invocation in this scenario.",
+             "All three actual production modes share one APK, device and instrumentation invocation in this scenario.",
              "Other scenarios may use different runners; do not aggregate their samples or calculate cross-group ratios.",
              "This is an unminified Release-derived component harness, not ProcessSessionPage, PTY/input echo or app startup.",
              "Updates include production reconciliation and two stable draw confirmations. Validation/wait overhead is included.",

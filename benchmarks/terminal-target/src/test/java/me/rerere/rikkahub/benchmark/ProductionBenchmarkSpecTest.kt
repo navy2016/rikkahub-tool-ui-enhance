@@ -6,23 +6,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProductionBenchmarkSpecTest {
-    @Test fun everyScenarioContainsAllSizesAndAnAdjacentProductionPair() {
+    @Test fun everyScenarioContainsAllSizesAndAdjacentModesWithRotatingOrder() {
         for (group in ProductionBenchmarkSpec.scenarios) {
             val cases = ProductionBenchmarkSpec.cases(group)
-            assertEquals(6, cases.size)
-            for ((index, pair) in cases.chunked(2).withIndex()) {
+            assertEquals(9, cases.size)
+            for ((index, pair) in cases.chunked(3).withIndex()) {
                 assertEquals(listOf(ProductionBenchmarkSpec.sizes[index]), pair.map { it[0] }.distinct())
                 assertEquals(listOf(group), pair.map { it[1] }.distinct())
                 assertEquals(ProductionBenchmarkSpec.modes.toSet(), pair.map { it[2] }.toSet())
             }
-            assertTrue(cases[0][2] != cases[2][2])
+            assertEquals(3, cases.chunked(3).map { it.first()[2] }.toSet().size)
         }
     }
 
-    @Test fun smokeKeepsBothModesAndNeverPretendsToBeAFullMatrix() {
+    @Test fun smokeKeepsAllThreeModesAndNeverPretendsToBeAFullMatrix() {
         for (group in ProductionBenchmarkSpec.scenarios) {
             val smoke = ProductionBenchmarkSpec.cases(group, smoke = true)
-            assertEquals(2, smoke.size)
+            assertEquals(3, smoke.size)
             assertEquals(listOf(1000), smoke.map { it[0] }.distinct())
             assertEquals(ProductionBenchmarkSpec.modes.toSet(), smoke.map { it[2] }.toSet())
         }

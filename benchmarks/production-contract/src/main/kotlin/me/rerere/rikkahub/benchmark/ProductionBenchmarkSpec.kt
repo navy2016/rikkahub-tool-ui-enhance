@@ -2,7 +2,7 @@ package me.rerere.rikkahub.benchmark
 
 /** Shared by the target and its driver; no Android or renderer implementation lives here. */
 internal object ProductionBenchmarkSpec {
-    const val VERSION = "production-viewport-v2"
+    const val VERSION = "production-viewport-v3"
     const val PHASE_TOKEN = "production.phase.token"
     const val PHASE_VALUE = "production.phase.value"
     const val PACKAGE = "me.rerere.rikkahub.terminalbenchmark"
@@ -17,12 +17,13 @@ internal object ProductionBenchmarkSpec {
     val sizes = listOf(1_000, 5_000, 10_000)
     val scenarios = listOf("initialCompose", "activeRowUpdate", "appendAndTrim",
         "semanticJump", "imeRoundTrip", "detachRestore")
-    val modes = listOf("chunkedLayers", "lazyHistory")
+    val modes = listOf("chunkedLayers", "lazyHistory", "lazyHistoryIme")
 
     fun cases(group: String, smoke: Boolean = false): List<Array<Any>> {
         require(group in scenarios) { "Unknown production scenario: $group" }
         return (if (smoke) sizes.take(1) else sizes).flatMapIndexed { index, size ->
-            val ordered = if ((index + scenarios.indexOf(group)) % 2 == 0) modes else modes.reversed()
+            val rotation = (index + scenarios.indexOf(group)) % modes.size
+            val ordered = modes.drop(rotation) + modes.take(rotation)
             ordered.map { mode -> arrayOf<Any>(size, group, mode) }
         }
     }

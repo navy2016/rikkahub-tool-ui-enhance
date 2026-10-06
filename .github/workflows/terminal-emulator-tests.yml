@@ -154,6 +154,7 @@ jobs:
               --tests me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndexTest \
               --tests me.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest \
               --tests me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest \
+              --tests me.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest \
               --tests me.rerere.rikkahub.data.container.TerminalHistorySnapshotTest \
               --stacktrace; then
               exit 0
@@ -181,6 +182,7 @@ jobs:
             --require-suite me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndexTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest \
+            --require-suite me.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalHistorySnapshotTest
 
       - name: Upload test reports

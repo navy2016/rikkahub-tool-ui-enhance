@@ -276,13 +276,18 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         val measuredHistory = widthIndex.measuredHistoryRows
         val measuredScreen = widthIndex.measuredScreenRows
         val fullHeight = viewport.viewportHeight
+        val stableIme = mode == TerminalRenderMode.VIRTUAL_HISTORY_IME
+        val measurements = viewport.measurements
+        val nodesBefore = measurements.createdRowNodes
+        val noticesBefore = measurements.publishedNotifications
+        val coalescedBefore = measurements.coalescedChanges
         productionAsyncTrace("Prod.imeShow") {
             focus.requestFocus()
             awaitCondition { inputFocused }
             checkNotNull(keyboard).show()
             awaitCondition { imeVisible && viewport.viewportHeight < fullHeight }
             awaitSettled(viewport)
-            check(!viewport.bound.virtualHistoryEnabled)
+            check(viewport.bound.virtualHistoryEnabled == stableIme)
             viewport.checkSavedAnchor(saved)
             validate(viewport)
         }
@@ -301,26 +306,42 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             checkNotNull(keyboard).hide()
             awaitCondition { !imeVisible && viewport.viewportHeight == fullHeight }
             awaitSettled(viewport)
-            check(!viewport.bound.virtualHistoryEnabled) { "IME fallback must remain latched" }
-            check(widthIndex.measuredHistoryRows == measuredHistory && widthIndex.measuredScreenRows == measuredScreen) {
-                "Compatibility fallback measured virtual widths"
+            check(viewport.bound.virtualHistoryEnabled == stableIme) { "Incorrect renderer after IME hide" }
+            if (!stableIme) {
+                check(widthIndex.measuredHistoryRows == measuredHistory && widthIndex.measuredScreenRows == measuredScreen) {
+                    "Compatibility fallback measured virtual widths"
+                }
             }
             viewport.checkSavedAnchor(saved)
             validate(viewport)
         }
         productionAsyncTrace("Prod.explicitRetry") {
-            // Same callback the production dialog invokes after persistence; no automatic retry.
+            // Same explicit Apply callback in all modes. Stable IME mode was already virtual;
+            // include this no-op phase for equal action counts, not as a required user operation.
             viewport.policy.reapplied(false)
-            awaitCondition { viewport.bound.virtualHistoryEnabled == (mode == TerminalRenderMode.VIRTUAL_HISTORY) }
+            awaitCondition { viewport.bound.virtualHistoryEnabled == mode.isVirtualHistory }
             awaitSettled(viewport)
             viewport.checkSavedAnchor(saved)
             validate(viewport)
         }
         check(viewport.bound.binding.widthIndex === widthIndex)
         check(widthIndex.measuredHistoryRows == measuredHistory) { "IME retry rescanned unchanged history widths" }
-        if (mode == TerminalRenderMode.VIRTUAL_HISTORY) {
+        if (mode.isVirtualHistory) {
             check(widthIndex.measuredScreenRows > measuredScreen) { "IME retry did not measure updated screen widths" }
         }
+        if (stableIme) {
+            check(measurements.eagerHistoryBuildCount == 0L) { "Stable IME mounted eager history" }
+            check(measurements.createdRowNodes - nodesBefore < 256) { "Stable IME rebuilt the history row tree" }
+        } else if (mode == TerminalRenderMode.VIRTUAL_HISTORY) {
+            check(measurements.coalescedChanges - coalescedBefore >= size - 128) {
+                "Eager fallback did not coalesce its bulk row invalidations"
+            }
+        }
+        Log.i("ProductionTerminalBenchmark", "IME_WORK size=$size mode=${mode.id} token=$phaseToken " +
+            "nodes=${measurements.createdRowNodes - nodesBefore} " +
+            "notifications=${measurements.publishedNotifications - noticesBefore} " +
+            "coalesced=${measurements.coalescedChanges - coalescedBefore} " +
+            "heightRecords=${measurements.createdHeightRecords} measuredRows=${measurements.measuredRowCount}")
         check(terminal.rows == TerminalBenchmarkWorkload.SCREEN_ROWS)
     }
 
@@ -375,7 +396,8 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         check(viewport.ready())
         check(viewport.bound.binding.maximumWriters <= 1) { "Multiple production scroll writers" }
         check(viewport.frame === viewport.bound.pass.frame && viewport.drawnFrame === viewport.frame)
-        val expected = mode == TerminalRenderMode.VIRTUAL_HISTORY && !imeVisible && !viewport.policy.imeFallback
+        val expected = mode.isVirtualHistory && !viewport.policy.imeFallback &&
+            (!imeVisible || mode == TerminalRenderMode.VIRTUAL_HISTORY_IME)
         check(viewport.bound.virtualHistoryEnabled == expected) { "Incorrect renderer under benchmark label" }
         if (expected) {
             check(viewport.measurements.retainedRows < 128) { "Virtual history retained an eager row tree" }
@@ -386,10 +408,14 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             check(viewport.bound.binding.widthIndex.measuredHistoryRows == 0L)
             check(viewport.measurements.createdRowNodes == 0L)
             check(viewport.measurements.measuredRowCount == 0L)
+            check(viewport.measurements.publishedNotifications == 0L)
         }
         Trace.setCounter("Prod.createdRowNodes", viewport.measurements.createdRowNodes)
         Trace.setCounter("Prod.measuredRowCount", viewport.measurements.measuredRowCount)
         Trace.setCounter("Prod.changedRowMeasurements", viewport.measurements.changedRowMeasurements)
+        Trace.setCounter("Prod.createdHeightRecords", viewport.measurements.createdHeightRecords)
+        Trace.setCounter("Prod.measurementNotifications", viewport.measurements.publishedNotifications)
+        Trace.setCounter("Prod.coalescedMeasurements", viewport.measurements.coalescedChanges)
         Trace.setCounter("Prod.widthMeasuredHistory", viewport.bound.binding.widthIndex.measuredHistoryRows)
         Trace.setCounter("Prod.widthMeasuredScreen", viewport.bound.binding.widthIndex.measuredScreenRows)
         Trace.setCounter("Prod.retainedMeasurements", viewport.measurements.retainedRows.toLong())
@@ -428,8 +454,8 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
                 terminalHistoryChunks(frame.historyCount, frame.historyStartSequence, usesTuiViewport = false)
             }
             policy = rememberTerminalVirtualHistoryPolicy(this, mode, ime)
-            val wants = mode == TerminalRenderMode.VIRTUAL_HISTORY &&
-                policy.allows(chunks.isNotEmpty(), true, false, false, ime)
+            val wants = mode.isVirtualHistory &&
+                policy.allows(chunks.isNotEmpty(), true, false, false, ime, avoidIme = ime)
             bound = rememberTerminalBoundViewport(this, controller, eager, lazy, measurements, frame, style, wants,
                 metrics = { TerminalViewportMetrics(eager.maxValue, viewportHeight, cellHeight, tailPadding,
                     imeVisible = ime, avoidIme = ime) },

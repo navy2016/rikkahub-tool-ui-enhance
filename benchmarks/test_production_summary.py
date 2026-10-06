@@ -36,8 +36,9 @@ def measurement(size, scenario, mode):
         counts[name] = int(scenario == owner)
     if scenario == "semanticJump":
         counts["scrollEffect"] = 2
-    if mode == "lazyHistory" and scenario != "semanticJump":
-        counts["width"] = 30 if scenario in ("activeRowUpdate", "appendAndTrim") else 1
+    if mode in ("lazyHistory", "lazyHistoryIme") and scenario != "semanticJump":
+        counts["width"] = (30 if scenario in ("activeRowUpdate", "appendAndTrim") else
+                           8 if mode == "lazyHistoryIme" and scenario == "imeRoundTrip" else 1)
     if mode == "lazyHistory" and scenario == "imeRoundTrip":
         counts["eagerGeometry"] = 5
     metrics = {"frameCount": {"runs": [3, 3]}}
@@ -104,6 +105,18 @@ class ProductionSummaryTest(unittest.TestCase):
             results[(1000, "imeRoundTrip", "chunkedLayers")]["metrics"][name] = {"runs": [1, 1]}
             with self.assertRaisesRegex(ValueError, "count"):
                 self.valid(results, "imeRoundTrip")
+
+    def test_keyboard_stable_mode_cannot_use_eager_fallback_or_skip_live_width_updates(self):
+        for metric, value in (("eagerGeometryCount", 1), ("widthCount", 1)):
+            results = matrix("imeRoundTrip")
+            results[(10000, "imeRoundTrip", "lazyHistoryIme")]["metrics"][metric] = {"runs": [value, value]}
+            with self.subTest(metric=metric), self.assertRaises(ValueError):
+                self.valid(results, "imeRoundTrip")
+
+    def test_old_two_mode_result_is_not_a_complete_v3_matrix(self):
+        results = {key: value for key, value in matrix().items() if key[2] != "lazyHistoryIme"}
+        with self.assertRaisesRegex(ValueError, "matrix"):
+            self.valid(results)
 
     def test_required_production_width_and_viewport_work_cannot_be_omitted(self):
         for name in ("widthCount", "viewportSumMs", "widthMaxMs"):
@@ -180,7 +193,7 @@ class ProductionSummaryTest(unittest.TestCase):
             self.assertIn("| 10000 | lazyHistory | 2 |", text)
             self.assertIn("RSS anon", text)
             notice = notices(results, SHA, scenario, False)
-            self.assertEqual(6, sum(line[:1].isdigit() for line in notice.splitlines()))
+            self.assertEqual(9, sum(line[:1].isdigit() for line in notice.splitlines()))
             self.assertTrue(all(line.endswith(" | —") for line in notice.splitlines() if line[:1].isdigit()))
             self.assertLess(len(notice.replace("\n", "%0A").encode()), 3000)
 

@@ -56,5 +56,6 @@ run_arm render-mode TerminalRenderModeInstrumentedTest
 run_arm measurement-node TerminalRowMeasurementInstrumentedTest
 run_arm text-compatibility TerminalTextCompatibilityInstrumentedTest
 run_arm item-viewport TerminalItemViewportInstrumentedTest
+run_arm ime-stable TerminalImeVirtualHistoryInstrumentedTest 240
 run_arm stability TerminalViewportStabilityInstrumentedTest 240
 exit "$overall_status"
