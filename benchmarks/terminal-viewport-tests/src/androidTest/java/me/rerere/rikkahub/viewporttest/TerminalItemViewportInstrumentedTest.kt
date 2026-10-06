@@ -136,6 +136,7 @@ class TerminalItemViewportInstrumentedTest {
             val captured = f.observation()!!.capture()!!
             assertEquals(f.saved.anchorLineId, captured.anchor.lineId)
             assertEquals(7, captured.anchor.clippedTopPx)
+            assertEquals(captured.capturedRowHeightPx, f.controller.state.value.anchorRowHeightPx)
             assertFalse(f.controller.state.value.autoScroll)
             assertTrue(f.observation()!!.rows.map { it.heightPx }.distinct().size > 1)
         }

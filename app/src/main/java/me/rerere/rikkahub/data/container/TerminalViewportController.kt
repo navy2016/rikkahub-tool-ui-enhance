@@ -512,8 +512,20 @@ internal class TerminalViewportController(
             )
             TerminalItemScrollTarget.Follow
         } else {
-            mutableState.value = state.value.copy(mode = ViewportMode.LOCKED, anchor = resolved)
-            TerminalItemScrollTarget.Anchor(resolved, state.value.anchorRowHeightPx)
+            // Legacy/restored IDs may have no measured capture scale. Bind it exactly once when
+            // the requested row actually appears in a valid layout, not to the currently visible
+            // unrelated row or a nominal cell. Otherwise every later font change treats the old
+            // pixel clip as if it were captured at the NEW height and silently loses scaling.
+            val measured = if (state.value.anchorRowHeightPx <= 0) observation.rows.firstOrNull {
+                observation.lineId(it.index) == resolved.lineId
+            } else null
+            val anchor = if (measured != null) resolved.copy(
+                clippedTopPx = resolved.clippedTopPx.coerceIn(0, measured.heightPx - 1),
+            ) else resolved
+            mutableState.value = state.value.copy(mode = ViewportMode.LOCKED, anchor = anchor,
+                anchorRowHeightPx = measured?.heightPx ?: state.value.anchorRowHeightPx,
+                anchorCellHeightPx = if (measured != null) observation.cellHeightPx else state.value.anchorCellHeightPx)
+            TerminalItemScrollTarget.Anchor(anchor, state.value.anchorRowHeightPx)
         }
         publishItemTarget(target, origin, animated)
     }

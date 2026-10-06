@@ -200,6 +200,7 @@ class TerminalImeVirtualHistoryInstrumentedTest {
     @Test fun imeStableFontRtlAndHeightChangesKeepScaledClippingWithoutEagerHistory() {
         val f = mount(history = 256, styled = true)
         val original = compose.runOnIdle { f.top() }
+        compose.runOnIdle { assertEquals(original.capturedRowHeightPx, f.controller.state.value.anchorRowHeightPx) }
         val horizontal = compose.runOnIdle { f.horizontal.value }
         compose.runOnIdle { f.ime = true; f.heightDp = 140; f.fontSp = 21; f.rtl = true }
         settle(f)

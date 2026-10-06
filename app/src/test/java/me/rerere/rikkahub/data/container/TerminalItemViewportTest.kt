@@ -146,6 +146,72 @@ class TerminalItemViewportTest {
         assertEquals(0, controller.state.value.scrollEffect!!.targetScrollPx)
     }
 
+    @Test fun restoredUnknownHeightBindsOnlyTheRequestedMeasuredRowThenScalesWithoutDrift() {
+        val frame = frame()
+        val controller = TerminalViewportController(TerminalViewportState(autoScroll = false,
+            anchorLineId = 175, anchorClippedTopPx = 7, anchorHistoryGeneration = 1))
+        controller.updateItemViewport(frame, view(frame, index = 50, height = 19))
+        assertEquals(0, controller.state.value.anchorRowHeightPx) // Unrelated visible row is NOT a scale.
+        val restore = requireNotNull(controller.state.value.scrollEffect)
+        controller.observeItemViewport(view(frame, index = 75, top = -7, height = 31))
+        controller.scrollFinished(restore.id, 0, true)
+        assertEquals(31, controller.state.value.anchorRowHeightPx)
+        assertEquals(7, controller.state.value.anchor?.clippedTopPx)
+        assertNull(controller.state.value.scrollEffect)
+        repeat(3) {
+            controller.updateItemViewport(frame, view(frame, index = 75, top = -7, height = 45))
+            val effect = requireNotNull(controller.state.value.scrollEffect)
+            val target = effect.itemTarget as TerminalItemScrollTarget.Anchor
+            assertEquals(31, target.capturedRowHeightPx)
+            assertEquals(10, terminalScaledItemClip(target.anchor.clippedTopPx, target.capturedRowHeightPx, 45))
+            controller.observeItemViewport(view(frame, index = 75, top = -10, height = 45))
+            controller.scrollFinished(effect.id, 0, true)
+            assertNull(controller.state.value.scrollEffect)
+            controller.updateItemViewport(frame, view(frame, index = 75, top = -7, height = 31))
+            assertNull(controller.state.value.scrollEffect)
+        }
+        assertEquals(31, controller.state.value.anchorRowHeightPx)
+        assertEquals(7, controller.state.value.anchor?.clippedTopPx)
+    }
+
+    @Test fun unknownRestoredScaleIgnoresStaleLayoutAndNeverOverwritesAKnownScale() {
+        val frame = frame()
+        val next = frame.copy()
+        val controller = TerminalViewportController(TerminalViewportState(autoScroll = false,
+            anchorLineId = 150, anchorClippedTopPx = 7, anchorHistoryGeneration = 1))
+        controller.updateItemViewport(next, view(frame, height = 31))
+        assertEquals(0, controller.state.value.anchorRowHeightPx)
+        assertFalse(controller.state.value.initialized)
+        controller.updateItemViewport(next, view(next, height = 31))
+        assertEquals(31, controller.state.value.anchorRowHeightPx)
+        controller.updateItemViewport(next, view(next, height = 47))
+        assertEquals(31, controller.state.value.anchorRowHeightPx)
+        assertEquals(7, controller.state.value.anchor?.clippedTopPx)
+        val known = TerminalViewportController(TerminalViewportState(autoScroll = false,
+            anchorLineId = 150, anchorClippedTopPx = 7, anchorHistoryGeneration = 1, anchorRowHeightPx = 29))
+        known.updateItemViewport(next, view(next, height = 47))
+        assertEquals(29, known.state.value.anchorRowHeightPx)
+    }
+
+    @Test fun firstKnownHeightClampsLegacyClipToTheActualRowAndKeepsItAcrossHandoff() {
+        val frame = frame()
+        val controller = TerminalViewportController(TerminalViewportState(autoScroll = false,
+            anchorLineId = 150, anchorClippedTopPx = 999, anchorHistoryGeneration = 1))
+        controller.updateItemViewport(frame, view(frame, top = -30, height = 31))
+        assertEquals(31, controller.state.value.anchorRowHeightPx)
+        assertEquals(30, controller.state.value.anchor?.clippedTopPx)
+        assertNull(controller.state.value.scrollEffect)
+        val geometry = TerminalEagerViewportGeometry(frame, IntArray(frame.rows.size) { 31 })
+        val metrics = TerminalViewportMetrics(geometry.contentHeightPx - 100, 100, 20, 8)
+        controller.updateViewport(frame, frame.rows.size, metrics, 0, geometry, true)
+        val effect = requireNotNull(controller.state.value.scrollEffect)
+        assertEquals(50 * 31 + 30, effect.targetScrollPx)
+        controller.scrollFinished(effect.id, effect.targetScrollPx, true)
+        controller.updateItemViewport(frame, view(frame, top = -30, height = 47))
+        assertEquals(31, controller.state.value.anchorRowHeightPx)
+        assertEquals(30, controller.state.value.anchor?.clippedTopPx)
+    }
+
     @Test fun fontChangesScaleFromOriginalCaptureAndDoNotAccumulateRounding() {
         val frame = frame()
         val controller = TerminalViewportController(followInitially = false)
