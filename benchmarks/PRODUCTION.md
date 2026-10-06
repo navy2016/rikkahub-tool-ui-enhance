@@ -124,6 +124,17 @@ work. This benchmark does not claim those end-to-end checks or change any status
 
 ## Verified checkpoints
 
+- [2b0f259 opt-in stable IME and notification coalescing](results/2b0f259-ime-v3.md):
+  341 application Release JVM cases, 106 viewport instrumentation cases, 25 fixture JVM cases and
+  18 three-mode smoke cases passed. Full V3 IME run `37454340924` passed all 9 cases / 27 iterations,
+  with original hash-checked evidence from `37455592563`. At 10k, original virtual IME total is
+  9178.10 ms, stable virtual 3245.22 ms and default 3260.08 ms on the same scenario device; show is
+  6783.77 / 932.94 / 961.06 ms respectively. Each stable-mode iteration creates 8 measurement nodes
+  versus 10051 in the original virtual mode. This is a complete IME scenario, not all 54 V3 cases.
+  The Release APK passed independent verification `37454360334`. Default/status/KEYS behavior and
+  original virtual IME latch remain unchanged. A first-measured-row fix also covers restored anchors
+  missing their capture height; later font changes now scale from that known height without drift.
+
 - [16ab7c0 full baseline](results/16ab7c0-production-viewport-ci.md), run `37172835069`:
   all 36 cases / 108 measured iterations passed. Each scenario has its own device/invocation;
   the archive preserves rounded validated notices and their source check-run links.

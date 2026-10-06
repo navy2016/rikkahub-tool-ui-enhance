@@ -293,6 +293,13 @@ matrix accessible via the check-run API when artifact/blob downloads fail. Missi
 
 ## Recorded baselines
 
+- [2b0f259: keyboard-stable virtual history, complete three-mode IME scenario](results/2b0f259-ime-v3.md)
+  — 341 application JVM tests, 106 viewport tests, 18 production smoke cases and 9 full IME cases /
+  27 measured iterations passed. The opt-in `lazyHistoryIme` keeps virtual rows through IME avoidance;
+  10k IME total is 3245.22 ms versus original `lazyHistory` 9178.10 ms on that scenario's same device.
+  Default rendering and the original mode's IME latch remain unchanged. This is not a full six-scenario
+  V3 baseline or a real-device FPS claim; source/APK verification and raw phase provenance are included.
+
 - [419636a: reusable row measurement node](results/419636a-ime-v2.md)
   — 95 viewport tests and a complete 1k/5k/10k IME scenario passed. The per-row eager measurement
   wrapper was replaced while preserving natural geometry and owner-release semantics. The report is
