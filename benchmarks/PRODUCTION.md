@@ -124,6 +124,15 @@ work. This benchmark does not claim those end-to-end checks or change any status
 
 ## Verified checkpoints
 
+- [42caa6d session-owned width summaries](results/42caa6d-detach-v3.md):
+  343 application Release JVM cases, 106 viewport instrumentation cases and 18 three-mode smoke
+  cases passed. Full detach/restore run `37497601322` passed all 9 cases / 27 iterations, with
+  original hash-checked evidence from `37499482837`. Every virtual iteration measures exactly the
+  12 rows archived while detached plus the 24-row screen; 10k width work is 2.28 / 4.85 ms and total
+  restore operation is 312.12 / 319.74 ms for original/stable virtual. The default remains eager.
+  Session removal clears the cache; weak font identities and all source/style/geometry changes
+  conservatively revoke reuse. The Release APK passed independent verification `37495475988`.
+
 - [a79e7b6 complete V3 baseline](results/a79e7b6-production-viewport-ci.md), run `37456883236`:
   all 54 cases / 162 measured iterations passed across six independent scenario groups; original
   manifests, six device/input-method contexts, result-file hashes and all 42 source/font/build hashes
@@ -181,16 +190,19 @@ Its SHA-256 is `fd8bd1f60dda05ce25a14cec2694f447fa8a37f35e08c6fcf54d5695b7866252
 confirms release signing, non-debuggable manifest, ZIP integrity and arm64-v8a. This is the app APK,
 not the separate profileable benchmark target. Actions artifact download requires GitHub sign-in.
 
-The scalar width index now belongs to the mounted production viewport binding. Compatibility
+The scalar width index now belongs to the interactive terminal session when one exists; isolated
+callers keep a page-local fallback. Compatibility
 fallback retains only width candidates and source/font validity metadata; it measures no virtual
 widths. Committed fallback frames prune retired FIFO candidates but do not advance the measured
 end past unmeasured output. Explicit retry measures surviving new archives and the active screen;
 unchanged history requires zero additional measurements. Owner/generation/render revision/columns,
-font resolution/style/density/direction changes and replaced rows revoke reuse. Disposing the binding
-clears its retained state. No full Text layout or Paragraph is cached, and IME fallback remains latched
+font resolution/style/density/direction changes and replaced rows revoke reuse. Page disposal keeps
+only the session-owned scalar candidates and weak font identities; deleting the process record clears
+them. No full Text layout or Paragraph is cached, and IME fallback remains latched
 until explicit retry. Production IME and detach scenarios assert these properties through cumulative
 work counters and disposal checks; `Prod.widthMeasuredHistory` / `Prod.widthMeasuredScreen` are trace
-counters, not timing estimates. Cold mount and remount still require a full width scan.
+counters, not timing estimates. First virtual mount still requires a full width scan; a same-session
+remount measures only surviving new archives and the active screen.
 
 The follow-up measurement-node optimization is recorded in [419636a IME results](results/419636a-ime-v2.md).
 It removes the per-row eager measurement wrapper and passes 95 viewport tests, including geometry,

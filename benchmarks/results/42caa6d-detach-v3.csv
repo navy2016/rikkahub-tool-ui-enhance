@@ -1,0 +1,10 @@
+scenario,job_id,history_rows,mode,repetitions,mount_ms,operation_ms,output_per_op_ms,cpu_p95_ms,width_per_call_ms,rss_anon_max_mib
+detachRestore,112388910258,1000,chunkedLayers,3,,871.18,,547.71,,136.24
+detachRestore,112388910258,1000,lazyHistory,3,,314.81,,120.93,2.36,97.36
+detachRestore,112388910258,1000,lazyHistoryIme,3,,329.18,,123.06,2.35,97.57
+detachRestore,112388910258,5000,chunkedLayers,3,,4414.3,,134.73,,230.12
+detachRestore,112388910258,5000,lazyHistory,3,,309.64,,122.55,4.27,118.98
+detachRestore,112388910258,5000,lazyHistoryIme,3,,312.1,,139.97,1.91,118.86
+detachRestore,112388910258,10000,chunkedLayers,3,,7347.68,,215.58,,444.64
+detachRestore,112388910258,10000,lazyHistory,3,,312.12,,126.89,2.28,170.91
+detachRestore,112388910258,10000,lazyHistoryIme,3,,319.74,,132.3,4.85,177.42

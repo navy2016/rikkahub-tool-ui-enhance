@@ -293,6 +293,14 @@ matrix accessible via the check-run API when artifact/blob downloads fail. Missi
 
 ## Recorded baselines
 
+- [42caa6d: session-owned scalar width summaries across page remounts](results/42caa6d-detach-v3.md)
+  — 343 application JVM tests, 106 viewport tests, 18 three-mode smoke cases and 9 full remount
+  cases / 27 iterations passed. Every virtual remount measures exactly 12 background archives plus
+  the current screen, independent of 1k/5k/10k retained history; 10k width work is 2.28–4.85 ms.
+  The session index stores scalar candidates and weak font identities only, and all process-removal
+  paths clear it. Default rendering and user operations are unchanged. This is not first-mount,
+  full-page/PTY, physical-device or long-stress acceptance.
+
 - [a79e7b6: complete production V3 three-mode baseline](results/a79e7b6-production-viewport-ci.md)
   — all six scenarios, three sizes and three production modes passed: 54 cases / 162 measured
   iterations, with six original device contexts and 42 source/font/build hashes verified. At 10k,

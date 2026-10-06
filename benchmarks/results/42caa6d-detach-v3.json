@@ -1,0 +1,309 @@
+{
+  "source_sha": "42caa6ddac2db33264328b952f8b50caa4a0729c",
+  "suite": "production-viewport-v3",
+  "workflow_run": 37497601322,
+  "workflow_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37497601322",
+  "evidence_run": 37499482837,
+  "evidence_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37499482837",
+  "source": "Validated check-run notices (rounded); original per-scenario manifests/device contexts verified by SHA-256",
+  "build": {
+    "sourceSha": "42caa6ddac2db33264328b952f8b50caa4a0729c",
+    "buildRun": "37497601322",
+    "suite": "production-viewport-v3",
+    "apks": {
+      "target": {
+        "file": "target.apk",
+        "sha256": "833d30a318dedb7e633c82c36fc7b5801bad0c73d5de0a9fad66e5662ecd48a7",
+        "bytes": 24522423,
+        "package": "me.rerere.rikkahub.terminalbenchmark"
+      },
+      "driver": {
+        "file": "driver.apk",
+        "sha256": "445afe6ab3134fe5c1bab7629b6c75dc7298ecf7724926a04dd9471dcf8790ec",
+        "bytes": 46274753,
+        "package": "me.rerere.rikkahub.terminalbenchmark.test"
+      }
+    },
+    "instrumentation": "me.rerere.rikkahub.terminalbenchmark.test/androidx.test.runner.AndroidJUnitRunner"
+  },
+  "scenarios": {
+    "detachRestore": {
+      "job_id": 112388910258,
+      "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/112388910258",
+      "notice": "production-viewport-v3 detachRestore sha=42caa6ddac2db33264328b952f8b50caa4a0729c smoke=False; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 3 | — | 871.18 | — | 547.71 | — | 136.24\n1000 | lazyHistory | 3 | — | 314.81 | — | 120.93 | 2.36 | 97.36\n1000 | lazyHistoryIme | 3 | — | 329.18 | — | 123.06 | 2.35 | 97.57\n5000 | chunkedLayers | 3 | — | 4414.30 | — | 134.73 | — | 230.12\n5000 | lazyHistory | 3 | — | 309.64 | — | 122.55 | 4.27 | 118.98\n5000 | lazyHistoryIme | 3 | — | 312.10 | — | 139.97 | 1.91 | 118.86\n10000 | chunkedLayers | 3 | — | 7347.68 | — | 215.58 | — | 444.64\n10000 | lazyHistory | 3 | — | 312.12 | — | 126.89 | 2.28 | 170.91\n10000 | lazyHistoryIme | 3 | — | 319.74 | — | 132.30 | 4.85 | 177.42",
+      "original": {
+        "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/112392502263",
+        "request": {
+          "sourceSha": "42caa6ddac2db33264328b952f8b50caa4a0729c",
+          "runId": "37497601322",
+          "groupId": "37497601322-1-detachRestore-full",
+          "suite": "production-viewport-v3",
+          "scenario": "detachRestore",
+          "smoke": "false",
+          "targetApkSha256": "833d30a318dedb7e633c82c36fc7b5801bad0c73d5de0a9fad66e5662ecd48a7",
+          "iterations": 3
+        },
+        "manifest": {
+          "sourceSha": "42caa6ddac2db33264328b952f8b50caa4a0729c",
+          "buildRun": "37497601322",
+          "suite": "production-viewport-v3",
+          "sources": {
+            "app/compose_compiler_config.conf": "df4a3b43dbb03277abc262efce10f408cebcefdb8faea85a877eb9c55a5cd03d",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalEagerGeometryCache.kt": "83de47bc1bb7fc064e664956a4495f983ee6189d71148720e3cec7a3984e4709",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalEagerViewportGeometry.kt": "6cec774d8bf81d405cdc8ca0cbad8e410e13468adf0d5638a6a7dc1571a5ea46",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalFastFlingTracker.kt": "8da3a8d579c5afbd684cc406d261091f1a588b32e16da5fad9da19feafa6be7c",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalItemViewport.kt": "a5bb2a3eb8d7fdac4553cc88dc196a6db3bb6675a5728e55c68527b7bcc701a0",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalLazyViewportAdapter.kt": "b2c3ffdbfabd8c13313e97bcd11922dad523631c61c22914db6bc9b87886abcf",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalLazyViewportMeasurement.kt": "e884cdeaddba017e7299baa6a0b67338b47361a401428321aa7a1334dd4d505f",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalRenderMode.kt": "d67fbc7278351c28cb6d51d0d9df7b6058f5e84b8e5228c5312013a97afe012b",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndex.kt": "b4d3be40ad379aa21bc0d8061c98d17e06ed899e511b6e292942bedede3bf9af",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt": "f6acb7f2b5221118cde3d48c30216a28e34ffa0fc884a1b7150745f2583e8d4e",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportGeometry.kt": "93f6d223a90ceb7b3572e762e45f99b0e30ba5169a14c9e6ea494bd626f17d9d",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportItemGeometry.kt": "86cfedc26dc08f5376b19ebce3fab053a5bb626e72c6dc323d461b716472daa8",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportReducer.kt": "9ea2b42fc6f9379db53be2d015434f976afc092580abf1e8f60fe60842942304",
+            "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportState.kt": "5c42c0c9827e1580986a683e7b0a55a0afc87c3dea4cd9c25d82d4af04ad5537",
+            "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemExecutor.kt": "7bf41b65a7298785d4b2616934db3dc3bce5e5c4f06991d458bdc4f815cb81b7",
+            "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt": "1d13d8001143e123e3fb8895d7f054b7527a8530a395026a028f66b0396b2fc7",
+            "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderControls.kt": "85d96b8de33d555f2a0ca1bed8988dd985762a26476825f3d60b7018e490aa1d",
+            "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt": "38a935404cb1510efe2ea338ceed4badfb9254c0c18e66eeb7c60dbc4384d97e",
+            "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptViewport.kt": "4e4c5b001f7136314bae1ea15bcc50d6b908d1dcd2d19a26a243725e62d90fae",
+            "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptWidth.kt": "3f4dd10346c4d64818524d00930de654565334bd1c9ed8dc5b506fd8698b9db8",
+            "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt": "6552ea156f82338840429a6a6c9e5ee279bb4af963d8f7a13a248bf99e5564c2",
+            "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportGestures.kt": "aeb38ae9fc5b8d35c66443b367a230bb0abe943dff531b9dc3a9fbd9a502a80e",
+            "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportScrollEffects.kt": "0bd78264ae26e16824ea397f43d448c86022c3f4257fdb955f3bcf339347a48e",
+            "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalVirtualHistoryPolicy.kt": "6cbae438d28fa67d11c0e0e52a9a5083a4e8f097d0139e91e94cad333554c2da",
+            "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalVirtualHistoryTranscript.kt": "92399c98b51207cce741878f634cfab6eb660745ba1db7dbb250e9a08477f5bf",
+            "app/src/main/java/me/rerere/rikkahub/ui/theme/Type.kt": "ff054a1f8a7d87771e26d3821f132e077cc451fa62e5f60a5eaba00994df84b5",
+            "app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt": "392199fb28aa1193ac407075f85539173b15488c371bd46a53554481d54069a2",
+            "app/src/main/java/me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt": "ff53900c9d3b7556119d878818a0e669fc3135fe9d1a0458204983a98d0294a5",
+            "app/src/main/res/font/jetbrains_mono.ttf": "662a196d58f1183bf2d77428b6d5283fe3f45161ab021bea4036bc98e5cac016",
+            "benchmarks/production-contract/src/main/kotlin/me/rerere/rikkahub/benchmark/ProductionBenchmarkProgress.kt": "02f67858521a97a126cbe31fee6d4b471fcb0ff439adf9ec6da7a3b529ca292e",
+            "benchmarks/production-contract/src/main/kotlin/me/rerere/rikkahub/benchmark/ProductionBenchmarkSpec.kt": "ae70dfdf6758d9afc238d3b7b78e6e295fb94b6dac14cd71c3ca056f243827a2",
+            "benchmarks/production_ci.py": "f973d0ea9acb5a1cdd686a4f81a7fc3f720a7eb89a34a88ba4982024c0386f94",
+            "benchmarks/production_emulator.py": "2fa9de96d0e3e1fa8d26a2292160278b00fe763524b2e9d5beb65ef763ba03ef",
+            "benchmarks/production_summary.py": "8eca64e25228f1fe5bdbfc388bc572c4ac68b8ff4424b680989eaef4787f8b14",
+            "benchmarks/terminal-macrobenchmark/build.gradle.kts": "284c2c13a6730ff16ba4acbd7ea76717087764df054e9b47cf2f7ee42d79bb23",
+            "benchmarks/terminal-macrobenchmark/src/main/AndroidManifest.xml": "782751aa27270b0667eee0e61772ad73bb7ddbec47002b7bd52f61f6d0b7d40b",
+            "benchmarks/terminal-macrobenchmark/src/main/java/me/rerere/rikkahub/benchmark/ProductionTerminalBenchmark.kt": "6d3c93bb9b2f3bf6e0e4271a95ac3070b2bdb8e1227d13900c4bdc4943168746",
+            "benchmarks/terminal-target/build.gradle.kts": "37f7b2d2baddbf9131c0457c8644c631c68e38e6fe05d7ec6515fc5fa462c4d9",
+            "benchmarks/terminal-target/src/main/AndroidManifest.xml": "5ca388c27f52f6f428afe23f7c9efff15303cc098c9dc5213e854b5c1da67a65",
+            "benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/ProductionTerminalBenchmarkActivity.kt": "dd6dfeb5a08a007730b7eea3f3b48177d21e4f16e955ac25c7d9260635c8d7f9",
+            "benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmarkWorkload.kt": "c9056562c04d48219ee1cfa0b5cd36e2d56e0b9f0ce35933b2d61f6eda1339c7",
+            "gradle/libs.versions.toml": "8d24a81b399b7b3f8db9b6aa58e5fd2192eed6d259958deede3a49c2fe16b52c"
+          },
+          "apks": {
+            "target": {
+              "file": "target.apk",
+              "sha256": "833d30a318dedb7e633c82c36fc7b5801bad0c73d5de0a9fad66e5662ecd48a7",
+              "bytes": 24522423,
+              "package": "me.rerere.rikkahub.terminalbenchmark"
+            },
+            "driver": {
+              "file": "driver.apk",
+              "sha256": "445afe6ab3134fe5c1bab7629b6c75dc7298ecf7724926a04dd9471dcf8790ec",
+              "bytes": 46274753,
+              "package": "me.rerere.rikkahub.terminalbenchmark.test"
+            }
+          },
+          "instrumentation": "me.rerere.rikkahub.terminalbenchmark.test/androidx.test.runner.AndroidJUnitRunner"
+        },
+        "device": "Android/sdk_phone64_x86_64/emu64x:14/UE1A.230829.036.A1/11228894:userdebug/test-keys\n\nPhysical size: 1440x2560\n\nPhysical density: 560\n\n576m\n\ncom.android.inputmethod.latin/.LatinIME\n",
+        "contexts": [
+          {
+            "build": {
+              "brand": "Android",
+              "device": "emu64x",
+              "fingerprint": "Android/sdk_phone64_x86_64/emu64x:14/UE1A.230829.036.A1/11228894:userdebug/test-keys",
+              "id": "UE1A.230829.036.A1",
+              "model": "Android SDK built for x86_64",
+              "type": "userdebug",
+              "version": {
+                "codename": "REL",
+                "sdk": 34
+              }
+            },
+            "cpuCoreCount": 2,
+            "cpuLocked": false,
+            "cpuMaxFreqHz": 2000,
+            "memTotalBytes": 4112924672,
+            "sustainedPerformanceModeEnabled": false,
+            "artMainlineVersion": 342090000,
+            "osCodenameAbbreviated": "U",
+            "compilationMode": "run-from-apk",
+            "payload": {
+              "runId": "37497601322",
+              "smoke": "false",
+              "suite": "production-viewport-v3",
+              "sourceSha": "42caa6ddac2db33264328b952f8b50caa4a0729c",
+              "groupId": "37497601322-1-detachRestore-full",
+              "scenario": "detachRestore",
+              "targetApkSha256": "833d30a318dedb7e633c82c36fc7b5801bad0c73d5de0a9fad66e5662ecd48a7"
+            }
+          }
+        ],
+        "validated": {
+          "sourceSha": "42caa6ddac2db33264328b952f8b50caa4a0729c",
+          "runId": "37497601322",
+          "groupId": "37497601322-1-detachRestore-full",
+          "suite": "production-viewport-v3",
+          "scenario": "detachRestore",
+          "smoke": "false",
+          "targetApkSha256": "833d30a318dedb7e633c82c36fc7b5801bad0c73d5de0a9fad66e5662ecd48a7",
+          "cases": 9,
+          "iterations": 3,
+          "verified": true
+        },
+        "result_files": {
+          "measurements/me.rerere.rikkahub.terminalbenchmark.test-benchmarkData.json": "aa27079e4b5efbe3ae57a201127eebce88c375e06131bded7ec702135f6e1ec8"
+        },
+        "summary": "# Production viewport: detachRestore\n\nCommit: `42caa6ddac2db33264328b952f8b50caa4a0729c`. Contract: `production-viewport-v3`. Smoke-only: `false`.\n\nAll three actual production modes share one APK, device and instrumentation invocation in this scenario.\nOther scenarios may use different runners; do not aggregate their samples or calculate cross-group ratios.\nThis is an unminified Release-derived component harness, not ProcessSessionPage, PTY/input echo or app startup.\nUpdates include production reconciliation and two stable draw confirmations. Validation/wait overhead is included.\nRoot measure includes lazy subcomposition. Phase durations overlap; do not subtract them from frame percentiles.\nMissing memory is —, not zero. RSS anon is sampled anonymous RSS, not PSS/Java/native/GPU peak memory.\n\n| History | Mode | n | Mount ms | Operation ms | Output/op ms | CPU p95 ms | Overrun % | RSS anon MiB |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n| 1000 | chunkedLayers | 3 | — | 871.18 | — | 547.71 | 100.00 | 136.24 |\n| 1000 | lazyHistory | 3 | — | 314.81 | — | 120.93 | 100.00 | 97.36 |\n| 1000 | lazyHistoryIme | 3 | — | 329.18 | — | 123.06 | 100.00 | 97.57 |\n| 5000 | chunkedLayers | 3 | — | 4414.30 | — | 134.73 | 100.00 | 230.12 |\n| 5000 | lazyHistory | 3 | — | 309.64 | — | 122.55 | 100.00 | 118.98 |\n| 5000 | lazyHistoryIme | 3 | — | 312.10 | — | 139.97 | 100.00 | 118.86 |\n| 10000 | chunkedLayers | 3 | — | 7347.68 | — | 215.58 | 100.00 | 444.64 |\n| 10000 | lazyHistory | 3 | — | 312.12 | — | 126.89 | 100.00 | 170.91 |\n| 10000 | lazyHistoryIme | 3 | — | 319.74 | — | 132.30 | 100.00 | 177.42 |\n\n## Phase means per invocation (median across iterations)\n\n| History | Mode | Feed | Frame | Row sync | Width | Eager geometry | Viewport | Measure | Draw | Scroll effect max |\n| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n| 1000 | chunkedLayers | 0.53 | 0.37 | 0.75 | — | — | 0.09 | 335.16 | 12.74 | 0.09 |\n| 1000 | lazyHistory | 0.59 | 0.37 | 0.76 | 2.36 | — | 0.09 | 11.47 | 0.21 | 113.50 |\n| 1000 | lazyHistoryIme | 0.55 | 0.41 | 0.76 | 2.35 | — | 0.08 | 8.31 | 0.12 | 125.54 |\n| 5000 | chunkedLayers | 0.53 | 0.46 | 8.55 | — | — | 0.16 | 3152.78 | 85.66 | 0.05 |\n| 5000 | lazyHistory | 0.54 | 0.38 | 8.74 | 4.27 | — | 0.08 | 20.34 | 0.14 | 110.96 |\n| 5000 | lazyHistoryIme | 0.99 | 0.31 | 6.21 | 1.91 | — | 0.09 | 22.25 | 0.14 | 114.99 |\n| 10000 | chunkedLayers | 0.60 | 0.39 | 7.10 | — | — | 0.31 | 4657.64 | 225.71 | 0.05 |\n| 10000 | lazyHistory | 3.36 | 0.31 | 12.36 | 2.28 | — | 0.11 | 14.11 | 0.12 | 103.06 |\n| 10000 | lazyHistoryIme | 0.57 | 3.71 | 13.83 | 4.85 | — | 0.12 | 18.01 | 0.18 | 110.36 |\n\n## Transitions (ms)\n\n| History | Mode | detach | restore |\n| ---: | --- | ---: | ---: |\n| 1000 | chunkedLayers | 55.12 | 820.91 |\n| 1000 | lazyHistory | 39.97 | 266.50 |\n| 1000 | lazyHistoryIme | 43.18 | 285.32 |\n| 5000 | chunkedLayers | 107.84 | 4255.79 |\n| 5000 | lazyHistory | 42.80 | 263.76 |\n| 5000 | lazyHistoryIme | 41.99 | 272.40 |\n| 10000 | chunkedLayers | 233.27 | 7113.75 |\n| 10000 | lazyHistory | 43.99 | 268.12 |\n| 10000 | lazyHistoryIme | 38.20 | 260.94 |\n\nNo FPS/improvement claim is derived from this diagnostic run. Old renderer-harness results are not a baseline pair.\n\n## Device and provenance\n\n```json\n{\n  \"build\": {\n    \"brand\": \"Android\",\n    \"device\": \"emu64x\",\n    \"fingerprint\": \"Android/sdk_phone64_x86_64/emu64x:14/UE1A.230829.036.A1/11228894:userdebug/test-keys\",\n    \"id\": \"UE1A.230829.036.A1\",\n    \"model\": \"Android SDK built for x86_64\",\n    \"type\": \"userdebug\",\n    \"version\": {\n      \"codename\": \"REL\",\n      \"sdk\": 34\n    }\n  },\n  \"cpuCoreCount\": 2,\n  \"cpuLocked\": false,\n  \"cpuMaxFreqHz\": 2000,\n  \"memTotalBytes\": 4112924672,\n  \"sustainedPerformanceModeEnabled\": false,\n  \"artMainlineVersion\": 342090000,\n  \"osCodenameAbbreviated\": \"U\",\n  \"compilationMode\": \"run-from-apk\",\n  \"payload\": {\n    \"runId\": \"37497601322\",\n    \"smoke\": \"false\",\n    \"suite\": \"production-viewport-v3\",\n    \"sourceSha\": \"42caa6ddac2db33264328b952f8b50caa4a0729c\",\n    \"groupId\": \"37497601322-1-detachRestore-full\",\n    \"scenario\": \"detachRestore\",\n    \"targetApkSha256\": \"833d30a318dedb7e633c82c36fc7b5801bad0c73d5de0a9fad66e5662ecd48a7\"\n  }\n}\n```\n",
+        "work_samples": []
+      }
+    }
+  },
+  "measurements": [
+    {
+      "scenario": "detachRestore",
+      "job_id": 112388910258,
+      "history_rows": 1000,
+      "mode": "chunkedLayers",
+      "repetitions": 3,
+      "mount_ms": null,
+      "operation_ms": 871.18,
+      "output_per_op_ms": null,
+      "cpu_p95_ms": 547.71,
+      "width_per_call_ms": null,
+      "rss_anon_max_mib": 136.24
+    },
+    {
+      "scenario": "detachRestore",
+      "job_id": 112388910258,
+      "history_rows": 1000,
+      "mode": "lazyHistory",
+      "repetitions": 3,
+      "mount_ms": null,
+      "operation_ms": 314.81,
+      "output_per_op_ms": null,
+      "cpu_p95_ms": 120.93,
+      "width_per_call_ms": 2.36,
+      "rss_anon_max_mib": 97.36
+    },
+    {
+      "scenario": "detachRestore",
+      "job_id": 112388910258,
+      "history_rows": 1000,
+      "mode": "lazyHistoryIme",
+      "repetitions": 3,
+      "mount_ms": null,
+      "operation_ms": 329.18,
+      "output_per_op_ms": null,
+      "cpu_p95_ms": 123.06,
+      "width_per_call_ms": 2.35,
+      "rss_anon_max_mib": 97.57
+    },
+    {
+      "scenario": "detachRestore",
+      "job_id": 112388910258,
+      "history_rows": 5000,
+      "mode": "chunkedLayers",
+      "repetitions": 3,
+      "mount_ms": null,
+      "operation_ms": 4414.3,
+      "output_per_op_ms": null,
+      "cpu_p95_ms": 134.73,
+      "width_per_call_ms": null,
+      "rss_anon_max_mib": 230.12
+    },
+    {
+      "scenario": "detachRestore",
+      "job_id": 112388910258,
+      "history_rows": 5000,
+      "mode": "lazyHistory",
+      "repetitions": 3,
+      "mount_ms": null,
+      "operation_ms": 309.64,
+      "output_per_op_ms": null,
+      "cpu_p95_ms": 122.55,
+      "width_per_call_ms": 4.27,
+      "rss_anon_max_mib": 118.98
+    },
+    {
+      "scenario": "detachRestore",
+      "job_id": 112388910258,
+      "history_rows": 5000,
+      "mode": "lazyHistoryIme",
+      "repetitions": 3,
+      "mount_ms": null,
+      "operation_ms": 312.1,
+      "output_per_op_ms": null,
+      "cpu_p95_ms": 139.97,
+      "width_per_call_ms": 1.91,
+      "rss_anon_max_mib": 118.86
+    },
+    {
+      "scenario": "detachRestore",
+      "job_id": 112388910258,
+      "history_rows": 10000,
+      "mode": "chunkedLayers",
+      "repetitions": 3,
+      "mount_ms": null,
+      "operation_ms": 7347.68,
+      "output_per_op_ms": null,
+      "cpu_p95_ms": 215.58,
+      "width_per_call_ms": null,
+      "rss_anon_max_mib": 444.64
+    },
+    {
+      "scenario": "detachRestore",
+      "job_id": 112388910258,
+      "history_rows": 10000,
+      "mode": "lazyHistory",
+      "repetitions": 3,
+      "mount_ms": null,
+      "operation_ms": 312.12,
+      "output_per_op_ms": null,
+      "cpu_p95_ms": 126.89,
+      "width_per_call_ms": 2.28,
+      "rss_anon_max_mib": 170.91
+    },
+    {
+      "scenario": "detachRestore",
+      "job_id": 112388910258,
+      "history_rows": 10000,
+      "mode": "lazyHistoryIme",
+      "repetitions": 3,
+      "mount_ms": null,
+      "operation_ms": 319.74,
+      "output_per_op_ms": null,
+      "cpu_p95_ms": 132.3,
+      "width_per_call_ms": 4.85,
+      "rss_anon_max_mib": 177.42
+    }
+  ],
+  "artifacts": [
+    {
+      "id": 11429530436,
+      "name": "production-viewport-detachRestore-42caa6ddac2db33264328b952f8b50caa4a0729c-1",
+      "size_in_bytes": 10685467,
+      "digest": "sha256:4dd0cb58612b32af08af75d664573aedf38963738390cc85851fd7375dd927a8",
+      "expired": false,
+      "expires_at": "2026-10-20T16:54:16Z"
+    },
+    {
+      "id": 11428496835,
+      "name": "production-benchmark-build-42caa6ddac2db33264328b952f8b50caa4a0729c-1",
+      "size_in_bytes": 37864157,
+      "digest": "sha256:49146afd6d689dada629921c603523ca1987cb5fc8af44f2a2217d86423136e1",
+      "expired": false,
+      "expires_at": "2026-10-20T16:47:09Z"
+    },
+    {
+      "id": 11428143882,
+      "name": "production-benchmark-build-evidence-42caa6ddac2db33264328b952f8b50caa4a0729c-1",
+      "size_in_bytes": 7589,
+      "digest": "sha256:450a4fdf2785fcc62da1ce555b5abd893db730a52fc576c4d1b0f9b47ff779f6",
+      "expired": false,
+      "expires_at": "2026-10-20T16:47:12Z"
+    }
+  ]
+}
