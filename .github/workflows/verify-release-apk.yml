@@ -9,6 +9,14 @@ on:
       source_sha:
         description: 'Exact 40-character SHA built by that run'
         required: true
+      reference_run_id:
+        description: 'Optional: compare with an existing known-good Release run; no rebuilding'
+        required: false
+        default: ''
+      reference_sha:
+        description: 'Exact known-good source SHA; required with reference_run_id'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -103,6 +111,43 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
               stream.write('```json\n' + json.dumps(result, indent=2) + '\n```\n')
           PY
+      - name: Checkout comparison diagnostics only
+        if: ${{ inputs.reference_run_id != '' }}
+        uses: actions/checkout@v4
+        with:
+          path: diagnostic-source
+      - name: Bind known-good reference run
+        if: ${{ inputs.reference_run_id != '' }}
+        env:
+          REFERENCE_RUN: ${{ inputs.reference_run_id }}
+          REFERENCE_SHA: ${{ inputs.reference_sha }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re, subprocess
+          run_id, sha = os.environ['REFERENCE_RUN'], os.environ['REFERENCE_SHA']
+          assert re.fullmatch(r'[0-9]+', run_id) and re.fullmatch(r'[a-f0-9]{40}', sha)
+          run = json.loads(subprocess.check_output(['gh', 'api',
+              f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{run_id}']))
+          assert run['head_sha'] == sha and run['status'] == 'completed' and run['conclusion'] == 'success'
+          assert run['path'] == '.github/workflows/release.yml'
+          pathlib.Path('verification/reference-run.json').write_text(json.dumps(run, indent=2) + '\n')
+          PY
+      - name: Download known-good Release for read-only comparison
+        if: ${{ inputs.reference_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.reference_run_id }}
+          name: rikkahub-release-${{ inputs.reference_sha }}
+          path: reference-apk
+      - name: Compare packaged fonts resources dependency versions and source identity
+        if: ${{ inputs.reference_run_id != '' }}
+        env:
+          REFERENCE_SHA: ${{ inputs.reference_sha }}
+        run: |
+          python3 diagnostic-source/.github/scripts/compare-release-apks.py \
+            --reference reference-apk --reference-sha "$REFERENCE_SHA" \
+            --candidate apk --candidate-sha "$SOURCE_SHA" --output verification/apk-comparison.json
       - name: Publish verification evidence
         if: always()
         uses: actions/upload-artifact@v4
