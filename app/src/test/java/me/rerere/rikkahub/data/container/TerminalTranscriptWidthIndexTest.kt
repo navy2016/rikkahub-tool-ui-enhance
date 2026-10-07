@@ -215,11 +215,13 @@ class TerminalTranscriptWidthIndexTest {
     }
 
     @Test fun scrollingAndScreenLineEditsReuseStableIdsInsteadOfOldPositions() {
-        val terminal = terminal()
+        // Keep the hidden cursor at column zero: appendStyledLine still reserves its column.
+        // The independent cursor-reservation test below covers that second real text change.
+        val terminal = terminal().apply { feed("\r") }
         val index = TerminalTranscriptWidthIndex()
         index.width(terminal.renderFrame(), 1, ::measure)
         repeat(30) {
-            terminal.feed("\r\nappend-$it")
+            terminal.feed("\r\nappend-$it\r")
             val next = terminal.renderFrame()
             assertEquals(expected(next), index.width(next, 1, ::measure))
             assertEquals(1, index.lastMeasuredHistoryRows)
@@ -240,10 +242,11 @@ class TerminalTranscriptWidthIndexTest {
     @Test fun shorteningTheWidestScreenRowReducesTheMaximum() {
         val terminal = TerminalEmulator(80, 6, 100).apply {
             feed("\u001B[?25l" + (0..5).joinToString("\r\n") { if (it == 0) "W".repeat(70) else "short-$it" })
+            feed("\r") // Do not also remove the last row's cursor-column space when moving home.
         }
         val index = TerminalTranscriptWidthIndex()
         val original = index.width(terminal.renderFrame(), 1, ::measure)
-        terminal.feed("\u001B[H\u001B[2Ktiny")
+        terminal.feed("\u001B[H\u001B[2Ktiny\r")
         val next = terminal.renderFrame()
         val shorter = index.width(next, 1, ::measure)
         assertEquals(expected(next), shorter)
@@ -257,14 +260,14 @@ class TerminalTranscriptWidthIndexTest {
     }
 
     @Test fun identicalCharactersWithDifferentAnsiOrUrlAnnotationsAreNotCacheHits() {
-        val terminal = terminal()
+        val terminal = terminal().apply { feed("\r") }
         val index = TerminalTranscriptWidthIndex()
         var frame = terminal.renderFrame()
         val plain = frame.rows.last().text.text
         index.width(frame, 1, ::measure)
         for (styled in listOf("\u001B[1m$plain\u001B[0m", "\u001B[3m$plain\u001B[0m",
             "\u001B]8;;https://example.invalid/new\u001B\\$plain\u001B]8;;\u001B\\")) {
-            terminal.feed("\r\u001B[2K$styled")
+            terminal.feed("\r\u001B[2K$styled\r")
             val next = terminal.renderFrame()
             assertEquals(plain, next.rows.last().text.text)
             assertNotEquals(frame.rows.last().text, next.rows.last().text)
@@ -273,6 +276,32 @@ class TerminalTranscriptWidthIndexTest {
             assertEquals(5, index.lastReusedScreenRows)
             frame = next
         }
+    }
+
+    @Test fun hiddenCursorColumnReservationChangesBothMovedAndNewRows() {
+        val terminal = terminal()
+        val first = terminal.renderFrame()
+        val index = TerminalTranscriptWidthIndex()
+        index.width(first, 1, ::measure)
+        val previousLast = first.rows.last().text
+        assertTrue(previousLast.text.endsWith(" "))
+        terminal.feed("\r\nnext")
+        val next = terminal.renderFrame()
+        val moved = next.rows[next.rows.lastIndex - 1].text
+        assertEquals(first.screenLineIds.last(), next.screenLineIds[next.screenLineIds.lastIndex - 1])
+        assertEquals(previousLast.text.dropLast(1), moved.text)
+        assertEquals("next ", next.rows.last().text.text)
+        assertEquals(expected(next), index.width(next, 1, ::measure))
+        assertEquals(1, index.lastMeasuredHistoryRows)
+        assertEquals(2, index.lastMeasuredScreenRows)
+        assertEquals(4, index.lastReusedScreenRows)
+        assertEquals(6, index.retainedScreenRows)
+        terminal.feed("\r")
+        val withoutReservation = terminal.renderFrame()
+        assertEquals("next", withoutReservation.rows.last().text.text)
+        assertEquals(expected(withoutReservation), index.width(withoutReservation, 1, ::measure))
+        assertEquals(1, index.lastMeasuredScreenRows)
+        assertEquals(5, index.lastReusedScreenRows)
     }
 
     @Test fun syntheticRowsIdsGenerationAndDifferentOwnerCannotReuseScreenWidths() {
