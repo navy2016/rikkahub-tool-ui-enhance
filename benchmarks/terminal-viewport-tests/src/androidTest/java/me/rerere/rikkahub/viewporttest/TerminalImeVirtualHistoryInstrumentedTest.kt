@@ -80,6 +80,7 @@ class TerminalImeVirtualHistoryInstrumentedTest {
         val original = compose.runOnIdle { f.top() }
         val widths = compose.runOnIdle { f.bound.binding.widthIndex }
         val measured = widths.measuredHistoryRows
+        val measuredScreen = widths.measuredScreenRows
         val created = f.measurements.createdRowNodes
         val height = f.viewportHeight
         repeat(2) {
@@ -102,6 +103,8 @@ class TerminalImeVirtualHistoryInstrumentedTest {
                 assertEquals(original.anchor, f.top().anchor)
                 assertEquals(measured, widths.measuredHistoryRows)
                 assertEquals(0L, f.measurements.eagerHistoryBuildCount)
+                assertEquals(measuredScreen + (it + 1) * 3, widths.measuredScreenRows)
+                assertEquals(24, widths.retainedScreenRows)
                 assertTrue("keyboard rebuilt history rows", f.measurements.createdRowNodes - created < 256)
                 assertEquals(24, f.terminal.rows)
             }
@@ -245,6 +248,7 @@ class TerminalImeVirtualHistoryInstrumentedTest {
         compose.runOnIdle {
             assertTrue(replacement.isVirtual)
             assertFalse(widths.hasRetainedState)
+            assertEquals(0, widths.retainedScreenRows)
             assertEquals(0, first.measurements.retainedRows)
             assertEquals(0, first.measurements.retainedEagerHistoryRows)
             assertEquals(0, first.activeWriters)

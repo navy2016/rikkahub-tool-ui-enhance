@@ -225,6 +225,10 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             return@productionAsyncTrace
         }
         val viewport = checkNotNull(current)
+        val widths = viewport.bound.binding.widthIndex
+        val screenWorkBefore = widths.measuredScreenRows
+        val historyWorkBefore = widths.measuredHistoryRows
+        val reusedBefore = widths.reusedScreenRows
         when (scenario) {
             "activeRowUpdate", "appendAndTrim" -> repeat(ProductionBenchmarkSpec.UPDATE_COUNT) { index ->
                 val deadline = SystemClock.uptimeMillis() + ProductionBenchmarkSpec.UPDATE_INTERVAL_MS
@@ -268,6 +272,23 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             "imeRoundTrip" -> imeRoundTrip(viewport)
             else -> error("Unsupported production operation: $scenario")
         }
+        if (mode.isVirtualHistory && scenario in listOf("activeRowUpdate", "appendAndTrim")) {
+            val measured = widths.measuredScreenRows - screenWorkBefore
+            val updates = ProductionBenchmarkSpec.UPDATE_COUNT.toLong()
+            if (scenario == "activeRowUpdate") {
+                check(measured == updates) { "Active row output remeasured unchanged screen widths: $measured" }
+                check(widths.measuredHistoryRows == historyWorkBefore)
+            } else {
+                // A visible cursor can change BOTH the former and new last screen row.
+                check(measured in updates..updates * 2) { "Append did not reuse surviving screen widths: $measured" }
+                check(widths.measuredHistoryRows - historyWorkBefore == updates)
+            }
+            check(widths.reusedScreenRows - reusedBefore >= updates * (TerminalBenchmarkWorkload.SCREEN_ROWS - 2))
+        }
+        Log.i("ProductionTerminalBenchmark", "WIDTH_WORK scenario=$scenario size=$size mode=${mode.id} token=$phaseToken " +
+            "historyMeasured=${widths.measuredHistoryRows - historyWorkBefore} " +
+            "screenMeasured=${widths.measuredScreenRows - screenWorkBefore} " +
+            "screenReused=${widths.reusedScreenRows - reusedBefore} retainedScreen=${widths.retainedScreenRows}")
     }
 
     private suspend fun imeRoundTrip(viewport: Viewport) {
@@ -332,6 +353,9 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         if (stableIme) {
             check(measurements.eagerHistoryBuildCount == 0L) { "Stable IME mounted eager history" }
             check(measurements.createdRowNodes - nodesBefore < 256) { "Stable IME rebuilt the history row tree" }
+            check(widthIndex.measuredScreenRows - measuredScreen == ProductionBenchmarkSpec.IME_UPDATE_COUNT.toLong()) {
+                "Stable IME remeasured unchanged physical screen widths"
+            }
         } else if (mode == TerminalRenderMode.VIRTUAL_HISTORY) {
             check(measurements.coalescedChanges - coalescedBefore >= size - 128) {
                 "Eager fallback did not coalesce its bulk row invalidations"
@@ -402,6 +426,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         if (expected) {
             check(viewport.measurements.retainedRows < 128) { "Virtual history retained an eager row tree" }
             check(viewport.measurements.retainedEagerHistoryRows == 0)
+            check(viewport.bound.binding.widthIndex.retainedScreenRows == TerminalBenchmarkWorkload.SCREEN_ROWS)
         } else if (mode == TerminalRenderMode.DEFAULT) {
             check(viewport.measurements.retainedRows == 0) { "Default eager added virtual measurements" }
             check(!viewport.bound.binding.widthIndex.hasRetainedState)
@@ -409,6 +434,9 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             check(viewport.measurements.createdRowNodes == 0L)
             check(viewport.measurements.measuredRowCount == 0L)
             check(viewport.measurements.publishedNotifications == 0L)
+        }
+        if (!expected) check(viewport.bound.binding.widthIndex.retainedScreenRows == 0) {
+            "Compatibility fallback retained physical screen text keys"
         }
         Trace.setCounter("Prod.createdRowNodes", viewport.measurements.createdRowNodes)
         Trace.setCounter("Prod.measuredRowCount", viewport.measurements.measuredRowCount)
@@ -418,6 +446,8 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         Trace.setCounter("Prod.coalescedMeasurements", viewport.measurements.coalescedChanges)
         Trace.setCounter("Prod.widthMeasuredHistory", viewport.bound.binding.widthIndex.measuredHistoryRows)
         Trace.setCounter("Prod.widthMeasuredScreen", viewport.bound.binding.widthIndex.measuredScreenRows)
+        Trace.setCounter("Prod.widthReusedScreen", viewport.bound.binding.widthIndex.reusedScreenRows)
+        Trace.setCounter("Prod.widthRetainedScreen", viewport.bound.binding.widthIndex.retainedScreenRows.toLong())
         Trace.setCounter("Prod.retainedMeasurements", viewport.measurements.retainedRows.toLong())
         Trace.setCounter("Prod.eagerHistoryRows", viewport.measurements.retainedEagerHistoryRows.toLong())
         Trace.setCounter("Prod.scrollEffects", viewport.bound.binding.effectCount.toLong())

@@ -6,8 +6,9 @@ import me.rerere.rikkahub.utils.ownedRows
 
 /**
  * Scalar-only FIFO maximum, promoted from the controlled width experiment. History reuse requires
- * emulator-owned immutable metadata; synthetic/replaced frames always take the full scan. No Text
- * layout, Paragraph, mutable cell or history-sized TextMeasurer cache is retained.
+ * emulator-owned immutable metadata; synthetic/replaced frames always take the full scan. Only the
+ * current physical screen retains annotated-text keys plus scalar widths (at most MAX_ROWS). No
+ * Text layout, Paragraph, mutable cell or history-sized TextMeasurer cache is retained.
  */
 internal class TerminalTranscriptWidthIndex {
     private data class Source(
@@ -15,9 +16,12 @@ internal class TerminalTranscriptWidthIndex {
         val columns: Int, val first: Long, val end: Long,
     )
     private data class Candidate(val sequence: Long, val width: Int)
+    private data class ScreenWidth(val text: AnnotatedString, val width: Int)
     private val widest = ArrayDeque<Candidate>()
     private var source: Source? = null
     private var metrics: Any? = null
+    private var screenGeneration: Long? = null
+    private var screenWidths: Map<Long, ScreenWidth> = emptyMap()
     var lastMeasuredHistoryRows = 0
         private set
     var lastMeasuredScreenRows = 0
@@ -26,16 +30,28 @@ internal class TerminalTranscriptWidthIndex {
         private set
     var measuredScreenRows = 0L
         private set
+    var lastReusedScreenRows = 0
+        private set
+    var reusedScreenRows = 0L
+        private set
     val retainedCandidates: Int get() = widest.size
-    val hasRetainedState: Boolean get() = source != null || metrics != null || widest.isNotEmpty()
+    val retainedScreenRows: Int get() = screenWidths.size
+    val hasRetainedState: Boolean get() = source != null || metrics != null || widest.isNotEmpty() || screenWidths.isNotEmpty()
+
+    private fun clearScreen() {
+        screenWidths = emptyMap()
+        screenGeneration = null
+    }
 
     /** Release fonts/owner tokens as well as scalar candidates; work counters remain cumulative. */
     fun clear() {
         widest.clear()
         source = null
         metrics = null
+        clearScreen()
         lastMeasuredHistoryRows = 0
         lastMeasuredScreenRows = 0
+        lastReusedScreenRows = 0
     }
 
     private fun sourceOf(frame: TerminalEmulator.RenderFrame): Source? =
@@ -55,9 +71,11 @@ internal class TerminalTranscriptWidthIndex {
      * A committed eager fallback prunes retired candidates without measuring any Text. Keep the
      * measured end, NOT the latest frame end: output arriving while hidden must be measured on retry.
      * Advancing the first ordinal also prevents a later older/speculative frame reusing lost maxima.
-     * No frame, rows, measure callback or layout survives this call.
+     * Drop screen text keys on every committed compatibility fallback, even without output. Only
+     * scalar history candidates/validity metadata survive; no frame, rows, callback or layout does.
      */
     fun retainFor(frame: TerminalEmulator.RenderFrame, metricKey: Any) {
+        clearScreen()
         val previous = source
         val next = sourceOf(frame)
         if (frame.historyCount == 0 || !canReuse(previous, next, metricKey)) {
@@ -73,11 +91,18 @@ internal class TerminalTranscriptWidthIndex {
         require(frame.historyCount in 0..frame.rows.size)
         lastMeasuredHistoryRows = 0
         lastMeasuredScreenRows = 0
+        lastReusedScreenRows = 0
         val next = sourceOf(frame)
         val previous = source
         val reuse = canReuse(previous, next, metricKey)
+        val screenCount = frame.rows.size - frame.historyCount
+        val cacheScreen = next != null && !frame.isAlternateScreen &&
+            screenCount in 1..TerminalEmulator.MAX_ROWS && frame.screenLineIds.size == screenCount
+        val reusableScreen = if (cacheScreen && reuse && screenGeneration == frame.screenGeneration) screenWidths
+            else emptyMap()
         source = null // A failed measurement must revoke the partially advanced cache.
         metrics = null
+        clearScreen() // Publish the new screen only after EVERY requested measurement succeeds.
         if (!reuse) widest.clear()
         val first = next?.first ?: 0L
         while (widest.isNotEmpty() && widest.first().sequence < first) widest.removeFirst()
@@ -91,12 +116,30 @@ internal class TerminalTranscriptWidthIndex {
             widest.addLast(Candidate(first + index, width))
         }
         var maximum = widest.firstOrNull()?.width ?: 0
+        // Replace, never accumulate: FIFO screen rows can move to history or disappear on resize.
+        val nextScreen = if (cacheScreen) HashMap<Long, ScreenWidth>(screenCount) else null
         for (index in frame.historyCount until frame.rows.size) {
-            val width = measure(frame.rows[index].text).also { require(it >= 0) }
-            lastMeasuredScreenRows++
-            measuredScreenRows++
+            val text = frame.rows[index].text
+            val id = if (cacheScreen) frame.screenLineIds[index - frame.historyCount] else null
+            // The emulator rebuilds screen AnnotatedStrings each frame, so reference equality is
+            // insufficient. Full equality also rejects changed ANSI/cursor/URL/paragraph styling.
+            val cached = id?.let { reusableScreen[it] }?.takeIf { it.text == text }
+            val width = if (cached != null) {
+                lastReusedScreenRows++
+                reusedScreenRows++
+                cached.width
+            } else {
+                measure(text).also {
+                    require(it >= 0)
+                    lastMeasuredScreenRows++
+                    measuredScreenRows++
+                }
+            }
+            if (nextScreen != null) nextScreen[checkNotNull(id)] = cached ?: ScreenWidth(text, width)
             maximum = maxOf(maximum, width)
         }
+        screenWidths = nextScreen ?: emptyMap()
+        screenGeneration = frame.screenGeneration.takeIf { cacheScreen }
         metrics = metricKey
         source = next
         return maximum

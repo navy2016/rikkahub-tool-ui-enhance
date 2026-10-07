@@ -293,6 +293,12 @@ matrix accessible via the check-run API when artifact/blob downloads fail. Missi
 
 ## Recorded baselines
 
+- [a79e7b6: complete three-mode V3 baseline](results/a79e7b6-verification.md)
+  — all 54 cases / 162 measured iterations passed, with six original source/device contexts.
+  Long-history mount/restore and stable-mode IME benefit; active-row updates are not faster than
+  the default. Cold width scans remain expensive. This is the verified base for the isolated
+  `opt/terminal-verified-a79e7b6` branch, not a real-device FPS or cross-run speedup claim.
+
 - [2b0f259: keyboard-stable virtual history, complete three-mode IME scenario](results/2b0f259-ime-v3.md)
   — 341 application JVM tests, 106 viewport tests, 18 production smoke cases and 9 full IME cases /
   27 measured iterations passed. The opt-in `lazyHistoryIme` keeps virtual rows through IME avoidance;

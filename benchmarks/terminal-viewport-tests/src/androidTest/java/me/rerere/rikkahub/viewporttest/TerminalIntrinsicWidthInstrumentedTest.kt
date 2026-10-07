@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import me.rerere.rikkahub.benchmark.TerminalBenchmarkWidthIndex
 import me.rerere.rikkahub.benchmark.TerminalIntrinsicWidthMeasurer
+import me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndex
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.junit.Assert.assertEquals
@@ -131,6 +132,56 @@ class TerminalIntrinsicWidthInstrumentedTest {
         terminal.resize(columns = 45, rows = 8)
         texts += terminal.renderFrame().rows.map { it.text }
         compare(texts)
+    }
+
+    @Test
+    fun intrinsicWidthScreenCacheMatchesUncachedFontsAnsiCursorAndResize() {
+        ready()
+        compose.runOnIdle {
+            val terminal = TerminalEmulator(80, 6, 32).apply {
+                feed("\u001B[?25l" + (0 until 38).joinToString("\r\n") { "r$it 中文 e\u0301 👩‍💻" })
+            }
+            val index = TerminalTranscriptWidthIndex()
+            for (density in densities) for (direction in listOf(LayoutDirection.Ltr, LayoutDirection.Rtl)) {
+                val style = terminalStyle.copy(fontSize = if (direction == LayoutDirection.Rtl) 19.sp else 14.sp)
+                val metric = listOf(style, density, direction)
+                val full = TextMeasurer(resolver, density, direction, cacheSize = 0)
+                val intrinsic = TerminalIntrinsicWidthMeasurer(style, density, direction, resolver)
+                fun verify() {
+                    val frame = terminal.renderFrame()
+                    val expected = frame.rows.maxOf {
+                        full.measure(it.text, style, softWrap = false, maxLines = 1, skipCache = true).size.width
+                    }
+                    assertEquals("density=$density direction=$direction", expected, index.width(frame, metric, intrinsic::width))
+                    assertEquals(terminal.rows, index.retainedScreenRows)
+                    assertEquals(terminal.rows, index.lastMeasuredScreenRows + index.lastReusedScreenRows)
+                }
+                verify()
+                assertEquals(terminal.rows, index.lastMeasuredScreenRows) // New font/density/direction.
+                verify()
+                assertEquals(0, index.lastMeasuredScreenRows)
+                assertEquals(terminal.rows, index.lastReusedScreenRows)
+                for (command in listOf(
+                    "\r\u001B[2Kwide WWWWW 中文 e\u0301",
+                    "\r\u001B[2K\u001B[1;3mwide WWWWW 中文 e\u0301\u001B[0m",
+                    "\r\u001B[2K\u001B]8;;https://example.invalid/a\u001B\\URL 👩‍💻\u001B]8;;\u001B\\",
+                    "\u001B[?25h\u001B[2;4H", "\u001B[3;5H", "\u001B[?25l",
+                    "\r\nappended", "\u001B[H\u001B[2Kshort", "\u001B[?5h", "\u001B[?5l",
+                )) {
+                    terminal.feed(command)
+                    verify()
+                }
+                terminal.resize(if (terminal.columns == 80) 40 else 80, if (terminal.rows == 6) 8 else 6)
+                verify()
+                assertEquals(terminal.rows, index.lastMeasuredScreenRows)
+                index.retainFor(terminal.renderFrame(), metric)
+                assertEquals(0, index.retainedScreenRows)
+                verify()
+                assertEquals(terminal.rows, index.lastMeasuredScreenRows)
+            }
+            index.clear()
+            assertEquals(0, index.retainedScreenRows)
+        }
     }
 
     @Test

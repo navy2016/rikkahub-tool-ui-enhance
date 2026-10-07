@@ -3,7 +3,7 @@ name: Terminal Viewport Interaction Tests
 on:
   workflow_dispatch:
   push:
-    branches: [fix/terminal-viewport-semantic-reducer]
+    branches: [fix/terminal-viewport-semantic-reducer, opt/terminal-verified-a79e7b6]
     paths:
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt'
@@ -92,7 +92,7 @@ jobs:
             --require-case-group 'widthIntrinsics=false:11' \
             --require-case-group 'widthIntrinsics=true:11' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalIntrinsicWidthInstrumentedTest \
-            --require-case-group 'intrinsicWidth:6' \
+            --require-case-group 'intrinsicWidth:7' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest \
             --require-case-group 'measurementNode:7' \

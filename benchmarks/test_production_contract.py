@@ -10,6 +10,16 @@ TARGET = ROOT / 'terminal-target/src/main/java/me/rerere/rikkahub/benchmark/Prod
 
 
 class ProductionContractTest(unittest.TestCase):
+    def test_screen_width_work_is_checked_without_populating_the_cache_from_the_harness(self):
+        source = TARGET.read_text()
+        self.assertIn('check(measured == updates)', source)
+        self.assertIn('check(measured in updates..updates * 2)', source)
+        self.assertIn('widths.reusedScreenRows - reusedBefore >= updates * (TerminalBenchmarkWorkload.SCREEN_ROWS - 2)', source)
+        self.assertIn('widthIndex.measuredScreenRows - measuredScreen == ProductionBenchmarkSpec.IME_UPDATE_COUNT.toLong()', source)
+        self.assertIn('if (!expected) check(viewport.bound.binding.widthIndex.retainedScreenRows == 0)', source)
+        self.assertNotIn('widthIndex.width(', source)
+        self.assertIn('WIDTH_WORK scenario=$scenario', source)
+
     def test_stable_ime_uses_production_policy_and_checks_bounded_nodes_without_eager_history(self):
         source = TARGET.read_text()
         self.assertIn('val wants = mode.isVirtualHistory', source)

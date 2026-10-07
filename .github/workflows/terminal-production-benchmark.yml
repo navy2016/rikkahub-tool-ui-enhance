@@ -17,7 +17,7 @@ on:
         default: '3'
         required: true
   push:
-    branches: [fix/terminal-viewport-semantic-reducer]
+    branches: [fix/terminal-viewport-semantic-reducer, opt/terminal-verified-a79e7b6]
     paths:
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt'
       - 'app/src/main/java/me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt'

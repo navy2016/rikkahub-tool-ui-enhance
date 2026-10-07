@@ -3,6 +3,10 @@
 This is the current production-component benchmark, distinct from the archived renderer-only
 experiments in README.md. Contract: `production-viewport-v3`. No old measurements are relabelled.
 
+Active development branch: `opt/terminal-verified-a79e7b6`, forked from the locally verified baseline.
+Explicitly dispatch workflows and push to that branch; do not merge or overwrite later commits on
+`fix/terminal-viewport-semantic-reducer` without the user's direction.
+
 ## What is measured
 
 The target compiles the actual production `TerminalTranscriptViewport`, `TerminalViewportBinding`,
@@ -80,6 +84,13 @@ make the entire append pipeline O(1). The baseline at `16ab7c0` predates this bl
   cumulative work counters, not time samples. `IME_WORK` log lines bind per-round node/notification
   deltas to the Activity's launch token. Stable IME requires zero eager history builds and fewer than
   256 newly created measurement nodes per round; the original mode must coalesce its bulk fallback.
+- Active-screen width reuse retains at most the current physical screen (maximum 80 annotated-text
+  keys and scalar widths), never TextLayouts or an accumulated history cache. Only trusted source,
+  stable row ID, screen generation, equal full AnnotatedString and equal font metrics permit reuse.
+  Compatibility fallback drops ALL screen keys; cold/replaced/invalid frames and failures revoke reuse.
+  `Prod.widthReusedScreen` and `Prod.widthRetainedScreen` expose cumulative reuse/current retention.
+  `WIDTH_WORK` launch-bound records report measured history/screen rows and cache hits after an
+  operation; the harness never calls width measurement to prewarm or repair production state.
 
 Results are accepted only with the complete three-mode/size matrix for that invocation, matching positive
 repetition count, successful instrumentation, required traces and exact provenance. Exact duplicate
@@ -97,7 +108,7 @@ After smoke and existing regression tests pass, request all sizes / three repeat
 
 ```bash
 gh workflow run terminal-production-benchmark.yml \
-  --ref fix/terminal-viewport-semantic-reducer \
+  --ref opt/terminal-verified-a79e7b6 \
   -f scenario=all -f smoke=false -f iterations=3
 ```
 
@@ -123,6 +134,14 @@ process-death recovery, representative physical-device memory/GC and 30-minute s
 work. This benchmark does not claim those end-to-end checks or change any status/KEYS behavior.
 
 ## Verified checkpoints
+
+- [a79e7b6 complete V3 baseline](results/a79e7b6-verification.md), run `37456883236`:
+  all 54 cases / 162 iterations passed with six hash-checked original contexts from `37459976695`.
+  Production inputs match the verified `2b0f259` Release; only documentation differs between those
+  commits. In the 10k IME scenario, original virtual / stable virtual / default totals are
+  10658.95 / 3708.66 / 3778.21 ms. Stable virtual mount/restore improve on default, while active-row
+  output latency does not. Cold width remains 711.68 ms at mount and 1359.00 ms at restore. These
+  data are a separate invocation from the earlier IME checkpoint, never a combined comparison.
 
 - [2b0f259 opt-in stable IME and notification coalescing](results/2b0f259-ime-v3.md):
   341 application Release JVM cases, 106 viewport instrumentation cases, 25 fixture JVM cases and

@@ -373,6 +373,7 @@ class TerminalItemViewportInstrumentedTest {
             assertTrue(widths.hasRetainedState)
             assertEquals(historyWork, widths.measuredHistoryRows)
             assertEquals(screenWork, widths.measuredScreenRows)
+            assertEquals(0, widths.retainedScreenRows)
             f.keyboard?.hide()
         }
         compose.waitUntil(10_000) { !f.ime }
@@ -466,6 +467,7 @@ class TerminalItemViewportInstrumentedTest {
         compose.runOnIdle {
             assertFalse(oldWidths.hasRetainedState)
             assertEquals(0, oldWidths.retainedCandidates)
+            assertEquals(0, oldWidths.retainedScreenRows)
             assertTrue(oldWidths !== replacement.bound.binding.widthIndex)
             assertEquals(128L, replacement.bound.binding.widthIndex.measuredHistoryRows)
         }
