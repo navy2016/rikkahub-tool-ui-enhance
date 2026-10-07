@@ -1,0 +1,10 @@
+scenario,job_id,history_rows,mode,repetitions,mount_ms,operation_ms,output_per_op_ms,cpu_p95_ms,width_per_call_ms,rss_anon_max_mib
+activeRowUpdate,112606133595,1000,chunkedLayers,3,,5174.93,172.48,134.2,,105.98
+activeRowUpdate,112606133595,1000,lazyHistory,3,,5909.41,196.96,132.87,0.48,109.44
+activeRowUpdate,112606133595,1000,lazyHistoryIme,3,,5708.01,190.26,133.14,1.82,109.31
+activeRowUpdate,112606133595,5000,chunkedLayers,3,,5267.91,175.58,135.03,,165.41
+activeRowUpdate,112606133595,5000,lazyHistory,3,,5750.62,191.67,133.77,0.77,118.69
+activeRowUpdate,112606133595,5000,lazyHistoryIme,3,,5620.76,187.34,133.68,0.67,118.88
+activeRowUpdate,112606133595,10000,chunkedLayers,3,,5398.71,179.94,135.62,,272.32
+activeRowUpdate,112606133595,10000,lazyHistory,3,,5775.99,192.52,134.13,1.25,151.09
+activeRowUpdate,112606133595,10000,lazyHistoryIme,3,,5789.41,192.85,134.47,1.18,160.8

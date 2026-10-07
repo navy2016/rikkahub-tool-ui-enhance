@@ -135,6 +135,16 @@ work. This benchmark does not claim those end-to-end checks or change any status
 
 ## Verified checkpoints
 
+- [807d2f0 bounded screen-width cache](results/807d2f0-active-row-v3.md):
+  forked `opt/terminal-verified-a79e7b6` from verified local `a79e7b6`, without merging later commits
+  on the original remote branch. Only the production width index changes relative to that base.
+  349 Release JVM cases passed at 807d2f0; 107 viewport tests and 18 smoke cases passed at ebc13f2,
+  whose app/instrumentation/benchmark inputs are identical (807d2f0 only fixes JVM fixtures).
+  Full active-row run `37563252917` passed 9 cases / 27 iterations, with original evidence from
+  `37564434194`. Each virtual 30-update iteration measures 30 screen rows, reuses 690 and retains 24;
+  history is not remeasured. 10k stable-mode output is 192.85 ms versus default 179.94 ms, so no
+  end-to-end win is claimed. Cold scans remain. Release verification `37563260757` passed.
+
 - [a79e7b6 complete V3 baseline](results/a79e7b6-verification.md), run `37456883236`:
   all 54 cases / 162 iterations passed with six hash-checked original contexts from `37459976695`.
   Production inputs match the verified `2b0f259` Release; only documentation differs between those

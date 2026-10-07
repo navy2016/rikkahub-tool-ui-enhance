@@ -293,6 +293,12 @@ matrix accessible via the check-run API when artifact/blob downloads fail. Missi
 
 ## Recorded baselines
 
+- [807d2f0: bounded active-screen width reuse on the isolated branch](results/807d2f0-active-row-v3.md)
+  — 349 application JVM and 107 viewport tests passed; the complete active-row scenario has 9 cases /
+  27 iterations. Each 30-update virtual case measures 30 screen rows and reuses 690, retaining only 24.
+  End-to-end output latency is still above the default on this device. This is a work-count proof,
+  not a same-device old/new-cache speedup claim. Verified Release and branch links are included.
+
 - [a79e7b6: complete three-mode V3 baseline](results/a79e7b6-verification.md)
   — all 54 cases / 162 measured iterations passed, with six original source/device contexts.
   Long-history mount/restore and stable-mode IME benefit; active-row updates are not faster than
