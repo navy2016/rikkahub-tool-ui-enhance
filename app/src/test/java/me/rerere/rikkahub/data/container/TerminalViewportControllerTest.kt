@@ -441,4 +441,70 @@ class TerminalViewportControllerTest {
     fun programmaticOriginsCannotEnterTheUserInputPath() {
         TerminalViewportController().beginUserScroll(ViewportScrollOrigin.IME, 0)
     }
+
+    @Test
+    fun freshMeasuredEagerWaitsForCompleteLayoutAndFollowsActualBottom() {
+        val frame = makeFrame()
+        val heights = IntArray(frame.rows.size) { if (it % 7 == 0) 37 else 21 }
+        val geometry = TerminalEagerViewportGeometry(frame, heights)
+        val metrics = metricsFor(frame).copy(maxScrollPx = heights.sum() + 8 - 100, tailPaddingPx = 8)
+        val controller = TerminalViewportController()
+        controller.updateViewport(frame, frame.rows.size, metrics, 0, null, true)
+        assertFalse(controller.state.value.initialized)
+        assertNull(controller.state.value.scrollEffect)
+        controller.updateViewport(frame, frame.rows.size, metrics, 0, geometry, true)
+        assertEquals(heights.sum() + 8 - 100, controller.effect().targetScrollPx)
+        assertNotEquals(frame.rows.size * 20 + 8 - 100, controller.effect().targetScrollPx)
+        controller.finish()
+        val drag = controller.beginUserScroll(ViewportScrollOrigin.USER_DRAG, metrics.maxScrollPx - 30)
+        controller.userScrolled(drag, metrics.maxScrollPx)
+        controller.endUserScroll(drag)
+        assertTrue(controller.state.value.autoScroll)
+        assertNull("Real bottom must not be corrected upward on release", controller.state.value.scrollEffect)
+    }
+
+    @Test
+    fun restoredEagerAnchorBindsMissingMeasuredScaleOnceAndPreservesItAcrossFontChanges() {
+        val frame = makeFrame()
+        val controller = TerminalViewportController(TerminalViewportState(autoScroll = false,
+            anchorLineId = 103, anchorClippedTopPx = 7, anchorHistoryGeneration = 1))
+        fun geometry(height: Int) = TerminalEagerViewportGeometry(frame,
+            IntArray(frame.rows.size) { if (it == 3) height else 43 })
+        fun update(height: Int, scroll: Int) {
+            val layout = geometry(height)
+            controller.updateViewport(frame, frame.rows.size,
+                metricsFor(frame).copy(maxScrollPx = layout.contentHeightPx - 100), scroll, layout, true)
+        }
+        update(31, 0)
+        assertEquals(31, controller.state.value.anchorRowHeightPx)
+        assertEquals(3 * 43 + 7, controller.effect().targetScrollPx)
+        controller.finish()
+        repeat(3) {
+            update(45, 3 * 43 + 7)
+            assertEquals(3 * 43 + 10, controller.effect().targetScrollPx)
+            controller.finish()
+            update(31, 3 * 43 + 10)
+            assertEquals(3 * 43 + 7, controller.effect().targetScrollPx)
+            controller.finish()
+        }
+        assertEquals(31, controller.state.value.anchorRowHeightPx)
+        assertEquals(7, controller.state.value.anchor?.clippedTopPx)
+    }
+
+    @Test
+    fun staleEagerLayoutCannotBindRestoredHeightOrOverwriteKnownCapture() {
+        val old = makeFrame()
+        val frame = old.copy()
+        val controller = TerminalViewportController(TerminalViewportState(autoScroll = false,
+            anchorLineId = 103, anchorClippedTopPx = 7, anchorRowHeightPx = 31, anchorHistoryGeneration = 1))
+        val stale = TerminalEagerViewportGeometry(old, IntArray(old.rows.size) { 45 })
+        controller.updateViewport(frame, frame.rows.size, metricsFor(frame), 0, stale, true)
+        assertFalse(controller.state.value.initialized)
+        assertNull(controller.state.value.scrollEffect)
+        val actual = TerminalEagerViewportGeometry(frame, IntArray(frame.rows.size) { 45 })
+        controller.updateViewport(frame, frame.rows.size,
+            metricsFor(frame).copy(maxScrollPx = actual.contentHeightPx - 100), 0, actual, true)
+        assertEquals(31, controller.state.value.anchorRowHeightPx)
+        assertEquals(3 * 45 + 10, controller.effect().targetScrollPx)
+    }
 }

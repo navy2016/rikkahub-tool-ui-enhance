@@ -8,6 +8,10 @@
 当前使用 `opt/terminal-verified-a79e7b6`；推送和 workflow dispatch 均须明确指定此分支。
 原远端 `fix/terminal-viewport-semantic-reducer` 已有其他新提交，不自动 pull、merge、rebase 或覆盖它。
 基础应用代码为 `2b0f259`，`a79e7b6` 仅增加文档，已通过 V3 六场景 54 用例／162 次测量。
+用户随后实机复核：`2b0f259` 也有全新默认会话底行半遮挡／松手回弹；切过虚拟历史后，
+该会话的 eager 实测几何路径会掩盖此缺陷。旧 V3 使用同一 nominal cell 公式判定默认完成，
+不能作为此缺陷不存在的证据。当前修复要求普通 eager 从首次布局采用实测行高，保持默认
+CHUNKED_LAYERS 和 TUI／全网格策略不变；基准协议升为 V4，不重标旧测量结果。
 
 ## Build, Test, and Development Commands
 

@@ -474,7 +474,7 @@ class TerminalItemViewportInstrumentedTest {
         }
     }
 
-    @Test fun itemNativeDefaultEagerRealImeUpdatesGeometryWithoutOutputOrVirtualMeasurements() {
+    @Test fun itemNativeDefaultEagerRealImeUpdatesMeasuredGeometryWithoutVirtualWidths() {
         val f = mount(Fixture(stressSpans = false, systemIme = true, initialMode = TerminalRenderMode.DEFAULT))
         compose.runOnIdle { f.controller.setFollow(true, f.inputPx()) }
         settle(f)
@@ -483,7 +483,8 @@ class TerminalItemViewportInstrumentedTest {
         settle(f)
         compose.runOnIdle {
             assertFalse(f.isVirtual)
-            assertEquals(0, f.measurements.retainedRows)
+            assertEquals(f.frame.rows.size, f.measurements.retainedRows)
+            assertEquals(f.frame.historyCount, f.measurements.retainedEagerHistoryRows)
             assertFalse(f.bound.binding.widthIndex.hasRetainedState)
             assertEquals(0L, f.bound.binding.widthIndex.measuredHistoryRows)
             assertEquals(0L, f.bound.binding.widthIndex.measuredScreenRows)

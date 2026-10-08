@@ -77,8 +77,6 @@ import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportLineLookup
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalViewportState
-import me.rerere.rikkahub.data.container.captureViewportAnchor
-import me.rerere.rikkahub.data.container.terminalImeAnchorScrollTarget
 import me.rerere.rikkahub.ui.pages.container.TerminalBoundViewport
 import me.rerere.rikkahub.ui.pages.container.TerminalLazyItemMeasurements
 import me.rerere.rikkahub.ui.pages.container.TerminalTranscriptViewport
@@ -428,12 +426,13 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             check(viewport.measurements.retainedEagerHistoryRows == 0)
             check(viewport.bound.binding.widthIndex.retainedScreenRows == TerminalBenchmarkWorkload.SCREEN_ROWS)
         } else if (mode == TerminalRenderMode.DEFAULT) {
-            check(viewport.measurements.retainedRows == 0) { "Default eager added virtual measurements" }
+            check(viewport.bound.eagerMeasurement != null) { "Fresh default did not measure actual Text heights" }
+            check(viewport.measurements.retainedRows == viewport.frame.rows.size)
+            check(viewport.measurements.retainedEagerHistoryRows == viewport.frame.historyCount)
             check(!viewport.bound.binding.widthIndex.hasRetainedState)
             check(viewport.bound.binding.widthIndex.measuredHistoryRows == 0L)
-            check(viewport.measurements.createdRowNodes == 0L)
-            check(viewport.measurements.measuredRowCount == 0L)
-            check(viewport.measurements.publishedNotifications == 0L)
+            check(viewport.measurements.createdRowNodes > 0L)
+            check(viewport.measurements.measuredRowCount > 0L)
         }
         if (!expected) check(viewport.bound.binding.widthIndex.retainedScreenRows == 0) {
             "Compatibility fallback retained physical screen text keys"
@@ -535,22 +534,20 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
                         TerminalItemScrollTarget.Anchor(it, controller.state.value.anchorRowHeightPx)) } == true
             }
             if (eager.maxValue == Int.MAX_VALUE || eager.isScrollInProgress) return false
-            val geometry = measurements.peekEager(bound.pass)
-            if (bound.eagerMeasurement != null && geometry == null) return false
+            // The fixture uses ordinary transcript mode, so DEFAULT also needs real geometry.
+            // Do not accept the same nominal cell formula that previously hid clipped last rows.
+            if (bound.eagerMeasurement == null) return false
+            val geometry = measurements.peekEager(bound.pass) ?: return false
             if (!controller.state.value.autoScroll) {
                 val state = controller.state.value
                 val anchor = state.anchor ?: return false
-                if (geometry != null) {
-                    val target = geometry.target(anchor, state.anchorRowHeightPx, anchorLookup) ?: return false
-                    return eager.value == target.coerceIn(0, eager.maxValue)
-                }
-                val captured = captureViewportAnchor(frame, frame.rows.size, eager.value, cellHeight) ?: return false
-                return captured.lineId == anchor.lineId && captured.clippedTopPx == anchor.clippedTopPx
+                val target = geometry.target(anchor, state.anchorRowHeightPx, anchorLookup) ?: return false
+                return eager.value == target.coerceIn(0, eager.maxValue)
             }
             val last = frame.contentBounds.lastNonBlankRow
-            val target = if (geometry != null && last != null) {
+            val target = if (last != null) {
                 (geometry.bottom(last) + tailPadding - viewportHeight).coerceIn(0, eager.maxValue)
-            } else terminalImeAnchorScrollTarget(last, cellHeight, viewportHeight, tailPadding, eager.maxValue)
+            } else 0
             return eager.value == target
         }
 
@@ -571,12 +568,9 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             if (bound.virtualHistoryEnabled) {
                 val actual = checkNotNull(bound.binding.observation()?.capture())
                 check(actual.anchor.lineId == saved.anchorLineId && actual.anchor.clippedTopPx == saved.anchorClippedTopPx)
-            } else if (bound.eagerMeasurement != null) {
+            } else {
                 val actual = checkNotNull(measurements.peekEager(bound.pass)).capture(eager.value)
                 check(actual.anchor.lineId == saved.anchorLineId && actual.anchor.clippedTopPx == saved.anchorClippedTopPx)
-            } else {
-                val actual = checkNotNull(captureViewportAnchor(frame, frame.rows.size, eager.value, cellHeight))
-                check(actual.lineId == saved.anchorLineId && actual.clippedTopPx == saved.anchorClippedTopPx)
             }
         }
     }

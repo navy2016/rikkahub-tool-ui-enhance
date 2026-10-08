@@ -10,6 +10,15 @@ TARGET = ROOT / 'terminal-target/src/main/java/me/rerere/rikkahub/benchmark/Prod
 
 
 class ProductionContractTest(unittest.TestCase):
+    def test_default_completion_requires_real_geometry_without_nominal_cell_oracle(self):
+        source = TARGET.read_text()
+        self.assertIn('check(viewport.bound.eagerMeasurement != null)', source)
+        self.assertIn('if (bound.eagerMeasurement == null) return false', source)
+        self.assertIn('val geometry = measurements.peekEager(bound.pass) ?: return false', source)
+        self.assertNotIn('terminalImeAnchorScrollTarget', source)
+        self.assertNotIn('captureViewportAnchor', source)
+        self.assertIn('check(!viewport.bound.binding.widthIndex.hasRetainedState)', source)
+
     def test_screen_width_work_is_checked_without_populating_the_cache_from_the_harness(self):
         source = TARGET.read_text()
         self.assertIn('check(measured == updates)', source)

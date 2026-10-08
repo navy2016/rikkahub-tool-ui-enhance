@@ -434,8 +434,21 @@ internal class TerminalViewportController(
         if (!state.value.autoScroll && state.value.anchor == null) capture(legacyOffsetPx ?: scrollPx)
         if (eagerGeometry != null && state.value.anchor != null) {
             val resolved = resolveTerminalItemAnchor(frame, requireNotNull(state.value.anchor), anchorLookup)
-            mutableState.value = if (resolved == null) state.value.copy(mode = followMode(), anchor = null)
-                else state.value.copy(anchor = resolved)
+            mutableState.value = if (resolved == null) state.value.copy(mode = followMode(), anchor = null) else {
+                // Older saved default anchors have no measured scale. Bind once to the resolved
+                // row's first actual height, just as the item backend does; do not rebase on every
+                // font change or overwrite a known capture height during a renderer handoff.
+                val height = if (state.value.anchorRowHeightPx <= 0) {
+                    val index = anchorLookup.find(frame, renderedRows, resolved.lineId)
+                    index.takeIf { it >= 0 }?.let { requireNotNull(eagerGeometry).height(it) }
+                } else null
+                state.value.copy(
+                    anchor = if (height != null) resolved.copy(clippedTopPx = resolved.clippedTopPx.coerceIn(0, height - 1))
+                        else resolved,
+                    anchorRowHeightPx = height ?: state.value.anchorRowHeightPx,
+                    anchorCellHeightPx = if (height != null) metrics.cellHeightPx else state.value.anchorCellHeightPx,
+                )
+            }
         }
         val anchor = state.value.anchor
         val captureHeight = state.value.anchorCellHeightPx.takeIf { it > 0 } ?: metrics.cellHeightPx

@@ -5,7 +5,7 @@ import me.rerere.rikkahub.utils.TerminalHistorySnapshot
 import me.rerere.rikkahub.utils.ownedRows
 
 /**
- * UI-thread cache for measured eager fallback only. A trusted immutable history identity proves its
+ * UI-thread cache for ordinary measured eager viewports. A trusted immutable history identity proves its
  * Text/IDs; the measurement owner must call invalidate for every changed/disposed measured row.
  * The first successful history scan marks those rows as history contributors in that owner. A
  * contributor change revokes this proof even if the frame/metrics are unchanged. Untrusted frames,

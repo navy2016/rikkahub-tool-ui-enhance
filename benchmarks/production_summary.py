@@ -8,7 +8,7 @@ from pathlib import Path
 
 from summarize import format_number, median, overrun_percent, per_operation, percentile
 
-VERSION = "production-viewport-v3"
+VERSION = "production-viewport-v4"
 SIZES = (1000, 5000, 10000)
 MODES = ("chunkedLayers", "lazyHistory", "lazyHistoryIme")
 SCENARIOS = ("initialCompose", "activeRowUpdate", "appendAndTrim", "semanticJump", "imeRoundTrip", "detachRestore")
@@ -130,7 +130,7 @@ def validate(results, context, sha, run_id, group_id, scenario, iterations, smok
                 trace(case, "eagerGeometry", count=0)
         else:
             trace(case, "width", count=0)
-            trace(case, "eagerGeometry", count=0)
+            trace(case, "eagerGeometry", minimum=1)
 
 
 def ordered(results):
@@ -144,6 +144,7 @@ def report(results, context, sha, scenario, smoke):
              "Other scenarios may use different runners; do not aggregate their samples or calculate cross-group ratios.",
              "This is an unminified Release-derived component harness, not ProcessSessionPage, PTY/input echo or app startup.",
              "Updates include production reconciliation and two stable draw confirmations. Validation/wait overhead is included.",
+             "V4 default eager uses real Text heights from its first layout; do not relabel V3 cell-based control results.",
              "Root measure includes lazy subcomposition. Phase durations overlap; do not subtract them from frame percentiles.",
              "Missing memory is —, not zero. RSS anon is sampled anonymous RSS, not PSS/Java/native/GPU peak memory.", "",
              "| History | Mode | n | Mount ms | Operation ms | Output/op ms | CPU p95 ms | Overrun % | RSS anon MiB |",

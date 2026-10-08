@@ -141,7 +141,7 @@ internal data class TerminalBoundViewport(
     val gestures: TerminalViewportGestures,
 )
 
-/** Production orchestration, including renderer handoff. Default eager rendering stays unmeasured. */
+/** Production orchestration. Ordinary eager and virtual viewports both use actual Text geometry. */
 @Composable
 internal fun rememberTerminalBoundViewport(
     sessionKey: Any,
@@ -161,7 +161,11 @@ internal fun rememberTerminalBoundViewport(
     }
     var visitedVirtual by remember(sessionKey) { mutableStateOf(armed || controller.state.value.anchorRowHeightPx > 0) }
     val virtual = wantsVirtual && armed
-    val measuredEager = !virtual && !metrics().usesTuiViewport && (wantsVirtual || visitedVirtual)
+    // Natural Text heights are not the nominal "W" cell height (fallback fonts, spans and pixel
+    // rounding). Gating measurement on a previous virtual visit made fresh DEFAULT sessions aim
+    // above the real tail and snap upward on drag release. Measure from the very first layout;
+    // preserve the existing TUI/physical-grid path and the one scroll writer.
+    val measuredEager = !virtual && !metrics().usesTuiViewport
     val latestInput by rememberUpdatedState(TerminalViewportBindingInput(pass, virtual, measuredEager, metrics))
     val latestWants by rememberUpdatedState(wantsVirtual)
     val binding = remember(sessionKey, controller, eager, lazy, measurements) {

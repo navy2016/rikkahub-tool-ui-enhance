@@ -2,7 +2,7 @@ package me.rerere.rikkahub.benchmark
 
 /** Shared by the target and its driver; no Android or renderer implementation lives here. */
 internal object ProductionBenchmarkSpec {
-    const val VERSION = "production-viewport-v3"
+    const val VERSION = "production-viewport-v4"
     const val PHASE_TOKEN = "production.phase.token"
     const val PHASE_VALUE = "production.phase.value"
     const val PACKAGE = "me.rerere.rikkahub.terminalbenchmark"

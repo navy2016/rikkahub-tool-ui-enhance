@@ -13,10 +13,10 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.Density
 import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.container.TerminalViewportState
-import me.rerere.rikkahub.data.container.ViewportScrollOrigin
 import me.rerere.rikkahub.utils.TerminalEmulator
 import me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest.Fixture
 import org.junit.Assert.assertEquals
@@ -34,8 +34,20 @@ class TerminalDefaultBottomInstrumentedTest {
     @get:Rule val compose = createAndroidComposeRule<TerminalViewportTestActivity>()
     @get:Rule val timeout = Timeout.seconds(60)
     @get:Rule val probe = object : TestWatcher() {
+        override fun starting(description: Description) {
+            Log.i("TerminalViewportProbe", "defaultBottom start lazy=true ${description.methodName}")
+        }
         override fun failed(error: Throwable, description: Description) {
-            Log.e("TerminalViewportProbe", "defaultBottom lazy=true ${description.methodName}", error)
+            Log.e("TerminalViewportProbe", "defaultBottom failure lazy=true ${description.methodName}: $error")
+            error.stackTrace.take(12).forEach {
+                Log.e("TerminalViewportProbe", "defaultBottom failure stack lazy=true $it")
+            }
+            Thread.getAllStackTraces().entries.firstOrNull { it.key.name == "main" }?.value?.take(16)?.forEach {
+                Log.e("TerminalViewportProbe", "defaultBottom main stack lazy=true $it")
+            }
+        }
+        override fun succeeded(description: Description) {
+            Log.i("TerminalViewportProbe", "defaultBottom passed lazy=true ${description.methodName}")
         }
     }
 
@@ -96,28 +108,29 @@ class TerminalDefaultBottomInstrumentedTest {
     }
 
     @Test fun defaultBottomManualDragToRealEndDoesNotBounceUpAfterRelease() {
-        val f = fresh()
+        val f = fresh(history = 8)
         compose.setContent { f.Content() }
         settle(f)
         val node = compose.onNodeWithTag("item-output")
         val size = node.fetchSemanticsNode().size
-        var reached = -1
-        compose.mainClock.autoAdvance = false
-        try {
-            node.performTouchInput {
-                down(Offset(size.width / 2f, size.height * .2f))
-                moveBy(Offset(0f, size.height * .5f), delayMillis = 32)
-                repeat(24) { moveBy(Offset(0f, -size.height.toFloat()), delayMillis = 32) }
-            }
-            compose.mainClock.advanceTimeBy(64)
-            compose.runOnUiThread {
-                assertEquals(ViewportScrollOrigin.USER_DRAG, f.controller.state.value.gesture?.origin)
-                reached = f.eager.value
-                assertEquals("pointer drag did not reach physical end", f.eager.maxValue, reached)
-            }
-            node.performTouchInput { advanceEventTime(500); up() }
-        } finally { compose.mainClock.autoAdvance = true }
+        // Keep the frame clock running: fetching another semantics node during a held gesture
+        // with a stopped clock can deadlock Compose's input/idle synchronization, not the app.
+        node.performTouchInput {
+            swipe(Offset(size.width / 2f, size.height * .2f), Offset(size.width / 2f, size.height * .4f), 600)
+        }
         settle(f)
+        compose.runOnIdle { assertTrue("first swipe did not leave the tail", f.eager.value < f.eager.maxValue) }
+        node.performTouchInput {
+            down(Offset(size.width / 2f, size.height * .85f))
+            moveTo(Offset(size.width / 2f, size.height * .1f), delayMillis = 600)
+            advanceEventTime(500) // Release without a high-velocity jump masking the final position.
+            up()
+        }
+        settle(f)
+        val reached = compose.runOnIdle {
+            assertEquals("manual drag did not remain at physical end", f.eager.maxValue, f.eager.value)
+            f.eager.value
+        }
         compose.mainClock.advanceTimeBy(800)
         settle(f)
         compose.runOnIdle {

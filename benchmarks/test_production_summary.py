@@ -41,6 +41,8 @@ def measurement(size, scenario, mode):
                            8 if mode == "lazyHistoryIme" and scenario == "imeRoundTrip" else 1)
     if mode == "lazyHistory" and scenario == "imeRoundTrip":
         counts["eagerGeometry"] = 5
+    if mode == "chunkedLayers":
+        counts["eagerGeometry"] = 5
     metrics = {"frameCount": {"runs": [3, 3]}}
     for name, count in counts.items():
         metrics[name + "Count"] = {"runs": [count, count]}
@@ -99,12 +101,18 @@ class ProductionSummaryTest(unittest.TestCase):
             with self.subTest(scenario=scenario, metric=name), self.assertRaises(ValueError):
                 self.valid(results, scenario)
 
-    def test_default_renderer_cannot_silently_use_virtual_measurements(self):
-        for name in ("widthCount", "eagerGeometryCount"):
+    def test_default_has_real_eager_geometry_but_no_virtual_width_measurements(self):
+        for name, values in (("widthCount", [1, 1]), ("eagerGeometryCount", [0, 0])):
             results = matrix("imeRoundTrip")
-            results[(1000, "imeRoundTrip", "chunkedLayers")]["metrics"][name] = {"runs": [1, 1]}
-            with self.assertRaisesRegex(ValueError, "count"):
+            results[(1000, "imeRoundTrip", "chunkedLayers")]["metrics"][name] = {"runs": values}
+            with self.assertRaises(ValueError):
                 self.valid(results, "imeRoundTrip")
+
+    def test_v3_default_geometry_cannot_be_reported_as_v4(self):
+        ctx = context()
+        ctx["payload"]["suite"] = "production-viewport-v3"
+        with self.assertRaisesRegex(ValueError, "provenance"):
+            self.valid(matrix(), ctx=ctx)
 
     def test_keyboard_stable_mode_cannot_use_eager_fallback_or_skip_live_width_updates(self):
         for metric, value in (("eagerGeometryCount", 1), ("widthCount", 1)):

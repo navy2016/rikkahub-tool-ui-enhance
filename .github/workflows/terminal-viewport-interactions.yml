@@ -8,6 +8,10 @@ on:
         type: choice
         options: [all, defaultBottom]
         default: all
+      production_sha:
+        description: 'Optional exact archived production SHA for defaultBottom only; tests remain from this ref'
+        type: string
+        default: ''
   push:
     branches: [fix/terminal-viewport-semantic-reducer, opt/terminal-verified-a79e7b6]
     paths:
@@ -51,6 +55,19 @@ jobs:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Bind optional old production source to current fresh-default regression tests
+        if: ${{ inputs.production_sha != '' }}
+        env:
+          PRODUCTION_SHA: ${{ inputs.production_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$PRODUCTION_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [ "$TERMINAL_VIEWPORT_SUITE" = defaultBottom ]
+          git fetch --no-tags --depth=1 origin "$PRODUCTION_SHA"
+          [ "$(git rev-parse FETCH_HEAD)" = "$PRODUCTION_SHA" ]
+          # Replace only production files in the disposable runner checkout; keep this ref's tests.
+          git archive FETCH_HEAD app/src/main | tar -x
+          echo "::notice title=Fresh default regression source::tests=$GITHUB_SHA production=$PRODUCTION_SHA"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

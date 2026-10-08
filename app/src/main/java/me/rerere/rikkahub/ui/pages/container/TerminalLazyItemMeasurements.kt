@@ -252,7 +252,7 @@ internal class TerminalLazyItemMeasurements {
             cellHeightPx, tailPaddingPx, state.canScrollBackward, state.canScrollForward)
     }
 
-    /** Only used for a renderer handoff/fallback, never adds an O(H) cache to the default renderer. */
+    /** Ordinary eager viewports share a proven historical prefix; active updates read only screen rows. */
     fun readEager(pass: TerminalLazyLayoutPass): TerminalEagerViewportGeometry? {
         Trace.beginSection("Terminal.productionEagerGeometry")
         return try {

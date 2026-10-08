@@ -1,7 +1,7 @@
 # Production viewport benchmark
 
 This is the current production-component benchmark, distinct from the archived renderer-only
-experiments in README.md. Contract: `production-viewport-v3`. No old measurements are relabelled.
+experiments in README.md. Contract: `production-viewport-v4`. No old measurements are relabelled.
 
 Active development branch: `opt/terminal-verified-a79e7b6`, forked from the locally verified baseline.
 Explicitly dispatch workflows and push to that branch; do not merge or overwrite later commits on
@@ -37,11 +37,23 @@ never drop output. This tests individual operation latency, NOT unrestricted PTY
 Completion requires the published frame to be drawn, the actual production layout to describe it,
 the effect writer and gestures to be idle, and the follow/lock target to be satisfied on two stable
 draw confirmations. The wait/validation cost is included equally and is not subtracted. Parent draw
-callbacks are not proof of GPU presentation. Default eager retains its existing cell-based position
-semantics; no benchmark-only real-height table is added to the control. Existing natural-height
-instrumented tests remain separate acceptance coverage.
+callbacks are not proof of GPU presentation. V4 default eager uses the production measured Text
+geometry from its first layout, just like an eager return from virtual history. No benchmark-only
+real-height table or scrolling repair is added. The dedicated fresh-default interaction suite checks
+the actual last Text bounds against the viewport and manual drag release independently of the
+controller's target formula.
 
-V3 keeps V2's completion protocol: a per-launch, nonce-bound, signature-permission-protected broadcast to
+The former V3 control checked the same nominal cell-height formula used by the controller; it could
+pass while a fresh default session clipped the last line. A prior virtual visit enabled measured
+eager geometry for that session and masked the defect. User retesting confirmed this also affects
+`2b0f259`, not just the later active-screen width cache. V4 retains DEFAULT = CHUNKED_LAYERS,
+natural Text layout, padding, PTY and controls, but now registers eager row heights and retains a
+scalar prefix from first mount. Cold/FIFO prefix scans and O(H) retained scalar measurements are
+part of the measured default cost. Unchanged trusted history is reused during screen-only output.
+TUI/physical-grid coordinate policy remains unchanged. Old V3 results are not proof that this
+fresh-session bug was absent and must not be relabelled or compared as an unchanged default control.
+
+V4 keeps V2/V3's completion protocol: a per-launch, nonce-bound, signature-permission-protected broadcast to
 the driver. The receiver is installed before launch and removed between launches and after the test;
 its durable latches reject out-of-order phases, stale launches and fixture failures. Only validated
 completion sends `mounted` / `done`; UIAutomator still clicks the native controls, but an accessibility
