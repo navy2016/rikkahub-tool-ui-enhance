@@ -10,6 +10,17 @@ TARGET = ROOT / 'terminal-target/src/main/java/me/rerere/rikkahub/benchmark/Prod
 
 
 class ProductionContractTest(unittest.TestCase):
+    def test_height_work_checks_boundaries_and_is_exported_without_driving_layout(self):
+        source = TARGET.read_text()
+        self.assertIn('check(historyReads == 0L)', source)
+        self.assertIn('check(historyReads in 1L..512L)', source)
+        self.assertIn('HEIGHT_WORK scenario=$scenario', source)
+        self.assertIn('directoryVisits=${heights.eagerVisitedHistoryBlocks - heightDirectoryBefore}', source)
+        self.assertNotIn('.readEager(', source)
+        evidence = (ROOT.parent / '.github/workflows/terminal-production-evidence.yml').read_text()
+        for marker in (' IME_WORK ', ' WIDTH_WORK ', ' HEIGHT_WORK '):
+            self.assertIn(marker, evidence)
+
     def test_default_completion_requires_real_geometry_without_nominal_cell_oracle(self):
         source = TARGET.read_text()
         self.assertIn('check(viewport.bound.eagerMeasurement != null)', source)

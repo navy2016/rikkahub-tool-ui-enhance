@@ -89,7 +89,8 @@ jobs:
               summary = folder / 'summary.md'
               # Retain launch-bound work diagnostics even on success; no transcript or APK bytes.
               with (folder / 'logcat.txt').open(errors='replace') as stream:
-                  work_samples = [line.strip() for line in stream if ' IME_WORK ' in line or ' WIDTH_WORK ' in line]
+                  work_samples = [line.strip() for line in stream if any(
+                      marker in line for marker in (' IME_WORK ', ' WIDTH_WORK ', ' HEIGHT_WORK '))]
               evidence = dict(request=request, manifest=manifest, device=(folder / 'device.txt').read_text(),
                   contexts=contexts, validated=json.loads(validated.read_text()) if validated.exists() else None,
                   result_files=result_files, summary=summary.read_text() if summary.exists() else None,

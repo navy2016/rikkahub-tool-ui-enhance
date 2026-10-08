@@ -6,11 +6,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.graphics.Color
 import me.rerere.rikkahub.data.container.TerminalItemScrollTarget
 import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
 import me.rerere.rikkahub.data.container.terminalScaledItemClip
 import me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest.Fixture
+import me.rerere.rikkahub.utils.TerminalEmulator
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -28,6 +30,48 @@ class TerminalViewportStabilityInstrumentedTest {
     @get:Rule val probe = object : TestWatcher() {
         override fun failed(e: Throwable, description: Description) {
             Log.e("TerminalViewportProbe", "stability lazy=true failed ${description.methodName}", e)
+        }
+    }
+
+    @Test fun stabilityDefaultTenThousandFifoUpdatesReadOnlyBoundaryHeightsAndKeepLockedAnchor() {
+        val terminal = TerminalEmulator(80, 24, 10_000).apply {
+            // A nearly exhausted first bucket exercises WHOLE bucket retirement within the run.
+            feed("\u001B[?25l" + (0 until 10_000 + 24 + 125).joinToString("\r\n") { "r$it 中文 e\u0301" })
+        }
+        val f = Fixture(stressSpans = false, terminalOverride = terminal,
+            initialMode = TerminalRenderMode.DEFAULT, foreground = Color.Green)
+        compose.setContent { f.Content() }
+        settle(f)
+        val before = compose.runOnIdle { requireNotNull(f.measurements.peekEager(f.bound.pass)) }
+        val anchor = compose.runOnIdle { before.capture(f.eager.value).anchor }
+        val oldTotal = before.contentHeightPx
+        val reusedBefore = compose.runOnIdle { f.measurements.eagerReusedHistoryRows }
+        repeat(32) { update ->
+            val visits = compose.runOnIdle { f.measurements.eagerVisitedHistoryRows }
+            compose.runOnIdle { f.append() }
+            settle(f)
+            compose.runOnIdle {
+                val now = requireNotNull(f.measurements.peekEager(f.bound.pass))
+                val work = f.measurements.eagerVisitedHistoryRows - visits
+                assertTrue("full history revalidation update=$update reads=$work", work in 1L..512L)
+                assertEquals(10_000, f.measurements.retainedEagerHistoryRows)
+                assertTrue(f.measurements.retainedEagerHistoryBlocks <= 80)
+                assertEquals(anchor, now.capture(f.eager.value).anchor)
+                assertFalse(f.controller.state.value.autoScroll)
+                assertEquals(oldTotal, before.contentHeightPx)
+                assertFalse(f.bound.binding.widthIndex.hasRetainedState)
+            }
+        }
+        compose.runOnIdle {
+            assertTrue("surviving complete blocks were not reused",
+                f.measurements.eagerReusedHistoryRows - reusedBefore >= 32L * (10_000 - 256))
+            f.controller.setFollow(true, f.inputPx())
+        }
+        settle(f)
+        compose.runOnIdle {
+            val now = requireNotNull(f.measurements.peekEager(f.bound.pass))
+            val bottom = now.bottom(requireNotNull(f.frame.contentBounds.lastNonBlankRow))
+            assertEquals((bottom + f.tailPadding - f.viewportHeight).coerceIn(0, f.eager.maxValue), f.eager.value)
         }
     }
 
@@ -259,6 +303,7 @@ class TerminalViewportStabilityInstrumentedTest {
         compose.runOnIdle {
             assertEquals(0, f.measurements.retainedRows)
             assertEquals(0, f.measurements.retainedEagerHistoryRows)
+            assertEquals(0, f.measurements.retainedEagerHistoryBlocks)
             assertEquals(0, f.activeWriters)
             assertFalse(f.bound.binding.widthIndex.hasRetainedState)
             assertEquals(0, f.bound.binding.widthIndex.retainedCandidates)

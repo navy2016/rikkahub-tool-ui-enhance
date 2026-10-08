@@ -227,9 +227,15 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         val screenWorkBefore = widths.measuredScreenRows
         val historyWorkBefore = widths.measuredHistoryRows
         val reusedBefore = widths.reusedScreenRows
+        val heights = viewport.measurements
+        val heightHistoryBefore = heights.eagerVisitedHistoryRows
+        val heightBlocksBefore = heights.eagerMeasuredHistoryBlocks
+        val heightReusedBefore = heights.eagerReusedHistoryRows
+        val heightDirectoryBefore = heights.eagerVisitedHistoryBlocks
         when (scenario) {
             "activeRowUpdate", "appendAndTrim" -> repeat(ProductionBenchmarkSpec.UPDATE_COUNT) { index ->
                 val deadline = SystemClock.uptimeMillis() + ProductionBenchmarkSpec.UPDATE_INTERVAL_MS
+                val heightReadsBefore = heights.eagerVisitedHistoryRows
                 productionAsyncTrace("Prod.outputToSettledDraw") {
                     val line = TerminalBenchmarkWorkload.line(size + TerminalBenchmarkWorkload.SCREEN_ROWS + index)
                     productionTrace("Prod.feed") {
@@ -248,6 +254,14 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
                     }
                     awaitSettled(viewport)
                     validate(viewport)
+                    if (mode == TerminalRenderMode.DEFAULT) {
+                        val historyReads = heights.eagerVisitedHistoryRows - heightReadsBefore
+                        if (scenario == "activeRowUpdate") check(historyReads == 0L) {
+                            "Active output rescanned historical heights: $historyReads"
+                        } else check(historyReads in 1L..512L) {
+                            "FIFO output did not bound height reads to boundary blocks/retries: $historyReads"
+                        }
+                    }
                 }
                 delay((deadline - SystemClock.uptimeMillis()).coerceAtLeast(0))
             }
@@ -287,6 +301,12 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             "historyMeasured=${widths.measuredHistoryRows - historyWorkBefore} " +
             "screenMeasured=${widths.measuredScreenRows - screenWorkBefore} " +
             "screenReused=${widths.reusedScreenRows - reusedBefore} retainedScreen=${widths.retainedScreenRows}")
+        Log.i("ProductionTerminalBenchmark", "HEIGHT_WORK scenario=$scenario size=$size mode=${mode.id} token=$phaseToken " +
+            "historyRead=${heights.eagerVisitedHistoryRows - heightHistoryBefore} " +
+            "blocksMeasured=${heights.eagerMeasuredHistoryBlocks - heightBlocksBefore} " +
+            "historyReused=${heights.eagerReusedHistoryRows - heightReusedBefore} " +
+            "directoryVisits=${heights.eagerVisitedHistoryBlocks - heightDirectoryBefore} " +
+            "retainedRows=${heights.retainedEagerHistoryRows} retainedBlocks=${heights.retainedEagerHistoryBlocks}")
     }
 
     private suspend fun imeRoundTrip(viewport: Viewport) {
@@ -449,6 +469,10 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         Trace.setCounter("Prod.widthRetainedScreen", viewport.bound.binding.widthIndex.retainedScreenRows.toLong())
         Trace.setCounter("Prod.retainedMeasurements", viewport.measurements.retainedRows.toLong())
         Trace.setCounter("Prod.eagerHistoryRows", viewport.measurements.retainedEagerHistoryRows.toLong())
+        Trace.setCounter("Prod.eagerHeightReads", viewport.measurements.eagerVisitedHistoryRows)
+        Trace.setCounter("Prod.eagerHeightReused", viewport.measurements.eagerReusedHistoryRows)
+        Trace.setCounter("Prod.eagerHeightBlocks", viewport.measurements.eagerMeasuredHistoryBlocks)
+        Trace.setCounter("Prod.eagerHeightDirectory", viewport.measurements.eagerVisitedHistoryBlocks)
         Trace.setCounter("Prod.scrollEffects", viewport.bound.binding.effectCount.toLong())
         Trace.setCounter("Prod.maximumWriters", viewport.bound.binding.maximumWriters.toLong())
     }

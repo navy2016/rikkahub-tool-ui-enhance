@@ -109,7 +109,7 @@ jobs:
             python3 .github/scripts/report-terminal-tests.py \
               benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
               --require-suite me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest \
-              --require-case-group 'defaultBottom:6'
+              --require-case-group 'defaultBottom:7'
             exit $?
           fi
           python3 .github/scripts/report-terminal-tests.py \
@@ -127,7 +127,7 @@ jobs:
             --require-case-group 'intrinsicWidth:7' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest \
-            --require-case-group 'measurementNode:7' \
+            --require-case-group 'measurementNode:8' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalTextCompatibilityInstrumentedTest \
             --require-case-group 'terminalText:3' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest \
@@ -135,9 +135,9 @@ jobs:
             --require-suite me.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest \
             --require-case-group 'imeStable:6' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest \
-            --require-case-group 'defaultBottom:6' \
+            --require-case-group 'defaultBottom:7' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest \
-            --require-case-group 'stability:8'
+            --require-case-group 'stability:9'
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

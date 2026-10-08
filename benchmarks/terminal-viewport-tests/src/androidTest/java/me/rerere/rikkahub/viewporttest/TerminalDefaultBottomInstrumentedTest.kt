@@ -225,4 +225,31 @@ class TerminalDefaultBottomInstrumentedTest {
         assertContentBottomVisible(f)
         compose.runOnIdle { assertEquals(0, f.eager.value) }
     }
+
+    @Test fun defaultBottomUnmodifiedTwelveSpCjkEmojiAndFontScaleStayFullyVisible() {
+        val terminal = TerminalEmulator(80, 24, 256).apply {
+            feed("\u001B[?25l" + (0 until 280).joinToString("\r\n") {
+                "native-$it " + when (it % 4) {
+                    0 -> "ASCII -> ffi"
+                    1 -> "中文输出 \u001B[32mANSI\u001B[0m"
+                    2 -> "e\u0301 العربية"
+                    else -> "👩‍💻 中文 bottom"
+                }
+            })
+        }
+        val f = Fixture(stressSpans = false, initialMode = TerminalRenderMode.DEFAULT,
+            terminalOverride = terminal, restored = TerminalViewportState(autoScroll = true),
+            foreground = Color(0xFF00E676)).apply { fontSp = 12 }
+        compose.setContent { f.Content() }
+        settle(f)
+        for (density in listOf(Density(1f), Density(1.33f, 1.3f), Density(2.75f, 1.15f), Density(3.5f))) {
+            compose.runOnIdle { f.densityOverride = density }
+            settle(f)
+            assertDefault(f)
+            assertContentBottomVisible(f)
+            compose.runOnIdle { terminal.feed("\r\u001B[2Knative-emoji 👩‍💻 e\u0301 中文"); f.publish() }
+            settle(f)
+            assertContentBottomVisible(f)
+        }
+    }
 }

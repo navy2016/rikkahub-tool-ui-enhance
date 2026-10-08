@@ -138,6 +138,44 @@ class TerminalRowMeasurementInstrumentedTest {
         }
     }
 
+    @Test fun measurementNodeOneHistoryHeightChangeEvictsOnlyItsActualBlock() {
+        val terminal = TerminalEmulator(80, 6, 384).apply {
+            feed("\u001B[?25l" + (0 until 390).joinToString("\r\n") { "row-$it" })
+        }
+        val frame = terminal.renderFrame()
+        val rows = createTerminalRenderedRows(frame)
+        val pass = TerminalLazyLayoutPass(frame, style)
+        val measurements = TerminalLazyItemMeasurements()
+        var minimum by mutableStateOf(0)
+        compose.setContent {
+            Layout(content = { rows.forEach { row -> key(row.lineId) { measurements.Row(style, row, style) } } }) { measurables, _ ->
+                val children = measurables.mapIndexed { index, measurable ->
+                    measurable.measure(Constraints(maxWidth = 700, minHeight = if (index == 150) minimum else 0, maxHeight = 200))
+                }
+                layout(700, children.sumOf { it.height }) {
+                    var top = 0
+                    children.forEach { it.placeRelative(0, top); top += it.height }
+                }
+            }
+        }
+        compose.waitForIdle()
+        val original = compose.runOnIdle { requireNotNull(measurements.readEager(pass)) }
+        val old = original.height(150)
+        val visits = measurements.eagerVisitedHistoryRows
+        compose.runOnIdle { minimum = old + 20 }
+        compose.waitForIdle()
+        compose.runOnIdle {
+            assertNull(measurements.peekEager(pass))
+            assertEquals(256, measurements.retainedEagerHistoryRows)
+            assertEquals(2, measurements.retainedEagerHistoryBlocks)
+            val next = requireNotNull(measurements.readEager(pass))
+            assertEquals(128L, measurements.eagerVisitedHistoryRows - visits)
+            assertEquals(old + 20, next.height(150))
+            assertEquals(original.contentHeightPx + 20, next.contentHeightPx)
+            assertEquals(old, original.height(150))
+        }
+    }
+
     @Test fun measurementNodeTextMetricIdAndRegistryReplacementDoNotAllocateAnotherNode() {
         val original = TerminalLazyItemMeasurements()
         var measurements by mutableStateOf(original, referentialEqualityPolicy())

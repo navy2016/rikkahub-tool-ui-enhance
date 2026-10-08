@@ -1,14 +1,45 @@
 package me.rerere.rikkahub.data.container
 
 import me.rerere.rikkahub.utils.TerminalEmulator
+import me.rerere.rikkahub.utils.TERMINAL_HISTORY_SNAPSHOT_BLOCK_ROWS
 
-/** Immutable scalar prefix. Screen updates may share the historical prefix without copying it. */
-internal class TerminalMeasuredHeightPrefix private constructor(private val tops: IntArray) {
-    val size: Int get() = tops.size - 1
+/** Immutable scalar prefix; a history directory shares flat, archival-aligned block prefixes. */
+internal class TerminalMeasuredHeightPrefix private constructor(
+    private val tops: IntArray,
+    private val blocks: Array<TerminalMeasuredHeightPrefix>? = null,
+    private val firstBlockOffset: Int = 0,
+    val size: Int = tops.size - 1,
+) {
     val totalHeightPx: Int get() = tops.last()
-    fun offset(index: Int): Int = tops[index]
+    fun offset(index: Int): Int {
+        if (index !in 0..size) throw IndexOutOfBoundsException("height offset $index, size $size")
+        val parts = blocks ?: return tops[index]
+        if (index == size) return totalHeightPx
+        val position = firstBlockOffset + index
+        val slot = position / TERMINAL_HISTORY_SNAPSHOT_BLOCK_ROWS
+        val local = if (slot == 0) index else position % TERMINAL_HISTORY_SNAPSHOT_BLOCK_ROWS
+        return tops[slot] + parts[slot].offset(local)
+    }
 
     companion object {
+        /** Copy only the directory; no previous prefix, snapshot, row text or callback is retained. */
+        fun fromBlocks(firstSequence: Long, prefixes: List<TerminalMeasuredHeightPrefix>): TerminalMeasuredHeightPrefix {
+            require(firstSequence >= 0)
+            val firstOffset = (firstSequence % TERMINAL_HISTORY_SNAPSHOT_BLOCK_ROWS).toInt()
+            val parts = prefixes.toTypedArray()
+            val totals = IntArray(parts.size + 1)
+            var rows = 0
+            for ((index, part) in parts.withIndex()) {
+                val capacity = TERMINAL_HISTORY_SNAPSHOT_BLOCK_ROWS - if (index == 0) firstOffset else 0
+                require(part.blocks == null && part.size in 1..capacity)
+                require(index == parts.lastIndex || part.size == capacity)
+                rows = Math.addExact(rows, part.size)
+                totals[index + 1] = Math.addExact(totals[index], part.totalHeightPx)
+            }
+            Math.addExact(firstSequence, rows.toLong())
+            return TerminalMeasuredHeightPrefix(totals, parts, firstOffset, rows)
+        }
+
         fun fromHeights(heights: IntArray, start: Int, end: Int): TerminalMeasuredHeightPrefix {
             require(start in 0..end && end <= heights.size)
             return requireNotNull(measure(end - start) { heights[start + it] })

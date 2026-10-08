@@ -50,6 +50,12 @@ eager geometry for that session and masked the defect. User retesting confirmed 
 natural Text layout, padding, PTY and controls, but now registers eager row heights and retains a
 scalar prefix from first mount. Cold/FIFO prefix scans and O(H) retained scalar measurements are
 part of the measured default cost. Unchanged trusted history is reused during screen-only output.
+The follow-up incremental-height implementation keeps flat scalar prefixes aligned to immutable
+128-row archival blocks. FIFO changes re-read changed boundary blocks, not every historical row.
+Each measured row carries a unique scalar-only invalidation token; row updates/disposal evict only
+the matching current block, and old tokens cannot evict a replacement. Source/column/metric changes
+invalidate as before. A missing row publishes no partial block/geometry; complete valid blocks may
+survive the retry. The directory and aggregate totals remain O(H / 128); eager UI retention remains O(H).
 TUI/physical-grid coordinate policy remains unchanged. Old V3 results are not proof that this
 fresh-session bug was absent and must not be relabelled or compared as an unchanged default control.
 
@@ -103,6 +109,11 @@ make the entire append pipeline O(1). The baseline at `16ab7c0` predates this bl
   `Prod.widthReusedScreen` and `Prod.widthRetainedScreen` expose cumulative reuse/current retention.
   `WIDTH_WORK` launch-bound records report measured history/screen rows and cache hits after an
   operation; the harness never calls width measurement to prewarm or repair production state.
+- `HEIGHT_WORK` launch-bound records expose actual eager historical height reads, measured/reused
+  blocks, reused rows, directory visits and current retention. Active output must read zero history
+  heights; single-line FIFO updates permit up to 512 reads including boundary-layout retries.
+  JVM tests separately require exactly the changed boundary block rows (at most 256) for complete
+  measurements. Counts describe cache/registry work, not the number of Compose Text layout passes.
 
 Results are accepted only with the complete three-mode/size matrix for that invocation, matching positive
 repetition count, successful instrumentation, required traces and exact provenance. Exact duplicate
@@ -124,7 +135,7 @@ gh workflow run terminal-production-benchmark.yml \
   -f scenario=all -f smoke=false -f iterations=3
 ```
 
-Full V3 collection is 54 cases / 162 measured iterations; each scenario has a 15-minute instrumentation
+Full V4 collection is 54 cases / 162 measured iterations; each scenario has a 15-minute instrumentation
 bound and uploads its raw JSON/traces/summary immediately when its job ends. Partial artifacts remain
 diagnostics, never a passed baseline. Failed-job reruns reuse the build job's original named/hash-checked
 bundle; a new source SHA requires a new build. No background Actions monitoring service is used.
