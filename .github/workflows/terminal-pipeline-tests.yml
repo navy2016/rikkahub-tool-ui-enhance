@@ -3,6 +3,11 @@ name: Terminal Full Page PTY Tests
 on:
   workflow_dispatch:
     inputs:
+      suite:
+        description: 'Full page samples or bounded transport preflight'
+        type: choice
+        options: [pipeline, transport]
+        default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'
         type: string
@@ -107,6 +112,8 @@ jobs:
     if: ${{ inputs.evidence_run_id == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      TERMINAL_PIPELINE_SUITE: ${{ inputs.suite || 'pipeline' }}
     steps:
       - uses: actions/checkout@v4
         with:

@@ -58,6 +58,7 @@ def sources():
         'app/src/terminaltest/AndroidManifest.xml',
         'app/src/terminaltest/java/me/rerere/rikkahub/pipeline/TerminalPipelineTestActivity.kt',
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPipelineInstrumentedTest.kt',
+        'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPtyTransportInstrumentedTest.kt',
         '.github/scripts/run-terminal-pipeline.py',
         'benchmarks/production_emulator.py',
         'gradle/libs.versions.toml', 'app/compose_compiler_config.conf',
@@ -193,8 +194,11 @@ def run():
         ('fingerprint', ['getprop', 'ro.build.fingerprint']), ('size', ['wm', 'size']),
         ('density', ['wm', 'density']), ('ime', ['settings', 'get', 'secure', 'default_input_method']))}
     (OUT / 'device.json').write_text(json.dumps(device, indent=2) + '\n')
-    methods = ('pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
-               'pipelineStableVirtualPtyEchoKeyboardAndRemount')
+    transport = os.environ.get('TERMINAL_PIPELINE_SUITE', 'pipeline') == 'transport'
+    methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
+        'pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
+        'pipelineStableVirtualPtyEchoKeyboardAndRemount')
+    test_class = 'me.rerere.rikkahub.pipeline.TerminalPtyTransportInstrumentedTest' if transport else CLASS
     logs, failed = [], []
     try:
         for method in methods:
@@ -204,7 +208,7 @@ def run():
             output(['adb', 'shell', 'am', 'force-stop', TEST_PACKAGE])
             log = OUT / (method + '.log')
             with log.open('w') as stream:
-                result = subprocess.run(['adb', 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class', CLASS + '#' + method,
+                result = subprocess.run(['adb', 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class', test_class + '#' + method,
                                          TEST_PACKAGE + '/androidx.test.runner.AndroidJUnitRunner'],
                                         stdout=stream, stderr=subprocess.STDOUT, timeout=300)
             text = log.read_text()
@@ -218,13 +222,22 @@ def run():
     finally:
         (OUT / 'instrumentation.log').write_text('\n'.join(logs))
         logcat = output(['adb', 'logcat', '-d', '-v', 'threadtime', 'TerminalPipelineTest:I',
-                         'TerminalPipelineActivity:I', 'AndroidRuntime:E', 'TestRunner:I', 'RikkahubPty:E', '*:S'])
+                         'TerminalPipelineActivity:I', 'NativePtyProcess:W', 'AndroidRuntime:E', 'TestRunner:I', 'RikkahubPty:E', '*:S'])
         (OUT / 'pipeline-logcat.txt').write_text(logcat)
         windows = output(['adb', 'shell', 'dumpsys', 'window', 'windows'])
         (OUT / 'window-focus.txt').write_text('\n'.join(line.strip() for line in windows.splitlines()
             if 'mCurrentFocus=' in line or 'mFocusedApp=' in line) + '\n')
     if failed:
         raise ValueError('; '.join(failed))
+    if transport:
+        probes = [json.loads(line.split('TRANSPORT_PROBE ', 1)[1]) for line in logcat.splitlines() if 'TRANSPORT_PROBE ' in line]
+        if len(probes) != 3 or {p['probe'] for p in probes} != {'androidPty', 'prootPipe', 'prootPty'}:
+            raise ValueError('Missing transport probe matrix')
+        if not all(p['matched'] and not p['timedOut'] and p['readerFailure'] is None for p in probes):
+            raise ValueError('Transport probes failed')
+        (OUT / 'transport-results.json').write_text(json.dumps(dict(manifest=manifest, device=device, probes=probes), indent=2) + '\n')
+        notice('notice', 'Terminal transport probes verified', json.dumps(probes))
+        return
     rows = validate_samples(logcat.splitlines())
     report = dict(manifest=manifest, device=device, samples=rows,
                   note='Full production page + native PTY in an emulator; synthetic input, traced first draw, '
@@ -305,7 +318,8 @@ def failure_excerpt(path):
         for raw in stream:
             line = raw.rstrip()[:550]
             tail.append(line)
-            if any(word in line for word in ('TerminalPipelineActivity', 'PIPELINE_READY', 'PIPELINE_DIAGNOSTIC', 'PIPELINE_GEOMETRY')):
+            if any(word in line for word in ('TerminalPipelineActivity', 'PIPELINE_READY', 'PIPELINE_DIAGNOSTIC', 'PIPELINE_GEOMETRY',
+                                             'TRANSPORT_PROBE', 'NativePtyProcess')):
                 lifecycle.append(line)
             if remaining == 0 and blocks < 2 and any(marker in line for marker in
                 ('Error in ', 'stack=', 'java.lang.', 'FATAL EXCEPTION')):
