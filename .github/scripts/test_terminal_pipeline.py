@@ -74,6 +74,10 @@ class TerminalPipelineValidationTest(unittest.TestCase):
                     good + 'INSTRUMENTATION_STATUS_CODE: -3', good + 'shortMsg=crashed'):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 pipeline.require_instrumentation(bad)
+        single = 'OK (1 test)\n\nINSTRUMENTATION_CODE: -1\n'
+        pipeline.require_instrumentation(single, expected=1)
+        with self.assertRaises(ValueError):
+            pipeline.require_instrumentation(single)
 
     def test_sources_cover_real_page_session_native_io_and_trace(self):
         names = pipeline.sources()

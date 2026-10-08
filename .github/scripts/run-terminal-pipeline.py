@@ -153,9 +153,10 @@ def validate_samples(lines):
     return rows
 
 
-def require_instrumentation(text):
-    if not re.search(r'^OK \(3 tests\)\s*$', text, re.M) or not re.search(r'^INSTRUMENTATION_CODE: -1\s*$', text, re.M):
-        raise ValueError('Pipeline instrumentation did not finish exactly 3 tests')
+def require_instrumentation(text, expected=3):
+    label = 'test' if expected == 1 else 'tests'
+    if not re.search(rf'^OK \({expected} {label}\)\s*$', text, re.M) or not re.search(r'^INSTRUMENTATION_CODE: -1\s*$', text, re.M):
+        raise ValueError(f'Pipeline instrumentation did not finish exactly {expected} {label}')
     if any(marker in text for marker in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'shortMsg=',
                                         'INSTRUMENTATION_STATUS_CODE: -2', 'INSTRUMENTATION_STATUS_CODE: -3',
                                         'INSTRUMENTATION_STATUS_CODE: -4')):
@@ -192,22 +193,38 @@ def run():
         ('fingerprint', ['getprop', 'ro.build.fingerprint']), ('size', ['wm', 'size']),
         ('density', ['wm', 'density']), ('ime', ['settings', 'get', 'secure', 'default_input_method']))}
     (OUT / 'device.json').write_text(json.dumps(device, indent=2) + '\n')
-    log = OUT / 'instrumentation.log'
+    methods = ('pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
+               'pipelineStableVirtualPtyEchoKeyboardAndRemount')
+    logs, failed = [], []
     try:
-        with log.open('w') as stream:
-            result = subprocess.run(['adb', 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class', CLASS,
-                                     TEST_PACKAGE + '/androidx.test.runner.AndroidJUnitRunner'],
-                                    stdout=stream, stderr=subprocess.STDOUT, timeout=900)
-        if result.returncode != 0:
-            raise ValueError(f'Pipeline instrumentation exited {result.returncode}')
+        for method in methods:
+            # One target process per mode. A prior failed test's pending Service teardown must
+            # not consume another mode's samples or make its Activity fail before test startup.
+            output(['adb', 'shell', 'am', 'force-stop', PACKAGE])
+            output(['adb', 'shell', 'am', 'force-stop', TEST_PACKAGE])
+            log = OUT / (method + '.log')
+            with log.open('w') as stream:
+                result = subprocess.run(['adb', 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class', CLASS + '#' + method,
+                                         TEST_PACKAGE + '/androidx.test.runner.AndroidJUnitRunner'],
+                                        stdout=stream, stderr=subprocess.STDOUT, timeout=300)
+            text = log.read_text()
+            logs.append(text)
+            try:
+                if result.returncode != 0:
+                    raise ValueError(f'Instrumentation exit {result.returncode}')
+                require_instrumentation(text, expected=1)
+            except ValueError as error:
+                failed.append(method + ': ' + str(error))
     finally:
+        (OUT / 'instrumentation.log').write_text('\n'.join(logs))
         logcat = output(['adb', 'logcat', '-d', '-v', 'threadtime', 'TerminalPipelineTest:I',
                          'TerminalPipelineActivity:I', 'AndroidRuntime:E', 'TestRunner:I', 'RikkahubPty:E', '*:S'])
         (OUT / 'pipeline-logcat.txt').write_text(logcat)
         windows = output(['adb', 'shell', 'dumpsys', 'window', 'windows'])
         (OUT / 'window-focus.txt').write_text('\n'.join(line.strip() for line in windows.splitlines()
             if 'mCurrentFocus=' in line or 'mFocusedApp=' in line) + '\n')
-    require_instrumentation(log.read_text())
+    if failed:
+        raise ValueError('; '.join(failed))
     rows = validate_samples(logcat.splitlines())
     report = dict(manifest=manifest, device=device, samples=rows,
                   note='Full production page + native PTY in an emulator; synthetic input, traced first draw, '
@@ -288,7 +305,7 @@ def failure_excerpt(path):
         for raw in stream:
             line = raw.rstrip()[:550]
             tail.append(line)
-            if 'TerminalPipelineActivity' in line or 'PIPELINE_READY' in line:
+            if any(word in line for word in ('TerminalPipelineActivity', 'PIPELINE_READY', 'PIPELINE_DIAGNOSTIC', 'PIPELINE_GEOMETRY')):
                 lifecycle.append(line)
             if remaining == 0 and blocks < 2 and any(marker in line for marker in
                 ('Error in ', 'stack=', 'java.lang.', 'FATAL EXCEPTION')):
@@ -296,7 +313,7 @@ def failure_excerpt(path):
             if remaining:
                 contexts.append(line)
                 remaining -= 1
-    return '\n'.join(contexts)[:1200] + '\nLifecycle:\n' + '\n'.join(lifecycle)[-600:] + '\nTail:\n' + '\n'.join(tail)[-400:]
+    return '\n'.join(contexts)[:1000] + '\nLifecycle/geometry:\n' + '\n'.join(lifecycle)[-1300:] + '\nTail:\n' + '\n'.join(tail)[-400:]
 
 
 def main():

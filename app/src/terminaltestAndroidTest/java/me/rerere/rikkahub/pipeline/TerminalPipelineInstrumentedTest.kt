@@ -55,6 +55,8 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
     private val manager: BackgroundProcessManager by inject()
     private val proot: PRootManager by inject()
     private val settings: SettingsStore by inject()
+    private var diagnosticProcessId: String? = null
+    private var diagnosticCapture: TerminalPipelineTrace.Capture? = null
 
     @Test fun pipelineDefaultPtyEchoKeyboardAndRemount() = exercise(TerminalRenderMode.DEFAULT)
     @Test fun pipelineVirtualPtyEchoKeyboardAndRemount() = exercise(TerminalRenderMode.VIRTUAL_HISTORY)
@@ -103,8 +105,10 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
             assertEquals("native-pty", started.terminalBackend)
             val id = started.processId
             processId = id
+            diagnosticProcessId = id
             val trace = TerminalPipelineTrace.start(id, 4096)
             capture = trace
+            diagnosticCapture = trace
             val nav = Navigator(mutableListOf())
             compose.setContent {
                 val values by settings.settingsFlow.collectAsState()
@@ -157,6 +161,8 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
                 compose.waitForIdle()
             } finally {
                 capture?.close()
+                diagnosticCapture = null
+                diagnosticProcessId = null
                 try {
                     processId?.let { id -> runBlocking { manager.closeInteractiveSession(id) }; manager.removeProcessRecord(id) }
                 } finally {
@@ -217,16 +223,42 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
     private fun outputHeight(): Int = compose.onNodeWithTag("terminal-trace-output").fetchSemanticsNode().size.height
 
     private fun waitVisible(marker: String, exact: Boolean = true) {
-        compose.waitUntil(20_000) {
-            val viewport = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.TestTag,
-                "terminal-trace-output")).fetchSemanticsNodes().singleOrNull() ?: return@waitUntil false
-            compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
-                .fetchSemanticsNodes().any { node ->
-                    val top = node.positionInRoot.y - viewport.positionInRoot.y
-                    node.config[SemanticsProperties.Text].any {
-                        if (exact) it.text.trimEnd() == marker else it.text.contains(marker)
-                    } && top >= -1f && top + node.size.height <= viewport.size.height + 1f
+        try {
+            compose.waitUntil(20_000) {
+                val viewport = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.TestTag,
+                    "terminal-trace-output")).fetchSemanticsNodes().singleOrNull() ?: return@waitUntil false
+                compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
+                    .fetchSemanticsNodes().any { node ->
+                        val top = node.positionInRoot.y - viewport.positionInRoot.y
+                        node.config[SemanticsProperties.Text].any {
+                            if (exact) it.text.trimEnd() == marker else it.text.contains(marker)
+                        } && top >= -1f && top + node.size.height <= viewport.size.height + 1f
+                    }
+            }
+        } catch (error: Throwable) {
+            // The child is synthetic, but still emit only booleans/counts/coordinates, never text.
+            val id = diagnosticProcessId
+            val frame = id?.let { manager.getInteractiveTerminalEmulator(it)?.renderFrame() }
+            val trace = diagnosticCapture?.snapshot().orEmpty()
+            Log.e("TerminalPipelineTest", "PIPELINE_DIAGNOSTIC bufferHasMarker=" +
+                (id?.let { manager.readInteractiveBuffer(it)?.contains(marker) }) +
+                " emulatorMatches=${frame?.rows?.count { it.text.text.trimEnd() == marker }}" +
+                " frame=${frame?.revision} rows=${frame?.rows?.size} history=${frame?.historyCount}" +
+                " counts=${trace.groupingBy { it.stage }.eachCount()}" +
+                " lifecycle=${compose.activity.lifecycle.currentState}")
+            runCatching {
+                val viewports = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.TestTag,
+                    "terminal-trace-output"), useUnmergedTree = true).fetchSemanticsNodes()
+                val candidates = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text),
+                    useUnmergedTree = true).fetchSemanticsNodes().filter { node ->
+                    node.config[SemanticsProperties.Text].any { it.text.contains(marker) }
                 }
+                Log.e("TerminalPipelineTest", "PIPELINE_GEOMETRY viewports=${viewports.size}" +
+                    " bounds=${viewports.map { listOf(it.positionInRoot.y, it.size.height) }}" +
+                    " matches=${candidates.size} candidateBounds=${candidates.take(4).map {
+                        listOf(it.positionInRoot.y, it.size.height) }}")
+            }.onFailure { Log.e("TerminalPipelineTest", "PIPELINE_GEOMETRY unavailable=${it.javaClass.simpleName}") }
+            throw error
         }
         val node = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
             .fetchSemanticsNodes().last { n -> n.config[SemanticsProperties.Text].any {
