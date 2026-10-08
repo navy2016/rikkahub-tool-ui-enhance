@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -79,6 +80,17 @@ class TerminalPipelineValidationTest(unittest.TestCase):
         for suffix in ('ProcessSessionPage.kt', 'BackgroundProcessManager.kt', 'rikkahub_pty.cpp',
                        'TerminalPipelineTrace.kt', 'TerminalPipelineInstrumentedTest.kt'):
             self.assertTrue(any(name.endswith(suffix) for name in names), suffix)
+
+    def test_failure_excerpt_preserves_initial_error_and_lifecycle_with_bounded_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'fixture.log'
+            path.write_text('progress\n' * 1000 + 'stack=java.lang.IllegalStateException: first cause\n'
+                            + 'at method\n' * 1000 + 'TerminalPipelineActivity paused finishing=false\n'
+                            + 'tail\n' * 1000)
+            text = pipeline.failure_excerpt(path)
+            self.assertIn('first cause', text)
+            self.assertIn('paused finishing=false', text)
+            self.assertLess(len(text), 2400)
 
 
 if __name__ == '__main__':

@@ -1,4 +1,6 @@
-package me.rerere.rikkahub.ui.pages.container
+// Frozen control: production TerminalLazyItemExecutor.kt at 1487040d79944661e7083d6f25f4908e4c5ff7f1.
+// Only package/function name/imports differ. Test-only; never included in the production application.
+package me.rerere.rikkahub.viewporttest
 
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.scrollBy
@@ -11,13 +13,7 @@ import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
 import me.rerere.rikkahub.data.container.resolveTerminalItemAnchor
 import me.rerere.rikkahub.data.container.terminalScaledItemClip
 
-/**
- * Called ONLY by runTerminalViewportScrollEffects, never from a sibling scroll coroutine.
- * A disjoint jump first measures its target item, then aligns the actual row. Screen rows remain
- * inside one screen item. No global pixel range, estimated prefix, fixed height or O(history)
- * measurement table is needed. Bounded frame yields also make cancellation/layout failure safe.
- */
-internal suspend fun executeTerminalLazyItemScroll(
+internal suspend fun executeLegacyTerminalLazyItemScroll(
     effect: TerminalViewportScrollEffect,
     state: LazyListState,
     current: () -> TerminalItemViewport?,
@@ -65,13 +61,6 @@ internal suspend fun executeTerminalLazyItemScroll(
             if (animated) state.animateScrollBy(delta.toFloat()) else state.scrollBy(delta.toFloat())
         }
         animated = false // The final measured correction must not start another long animation.
-        if (!isCurrent()) return false
-        // Read AFTER the mutation. LazyList can update measured offsets synchronously; do not
-        // spend another frame holding the sole writer when this exact target is already satisfied.
-        // A new frame/font/viewport, missing layout or unsatisfied target still yields as before.
-        val completedLayout = current()
-        if (!isCurrent()) return false
-        if (completedLayout?.confirmsScrollFrom(observation, target) == true) return true
         withFrameNanos { }
     }
     // A stalled/mismatched layout is not success. The next real layout can request reconciliation.

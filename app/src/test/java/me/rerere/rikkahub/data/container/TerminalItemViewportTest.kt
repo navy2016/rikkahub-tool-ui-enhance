@@ -54,6 +54,40 @@ class TerminalItemViewportTest {
             .isSatisfied(TerminalItemScrollTarget.Follow))
     }
 
+    @Test fun synchronousScrollCompletionRequiresCurrentFrameIdentityAndGeometry() {
+        val frame = frame()
+        val before = view(frame, index = 103, top = 80, height = 29)
+        val after = view(frame, index = 103, top = 63, height = 29)
+        val target = TerminalItemScrollTarget.Follow
+        assertFalse(before.isSatisfied(target))
+        assertTrue(after.confirmsScrollFrom(before, target))
+        // Same revision/data is not the same publication, including reused revisions in another session.
+        assertFalse(after.copy(frame = frame.copy()).confirmsScrollFrom(before, target))
+        assertFalse(after.copy(layoutKey = "another-font").confirmsScrollFrom(before, target))
+        assertFalse(after.copy(cellHeightPx = 21).confirmsScrollFrom(before, target))
+        assertFalse(after.copy(viewportHeightPx = 101).confirmsScrollFrom(before, target))
+        assertFalse(after.copy(tailPaddingPx = 9).confirmsScrollFrom(before, target))
+        assertFalse(before.confirmsScrollFrom(before, target))
+        assertFalse(after.copy(rows = emptyList()).confirmsScrollFrom(before, target))
+        assertFalse(after.confirmsScrollFrom(before.copy(viewportHeightPx = 0), target))
+    }
+
+    @Test fun synchronousCompletionPreservesMeasuredAnchorAndDirectionalClamping() {
+        val frame = frame()
+        val before = view(frame, index = 50, top = -20, height = 31)
+        val after = view(frame, index = 50, top = -7, height = 31)
+        val target = TerminalItemScrollTarget.Anchor(ViewportAnchor(150, 7, null, 1), 31)
+        assertTrue(after.confirmsScrollFrom(before, target))
+        assertFalse(after.copy(rows = listOf(TerminalVisibleRow(50, -6, 31))).confirmsScrollFrom(before, target))
+        val tailBefore = view(frame, index = 103, top = 80, height = 29)
+        // Reaching a physical end permits clamping ONLY in the blocked direction.
+        assertTrue(tailBefore.copy(canScrollForward = false).confirmsScrollFrom(tailBefore, TerminalItemScrollTarget.Follow))
+        assertFalse(view(frame, index = 103, top = 4, height = 29, atBottom = true)
+            .confirmsScrollFrom(tailBefore, TerminalItemScrollTarget.Follow))
+        assertTrue(view(frame, index = 0, top = 0, height = 29, atTop = true)
+            .confirmsScrollFrom(view(frame, index = 0, top = -20, height = 29), TerminalItemScrollTarget.Top))
+    }
+
     @Test fun structuralEndStillNeedsBackwardCorrectionForBlankScreenRows() {
         val frame = frame()
         assertFalse(view(frame, index = 103, top = 4, height = 29, atBottom = true)

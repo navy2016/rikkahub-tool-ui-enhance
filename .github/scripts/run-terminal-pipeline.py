@@ -176,6 +176,13 @@ def run():
         install = output(['adb', 'shell', 'pm', 'install', '-r', '-t', remote], 180)
         if 'Success' not in install:
             raise ValueError('Pipeline install rejected: ' + install[-500:])
+    # Target SDK 28 delegates the first notification prompt to Android 13+. A foreground-service
+    # channel can pause the test Activity after its first draw and remove RESUMED Compose roots.
+    # Preset ONLY this disposable test package; never change the release app or production policy.
+    output(['adb', 'shell', 'pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS'])
+    permissions = output(['adb', 'shell', 'dumpsys', 'package', PACKAGE])
+    if not re.search(r'android\.permission\.POST_NOTIFICATIONS: granted=true', permissions):
+        raise ValueError('Test notification permission not granted')
     compile_result = output(['adb', 'shell', 'cmd', 'package', 'compile', '-f', '-m', 'speed', PACKAGE], 180)
     if 'Success' not in compile_result:
         raise ValueError('Full target compilation failed: ' + compile_result[-500:])
@@ -195,8 +202,11 @@ def run():
             raise ValueError(f'Pipeline instrumentation exited {result.returncode}')
     finally:
         logcat = output(['adb', 'logcat', '-d', '-v', 'threadtime', 'TerminalPipelineTest:I',
-                         'AndroidRuntime:E', 'TestRunner:I', 'RikkahubPty:E', '*:S'])
+                         'TerminalPipelineActivity:I', 'AndroidRuntime:E', 'TestRunner:I', 'RikkahubPty:E', '*:S'])
         (OUT / 'pipeline-logcat.txt').write_text(logcat)
+        windows = output(['adb', 'shell', 'dumpsys', 'window', 'windows'])
+        (OUT / 'window-focus.txt').write_text('\n'.join(line.strip() for line in windows.splitlines()
+            if 'mCurrentFocus=' in line or 'mFocusedApp=' in line) + '\n')
     require_instrumentation(log.read_text())
     rows = validate_samples(logcat.splitlines())
     report = dict(manifest=manifest, device=device, samples=rows,
@@ -269,6 +279,26 @@ def emulator():
         guest.stop_emulator(process, env)
 
 
+def failure_excerpt(path):
+    """Keep first causal messages and fixed lifecycle probes, not only the tail of a Java stack."""
+    from collections import deque
+    contexts, lifecycle, tail = [], deque(maxlen=8), deque(maxlen=5)
+    remaining, blocks = 0, 0
+    with path.open(errors='replace') as stream:
+        for raw in stream:
+            line = raw.rstrip()[:550]
+            tail.append(line)
+            if 'TerminalPipelineActivity' in line or 'PIPELINE_READY' in line:
+                lifecycle.append(line)
+            if remaining == 0 and blocks < 2 and any(marker in line for marker in
+                ('Error in ', 'stack=', 'java.lang.', 'FATAL EXCEPTION')):
+                remaining, blocks = 4, blocks + 1
+            if remaining:
+                contexts.append(line)
+                remaining -= 1
+    return '\n'.join(contexts)[:1200] + '\nLifecycle:\n' + '\n'.join(lifecycle)[-600:] + '\nTail:\n' + '\n'.join(tail)[-400:]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('prepare', 'run', 'emulator'))
@@ -281,11 +311,10 @@ def main():
         for name in ('instrumentation.log', 'pipeline-logcat.txt'):
             path = OUT / name
             if path.exists():
-                with path.open('rb') as stream:
-                    stream.seek(max(0, path.stat().st_size - 8192))
-                    tail = stream.read(8192).decode(errors='replace')
-                details.append(name + ':\n' + tail[-1500:])
-        notice('error', 'Terminal pipeline failure', type(error).__name__ + ': ' + str(error)[:400] + '\n' + '\n'.join(details))
+                details.append((name, failure_excerpt(path)))
+        notice('error', 'Terminal pipeline failure', type(error).__name__ + ': ' + str(error)[:400])
+        for name, excerpt in details:
+            notice('error', 'Terminal pipeline ' + name, excerpt)
         return 1
 
 

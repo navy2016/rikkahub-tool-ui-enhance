@@ -34,6 +34,12 @@ the existing non-root KVM startup primitives. Output artifacts include exact sou
 device/IME identity, compact validated samples and bounded failure diagnostics. Test absence, skips,
 partial samples, backend mismatches, invalid timings and trace overflows must fail validation.
 
+The disposable test package is pregranted POST_NOTIFICATIONS before launch. The real app targets
+SDK 28, where a foreground notification channel can trigger Android 13+'s automatic permission
+prompt and pause an Activity that Compose instrumentation needs RESUMED. This does not change the
+production app's manifest or runtime permission policy. Test Activity configuration handling matches
+RouteActivity and emits fixed lifecycle/focus probes for diagnosing lost UI roots.
+
 This first step measures the current renderer without changing output batching, synchronized-output
 hold, TUI resize, scroll animation handoff or the renderer default. It is a diagnostic baseline; no
 speedup is established until a controlled same-device comparison succeeds.

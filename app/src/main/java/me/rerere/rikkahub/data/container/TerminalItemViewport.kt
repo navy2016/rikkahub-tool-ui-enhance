@@ -95,6 +95,16 @@ internal data class TerminalItemViewport(
         return delta == 0 || (delta < 0 && !canScrollBackward) || (delta > 0 && !canScrollForward)
     }
 
+    /**
+     * An awaited scroll may synchronously publish its new measured offsets. Only that fresh read
+     * under the SAME immutable frame/font/viewport may finish without a frame yield. The executor
+     * separately verifies that its effect was not cancelled. This is not proof of GPU presentation.
+     */
+    fun confirmsScrollFrom(before: TerminalItemViewport, target: TerminalItemScrollTarget): Boolean =
+        ready && before.ready && frame === before.frame && layoutKey == before.layoutKey &&
+            viewportHeightPx == before.viewportHeightPx && cellHeightPx == before.cellHeightPx &&
+            tailPaddingPx == before.tailPaddingPx && isSatisfied(target)
+
     // Frame identity is the contract. Do not structurally compare a 10k-row frame on every scroll.
     override fun equals(other: Any?): Boolean = other is TerminalItemViewport && frame === other.frame &&
         layoutKey == other.layoutKey && rows == other.rows && viewportHeightPx == other.viewportHeightPx &&

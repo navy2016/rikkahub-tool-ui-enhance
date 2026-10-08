@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.pipeline
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -16,6 +19,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.espresso.Espresso
+import androidx.lifecycle.Lifecycle
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.data.container.BackgroundProcessManager
@@ -58,6 +62,8 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
 
     private fun exercise(mode: TerminalRenderMode) {
         check(compose.activity.packageName == "me.rerere.rikkahub.dev.next.terminaltest")
+        if (Build.VERSION.SDK_INT >= 33) assertEquals("Runner must grant only the test app's notifications before launch",
+            PackageManager.PERMISSION_GRANTED, compose.activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
         val launch = UUID.randomUUID().toString()
         val sandbox = "pipeline-$launch"
         // Cooked input keeps exact line semantics; echo is from the child only, no line-discipline echo.
@@ -109,6 +115,8 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
                 }
             }
             compose.waitUntil(30_000) { trace.snapshot().any { it.stage == TerminalPipelineStage.FRAME_DRAWN } }
+            compose.waitUntil(10_000) { compose.activity.lifecycle.currentState == Lifecycle.State.RESUMED }
+            Log.i("TerminalPipelineTest", "PIPELINE_READY mode=${mode.id} lifecycle=${compose.activity.lifecycle.currentState}")
             waitVisible("READY")
             compose.waitForIdle()
             Espresso.closeSoftKeyboard()
