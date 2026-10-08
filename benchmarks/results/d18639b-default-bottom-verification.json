@@ -1,0 +1,445 @@
+{
+  "source_sha": "d18639bb6f219704ee78f6d34d140357807877ea",
+  "old_production_sha": "807d2f02836f25ff0cfd1b23332a374537b3a1a0",
+  "note": "Same regression test sources; old production is explicitly injected on the disposable CI runner. Separate emulator runs prove assertions fail/pass, not performance A/B or phone validation.",
+  "source_hashes": {
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt": "fa63a49f3c83e8b378572b70869102a39369d64dcd396d133ee7a5f11e66b29e",
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt": "7aa6f3dbb1b481d39598dd7e09e3b52ae8e1d55000f1ba85cff710ab50095fe4",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt": "e57b29a78df9d86aa3b4d99e575dd19e447794839299cd8db7871a898664eeb4",
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalEagerGeometryCache.kt": "bbd5a404ae939506275c42ad9e9e9376df2aaba3e5cb8c68baf10baf819412c0",
+    "benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/TerminalDefaultBottomInstrumentedTest.kt": "5fa7866a0161f92a0d61615a5743e49f87c69b485f11e682040a19592f334ea8",
+    "benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/TerminalItemViewportInstrumentedTest.kt": "5391976198e600a5a47f80a6acda08a66825fc5c792fc618fb7aa98628c8e921",
+    ".github/workflows/terminal-viewport-interactions.yml": "691e114afe28ae2824bb7eddcac7b7f6d276497ac9a4100e85248862a50ada2a"
+  },
+  "runs": {
+    "old_production_control": {
+      "run": {
+        "id": 37717951119,
+        "head_sha": "d18639bb6f219704ee78f6d34d140357807877ea",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "event": "workflow_dispatch",
+        "path": ".github/workflows/terminal-viewport-interactions.yml",
+        "status": "completed",
+        "conclusion": "failure",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37717951119",
+        "created_at": "2026-10-08T02:27:23Z",
+        "updated_at": "2026-10-08T02:33:52Z"
+      },
+      "jobs": [
+        {
+          "id": 113118713964,
+          "name": "gestures",
+          "conclusion": "failure",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113118713964",
+          "annotations": [
+            {
+              "title": "Terminal regression test counts",
+              "message": "6 JUnit cases; failures/errors/skips/missing suites: 6\nme.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest: 6",
+              "level": "notice"
+            },
+            {
+              "title": "Terminal regression failed",
+              "message": "me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomScreenOnlySessionAndClearUseActualTextHeights: failure: java.lang.AssertionError: content bottom clipped: bottom=1141.0 viewport=770 rowHeight=72 scroll=818/1217\nat org.junit.Assert.fail(Assert.java:89)\nat org.junit.Assert.assertTrue(Assert.java:42)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.assertContentBottomVisible(TerminalDefaultBottomInstrumentedTest.kt:80)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomScreenOnlySessionAndClearUseActualTextHeights(TerminalDefaultBottomInstrumentedTest.kt:222)\n",
+              "level": "failure"
+            },
+            {
+              "title": "Terminal regression failed",
+              "message": "me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomFontDensityRtlAndAppendsKeepTheLastRowVisible: failure: java.lang.AssertionError: content bottom clipped: bottom=1754.0 viewport=605 rowHeight=117 scroll=3817/4988\nat org.junit.Assert.fail(Assert.java:89)\nat org.junit.Assert.assertTrue(Assert.java:42)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.assertContentBottomVisible(TerminalDefaultBottomInstrumentedTest.kt:80)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomFontDensityRtlAndAppendsKeepTheLastRowVisible(TerminalDefaultBottomInstrumentedTest.kt:181)\n",
+              "level": "failure"
+            },
+            {
+              "title": "Terminal regression failed",
+              "message": "me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomFreshSessionShowsFullLastRowBeforeAnyRendererSwitch: failure: java.lang.AssertionError: content bottom clipped: bottom=2359.0 viewport=770 rowHeight=149 scroll=4978/6595\nat org.junit.Assert.fail(Assert.java:89)\nat org.junit.Assert.assertTrue(Assert.java:42)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.assertContentBottomVisible(TerminalDefaultBottomInstrumentedTest.kt:80)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomFreshSessionShowsFullLastRowBeforeAnyRendererSwitch(TerminalDefaultBottomInstrumentedTest.kt:102)\n",
+              "level": "failure"
+            },
+            {
+              "title": "Terminal regression failed",
+              "message": "me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomRendererRoundTripAndAnotherFreshSessionHaveSameVisibility: failure: java.lang.AssertionError: content bottom clipped: bottom=2359.0 viewport=770 rowHeight=149 scroll=4978/6595\nat org.junit.Assert.fail(Assert.java:89)\nat org.junit.Assert.assertTrue(Assert.java:42)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.assertContentBottomVisible(TerminalDefaultBottomInstrumentedTest.kt:80)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomRendererRoundTripAndAnotherFreshSessionHaveSameVisibility(TerminalDefaultBottomInstrumentedTest.kt:149)\n",
+              "level": "failure"
+            },
+            {
+              "title": "Terminal regression failed",
+              "message": "me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomRealKeyboardRoundTripNeedsNoVirtualModeWarmup: failure: java.lang.AssertionError: content bottom clipped: bottom=4084.0 viewport=2495 rowHeight=149 scroll=3253/4870\nat org.junit.Assert.fail(Assert.java:89)\nat org.junit.Assert.assertTrue(Assert.java:42)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.assertContentBottomVisible(TerminalDefaultBottomInstrumentedTest.kt:80)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomRealKeyboardRoundTripNeedsNoVirtualModeWarmup(TerminalDefaultBottomInstrumentedTest.kt:194)\n",
+              "level": "failure"
+            },
+            {
+              "title": "Terminal regression failed",
+              "message": "me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomManualDragToRealEndDoesNotBounceUpAfterRelease: failure: java.lang.AssertionError: manual drag did not remain at physical end expected:<1947> but was:<1338>\nat org.junit.Assert.fail(Assert.java:89)\nat org.junit.Assert.failNotEquals(Assert.java:835)\nat org.junit.Assert.assertEquals(Assert.java:120)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomManualDragToRealEndDoesNotBounceUpAfterRelease$lambda$4(TerminalDefaultBottomInstrumentedTest.kt:131)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest$$ExternalSyntheticLambda34.invoke(D8$$SyntheticClass:0)\nat androidx.compose.ui.test.AndroidSynchronization_androidKt.runOnUiThread$lambda$0(AndroidSynchronization.android.kt:39)\nat androidx.compose.ui.test.AndroidSynchronization_androidKt$$ExternalSyntheticLambda0.call(D8$$SyntheticClass:0)\nat java.util.concurrent.FutureTask.run(FutureTask.java:264)\nat java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:487)\nat java.util.concurrent.FutureTask.run(FutureTask.java:264)\nat android.app.Instrumentation$SyncRunnable.run(Instrumentation.java:2420)\nat android.os.Handler.handleCallback(Handler.java:958)\nat android.os.Handler.dispatchMessage(Handler.java:99)\nat android.os.Looper.loopOnce(Looper.java:205)\nat android.os.Looper.loop(Looper.java:294)\nat android.app.ActivityThread.main(ActivityThread.java:8177)\nat java.lang.reflect.Method.invoke(Native Method)\nat com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:552)\nat com.android.internal.os.ZygoteInit.main(ZygoteInit.java:971)\nSuppressed: java.util.concurrent.ExecutionException: An Exception occurred on the UI thread during runOnUiThread()\nat androidx.compose.ui.test.AndroidSynchronization_androidKt.runOnUiThread(AndroidSynchronization.android.kt:50)\nat androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.runOnUiThread(ComposeUiTest.android.kt:834)\nat androidx.compose.ui.test.AndroidComposeUiTestEnvironment$AndroidComposeUiTestImpl.runOnIdle(ComposeUiTest.android.kt:841)\nat androidx.compose.ui.test.junit4.AndroidComposeTestRule.runOnIdle(AndroidComposeTestRule.android.kt:475)\nat me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest.defaultBottomManualDragToRealEndDoesNotBounceUpAfterRelease(TerminalDefaultBottomInstrumentedTest.kt:130)\nat java.lang.reflect.Method.invoke(Native Method)\nat org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)\nat org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)\nat org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)\nat org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)\nat org.junit.internal.runners.statements.FailOnTimeout$CallableStatement.call(FailOnTimeout.java:299)\nat org.junit.internal.runners.statements.FailOnTimeout$CallableStatem",
+              "level": "failure"
+            },
+            {
+              "title": "Fresh default regression source",
+              "message": "tests=d18639bb6f219704ee78f6d34d140357807877ea production=807d2f02836f25ff0cfd1b23332a374537b3a1a0",
+              "level": "notice"
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 11524727584,
+          "name": "terminal-viewport-interactions-d18639bb6f219704ee78f6d34d140357807877ea",
+          "digest": "sha256:74836e0a20a24b02d26e2eeb96c588b487efeab96f0a4b005c731ffecff90393",
+          "size_in_bytes": 10036204,
+          "expired": false,
+          "expires_at": "2026-10-22T02:33:45Z"
+        }
+      ]
+    },
+    "viewport_regression": {
+      "run": {
+        "id": 37717908734,
+        "head_sha": "d18639bb6f219704ee78f6d34d140357807877ea",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "event": "push",
+        "path": ".github/workflows/terminal-viewport-interactions.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37717908734",
+        "created_at": "2026-10-08T02:26:52Z",
+        "updated_at": "2026-10-08T02:44:03Z"
+      },
+      "jobs": [
+        {
+          "id": 113118574916,
+          "name": "gestures",
+          "conclusion": "success",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113118574916",
+          "annotations": [
+            {
+              "title": "Terminal regression test counts",
+              "message": "113 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest: 6\nme.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest: 6\nme.rerere.rikkahub.viewporttest.TerminalIntrinsicWidthInstrumentedTest: 7\nme.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest: 20\nme.rerere.rikkahub.viewporttest.TerminalLazyNaturalGeometryInstrumentedTest: 22\nme.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest: 2\nme.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest: 7\nme.rerere.rikkahub.viewporttest.TerminalTextCompatibilityInstrumentedTest: 3\nme.rerere.rikkahub.viewporttest.TerminalTranscriptGeometryInstrumentedTest: 8\nme.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest: 24\nme.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest: 8",
+              "level": "notice"
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 11524913357,
+          "name": "terminal-viewport-interactions-d18639bb6f219704ee78f6d34d140357807877ea",
+          "digest": "sha256:baa840df6cddba0ae8f800b73daf962c21d39feeea2d6b715972e3f47e24ded7",
+          "size_in_bytes": 11344549,
+          "expired": false,
+          "expires_at": "2026-10-22T02:43:57Z"
+        }
+      ]
+    },
+    "release_jvm": {
+      "run": {
+        "id": 37717908492,
+        "head_sha": "d18639bb6f219704ee78f6d34d140357807877ea",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "event": "push",
+        "path": ".github/workflows/terminal-emulator-tests.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37717908492",
+        "created_at": "2026-10-08T02:26:51Z",
+        "updated_at": "2026-10-08T02:34:55Z"
+      },
+      "jobs": [
+        {
+          "id": 113118573739,
+          "name": "Run TerminalEmulator unit tests",
+          "conclusion": "success",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113118573739",
+          "annotations": [
+            {
+              "title": "Terminal regression test counts",
+              "message": "353 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.data.container.BunCompatibilitySourceTest: 4\nme.rerere.rikkahub.data.container.ControlInputTest: 6\nme.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest: 1\nme.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest: 13\nme.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest: 1\nme.rerere.rikkahub.data.container.PtyModeInferenceTest: 7\nme.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest: 12\nme.rerere.rikkahub.data.container.TerminalFastFlingTest: 15\nme.rerere.rikkahub.data.container.TerminalHistorySnapshotTest: 12\nme.rerere.rikkahub.data.container.TerminalItemViewportTest: 20\nme.rerere.rikkahub.data.container.TerminalLazyViewportAdapterTest: 7\nme.rerere.rikkahub.data.container.TerminalLazyViewportMeasurementTest: 14\nme.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest: 5\nme.rerere.rikkahub.data.container.TerminalRenderPreferencesTest: 6\nme.rerere.rikkahub.data.container.TerminalRenderedRowsTest: 29\nme.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest: 22\nme.rerere.rikkahub.data.container.TerminalTranscriptWidthIndexTest: 18\nme.rerere.rikkahub.data.container.TerminalUiSourceTest: 11\nme.rerere.rikkahub.data.container.TerminalViewportControllerTest: 29\nme.rerere.rikkahub.data.container.TerminalViewportItemGeometryTest: 6\nme.rerere.rikkahub.data.container.TerminalViewportReducerTest: 27\nme.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest: 4\nme.rerere.rikkahub.utils.TerminalEmulatorTest: 84",
+              "level": "notice"
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 11524872194,
+          "name": "terminal-emulator-test-reports",
+          "digest": "sha256:4819beee6106329ef4f94c1cbd9168df4da0e84ebe3e7c00b85c92f6766e27eb",
+          "size_in_bytes": 91520,
+          "expired": false,
+          "expires_at": "2026-10-15T02:34:50Z"
+        }
+      ]
+    },
+    "production_smoke_v4": {
+      "run": {
+        "id": 37717908565,
+        "head_sha": "d18639bb6f219704ee78f6d34d140357807877ea",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "event": "push",
+        "path": ".github/workflows/terminal-production-benchmark.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37717908565",
+        "created_at": "2026-10-08T02:26:51Z",
+        "updated_at": "2026-10-08T02:37:55Z"
+      },
+      "jobs": [
+        {
+          "id": 113118574026,
+          "name": "build",
+          "conclusion": "success",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113118574026",
+          "annotations": [
+            {
+              "title": "Production benchmark build",
+              "message": "{\"sourceSha\": \"d18639bb6f219704ee78f6d34d140357807877ea\", \"buildRun\": \"37717908565\", \"suite\": \"production-viewport-v4\", \"apks\": {\"target\": {\"file\": \"target.apk\", \"sha256\": \"b512b061748dc39ded01b7c042098ec969645cae41893a9bd8c0bad37679126c\", \"bytes\": 24506039, \"package\": \"me.rerere.rikkahub.terminalbenchmark\"}, \"driver\": {\"file\": \"driver.apk\", \"sha256\": \"5e9fb500f875ef5e98436d7c569ae208ca2766413449f1b36219a508570bafeb\", \"bytes\": 46274753, \"package\": \"me.rerere.rikkahub.terminalbenchmark.test\"}}, \"instrumentation\": \"me.rerere.rikkahub.terminalbenchmark.test/androidx.test.runner.AndroidJUnitRunner\"}",
+              "level": "notice"
+            },
+            {
+              "title": "Terminal regression test counts",
+              "message": "25 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.benchmark.ProductionBenchmarkSpecTest: 6\nme.rerere.rikkahub.benchmark.TerminalBenchmarkLayoutTest: 10\nme.rerere.rikkahub.benchmark.TerminalBenchmarkWidthIndexTest: 8\nme.rerere.rikkahub.benchmark.TerminalBenchmarkWorkloadTest: 1",
+              "level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113119624048,
+          "name": "scenario (detachRestore)",
+          "conclusion": "success",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113119624048",
+          "annotations": [
+            {
+              "title": "Production viewport detachRestore",
+              "message": "production-viewport-v4 detachRestore sha=d18639bb6f219704ee78f6d34d140357807877ea smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 505.33 | — | 211.15 | — | 140.18\n1000 | lazyHistory | 1 | — | 261.50 | — | 98.39 | 22.60 | 101.98\n1000 | lazyHistoryIme | 1 | — | 242.72 | — | 90.65 | 31.44 | 102.29",
+              "level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113119624061,
+          "name": "scenario (semanticJump)",
+          "conclusion": "success",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113119624061",
+          "annotations": [
+            {
+              "title": "Production viewport semanticJump",
+              "message": "production-viewport-v4 semanticJump sha=d18639bb6f219704ee78f6d34d140357807877ea smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 1342.78 | — | 118.43 | — | 105.77\n1000 | lazyHistory | 1 | — | 960.71 | — | 193.28 | — | 109.42\n1000 | lazyHistoryIme | 1 | — | 1048.77 | — | 157.16 | — | 110.52",
+              "level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113119624078,
+          "name": "scenario (imeRoundTrip)",
+          "conclusion": "success",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113119624078",
+          "annotations": [
+            {
+              "title": "Production viewport imeRoundTrip",
+              "message": "production-viewport-v4 imeRoundTrip sha=d18639bb6f219704ee78f6d34d140357807877ea smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 4247.32 | 218.63 | 279.86 | — | 106.34\n1000 | lazyHistory | 1 | — | 5823.16 | 215.65 | 290.62 | 0.86 | 126.81\n1000 | lazyHistoryIme | 1 | — | 4270.71 | 230.02 | 237.79 | 0.34 | 96.92",
+              "level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113119624106,
+          "name": "scenario (initialCompose)",
+          "conclusion": "success",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113119624106",
+          "annotations": [
+            {
+              "title": "Production viewport initialCompose",
+              "message": "production-viewport-v4 initialCompose sha=d18639bb6f219704ee78f6d34d140357807877ea smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | 344.40 | — | — | 202.17 | — | 104.35\n1000 | lazyHistory | 1 | 365.52 | — | — | 159.46 | 35.13 | 93.49\n1000 | lazyHistoryIme | 1 | 330.07 | — | — | 148.65 | 34.42 | 93.71",
+              "level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113119624108,
+          "name": "scenario (activeRowUpdate)",
+          "conclusion": "success",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113119624108",
+          "annotations": [
+            {
+              "title": "Production viewport activeRowUpdate",
+              "message": "production-viewport-v4 activeRowUpdate sha=d18639bb6f219704ee78f6d34d140357807877ea smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 5527.92 | 184.24 | 132.35 | — | 108.23\n1000 | lazyHistory | 1 | — | 5772.12 | 192.39 | 129.23 | 0.36 | 109.69\n1000 | lazyHistoryIme | 1 | — | 5559.88 | 185.32 | 126.71 | 1.21 | 98.04",
+              "level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113119624122,
+          "name": "scenario (appendAndTrim)",
+          "conclusion": "success",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113119624122",
+          "annotations": [
+            {
+              "title": "Production viewport appendAndTrim",
+              "message": "production-viewport-v4 appendAndTrim sha=d18639bb6f219704ee78f6d34d140357807877ea smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 5509.25 | 183.63 | 117.35 | — | 132.11\n1000 | lazyHistory | 1 | — | 6159.61 | 205.31 | 114.47 | 0.69 | 103.06\n1000 | lazyHistoryIme | 1 | — | 6262.85 | 208.72 | 122.71 | 1.20 | 113.85",
+              "level": "notice"
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 11525001678,
+          "name": "production-viewport-appendAndTrim-d18639bb6f219704ee78f6d34d140357807877ea-1",
+          "digest": "sha256:4419f213a7db643f30fc2417b784a00fb86041b22cbc37455bcbfc17a50cbd9a",
+          "size_in_bytes": 2861123,
+          "expired": false,
+          "expires_at": "2026-10-22T02:35:27Z"
+        },
+        {
+          "id": 11524941592,
+          "name": "production-viewport-initialCompose-d18639bb6f219704ee78f6d34d140357807877ea-1",
+          "digest": "sha256:8036131d7a8de2829d1cd67bc611d4244ffba7caaed1ce0454c8a623a3fe448e",
+          "size_in_bytes": 783097,
+          "expired": false,
+          "expires_at": "2026-10-22T02:33:01Z"
+        },
+        {
+          "id": 11524901235,
+          "name": "production-benchmark-build-evidence-d18639bb6f219704ee78f6d34d140357807877ea-1",
+          "digest": "sha256:cd73e3f3567d02c21b9066a9fd69b85b2a261febdbabfcb1da15445e0f1ccaf0",
+          "size_in_bytes": 7589,
+          "expired": false,
+          "expires_at": "2026-10-22T02:30:46Z"
+        },
+        {
+          "id": 11524832668,
+          "name": "production-viewport-imeRoundTrip-d18639bb6f219704ee78f6d34d140357807877ea-1",
+          "digest": "sha256:6184eec31f1191eb38949eb901960a3893793047056b7fac8440a2f9eaf4bed9",
+          "size_in_bytes": 2324304,
+          "expired": false,
+          "expires_at": "2026-10-22T02:37:45Z"
+        },
+        {
+          "id": 11524722088,
+          "name": "production-benchmark-build-d18639bb6f219704ee78f6d34d140357807877ea-1",
+          "digest": "sha256:99b3ddb95b04b1e55fff8e240bd1d9f82ff6478a5d98866471d38c510fc5b37d",
+          "size_in_bytes": 37863486,
+          "expired": false,
+          "expires_at": "2026-10-22T02:30:43Z"
+        },
+        {
+          "id": 11524703237,
+          "name": "production-viewport-detachRestore-d18639bb6f219704ee78f6d34d140357807877ea-1",
+          "digest": "sha256:8f21bbf5c94cd14e9bd6b8cafb94f44953c435614c43a8798bfd18f8e9ffa0bd",
+          "size_in_bytes": 688409,
+          "expired": false,
+          "expires_at": "2026-10-22T02:37:51Z"
+        },
+        {
+          "id": 11524617190,
+          "name": "production-viewport-activeRowUpdate-d18639bb6f219704ee78f6d34d140357807877ea-1",
+          "digest": "sha256:0e707083790212913e3ad83807c550531687e848ad65951a282e922921133421",
+          "size_in_bytes": 2472837,
+          "expired": false,
+          "expires_at": "2026-10-22T02:33:41Z"
+        },
+        {
+          "id": 11524547733,
+          "name": "production-viewport-semanticJump-d18639bb6f219704ee78f6d34d140357807877ea-1",
+          "digest": "sha256:d8ddf8d9ab0ad08e8e04dfb7674d1d6405371b80cc9f065b443e3c59870b1162",
+          "size_in_bytes": 923269,
+          "expired": false,
+          "expires_at": "2026-10-22T02:35:44Z"
+        }
+      ]
+    },
+    "release_build": {
+      "run": {
+        "id": 37717908544,
+        "head_sha": "d18639bb6f219704ee78f6d34d140357807877ea",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "event": "push",
+        "path": ".github/workflows/release.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37717908544",
+        "created_at": "2026-10-08T02:26:51Z",
+        "updated_at": "2026-10-08T02:34:08Z"
+      },
+      "jobs": [
+        {
+          "id": 113118574648,
+          "name": "build",
+          "conclusion": "success",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113118574648",
+          "annotations": []
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 11524529073,
+          "name": "rikkahub-release-d18639bb6f219704ee78f6d34d140357807877ea",
+          "digest": "sha256:87289a43e75d6f1c1ae08c51dcff4d1838aba55da74ea8c0bc75199d383f064a",
+          "size_in_bytes": 81437113,
+          "expired": false,
+          "expires_at": "2026-10-22T02:34:00Z"
+        }
+      ]
+    },
+    "apk_verification": {
+      "run": {
+        "id": 37719382330,
+        "head_sha": "d18639bb6f219704ee78f6d34d140357807877ea",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "event": "workflow_dispatch",
+        "path": ".github/workflows/verify-release-apk.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37719382330",
+        "created_at": "2026-10-08T02:44:57Z",
+        "updated_at": "2026-10-08T02:45:18Z"
+      },
+      "jobs": [
+        {
+          "id": 113123273874,
+          "name": "verify",
+          "conclusion": "success",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113123273874",
+          "annotations": [
+            {
+              "title": "Release APK verified",
+              "message": "{\"source_sha\": \"d18639bb6f219704ee78f6d34d140357807877ea\", \"release_run_id\": \"37717908544\", \"apk\": \"app-release.apk\", \"bytes\": 83696743, \"sha256\": \"375cc48327706594eb2e58bb55b2f170e49a72202274981402d540b96c9a93ab\", \"package\": \"me.rerere.rikkahub.dev.next.mod\", \"version_code\": \"151\", \"version_name\": \"2.1.62\", \"debuggable\": false, \"native_abis\": [\"arm64-v8a\"], \"signer_certificate_sha256\": [\"f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265\"], \"signature_verified\": true, \"zip_verified\": true}",
+              "level": "notice"
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 11524653182,
+          "name": "release-apk-verification-d18639bb6f219704ee78f6d34d140357807877ea",
+          "digest": "sha256:1f4490c73ca48806717d9322f6f15ee260cb4898f89d9e4135c61fcf7ae2789c",
+          "size_in_bytes": 4590,
+          "expired": false,
+          "expires_at": "2026-10-22T02:45:14Z"
+        }
+      ]
+    }
+  },
+  "apk": {
+    "source_sha": "d18639bb6f219704ee78f6d34d140357807877ea",
+    "release_run_id": "37717908544",
+    "apk": "app-release.apk",
+    "bytes": 83696743,
+    "sha256": "375cc48327706594eb2e58bb55b2f170e49a72202274981402d540b96c9a93ab",
+    "package": "me.rerere.rikkahub.dev.next.mod",
+    "version_code": "151",
+    "version_name": "2.1.62",
+    "debuggable": false,
+    "native_abis": [
+      "arm64-v8a"
+    ],
+    "signer_certificate_sha256": [
+      "f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265"
+    ],
+    "signature_verified": true,
+    "zip_verified": true
+  },
+  "local_script_tests": {
+    "benchmark": 55,
+    "diagnostics": 15
+  },
+  "excluded_initial_test_run": {
+    "id": 37716410797,
+    "reason": "Stopped-clock pointer fixture timed out; 0 completed JUnit cases, not regression proof."
+  }
+}
