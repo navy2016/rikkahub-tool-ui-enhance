@@ -43,6 +43,11 @@ class TerminalProotOverlayTest(unittest.TestCase):
         self.assertEqual(builder.LIB_SHA, hashlib.sha256(library.read_bytes()).hexdigest())
         self.assertEqual(ROOT / 'app/build/generated/pipelineAssets/proot/proot-x86_64', builder.OVERLAY)
 
+    def test_ndk_header_patch_adds_declarations_only(self):
+        text = builder.HEADER_PATCH.read_text()
+        additions = [line for line in text.splitlines() if line.startswith('+') and not line.startswith('+++')]
+        self.assertEqual(['+#include <string.h> /* strcmp, memset */'], additions)
+
     def test_overlay_is_only_on_opt_in_test_variant(self):
         gradle = (ROOT / 'app/build.gradle.kts').read_text()
         lines = [line.strip() for line in gradle.splitlines() if 'generated/pipelineAssets' in line]

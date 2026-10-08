@@ -63,6 +63,7 @@ def sources():
         '.github/scripts/run-terminal-pipeline.py',
         '.github/scripts/build-terminal-proot.py',
         'benchmarks/proot-x86_64/fork-to-clone.patch',
+        'benchmarks/proot-x86_64/ndk-string-header.patch',
         'benchmarks/production_emulator.py',
         'gradle/libs.versions.toml', 'app/compose_compiler_config.conf',
         'app/src/main/res/font/jetbrains_mono.ttf',

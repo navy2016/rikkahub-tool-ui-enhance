@@ -15,6 +15,8 @@ The GitHub Actions-only build links the repository's unchanged x86_64 libtalloc,
 the exact 2.4.3 header, and reuses existing loader/loader32 assets. NDK r27c produces an
 optimized PIE with `$ORIGIN` runpath. Build helpers may be fetched only at pinned commits
 or hashes; target, source, patch, library, header and tool identities go into the evidence.
+The separate header patch supplies the missing `string.h` declaration in ashmem_memfd.c
+required by NDK clang; it changes no runtime policy or compiler diagnostics.
 
 Only `terminaltest` uses `app/build/generated/pipelineAssets/proot/proot-x86_64` as a
 higher-priority asset overlay. `app/src/main/assets`, normal Release variants, the main

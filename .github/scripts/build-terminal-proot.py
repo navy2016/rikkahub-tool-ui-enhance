@@ -13,6 +13,7 @@ NDK = '27.2.12479018'
 WORK = ROOT / 'artifacts/pipeline-proot-build'
 OUT = ROOT / 'artifacts/terminal-pipeline'
 PATCH = ROOT / 'benchmarks/proot-x86_64/fork-to-clone.patch'
+HEADER_PATCH = ROOT / 'benchmarks/proot-x86_64/ndk-string-header.patch'
 OVERLAY = ROOT / 'app/build/generated/pipelineAssets/proot/proot-x86_64'
 
 
@@ -45,8 +46,9 @@ def main():
     command(['git', 'clone', '--quiet', '--depth=1', '--branch', 'v5.1.107.72', 'https://github.com/termux/proot.git', str(source)])
     if command(['git', 'rev-parse', 'HEAD'], cwd=source).strip() != SOURCE_SHA:
         raise RuntimeError('Unexpected PRoot source SHA')
-    command(['git', 'apply', '--check', str(PATCH)], cwd=source)
-    command(['git', 'apply', str(PATCH)], cwd=source)
+    for patch in (PATCH, HEADER_PATCH):
+        command(['git', 'apply', '--check', str(patch)], cwd=source)
+        command(['git', 'apply', str(patch)], cwd=source)
     include = WORK / 'include'
     include.mkdir(exist_ok=True)
     header = include / 'talloc.h'
@@ -58,7 +60,7 @@ def main():
         raise RuntimeError('Pinned talloc header/library hash mismatch')
     env = dict(os.environ, PATH=str(tool) + os.pathsep + os.environ['PATH'])
     # Existing loader/loader32 are supplied by the app. The make -o option marks the loader
-    # up-to-date; there is no source rewrite apart from the reviewed syscall patch.
+    # up-to-date; source edits are the reviewed syscall mapping and missing string.h include.
     args = ['make', '-C', str(source / 'src'), '-j2', 'V=1', 'proot',
             f'CC={compiler}', f'STRIP={tool / "llvm-strip"}', f'OBJCOPY={tool / "llvm-objcopy"}',
             f'OBJDUMP={tool / "llvm-objdump"}', 'HAS_LOADER_32BIT=',
@@ -77,6 +79,7 @@ def main():
     OVERLAY.parent.mkdir(parents=True, exist_ok=True)
     command(['cp', str(binary), str(OVERLAY)])
     provenance = dict(proot_commit=SOURCE_SHA, patch_sha256=digest(PATCH), ndk=NDK,
+                      header_patch_sha256=digest(HEADER_PATCH),
                       talloc_header_sha256=HEADER_SHA, talloc_library_sha256=LIB_SHA,
                       overlay_sha256=digest(OVERLAY), source_sha=os.environ['GITHUB_SHA'],
                       build_run=os.environ['GITHUB_RUN_ID'], overlay_only=True,
