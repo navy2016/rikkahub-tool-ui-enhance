@@ -2,6 +2,15 @@ name: Terminal Full Page PTY Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      evidence_run_id:
+        description: 'Read bounded original pipeline failure excerpts; skips building'
+        type: string
+        default: ''
+      evidence_sha:
+        description: 'Exact source SHA of evidence_run_id'
+        type: string
+        default: ''
   push:
     branches: [opt/terminal-verified-a79e7b6]
     paths:
@@ -19,9 +28,64 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
+  evidence:
+    if: ${{ inputs.evidence_run_id != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: ${{ inputs.evidence_run_id }}
+      SOURCE_SHA: ${{ inputs.evidence_sha }}
+    steps:
+      - name: Bind requested diagnostic to an existing pipeline run
+        id: source
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          run_id, sha = os.environ['SOURCE_RUN'], os.environ['SOURCE_SHA']
+          assert re.fullmatch('[0-9]+', run_id) and re.fullmatch('[a-f0-9]{40}', sha)
+          run = json.loads(subprocess.check_output(['gh', 'api', f'repos/{os.environ["GITHUB_REPOSITORY"]}/actions/runs/{run_id}']))
+          assert run['head_sha'] == sha and run['status'] == 'completed'
+          assert run['path'] == '.github/workflows/terminal-pipeline-tests.yml'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'artifact=terminal-pipeline-{sha}-{run["run_attempt"]}\n')
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.evidence_run_id }}
+          name: ${{ steps.source.outputs.artifact }}
+          path: original-pipeline
+      - name: Export only first exception contexts and lifecycle diagnostics
+        run: |
+          python3 - <<'PY'
+          from collections import deque
+          from pathlib import Path
+          import os
+          def note(title, lines):
+              value = ('source=' + os.environ['SOURCE_SHA'] + ' run=' + os.environ['SOURCE_RUN'] + '\n' + '\n'.join(lines))[:2800]
+              print('::notice title=' + title + '::' + value.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
+          for name in ('instrumentation.log', 'pipeline-logcat.txt'):
+              files = list(Path('original-pipeline').rglob(name))
+              assert len(files) == 1, name
+              lines, remaining, blocks, previous = [], 0, 0, deque(maxlen=2)
+              with files[0].open(errors='replace') as stream:
+                  for raw in stream:
+                      line = raw.rstrip()[:700]
+                      if ('java.lang.' in line or 'Error in ' in line or 'FATAL EXCEPTION' in line or 'No compose hierarchies' in line) and remaining == 0 and blocks < 3:
+                          lines.extend(previous)
+                          remaining, blocks = 5, blocks + 1
+                      if remaining:
+                          lines.append(line)
+                          remaining -= 1
+                      previous.append(line)
+              note('Original pipeline ' + name, lines)
+          PY
   pipeline:
+    if: ${{ inputs.evidence_run_id == '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
