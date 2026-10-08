@@ -23,7 +23,7 @@ import java.util.concurrent.TimeoutException
 
 /** Bounded transport probes before involving Compose, a session reader or stdin actors. */
 class TerminalPtyTransportInstrumentedTest : KoinComponent {
-    @get:Rule val timeout = Timeout.seconds(90)
+    @get:Rule val timeout = Timeout.seconds(180)
     private val proot: PRootManager by inject()
     private val manager: BackgroundProcessManager by inject()
 
@@ -44,6 +44,36 @@ class TerminalPtyTransportInstrumentedTest : KoinComponent {
         }
         val prefix = "export TERM=xterm-256color LINES=24 COLUMNS=80; export FORCE_COLOR=1 COLORTERM=truecolor; " +
             "stty sane rows 24 cols 80 2>/dev/null || stty rows 24 cols 80 2>/dev/null || true; "
+        results += probe("cookedBuiltin", "COOKED_BUILTIN_READY\r\n") {
+            runBlocking { proot.execNativePty("pipeline-transport", listOf("sh", "-c", "printf 'COOKED_BUILTIN_READY\\n'"),
+                ptyMode = PtyMode.COOKED) }
+        }
+        results += probe("rawLogin", "RAW_LOGIN_READY\n") {
+            runBlocking { proot.execNativePty("pipeline-transport", listOf("sh", "-lc", "printf 'RAW_LOGIN_READY\\n'"),
+                ptyMode = PtyMode.RAW) }
+        }
+        results += probe("cookedLoginOnly", "LOGIN_READY\r\n") {
+            runBlocking { proot.execNativePty("pipeline-transport", listOf("sh", "-lc", "printf 'LOGIN_READY\\n'"),
+                ptyMode = PtyMode.COOKED) }
+        }
+        results += probe("pipeLogin", "PIPE_LOGIN_READY\n") {
+            runBlocking { proot.execInteractive("pipeline-transport", listOf("sh", "-lc", "printf 'PIPE_LOGIN_READY\\n'")) }
+        }
+        results += probe("cookedSttyOnly", "BEFORE_STTY\r\nAFTER_STTY\r\n") {
+            runBlocking { proot.execNativePty("pipeline-transport", listOf("sh", "-c",
+                "printf 'BEFORE_STTY\\n'; stty sane rows 24 cols 80; printf 'AFTER_STTY\\n'"), ptyMode = PtyMode.COOKED) }
+        }
+        results += probe("rawExternal", "EXTERNAL_READY\n") {
+            runBlocking { proot.execNativePty("pipeline-transport", listOf("sh", "-c", "/bin/echo EXTERNAL_READY"),
+                ptyMode = PtyMode.RAW) }
+        }
+        results += probe("pipePrefix", "PIPE_PREFIX_READY\n") {
+            runBlocking { proot.execInteractive("pipeline-transport", listOf("sh", "-lc", prefix + "printf 'PIPE_PREFIX_READY\\n'")) }
+        }
+        results += probe("redirectOnly", "REDIRECT_READY\r\n") {
+            runBlocking { proot.execNativePty("pipeline-transport", listOf("sh", "-c",
+                "true 2>/dev/null; printf 'REDIRECT_READY\\n'"), ptyMode = PtyMode.COOKED) }
+        }
         results += probe("cookedLogin", "COOKED_READY\r\n") {
             runBlocking { proot.execNativePty("pipeline-transport", listOf("sh", "-lc", prefix + "printf 'COOKED_READY\\n'"),
                 ptyMode = PtyMode.COOKED) }
@@ -132,6 +162,12 @@ class TerminalPtyTransportInstrumentedTest : KoinComponent {
         val matched = bytesOut.contentEquals(expected.toByteArray())
         report.put("matched", matched).put("stdoutBytes", bytesOut.size).put("stderrBytes", bytesError.size)
             .put("timedOut", timedOut).put("readerFailure", readerFailure ?: JSONObject.NULL)
+        if (!matched) {
+            // These probes run ONLY constant synthetic commands in the disposable test app.
+            // Preserve bounded errors to distinguish shell startup from missing output delivery.
+            report.put("fixedStdoutPrefix", bytesOut.toString(Charsets.UTF_8).take(240))
+                .put("fixedStderrPrefix", bytesError.toString(Charsets.UTF_8).take(240))
+        }
         Log.i("TerminalPipelineTest", "TRANSPORT_PROBE $report")
         return matched && bytesError.isEmpty() && !timedOut && readerFailure == null
     }

@@ -233,12 +233,15 @@ def run():
     if transport:
         probes = [json.loads(line.split('TRANSPORT_PROBE ', 1)[1]) for line in logcat.splitlines() if 'TRANSPORT_PROBE ' in line]
         expected_probes = {'androidPty', 'prootPipe', 'prootPty', 'cookedLogin', 'directWorkload', 'managerPrintf', 'managerWorkload'}
+        expected_probes.update(('cookedBuiltin', 'rawLogin', 'cookedLoginOnly', 'pipeLogin', 'cookedSttyOnly',
+                                'rawExternal', 'pipePrefix', 'redirectOnly'))
         if len(probes) != len(expected_probes) or {p['probe'] for p in probes} != expected_probes:
             raise ValueError('Missing transport probe matrix')
         if not all(p['matched'] and not p['timedOut'] and p['readerFailure'] is None for p in probes):
             raise ValueError('Transport probes failed')
         (OUT / 'transport-results.json').write_text(json.dumps(dict(manifest=manifest, device=device, probes=probes), indent=2) + '\n')
-        notice('notice', 'Terminal transport probes verified', json.dumps(probes))
+        for start in range(0, len(probes), 4):
+            notice('notice', f'Terminal transport probes verified {start // 4 + 1}', json.dumps(probes[start:start + 4]))
         return
     rows = validate_samples(logcat.splitlines())
     report = dict(manifest=manifest, device=device, samples=rows,
@@ -351,9 +354,9 @@ def main():
         path = OUT / 'pipeline-logcat.txt'
         if path.exists():
             with path.open(errors='replace') as stream:
-                probes = [line.strip() for line in stream if 'TRANSPORT_PROBE ' in line]
-            if probes:
-                notice('error', 'Terminal transport probe values', '\n'.join(probes))
+                probes = [line.strip() for line in stream if 'TRANSPORT_PROBE {' in line]
+            for start in range(0, len(probes), 4):
+                notice('error', f'Terminal transport probe values {start // 4 + 1}', '\n'.join(probes[start:start + 4]))
         return 1
 
 
