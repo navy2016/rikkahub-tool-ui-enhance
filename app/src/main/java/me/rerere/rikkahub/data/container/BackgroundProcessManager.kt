@@ -1636,11 +1636,13 @@ class BackgroundProcessManager @Inject constructor(
             } else {
                 input.toByteArray(Charsets.UTF_8)
             }
+            TerminalPipelineTrace.record(processId, TerminalPipelineStage.INPUT_ENQUEUE_STARTED, bytes = bytes.size)
             if (!record.inputChannel.trySend(SessionWrite.Bytes(bytes)).isSuccess) {
                 return@withContext Result.failure(
                     IllegalStateException("Interactive session is closing: $processId")
                 )
             }
+            TerminalPipelineTrace.record(processId, TerminalPipelineStage.INPUT_ENQUEUED, bytes = bytes.size)
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error sending input to session: $processId", e)
@@ -1661,11 +1663,13 @@ class BackgroundProcessManager @Inject constructor(
                 IllegalStateException("Interactive session not found: $processId")
             )
         if (bytes.isEmpty()) return@withContext Result.success(Unit)
+        TerminalPipelineTrace.record(processId, TerminalPipelineStage.INPUT_ENQUEUE_STARTED, bytes = bytes.size)
         if (!record.inputChannel.trySend(SessionWrite.Bytes(bytes)).isSuccess) {
             return@withContext Result.failure(
                 IllegalStateException("Interactive session is closing: $processId")
             )
         }
+        TerminalPipelineTrace.record(processId, TerminalPipelineStage.INPUT_ENQUEUED, bytes = bytes.size)
         Result.success(Unit)
     }
 
@@ -1687,11 +1691,13 @@ class BackgroundProcessManager @Inject constructor(
             } else {
                 controlInputBytes(control)
             }
+            TerminalPipelineTrace.record(processId, TerminalPipelineStage.INPUT_ENQUEUE_STARTED, bytes = bytes.size)
             if (!record.inputChannel.trySend(SessionWrite.Bytes(bytes)).isSuccess) {
                 return@withContext Result.failure(
                     IllegalStateException("Interactive session is closing: $processId")
                 )
             }
+            TerminalPipelineTrace.record(processId, TerminalPipelineStage.INPUT_ENQUEUED, bytes = bytes.size)
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error sending control input to session: $processId", e)
@@ -1885,10 +1891,16 @@ class BackgroundProcessManager @Inject constructor(
         val nativeProcess = record.process as? NativePtyProcess ?: return
         val tail = nativeProcess.drainAvailable(maxBytes)
         if (tail.isNotEmpty()) {
+            TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_READ, bytes = tail.size)
             record.outputBuffer.append(tail)
             record.terminalEmulator.feed(tail)
+            if (TerminalPipelineTrace.isRecording(record.processId)) TerminalPipelineTrace.record(
+                record.processId, TerminalPipelineStage.EMULATOR_FED, bytes = tail.size,
+                frameRevision = record.terminalEmulator.revision())
             handleTerminalProtocolEvents(record)
+            TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_EMIT_STARTED, bytes = tail.size)
             record.outputFlow.emit(tail)
+            TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_EMITTED, bytes = tail.size)
             record.lastActivityAt = System.currentTimeMillis()
         }
     }
@@ -2577,8 +2589,10 @@ class BackgroundProcessManager @Inject constructor(
             val bytes = (write as? SessionWrite.Bytes)?.value ?: continue
             runCatching {
                 record.inputMutex.withLock {
+                    TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.INPUT_WRITE_STARTED, bytes = bytes.size)
                     record.process.outputStream.write(bytes)
                     record.process.outputStream.flush()
+                    TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.INPUT_WRITTEN, bytes = bytes.size)
                     record.lastActivityAt = System.currentTimeMillis()
                 }
             }.onFailure { error ->
@@ -2599,10 +2613,16 @@ class BackgroundProcessManager @Inject constructor(
                 if (read == 0) continue
 
                 val data = chunk.copyOf(read)
+                TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_READ, bytes = read)
                 record.outputBuffer.append(data)
                 record.terminalEmulator.feed(data)
+                if (TerminalPipelineTrace.isRecording(record.processId)) TerminalPipelineTrace.record(
+                    record.processId, TerminalPipelineStage.EMULATOR_FED, bytes = read,
+                    frameRevision = record.terminalEmulator.revision())
                 handleTerminalProtocolEvents(record)
+                TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_EMIT_STARTED, bytes = read)
                 record.outputFlow.emit(data)
+                TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_EMITTED, bytes = read)
                 record.lastActivityAt = System.currentTimeMillis()
             }
         } catch (_: Exception) {

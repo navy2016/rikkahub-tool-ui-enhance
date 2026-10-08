@@ -123,6 +123,8 @@ import me.rerere.rikkahub.data.container.isConfiguredTerminalCommand
 import me.rerere.rikkahub.data.container.isTuiCommand
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
+import me.rerere.rikkahub.data.container.TerminalPipelineStage
+import me.rerere.rikkahub.data.container.TerminalPipelineTrace
 import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.container.effectiveTerminalRenderMode
 import me.rerere.rikkahub.data.container.terminalRendererForCommand
@@ -1129,6 +1131,7 @@ private fun TerminalInteractivePanel(
             terminalViewportFrame = frame
             terminalModeSummary = frame.modeSummary
         }
+        TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_PUBLISHED, frameRevision = frame.revision)
         resizeAwaitingTuiRedraw.set(false)
         lastRenderAt.set(now)
         if (hasDeferredGridBlank) {
@@ -1201,6 +1204,7 @@ private fun TerminalInteractivePanel(
     fun sendCommand(command: String, rememberHistory: Boolean = true) {
         val trimmed = command.trim()
         if (trimmed.isBlank()) return
+        TerminalPipelineTrace.record(processId, TerminalPipelineStage.UI_INPUT)
         if (rememberHistory && commandHistory.lastOrNull() != trimmed) {
             commandHistory.add(trimmed)
             while (commandHistory.size > 50) commandHistory.removeAt(0)
@@ -1221,11 +1225,13 @@ private fun TerminalInteractivePanel(
 
     fun sendRaw(sequence: String) {
         if (sequence.isEmpty()) return
+        TerminalPipelineTrace.record(processId, TerminalPipelineStage.UI_INPUT)
         if (!rawInputChannel.trySend(sequence).isSuccess) terminalStatus = "发送失败"
     }
 
     fun sendRawMouseBytes(bytes: ByteArray) {
         if (bytes.isEmpty()) return
+        TerminalPipelineTrace.record(processId, TerminalPipelineStage.UI_INPUT)
         if (!rawMouseChannel.trySend(bytes).isSuccess) terminalStatus = "发送失败"
     }
 
@@ -1550,6 +1556,7 @@ private fun TerminalInteractivePanel(
 
     LaunchedEffect(processId) {
         bgManager.observeOutput(processId)?.collect { bytes ->
+            TerminalPipelineTrace.record(processId, TerminalPipelineStage.UI_OUTPUT_RECEIVED, bytes = bytes.size)
             if (sessionTerminalEmulator == null) {
                 terminalEmulator.feed(bytes)
                 terminalEmulator.drainResponses().forEach { response ->
@@ -1841,7 +1848,8 @@ private fun TerminalInteractivePanel(
                         horizontalScroll = horizontalScroll,
                         panEnabled = terminalPanMode,
                         selectionMode = selectionMode,
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        modifier = Modifier.weight(1f).fillMaxWidth()
+                            .terminalPipelineDraw(processId, terminalViewportFrame.revision, virtualHistoryEnabled),
                     )
                 }
             }

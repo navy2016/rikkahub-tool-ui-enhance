@@ -1,0 +1,293 @@
+"""SHA-bound full-page/native-PTY diagnostics, not a physical-device benchmark."""
+import argparse
+import base64
+import hashlib
+import json
+import math
+import os
+import re
+import statistics
+import subprocess
+import sys
+import zipfile
+import zlib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / 'artifacts/terminal-pipeline'
+PACKAGE = 'me.rerere.rikkahub.dev.next.terminaltest'
+TEST_PACKAGE = PACKAGE + '.test'
+CLASS = 'me.rerere.rikkahub.pipeline.TerminalPipelineInstrumentedTest'
+MODES = ('chunkedLayers', 'lazyHistory', 'lazyHistoryIme')
+PHASES = ('mounted', 'imeVisible', 'imeHidden', 'remount')
+STAGES = ('INPUT_ENQUEUE_STARTED', 'INPUT_WRITE_STARTED', 'OUTPUT_READ', 'EMULATOR_FED',
+          'UI_OUTPUT_RECEIVED', 'FRAME_PUBLISHED', 'FRAME_DRAWN')
+
+
+def notice(level, title, message):
+    text = message[:2800].replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+    print(f'::{level} title={title}::{text}', flush=True)
+
+
+def identity():
+    sha, run = os.environ.get('GITHUB_SHA', ''), os.environ.get('GITHUB_RUN_ID', '')
+    if not re.fullmatch('[a-f0-9]{40}', sha) or not re.fullmatch('[0-9]+', run):
+        raise ValueError('Expected exact CI SHA and run ID')
+    return sha, run
+
+
+def digest(path):
+    with path.open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def sources():
+    paths = [
+        'app/src/main/java/me/rerere/rikkahub/data/container/BackgroundProcessManager.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/NativePtyBridge.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/NativePtyProcess.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/PRootManager.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalPipelineTrace.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalPipelineInstrumentation.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemExecutor.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportScrollEffects.kt',
+        'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt',
+        'app/src/main/cpp/rikkahub_pty.cpp', 'app/build.gradle.kts',
+        'app/src/terminaltest/AndroidManifest.xml',
+        'app/src/terminaltest/java/me/rerere/rikkahub/pipeline/TerminalPipelineTestActivity.kt',
+        'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPipelineInstrumentedTest.kt',
+        '.github/scripts/run-terminal-pipeline.py',
+        'benchmarks/production_emulator.py',
+        'gradle/libs.versions.toml', 'app/compose_compiler_config.conf',
+        'app/src/main/res/font/jetbrains_mono.ttf',
+    ]
+    return {path: digest(ROOT / path) for path in paths}
+
+
+def output(command, seconds=30):
+    return subprocess.check_output(command, text=True, stderr=subprocess.STDOUT, timeout=seconds)
+
+
+def prepare():
+    sha, run = identity()
+    OUT.mkdir(parents=True, exist_ok=True)
+    tools = sorted((Path(os.environ['ANDROID_HOME']) / 'build-tools').glob('*/aapt'),
+                   key=lambda p: tuple(int(n) for n in re.findall(r'\d+', p.parent.name)))[-1].parent
+    apks = {}
+    for role, folder, package in (('target', 'terminaltest', PACKAGE),
+                                  ('test', 'androidTest/terminaltest', TEST_PACKAGE)):
+        files = list((ROOT / 'app/build/outputs/apk' / folder).glob('*.apk'))
+        if len(files) != 1:
+            raise ValueError(f'Expected exactly one {role} APK, found {len(files)}')
+        apk = files[0]
+        manifest = output([str(tools / 'aapt'), 'dump', 'badging', str(apk)])
+        if not manifest.startswith(f"package: name='{package}'"):
+            raise ValueError(f'Wrong {role} package')
+        if role == 'target' and 'application-debuggable' in manifest:
+            raise ValueError('Pipeline target must be Release-derived, not debuggable')
+        signing = output([str(tools / 'apksigner'), 'verify', '--verbose', '--print-certs', str(apk)], 60)
+        certificates = re.findall(r'^.*?\bcertificate SHA-256 digest: ([a-fA-F0-9]{64})\s*$', signing, re.M)
+        if not certificates or not re.search(r'Verified using v[23](?:\.1)? scheme .*: true', signing):
+            raise ValueError('Unsigned pipeline APK')
+        with zipfile.ZipFile(apk) as archive:
+            if archive.testzip() is not None:
+                raise ValueError('Corrupt pipeline APK')
+            if role == 'target':
+                revision = archive.read('META-INF/version-control-info.textproto').decode()
+                if re.findall(r'revision:\s*"([a-f0-9]{40})"', revision) != [sha]:
+                    raise ValueError('Embedded target revision mismatch')
+                if 'lib/x86_64/librikkahub-pty.so' not in archive.namelist():
+                    raise ValueError('Missing x86_64 native PTY')
+        apks[role] = dict(file=str(apk.relative_to(ROOT)), sha256=digest(apk), bytes=apk.stat().st_size,
+                          package=package, certificate_sha256=certificates)
+    if apks['target']['certificate_sha256'] != apks['test']['certificate_sha256']:
+        raise ValueError('Instrumentation signer differs from target')
+    manifest = dict(suite='terminal-pipeline-v1', sourceSha=sha, runId=run, sources=sources(), apks=apks,
+                    target_debuggable=False, target_minified=False, target_release_derived=True)
+    (OUT / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    notice('notice', 'Terminal pipeline APK identity', json.dumps({k: v for k, v in manifest.items() if k != 'sources'}))
+
+
+def validate_samples(lines):
+    rows, seen, launches = [], set(), {}
+    for line in lines:
+        if 'PIPELINE_SAMPLE ' not in line:
+            continue
+        row = json.loads(line.split('PIPELINE_SAMPLE ', 1)[1])
+        key = (row.get('mode'), row.get('phase'), row.get('iteration'))
+        if key in seen or key[0] not in MODES or key[1] not in PHASES or type(key[2]) is not int or key[2] not in range(3):
+            raise ValueError('Duplicate or unknown pipeline sample')
+        launch = row.get('launch', '')
+        if not re.fullmatch('[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', launch):
+            raise ValueError('Invalid pipeline launch identity')
+        if launches.setdefault(key[0], launch) != launch:
+            raise ValueError('Mixed launches for one renderer')
+        expected_virtual = key[0] == 'lazyHistoryIme' or (key[0] == 'lazyHistory' and key[1] in ('mounted', 'remount'))
+        if type(row.get('virtual')) is not bool or row['virtual'] != expected_virtual:
+            raise ValueError('Incorrect pipeline backend')
+        if type(row.get('frameRevision')) is not int or row['frameRevision'] < 0:
+            raise ValueError('Invalid pipeline frame revision')
+        expected_bytes = len(f'ECHO:{key[1]}-{key[2]}\r\n'.encode())
+        if type(row.get('outputBytes')) is not int or row['outputBytes'] != expected_bytes:
+            raise ValueError('Incorrect echo byte count')
+        for name in (*STAGES, 'inputToDrawMs', 'inputToVisibleCheckMs'):
+            value = row.get(name)
+            if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+                raise ValueError('Missing or invalid pipeline duration: ' + name)
+        # Queue-return/emit-return events are NOT an ordering guarantee; actor/UI may run first.
+        for a, b in (('INPUT_ENQUEUE_STARTED', 'INPUT_WRITE_STARTED'), ('INPUT_WRITE_STARTED', 'OUTPUT_READ'),
+                     ('OUTPUT_READ', 'EMULATOR_FED'), ('FRAME_PUBLISHED', 'FRAME_DRAWN'),
+                     ('inputToDrawMs', 'inputToVisibleCheckMs')):
+            if row[a] > row[b]:
+                raise ValueError(f'Invalid pipeline order: {a}/{b}')
+        if row['inputToDrawMs'] != row['FRAME_DRAWN']:
+            raise ValueError('Draw latency differs from traced event')
+        rows.append(row)
+        seen.add(key)
+    if seen != {(mode, phase, i) for mode in MODES for phase in PHASES for i in range(3)}:
+        raise ValueError(f'Incomplete pipeline sample matrix: {len(seen)}/36')
+    if len(set(launches.values())) != len(MODES):
+        raise ValueError('Launch identity reused across renderers')
+    return rows
+
+
+def require_instrumentation(text):
+    if not re.search(r'^OK \(3 tests\)\s*$', text, re.M) or not re.search(r'^INSTRUMENTATION_CODE: -1\s*$', text, re.M):
+        raise ValueError('Pipeline instrumentation did not finish exactly 3 tests')
+    if any(marker in text for marker in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'shortMsg=',
+                                        'INSTRUMENTATION_STATUS_CODE: -2', 'INSTRUMENTATION_STATUS_CODE: -3',
+                                        'INSTRUMENTATION_STATUS_CODE: -4')):
+        raise ValueError('Pipeline instrumentation failed or skipped a case')
+
+
+def run():
+    sha, run_id = identity()
+    manifest = json.loads((OUT / 'manifest.json').read_text())
+    if manifest['sourceSha'] != sha or manifest['runId'] != run_id or manifest['sources'] != sources():
+        raise ValueError('Pipeline bundle does not match the requested source')
+    for role, apk in manifest['apks'].items():
+        path = ROOT / apk['file']
+        if digest(path) != apk['sha256']:
+            raise ValueError('Pipeline APK hash mismatch')
+        remote = f'/data/local/tmp/terminal-pipeline-{role}.apk'
+        output(['adb', 'push', str(path), remote], 180)
+        install = output(['adb', 'shell', 'pm', 'install', '-r', '-t', remote], 180)
+        if 'Success' not in install:
+            raise ValueError('Pipeline install rejected: ' + install[-500:])
+    compile_result = output(['adb', 'shell', 'cmd', 'package', 'compile', '-f', '-m', 'speed', PACKAGE], 180)
+    if 'Success' not in compile_result:
+        raise ValueError('Full target compilation failed: ' + compile_result[-500:])
+    output(['adb', 'shell', 'settings', 'put', 'secure', 'show_ime_with_hard_keyboard', '1'])
+    output(['adb', 'logcat', '-c'])
+    device = {label: output(['adb', 'shell', *args]).strip() for label, args in (
+        ('fingerprint', ['getprop', 'ro.build.fingerprint']), ('size', ['wm', 'size']),
+        ('density', ['wm', 'density']), ('ime', ['settings', 'get', 'secure', 'default_input_method']))}
+    (OUT / 'device.json').write_text(json.dumps(device, indent=2) + '\n')
+    log = OUT / 'instrumentation.log'
+    try:
+        with log.open('w') as stream:
+            result = subprocess.run(['adb', 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class', CLASS,
+                                     TEST_PACKAGE + '/androidx.test.runner.AndroidJUnitRunner'],
+                                    stdout=stream, stderr=subprocess.STDOUT, timeout=900)
+        if result.returncode != 0:
+            raise ValueError(f'Pipeline instrumentation exited {result.returncode}')
+    finally:
+        logcat = output(['adb', 'logcat', '-d', '-v', 'threadtime', 'TerminalPipelineTest:I',
+                         'AndroidRuntime:E', 'TestRunner:I', 'RikkahubPty:E', '*:S'])
+        (OUT / 'pipeline-logcat.txt').write_text(logcat)
+    require_instrumentation(log.read_text())
+    rows = validate_samples(logcat.splitlines())
+    report = dict(manifest=manifest, device=device, samples=rows,
+                  note='Full production page + native PTY in an emulator; synthetic input, traced first draw, '
+                       'and separately timed test visibility confirmation. Neither GPU presentation nor phone FPS.')
+    data = json.dumps(report, separators=(',', ':')).encode()
+    (OUT / 'pipeline-results.json').write_text(json.dumps(report, indent=2) + '\n')
+    summary = []
+    for mode in MODES:
+        for phase in PHASES:
+            group = [r for r in rows if r['mode'] == mode and r['phase'] == phase]
+            summary.append(f'{mode}/{phase}: firstDraw={statistics.median(r["inputToDrawMs"] for r in group):.2f}ms '
+                           f'visibleCheck={statistics.median(r["inputToVisibleCheckMs"] for r in group):.2f}ms')
+    notice('notice', 'Terminal pipeline 36 samples verified', '\n'.join(summary))
+    encoded = base64.b64encode(zlib.compress(data, 9)).decode()
+    parts = [encoded[i:i + 2600] for i in range(0, len(encoded), 2600)]
+    if len(parts) > 8:
+        raise ValueError('Pipeline compact evidence exceeds annotation budget')
+    for number, part in enumerate(parts, 1):
+        notice('notice', f'Terminal pipeline evidence {number}/{len(parts)}',
+               'zlib-base64 sha256=' + hashlib.sha256(data).hexdigest() + '\n' + part)
+
+
+def emulator():
+    """Use the same verified non-root KVM primitives as the component benchmark."""
+    import pwd
+    sys.path.insert(0, str(ROOT / 'benchmarks'))
+    import production_emulator as guest
+
+    sha, run_id = identity()
+    manifest = json.loads((OUT / 'manifest.json').read_text())
+    if manifest['sourceSha'] != sha or manifest['runId'] != run_id or manifest['sources'] != sources():
+        raise ValueError('Pipeline emulator source mismatch')
+    state = ROOT / 'artifacts/pipeline-emulator-state'
+    state.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    sdk = Path(env['ANDROID_HOME'])
+    env.update(ANDROID_SDK_ROOT=str(sdk), ANDROID_AVD_HOME=str(state / 'avds'),
+               ANDROID_USER_HOME=str(state / 'android'), ANDROID_SERIAL=guest.SERIAL)
+    Path(env['ANDROID_AVD_HOME']).mkdir(exist_ok=True)
+    Path(env['ANDROID_USER_HOME']).mkdir(exist_ok=True)
+    env['PATH'] = str(sdk / 'platform-tools') + os.pathsep + env['PATH']
+    user = pwd.getpwuid(os.getuid()).pw_name
+    tools = sdk / 'cmdline-tools/latest/bin'
+    process = None
+    try:
+        guest.logged([str(tools / 'sdkmanager'), '--install', 'emulator', guest.IMAGE],
+                     OUT / 'sdk-install.log', env, 300)
+        binary = sdk / 'emulator/emulator'
+        acceleration = subprocess.run(guest.group_command(binary, ['-accel-check'], env, user),
+                                      capture_output=True, text=True, timeout=30)
+        acceleration.stdout = (acceleration.stdout or '') + (acceleration.stderr or '')
+        (OUT / 'acceleration.txt').write_text(acceleration.stdout)
+        guest.require_acceleration(acceleration)
+        guest.logged([str(tools / 'avdmanager'), 'create', 'avd', '--force', '-n', 'terminalPipeline',
+                      '--package', guest.IMAGE, '--device', 'Nexus 6'], OUT / 'avd-create.log', env, 90, 'no\n')
+        config = Path(env['ANDROID_AVD_HOME']) / 'terminalPipeline.avd/config.ini'
+        with config.open('a') as stream:
+            stream.write('\nhw.cpu.ncore=2\nhw.ramSize=4096M\nhw.heapSize=768M\nhw.keyboard=yes\ndisk.dataPartition.size=8G\n')
+        options = ['-port', '5554', '-avd', 'terminalPipeline', '-no-window', '-accel', 'on',
+                   '-gpu', 'swiftshader_indirect', '-noaudio', '-no-boot-anim', '-no-snapshot', '-camera-back', 'none']
+        with (OUT / 'emulator.log').open('w') as log:
+            process = subprocess.Popen(guest.group_command(binary, options, env, user), env=env,
+                                       stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            guest.wait_for_boot(process, env)
+            os.environ.update(PATH=env['PATH'], ANDROID_SERIAL=guest.SERIAL)
+            output(['adb', 'shell', 'input', 'keyevent', '82'])
+            run()
+    finally:
+        guest.stop_emulator(process, env)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', choices=('prepare', 'run', 'emulator'))
+    args = parser.parse_args()
+    try:
+        {'prepare': prepare, 'run': run, 'emulator': emulator}[args.action]()
+        return 0
+    except (ValueError, OSError, subprocess.SubprocessError, KeyError) as error:
+        details = []
+        for name in ('instrumentation.log', 'pipeline-logcat.txt'):
+            path = OUT / name
+            if path.exists():
+                with path.open('rb') as stream:
+                    stream.seek(max(0, path.stat().st_size - 8192))
+                    tail = stream.read(8192).decode(errors='replace')
+                details.append(name + ':\n' + tail[-1500:])
+        notice('error', 'Terminal pipeline failure', type(error).__name__ + ': ' + str(error)[:400] + '\n' + '\n'.join(details))
+        return 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

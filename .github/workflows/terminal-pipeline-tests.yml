@@ -1,0 +1,57 @@
+name: Terminal Full Page PTY Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [opt/terminal-verified-a79e7b6]
+    paths:
+      - 'app/src/main/java/me/rerere/rikkahub/data/container/**'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/Terminal*.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt'
+      - 'app/src/terminaltest/**'
+      - 'app/src/terminaltestAndroidTest/**'
+      - 'app/build.gradle.kts'
+      - '.github/scripts/run-terminal-pipeline.py'
+      - '.github/scripts/test_terminal_pipeline.py'
+      - '.github/workflows/terminal-pipeline-tests.yml'
+      - 'benchmarks/production_emulator.py'
+      - 'gradle/libs.versions.toml'
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Validate diagnostics and build Release-derived full-page test pair
+        run: |
+          python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+          chmod +x gradlew
+          bash .github/scripts/run-terminal-gradle.sh -PterminalPipelineTests=true -PincludeX86_64AbiForTests=true \
+            :app:assembleTerminaltest :app:assembleTerminaltestAndroidTest --stacktrace
+          python3 .github/scripts/run-terminal-pipeline.py prepare
+      - name: Run actual page and native PTY with real keyboard on non-root KVM guest
+        run: python3 .github/scripts/run-terminal-pipeline.py emulator
+      - name: Preserve exact source identities, samples and focused diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-pipeline-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-pipeline/
+            artifacts/terminal-validation/
+          if-no-files-found: error
+          retention-days: 14

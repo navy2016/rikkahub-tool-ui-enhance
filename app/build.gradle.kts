@@ -15,12 +15,14 @@ plugins {
 val includeX86_64AbiForTests = providers.gradleProperty("includeX86_64AbiForTests")
     .map { it.equals("true", ignoreCase = true) }
     .getOrElse(false)
+val terminalPipelineTests = providers.gradleProperty("terminalPipelineTests").orNull == "true"
 
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 36
     // Scope release host-test selection to terminal CI; leave other instrumentation configurations alone.
     if (providers.gradleProperty("terminalReleaseTests").orNull == "true") testBuildType = "release"
+    if (terminalPipelineTests) testBuildType = "terminaltest"
 
     lint {
         disable += "ExpiredTargetSdkVersion"
@@ -99,6 +101,16 @@ android {
             isShrinkResources = false
             isProfileable = true
         }
+        if (terminalPipelineTests) create("terminaltest") {
+            initWith(getByName("release"))
+            matchingFallbacks.add("release")
+            signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".terminaltest"
+            isDebuggable = false
+            isMinifyEnabled = false
+            isShrinkResources = false
+            isProfileable = true
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -110,6 +122,7 @@ android {
     }
     sourceSets {
         getByName("androidTest").assets.directories.add("$projectDir/schemas")
+        if (terminalPipelineTests) getByName("androidTest").kotlin.srcDir("src/terminaltestAndroidTest/java")
     }
     androidResources {
         generateLocaleConfig = true
