@@ -59,6 +59,7 @@ def sources():
         'app/src/terminaltest/java/me/rerere/rikkahub/pipeline/TerminalPipelineTestActivity.kt',
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPipelineInstrumentedTest.kt',
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPtyTransportInstrumentedTest.kt',
+        'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPipelineWorkload.kt',
         '.github/scripts/run-terminal-pipeline.py',
         'benchmarks/production_emulator.py',
         'gradle/libs.versions.toml', 'app/compose_compiler_config.conf',
@@ -231,7 +232,8 @@ def run():
         raise ValueError('; '.join(failed))
     if transport:
         probes = [json.loads(line.split('TRANSPORT_PROBE ', 1)[1]) for line in logcat.splitlines() if 'TRANSPORT_PROBE ' in line]
-        if len(probes) != 3 or {p['probe'] for p in probes} != {'androidPty', 'prootPipe', 'prootPty'}:
+        expected_probes = {'androidPty', 'prootPipe', 'prootPty', 'cookedLogin', 'directWorkload', 'managerPrintf', 'managerWorkload'}
+        if len(probes) != len(expected_probes) or {p['probe'] for p in probes} != expected_probes:
             raise ValueError('Missing transport probe matrix')
         if not all(p['matched'] and not p['timedOut'] and p['readerFailure'] is None for p in probes):
             raise ValueError('Transport probes failed')
@@ -346,6 +348,12 @@ def main():
         notice('error', 'Terminal pipeline failure', type(error).__name__ + ': ' + str(error)[:400])
         for name, excerpt in details:
             notice('error', 'Terminal pipeline ' + name, excerpt)
+        path = OUT / 'pipeline-logcat.txt'
+        if path.exists():
+            with path.open(errors='replace') as stream:
+                probes = [line.strip() for line in stream if 'TRANSPORT_PROBE ' in line]
+            if probes:
+                notice('error', 'Terminal transport probe values', '\n'.join(probes))
         return 1
 
 

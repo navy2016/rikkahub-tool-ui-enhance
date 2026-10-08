@@ -2,6 +2,7 @@ package me.rerere.rikkahub.pipeline
 
 import android.util.Log
 import kotlinx.coroutines.runBlocking
+import me.rerere.rikkahub.data.container.BackgroundProcessManager
 import me.rerere.rikkahub.data.container.NativePtyBridge
 import me.rerere.rikkahub.data.container.NativePtyProcess
 import me.rerere.rikkahub.data.container.PRootManager
@@ -24,6 +25,7 @@ import java.util.concurrent.TimeoutException
 class TerminalPtyTransportInstrumentedTest : KoinComponent {
     @get:Rule val timeout = Timeout.seconds(90)
     private val proot: PRootManager by inject()
+    private val manager: BackgroundProcessManager by inject()
 
     @Test fun transportNativeAndProotProduceExactFixedBytes() {
         assertTrue("Native PTY unavailable: ${NativePtyBridge.unavailableReason}", NativePtyBridge.isAvailable)
@@ -40,10 +42,57 @@ class TerminalPtyTransportInstrumentedTest : KoinComponent {
             runBlocking { proot.execNativePty("pipeline-transport", listOf("sh", "-c", "printf 'PROOT_PTY_READY\\n'"),
                 ptyMode = PtyMode.RAW) }
         }
+        val prefix = "export TERM=xterm-256color LINES=24 COLUMNS=80; export FORCE_COLOR=1 COLORTERM=truecolor; " +
+            "stty sane rows 24 cols 80 2>/dev/null || stty rows 24 cols 80 2>/dev/null || true; "
+        results += probe("cookedLogin", "COOKED_READY\r\n") {
+            runBlocking { proot.execNativePty("pipeline-transport", listOf("sh", "-lc", prefix + "printf 'COOKED_READY\\n'"),
+                ptyMode = PtyMode.COOKED) }
+        }
+        results += probe("directWorkload", TerminalPipelineWorkload.READY, persistent = true) {
+            runBlocking { proot.execNativePty("pipeline-transport",
+                listOf("sh", "-lc", prefix + "exec " + TerminalPipelineWorkload.command), ptyMode = PtyMode.COOKED) }
+        }
+        results += managerProbe("managerPrintf", "printf 'MANAGER_READY\\n'", "MANAGER_READY\r\n")
+        results += managerProbe("managerWorkload", TerminalPipelineWorkload.command, TerminalPipelineWorkload.READY)
         assertTrue("One or more transport probes failed; see TRANSPORT_PROBE scalar diagnostics", results.all { it })
     }
 
-    private fun probe(label: String, expected: String, create: () -> Process): Boolean {
+    private fun managerProbe(label: String, command: String, expected: String): Boolean {
+        val started = runBlocking { manager.startInteractiveSession("pipeline-transport", command, ptyMode = PtyMode.COOKED) }
+        if (!started.success) {
+            Log.i("TerminalPipelineTest", "TRANSPORT_PROBE " + JSONObject().put("probe", label).put("matched", false)
+                .put("timedOut", false).put("readerFailure", "start failed").put("stdoutBytes", 0).put("stderrBytes", 0))
+            return false
+        }
+        var contents = ""
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8)
+        while (System.nanoTime() < deadline) {
+            contents = manager.readInteractiveBuffer(started.processId).orEmpty()
+            if (contents == expected) break
+            Thread.sleep(20)
+        }
+        val info = manager.getProcess(started.processId)
+        val report = JSONObject().put("probe", label).put("matched", contents == expected).put("timedOut", contents != expected)
+            .put("readerFailure", JSONObject.NULL).put("stdoutBytes", contents.toByteArray().size).put("stderrBytes", 0)
+            .put("status", info?.status?.name).put("exit", info?.exitCode).put("backend", info?.terminalBackend)
+        started.pid?.let { pid -> scalarProcessState(pid, report) }
+        Log.i("TerminalPipelineTest", "TRANSPORT_PROBE $report")
+        runBlocking { manager.closeInteractiveSession(started.processId) }
+        manager.removeProcessRecord(started.processId)
+        return contents == expected
+    }
+
+    private fun scalarProcessState(pid: Int, report: JSONObject) {
+        runCatching {
+            File("/proc/$pid/status").useLines { lines ->
+                lines.filter { it.startsWith("State:") || it.startsWith("TracerPid:") || it.startsWith("Threads:") }
+                    .forEach { report.put(it.substringBefore(':'), it.substringAfter(':').trim()) }
+            }
+            report.put("wchan", File("/proc/$pid/wchan").readText().trim().take(100))
+        }
+    }
+
+    private fun probe(label: String, expected: String, persistent: Boolean = false, create: () -> Process): Boolean {
         val pool = Executors.newFixedThreadPool(2) { task -> Thread(task, "pipeline-probe-reader").apply { isDaemon = true } }
         var process: Process? = null
         var bytesOut = ByteArray(0)
@@ -54,7 +103,7 @@ class TerminalPtyTransportInstrumentedTest : KoinComponent {
         try {
             val child = create()
             process = child
-            val output = pool.submit<ByteArray> { readBounded(child.inputStream) }
+            val output = pool.submit<ByteArray> { readBounded(child.inputStream, if (persistent) expected.toByteArray().size else 4096) }
             val errors = pool.submit<ByteArray> { readBounded(child.errorStream) }
             try {
                 bytesOut = output.get(8, TimeUnit.SECONDS)
@@ -66,13 +115,7 @@ class TerminalPtyTransportInstrumentedTest : KoinComponent {
             }
             // Read process state before destroying; retain only numeric/state fields, not argv/env.
             val pid = (child as? NativePtyProcess)?.pidOrNull()
-            if (pid != null) runCatching {
-                File("/proc/$pid/status").useLines { lines ->
-                    lines.filter { it.startsWith("State:") || it.startsWith("TracerPid:") || it.startsWith("Threads:") }
-                        .forEach { report.put(it.substringBefore(':'), it.substringAfter(':').trim()) }
-                }
-                report.put("wchan", File("/proc/$pid/wchan").readText().trim().take(100))
-            }
+            if (pid != null) scalarProcessState(pid, report)
             report.put("alive", child.isAlive)
             if (!child.isAlive) report.put("exit", runCatching { child.exitValue() }.getOrDefault(-999))
         } catch (error: Exception) {
@@ -93,11 +136,11 @@ class TerminalPtyTransportInstrumentedTest : KoinComponent {
         return matched && bytesError.isEmpty() && !timedOut && readerFailure == null
     }
 
-    private fun readBounded(input: InputStream): ByteArray {
+    private fun readBounded(input: InputStream, limit: Int = 4096): ByteArray {
         val out = ByteArrayOutputStream()
         val bytes = ByteArray(512)
-        while (out.size() < 4_096) {
-            val read = input.read(bytes, 0, minOf(bytes.size, 4_096 - out.size()))
+        while (out.size() < limit) {
+            val read = input.read(bytes, 0, minOf(bytes.size, limit - out.size()))
             if (read < 0) break
             if (read > 0) out.write(bytes, 0, read)
         }

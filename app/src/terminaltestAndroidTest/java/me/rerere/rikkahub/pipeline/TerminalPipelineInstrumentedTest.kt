@@ -69,19 +69,7 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
         val launch = UUID.randomUUID().toString()
         val sandbox = "pipeline-$launch"
         // Cooked input keeps exact line semantics; echo is from the child only, no line-discipline echo.
-        val script = """
-            stty -echo -onlcr
-            printf '\033[?25lREADY\r\n'
-            while IFS= read -r line; do
-              if [ "${'$'}line" = SEED ]; then
-                i=0; while [ "${'$'}i" -lt 1100 ]; do printf 'history-%04d 中文\r\n' "${'$'}i"; i=${'$'}((i+1)); done
-                printf 'SEED_DONE\r\n'
-              else
-                printf 'ECHO:%s\r\n' "${'$'}line"
-              fi
-            done
-        """.trimIndent()
-        val command = "sh -c '" + script.replace("'", "'\"'\"'") + "'"
+        val command = TerminalPipelineWorkload.command
         val saved = runBlocking { settings.settingsFlow.first { !it.init } }
         val key = MessageDigest.getInstance("SHA-256").digest(command.toByteArray())
             .joinToString("") { "%02x".format(it) }
