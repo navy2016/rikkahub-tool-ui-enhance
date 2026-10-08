@@ -27,6 +27,7 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -552,6 +553,7 @@ class TerminalItemViewportInstrumentedTest {
         private val historyRows: Int = 1_000,
         terminalOverride: TerminalEmulator? = null,
         restored: TerminalViewportState? = null,
+        private val foreground: Color = Color.Unspecified,
     ) {
         val terminal = terminalOverride ?: TerminalEmulator(initialColumns = 80, initialRows = 24,
             maxScrollbackLines = historyRows).apply {
@@ -662,7 +664,7 @@ class TerminalItemViewportInstrumentedTest {
             val actualIme = WindowInsets.isImeVisible
             keyboard = LocalSoftwareKeyboardController.current
             SideEffect { if (systemIme) ime = actualIme }
-            val style = TextStyle(fontFamily = fontFamily, fontSize = fontSp.sp, lineHeight = fontSp.sp,
+            val style = TextStyle(color = foreground, fontFamily = fontFamily, fontSize = fontSp.sp, lineHeight = fontSp.sp,
                 platformStyle = PlatformTextStyle(includeFontPadding = false),
                 lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both))
             val textMeasurer = rememberTextMeasurer()

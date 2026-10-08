@@ -46,6 +46,11 @@ run_arm() {
   fi
 }
 
+if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
+  run_arm default-bottom TerminalDefaultBottomInstrumentedTest 240
+  exit "$overall_status"
+fi
+
 run_arm false
 run_arm true
 run_arm geometry TerminalTranscriptGeometryInstrumentedTest
@@ -57,5 +62,6 @@ run_arm measurement-node TerminalRowMeasurementInstrumentedTest
 run_arm text-compatibility TerminalTextCompatibilityInstrumentedTest
 run_arm item-viewport TerminalItemViewportInstrumentedTest
 run_arm ime-stable TerminalImeVirtualHistoryInstrumentedTest 240
+run_arm default-bottom TerminalDefaultBottomInstrumentedTest 240
 run_arm stability TerminalViewportStabilityInstrumentedTest 240
 exit "$overall_status"

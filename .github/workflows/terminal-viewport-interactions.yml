@@ -2,6 +2,12 @@ name: Terminal Viewport Interaction Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: 'all runs the complete regression; defaultBottom isolates the fresh-session bug'
+        type: choice
+        options: [all, defaultBottom]
+        default: all
   push:
     branches: [fix/terminal-viewport-semantic-reducer, opt/terminal-verified-a79e7b6]
     paths:
@@ -41,6 +47,8 @@ jobs:
   gestures:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -80,6 +88,13 @@ jobs:
       - name: Require both gesture arms and both chunk geometry modes
         if: always()
         run: |
+          if [ "$TERMINAL_VIEWPORT_SUITE" = defaultBottom ]; then
+            python3 .github/scripts/report-terminal-tests.py \
+              benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest \
+              --require-case-group 'defaultBottom:6'
+            exit $?
+          fi
           python3 .github/scripts/report-terminal-tests.py \
             benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest \
@@ -102,6 +117,8 @@ jobs:
             --require-case-group 'itemNative:20' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest \
             --require-case-group 'imeStable:6' \
+            --require-suite me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest \
+            --require-case-group 'defaultBottom:6' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest \
             --require-case-group 'stability:8'
       - name: Upload fixture APKs, JUnit and logcat
