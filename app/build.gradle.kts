@@ -123,7 +123,8 @@ android {
     sourceSets {
         getByName("androidTest").assets.directories.add("$projectDir/schemas")
         if (terminalPipelineTests) getByName("androidTest").kotlin.srcDir("src/terminaltestAndroidTest/java")
-        if (terminalPipelineTests) getByName("terminaltest").assets.srcDir(layout.buildDirectory.dir("generated/pipelineAssets"))
+        // CI builds this asset before invoking Gradle. AGP 9 forbids unresolved Providers in SourceSets.
+        if (terminalPipelineTests) getByName("terminaltest").assets.srcDir(layout.buildDirectory.dir("generated/pipelineAssets").get().asFile)
     }
     androidResources {
         generateLocaleConfig = true

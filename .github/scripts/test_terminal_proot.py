@@ -53,6 +53,7 @@ class TerminalProotOverlayTest(unittest.TestCase):
         lines = [line.strip() for line in gradle.splitlines() if 'generated/pipelineAssets' in line]
         self.assertEqual(1, len(lines))
         self.assertTrue(lines[0].startswith('if (terminalPipelineTests) getByName("terminaltest")'))
+        self.assertIn('.get().asFile)', lines[0])
         main = (ROOT / 'app/src/main/java/me/rerere/rikkahub/data/container/PRootManager.kt').read_text()
         self.assertNotIn('pipelineAssets', main)
         self.assertNotIn('fork-to-clone', main)
