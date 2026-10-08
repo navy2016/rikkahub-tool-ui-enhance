@@ -83,6 +83,25 @@ jobs:
                           remaining -= 1
                       previous.append(line)
               note('Original pipeline ' + name, lines)
+          # Fatal exceptions can occur after earlier expected test failures; never let the first
+          # three java.lang stack frames exhaust the diagnostic budget before the actual crash.
+          logcat = next(Path('original-pipeline').rglob('pipeline-logcat.txt'))
+          fatal, remaining = [], 0
+          with logcat.open(errors='replace') as stream:
+              for raw in stream:
+                  line = raw.rstrip()
+                  if 'FATAL EXCEPTION' in line:
+                      fatal, remaining = [], 32
+                  if remaining:
+                      fatal.append(line)
+                      remaining -= 1
+          if fatal:
+              note('Original pipeline fatal first', fatal[:14])
+              note('Original pipeline fatal continuation', fatal[14:])
+          instrument = next(Path('original-pipeline').rglob('instrumentation.log'))
+          with instrument.open(errors='replace') as stream:
+              callers = [line.rstrip() for line in stream if 'TerminalPipelineInstrumentedTest.exercise(' in line]
+          note('Original pipeline failure callers', callers)
           PY
   pipeline:
     if: ${{ inputs.evidence_run_id == '' }}
