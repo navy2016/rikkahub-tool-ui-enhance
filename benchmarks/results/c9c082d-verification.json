@@ -1,0 +1,1541 @@
+{
+  "source_sha": "c9c082deb59c03d21675fc9124556299e969eeb7",
+  "matrices": {
+    "baseline": {
+      "source_sha": "e8d3208d09559ad65b7557d5b206dccdc71c82c6",
+      "workflow_run": 37720935305,
+      "evidence_run": 37724074854,
+      "cases": 54,
+      "iterations": 162,
+      "verified_source_hashes": 42,
+      "target_apk_sha256": "087798bcf189d0592f02a63fd33723d345d701c38a582c1f4efac5afeb170827",
+      "evidence_json_sha256": "6e4d50d04e6301ba4a6107814597729779d8137f19963049eff8aa1130df66e3"
+    },
+    "candidate": {
+      "source_sha": "c9c082deb59c03d21675fc9124556299e969eeb7",
+      "workflow_run": 37724061734,
+      "evidence_run": 37726277181,
+      "cases": 54,
+      "iterations": 162,
+      "verified_source_hashes": 42,
+      "target_apk_sha256": "6b389b89ebcd72721fdeb7efb2a095f189732af7748139e0348c80cebfe44982",
+      "evidence_json_sha256": "b3de6968a77202be83f59f7d8e98899030ebd24cfc4535bb7d2a5adbde1f496f"
+    }
+  },
+  "verification": {
+    "release_jvm": {
+      "run": {
+        "id": 37722630316,
+        "head_sha": "c9c082deb59c03d21675fc9124556299e969eeb7",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/terminal-emulator-tests.yml",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37722630316"
+      },
+      "jobs": [
+        {
+          "id": 113133560682,
+          "name": "Run TerminalEmulator unit tests",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113133560682",
+          "annotations": [
+            {
+              "title": "Terminal regression test counts",
+              "message": "359 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.data.container.BunCompatibilitySourceTest: 4\nme.rerere.rikkahub.data.container.ControlInputTest: 6\nme.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest: 1\nme.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest: 13\nme.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest: 1\nme.rerere.rikkahub.data.container.PtyModeInferenceTest: 7\nme.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest: 18\nme.rerere.rikkahub.data.container.TerminalFastFlingTest: 15\nme.rerere.rikkahub.data.container.TerminalHistorySnapshotTest: 12\nme.rerere.rikkahub.data.container.TerminalItemViewportTest: 20\nme.rerere.rikkahub.data.container.TerminalLazyViewportAdapterTest: 7\nme.rerere.rikkahub.data.container.TerminalLazyViewportMeasurementTest: 14\nme.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest: 5\nme.rerere.rikkahub.data.container.TerminalRenderPreferencesTest: 6\nme.rerere.rikkahub.data.container.TerminalRenderedRowsTest: 29\nme.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest: 22\nme.rerere.rikkahub.data.container.TerminalTranscriptWidthIndexTest: 18\nme.rerere.rikkahub.data.container.TerminalUiSourceTest: 11\nme.rerere.rikkahub.data.container.TerminalViewportControllerTest: 29\nme.rerere.rikkahub.data.container.TerminalViewportItemGeometryTest: 6\nme.rerere.rikkahub.data.container.TerminalViewportReducerTest: 27\nme.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest: 4\nme.rerere.rikkahub.utils.TerminalEmulatorTest: 84",
+              "annotation_level": "notice"
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 11526806166,
+          "name": "terminal-emulator-test-reports",
+          "size_in_bytes": 92048,
+          "expired": false,
+          "expires_at": "2026-10-15T03:33:12Z",
+          "digest": "sha256:c35949daf0df1305c03c208a51900dcf8b5eb3f9630105cf02b73cb7a8ef7caf"
+        }
+      ]
+    },
+    "viewport_regression": {
+      "run": {
+        "id": 37722630336,
+        "head_sha": "c9c082deb59c03d21675fc9124556299e969eeb7",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/terminal-viewport-interactions.yml",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37722630336"
+      },
+      "jobs": [
+        {
+          "id": 113133560706,
+          "name": "gestures",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113133560706",
+          "annotations": [
+            {
+              "title": "Terminal regression test counts",
+              "message": "116 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest: 7\nme.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest: 6\nme.rerere.rikkahub.viewporttest.TerminalIntrinsicWidthInstrumentedTest: 7\nme.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest: 20\nme.rerere.rikkahub.viewporttest.TerminalLazyNaturalGeometryInstrumentedTest: 22\nme.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest: 2\nme.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest: 8\nme.rerere.rikkahub.viewporttest.TerminalTextCompatibilityInstrumentedTest: 3\nme.rerere.rikkahub.viewporttest.TerminalTranscriptGeometryInstrumentedTest: 8\nme.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest: 24\nme.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest: 9",
+              "annotation_level": "notice"
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 11526742671,
+          "name": "terminal-viewport-interactions-c9c082deb59c03d21675fc9124556299e969eeb7",
+          "size_in_bytes": 11373790,
+          "expired": false,
+          "expires_at": "2026-10-22T03:42:17Z",
+          "digest": "sha256:c166f46447b9932bfbf71b2b5f50279b834b83bf05976ad47be9be661ef33e93"
+        }
+      ]
+    },
+    "production_smoke": {
+      "run": {
+        "id": 37722630303,
+        "head_sha": "c9c082deb59c03d21675fc9124556299e969eeb7",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/terminal-production-benchmark.yml",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37722630303"
+      },
+      "jobs": [
+        {
+          "id": 113133560641,
+          "name": "build",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113133560641",
+          "annotations": [
+            {
+              "title": "Production benchmark build",
+              "message": "{\"sourceSha\": \"c9c082deb59c03d21675fc9124556299e969eeb7\", \"buildRun\": \"37722630303\", \"suite\": \"production-viewport-v4\", \"apks\": {\"target\": {\"file\": \"target.apk\", \"sha256\": \"453319b34629b866f024bb796bf13439f49e26f39b4ffe340a342d131a9c0220\", \"bytes\": 24522423, \"package\": \"me.rerere.rikkahub.terminalbenchmark\"}, \"driver\": {\"file\": \"driver.apk\", \"sha256\": \"98c363bf21c2edaa7f2dbcd8f7a6fa1add7afc2dd94ce31bafdef845256e4aa1\", \"bytes\": 46274753, \"package\": \"me.rerere.rikkahub.terminalbenchmark.test\"}}, \"instrumentation\": \"me.rerere.rikkahub.terminalbenchmark.test/androidx.test.runner.AndroidJUnitRunner\"}",
+              "annotation_level": "notice"
+            },
+            {
+              "title": "Terminal regression test counts",
+              "message": "25 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.benchmark.ProductionBenchmarkSpecTest: 6\nme.rerere.rikkahub.benchmark.TerminalBenchmarkLayoutTest: 10\nme.rerere.rikkahub.benchmark.TerminalBenchmarkWidthIndexTest: 8\nme.rerere.rikkahub.benchmark.TerminalBenchmarkWorkloadTest: 1",
+              "annotation_level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113134474646,
+          "name": "scenario (activeRowUpdate)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113134474646",
+          "annotations": [
+            {
+              "title": "Production viewport activeRowUpdate",
+              "message": "production-viewport-v4 activeRowUpdate sha=c9c082deb59c03d21675fc9124556299e969eeb7 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 4682.77 | 156.08 | 109.27 | — | 107.40\n1000 | lazyHistory | 1 | — | 4768.22 | 158.92 | 115.30 | 0.78 | 98.36\n1000 | lazyHistoryIme | 1 | — | 4527.14 | 150.78 | 109.97 | 0.48 | 98.32",
+              "annotation_level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113134474671,
+          "name": "scenario (detachRestore)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113134474671",
+          "annotations": [
+            {
+              "title": "Production viewport detachRestore",
+              "message": "production-viewport-v4 detachRestore sha=c9c082deb59c03d21675fc9124556299e969eeb7 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 760.47 | — | 423.28 | — | 137.99\n1000 | lazyHistory | 1 | — | 373.03 | — | 123.06 | 37.82 | 102.00\n1000 | lazyHistoryIme | 1 | — | 299.73 | — | 103.78 | 28.92 | 102.04",
+              "annotation_level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113134474705,
+          "name": "scenario (semanticJump)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113134474705",
+          "annotations": [
+            {
+              "title": "Production viewport semanticJump",
+              "message": "production-viewport-v4 semanticJump sha=c9c082deb59c03d21675fc9124556299e969eeb7 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 1238.83 | — | 103.20 | — | 105.59\n1000 | lazyHistory | 1 | — | 779.57 | — | 128.06 | — | 110.72\n1000 | lazyHistoryIme | 1 | — | 722.04 | — | 111.76 | — | 110.07",
+              "annotation_level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113134474710,
+          "name": "scenario (imeRoundTrip)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113134474710",
+          "annotations": [
+            {
+              "title": "Production viewport imeRoundTrip",
+              "message": "production-viewport-v4 imeRoundTrip sha=c9c082deb59c03d21675fc9124556299e969eeb7 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 4107.61 | 212.17 | 240.80 | — | 106.56\n1000 | lazyHistory | 1 | — | 6318.43 | 229.97 | 438.52 | 46.32 | 132.12\n1000 | lazyHistoryIme | 1 | — | 4286.27 | 221.84 | 236.93 | 0.26 | 97.07",
+              "annotation_level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113134474724,
+          "name": "scenario (initialCompose)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113134474724",
+          "annotations": [
+            {
+              "title": "Production viewport initialCompose",
+              "message": "production-viewport-v4 initialCompose sha=c9c082deb59c03d21675fc9124556299e969eeb7 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | 246.87 | — | — | 139.62 | — | 104.44\n1000 | lazyHistory | 1 | 276.63 | — | — | 119.01 | 24.15 | 93.44\n1000 | lazyHistoryIme | 1 | 288.56 | — | — | 120.01 | 27.57 | 93.61",
+              "annotation_level": "notice"
+            }
+          ]
+        },
+        {
+          "id": 113134474731,
+          "name": "scenario (appendAndTrim)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113134474731",
+          "annotations": [
+            {
+              "title": "Production viewport appendAndTrim",
+              "message": "production-viewport-v4 appendAndTrim sha=c9c082deb59c03d21675fc9124556299e969eeb7 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 4153.31 | 138.42 | 93.57 | — | 132.17\n1000 | lazyHistory | 1 | — | 4788.73 | 159.61 | 89.65 | 2.07 | 101.70\n1000 | lazyHistoryIme | 1 | — | 4794.78 | 159.81 | 88.56 | 1.09 | 101.59",
+              "annotation_level": "notice"
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 11527110419,
+          "name": "production-viewport-semanticJump-c9c082deb59c03d21675fc9124556299e969eeb7-1",
+          "size_in_bytes": 980862,
+          "expired": false,
+          "expires_at": "2026-10-22T03:33:26Z",
+          "digest": "sha256:f038885d76b6875ed7021db68f1a72b2475c17a2df77de93a3149c4b9cd286c6"
+        },
+        {
+          "id": 11526886230,
+          "name": "production-viewport-detachRestore-c9c082deb59c03d21675fc9124556299e969eeb7-1",
+          "size_in_bytes": 767293,
+          "expired": false,
+          "expires_at": "2026-10-22T03:35:34Z",
+          "digest": "sha256:450ec6f5e562eb6fa3ab6de6501fc95396a52462079560e63f975aa7be148942"
+        },
+        {
+          "id": 11526593546,
+          "name": "production-viewport-imeRoundTrip-c9c082deb59c03d21675fc9124556299e969eeb7-1",
+          "size_in_bytes": 2356407,
+          "expired": false,
+          "expires_at": "2026-10-22T03:35:19Z",
+          "digest": "sha256:695edf7d340a3f5e96c801b8c59fcc573ad57a4baff4e30c10ec54a999c439bd"
+        },
+        {
+          "id": 11526542296,
+          "name": "production-viewport-appendAndTrim-c9c082deb59c03d21675fc9124556299e969eeb7-1",
+          "size_in_bytes": 2716545,
+          "expired": false,
+          "expires_at": "2026-10-22T03:32:46Z",
+          "digest": "sha256:8d3ace4842f31661dedea1ee3ae00abd733cee4ba99fd2d25cbf3405b9fb6df8"
+        },
+        {
+          "id": 11526523026,
+          "name": "production-benchmark-build-evidence-c9c082deb59c03d21675fc9124556299e969eeb7-1",
+          "size_in_bytes": 7454,
+          "expired": false,
+          "expires_at": "2026-10-22T03:28:52Z",
+          "digest": "sha256:882619ff88fa3367dcfc73c7ea72333298b46899ec243bc9e5abd59b641b0dfc"
+        },
+        {
+          "id": 11526164811,
+          "name": "production-benchmark-build-c9c082deb59c03d21675fc9124556299e969eeb7-1",
+          "size_in_bytes": 37867436,
+          "expired": false,
+          "expires_at": "2026-10-22T03:28:49Z",
+          "digest": "sha256:5704fce0e4874c3cf07efeb798cd25bd208f14c3661258dd10247055530a1a99"
+        },
+        {
+          "id": 11525584703,
+          "name": "production-viewport-activeRowUpdate-c9c082deb59c03d21675fc9124556299e969eeb7-1",
+          "size_in_bytes": 2331548,
+          "expired": false,
+          "expires_at": "2026-10-22T03:31:15Z",
+          "digest": "sha256:6b75de72c0aec1d81b21112117119295a6b8a663b2751c788f1140ce0129b4d3"
+        },
+        {
+          "id": 11525569678,
+          "name": "production-viewport-initialCompose-c9c082deb59c03d21675fc9124556299e969eeb7-1",
+          "size_in_bytes": 735675,
+          "expired": false,
+          "expires_at": "2026-10-22T03:30:42Z",
+          "digest": "sha256:04efcf669dc3eb2a95c2b3c820ee26038906270de2d105afc7bae35d03daf198"
+        }
+      ]
+    },
+    "release_build": {
+      "run": {
+        "id": 37722630334,
+        "head_sha": "c9c082deb59c03d21675fc9124556299e969eeb7",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/release.yml",
+        "event": "push",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37722630334"
+      },
+      "jobs": [
+        {
+          "id": 113133560686,
+          "name": "build",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113133560686",
+          "annotations": []
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 11526304905,
+          "name": "rikkahub-release-c9c082deb59c03d21675fc9124556299e969eeb7",
+          "size_in_bytes": 81438380,
+          "expired": false,
+          "expires_at": "2026-10-22T03:32:15Z",
+          "digest": "sha256:beaf70b4edaf59a52bf10466d5994ef35a579f673f91f71ced7e5bd0912fdc58"
+        }
+      ]
+    },
+    "apk_verification": {
+      "run": {
+        "id": 37724070805,
+        "head_sha": "c9c082deb59c03d21675fc9124556299e969eeb7",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/verify-release-apk.yml",
+        "event": "workflow_dispatch",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37724070805"
+      },
+      "jobs": [
+        {
+          "id": 113138120279,
+          "name": "verify",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113138120279",
+          "annotations": [
+            {
+              "title": "Release APK verified",
+              "message": "{\"source_sha\": \"c9c082deb59c03d21675fc9124556299e969eeb7\", \"release_run_id\": \"37722630334\", \"apk\": \"app-release.apk\", \"bytes\": 83699299, \"sha256\": \"18ec80ac69d6569362a2f2529ba5beb893b316e6caaa73bb49720e9d0b3cd508\", \"package\": \"me.rerere.rikkahub.dev.next.mod\", \"version_code\": \"151\", \"version_name\": \"2.1.62\", \"debuggable\": false, \"native_abis\": [\"arm64-v8a\"], \"signer_certificate_sha256\": [\"f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265\"], \"signature_verified\": true, \"zip_verified\": true}",
+              "annotation_level": "notice"
+            }
+          ]
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 11527575102,
+          "name": "release-apk-verification-c9c082deb59c03d21675fc9124556299e969eeb7",
+          "size_in_bytes": 4579,
+          "expired": false,
+          "expires_at": "2026-10-22T03:43:41Z",
+          "digest": "sha256:8271fdad1f06cd3762a9ab23910c75bf8f7832cdfa56fb2a01f408dedb2c5d5a"
+        }
+      ]
+    }
+  },
+  "apk": {
+    "source_sha": "c9c082deb59c03d21675fc9124556299e969eeb7",
+    "release_run_id": "37722630334",
+    "apk": "app-release.apk",
+    "bytes": 83699299,
+    "sha256": "18ec80ac69d6569362a2f2529ba5beb893b316e6caaa73bb49720e9d0b3cd508",
+    "package": "me.rerere.rikkahub.dev.next.mod",
+    "version_code": "151",
+    "version_name": "2.1.62",
+    "debuggable": false,
+    "native_abis": [
+      "arm64-v8a"
+    ],
+    "signer_certificate_sha256": [
+      "f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265"
+    ],
+    "signature_verified": true,
+    "zip_verified": true
+  },
+  "work": {
+    "unique_height_tokens": 108,
+    "records_by_scenario": {
+      "semanticJump": {
+        "WIDTH_WORK": 27,
+        "HEIGHT_WORK": 27
+      },
+      "initialCompose": {},
+      "imeRoundTrip": {
+        "IME_WORK": 27,
+        "WIDTH_WORK": 27,
+        "HEIGHT_WORK": 27
+      },
+      "activeRowUpdate": {
+        "WIDTH_WORK": 27,
+        "HEIGHT_WORK": 27
+      },
+      "detachRestore": {},
+      "appendAndTrim": {
+        "WIDTH_WORK": 27,
+        "HEIGHT_WORK": 27
+      }
+    },
+    "summary": [
+      {
+        "scenario": "activeRowUpdate",
+        "history_rows": 1000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            1000,
+            1000
+          ],
+          "retainedBlocks": [
+            8,
+            8
+          ]
+        }
+      },
+      {
+        "scenario": "activeRowUpdate",
+        "history_rows": 1000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "activeRowUpdate",
+        "history_rows": 1000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "activeRowUpdate",
+        "history_rows": 5000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            5000,
+            5000
+          ],
+          "retainedBlocks": [
+            40,
+            40
+          ]
+        }
+      },
+      {
+        "scenario": "activeRowUpdate",
+        "history_rows": 5000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "activeRowUpdate",
+        "history_rows": 5000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "activeRowUpdate",
+        "history_rows": 10000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            10000,
+            10000
+          ],
+          "retainedBlocks": [
+            79,
+            79
+          ]
+        }
+      },
+      {
+        "scenario": "activeRowUpdate",
+        "history_rows": 10000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "activeRowUpdate",
+        "history_rows": 10000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "appendAndTrim",
+        "history_rows": 1000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            6192,
+            6192
+          ],
+          "blocksMeasured": [
+            60,
+            60
+          ],
+          "historyReused": [
+            23808,
+            23808
+          ],
+          "directoryVisits": [
+            492,
+            492
+          ],
+          "retainedRows": [
+            1000,
+            1000
+          ],
+          "retainedBlocks": [
+            9,
+            9
+          ]
+        }
+      },
+      {
+        "scenario": "appendAndTrim",
+        "history_rows": 1000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "appendAndTrim",
+        "history_rows": 1000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "appendAndTrim",
+        "history_rows": 5000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            4080,
+            4080
+          ],
+          "blocksMeasured": [
+            60,
+            60
+          ],
+          "historyReused": [
+            145920,
+            145920
+          ],
+          "directoryVisits": [
+            2400,
+            2400
+          ],
+          "retainedRows": [
+            5000,
+            5000
+          ],
+          "retainedBlocks": [
+            40,
+            40
+          ]
+        }
+      },
+      {
+        "scenario": "appendAndTrim",
+        "history_rows": 5000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "appendAndTrim",
+        "history_rows": 5000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "appendAndTrim",
+        "history_rows": 10000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            4320,
+            4320
+          ],
+          "blocksMeasured": [
+            60,
+            60
+          ],
+          "historyReused": [
+            295680,
+            295680
+          ],
+          "directoryVisits": [
+            4740,
+            4740
+          ],
+          "retainedRows": [
+            10000,
+            10000
+          ],
+          "retainedBlocks": [
+            79,
+            79
+          ]
+        }
+      },
+      {
+        "scenario": "appendAndTrim",
+        "history_rows": 10000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "appendAndTrim",
+        "history_rows": 10000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "imeRoundTrip",
+        "history_rows": 1000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            1000,
+            1000
+          ],
+          "retainedBlocks": [
+            8,
+            8
+          ]
+        }
+      },
+      {
+        "scenario": "imeRoundTrip",
+        "history_rows": 1000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            1000,
+            1000
+          ],
+          "blocksMeasured": [
+            8,
+            8
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            8,
+            8
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "imeRoundTrip",
+        "history_rows": 1000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "imeRoundTrip",
+        "history_rows": 5000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            5000,
+            5000
+          ],
+          "retainedBlocks": [
+            40,
+            40
+          ]
+        }
+      },
+      {
+        "scenario": "imeRoundTrip",
+        "history_rows": 5000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            5000,
+            5000
+          ],
+          "blocksMeasured": [
+            40,
+            40
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            40,
+            40
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "imeRoundTrip",
+        "history_rows": 5000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "imeRoundTrip",
+        "history_rows": 10000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            10000,
+            10000
+          ],
+          "retainedBlocks": [
+            79,
+            79
+          ]
+        }
+      },
+      {
+        "scenario": "imeRoundTrip",
+        "history_rows": 10000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            10000,
+            10000
+          ],
+          "blocksMeasured": [
+            79,
+            79
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            79,
+            79
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "imeRoundTrip",
+        "history_rows": 10000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "semanticJump",
+        "history_rows": 1000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            1000,
+            1000
+          ],
+          "retainedBlocks": [
+            8,
+            8
+          ]
+        }
+      },
+      {
+        "scenario": "semanticJump",
+        "history_rows": 1000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "semanticJump",
+        "history_rows": 1000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "semanticJump",
+        "history_rows": 5000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            5000,
+            5000
+          ],
+          "retainedBlocks": [
+            40,
+            40
+          ]
+        }
+      },
+      {
+        "scenario": "semanticJump",
+        "history_rows": 5000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "semanticJump",
+        "history_rows": 5000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "semanticJump",
+        "history_rows": 10000,
+        "mode": "chunkedLayers",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            10000,
+            10000
+          ],
+          "retainedBlocks": [
+            79,
+            79
+          ]
+        }
+      },
+      {
+        "scenario": "semanticJump",
+        "history_rows": 10000,
+        "mode": "lazyHistory",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      },
+      {
+        "scenario": "semanticJump",
+        "history_rows": 10000,
+        "mode": "lazyHistoryIme",
+        "repetitions": 3,
+        "ranges": {
+          "historyRead": [
+            0,
+            0
+          ],
+          "blocksMeasured": [
+            0,
+            0
+          ],
+          "historyReused": [
+            0,
+            0
+          ],
+          "directoryVisits": [
+            0,
+            0
+          ],
+          "retainedRows": [
+            0,
+            0
+          ],
+          "retainedBlocks": [
+            0,
+            0
+          ]
+        }
+      }
+    ]
+  },
+  "local_script_tests": {
+    "benchmark": 56,
+    "diagnostics": 15
+  },
+  "boundaries": [
+    "Separate runners are not performance A/B.",
+    "Work counts are height-registry reads, not Text layout calls.",
+    "Initial/remount work records are absent, not zero.",
+    "Full page / PTY echo / 30-minute phone stress not yet verified."
+  ]
+}

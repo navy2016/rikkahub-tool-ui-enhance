@@ -12,6 +12,10 @@
 该会话的 eager 实测几何路径会掩盖此缺陷。旧 V3 使用同一 nominal cell 公式判定默认完成，
 不能作为此缺陷不存在的证据。当前修复要求普通 eager 从首次布局采用实测行高，保持默认
 CHUNKED_LAYERS 和 TUI／全网格策略不变；基准协议升为 V4，不重标旧测量结果。
+`c9c082d` 完成按不可变历史块复用真实行高：行的标量 token 只可撤销对应当前块，旧 token
+不能撤销替换块；不完整块／几何不能发布，允许已验证完整块在重试中保留。新旧 V4 各
+54 用例／162 测量通过；新版本 359 JVM、116 视口测试通过。证据见
+`benchmarks/results/c9c082d-eager-height-blocks.md`。不可将独立 Runner 结果解释为受控提速。
 
 ## Build, Test, and Development Commands
 

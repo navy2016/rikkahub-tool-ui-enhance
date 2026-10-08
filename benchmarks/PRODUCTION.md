@@ -158,6 +158,15 @@ work. This benchmark does not claim those end-to-end checks or change any status
 
 ## Verified checkpoints
 
+- [c9c082d immutable-block eager height index](results/c9c082d-eager-height-blocks.md):
+  359 Release JVM, 116 viewport instrumented and 18 smoke cases passed. Both the bottom-fixed
+  e8d3208 baseline and c9c082d complete V4 matrices passed all 54 cases / 162 iterations, with
+  independent six-scenario provenance and 42 source hashes each. In each 10k default append round,
+  30 updates read 4,320 historical heights and reuse 295,680; 60 boundary blocks are measured.
+  Default active-row output keeps zero history reads. This proves bounded repeated work, not a
+  controlled old/new speedup. Cold eager mounting and real-page/PTY validation remain follow-up.
+  Release build `37722630334`, verification `37724070805`; user controls and bottom fix unchanged.
+
 - [807d2f0 bounded screen-width cache](results/807d2f0-active-row-v3.md):
   forked `opt/terminal-verified-a79e7b6` from verified local `a79e7b6`, without merging later commits
   on the original remote branch. Only the production width index changes relative to that base.

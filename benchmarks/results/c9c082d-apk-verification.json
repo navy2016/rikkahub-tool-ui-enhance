@@ -1,0 +1,19 @@
+{
+  "source_sha": "c9c082deb59c03d21675fc9124556299e969eeb7",
+  "release_run_id": "37722630334",
+  "apk": "app-release.apk",
+  "bytes": 83699299,
+  "sha256": "18ec80ac69d6569362a2f2529ba5beb893b316e6caaa73bb49720e9d0b3cd508",
+  "package": "me.rerere.rikkahub.dev.next.mod",
+  "version_code": "151",
+  "version_name": "2.1.62",
+  "debuggable": false,
+  "native_abis": [
+    "arm64-v8a"
+  ],
+  "signer_certificate_sha256": [
+    "f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265"
+  ],
+  "signature_verified": true,
+  "zip_verified": true
+}
