@@ -40,6 +40,13 @@ prompt and pause an Activity that Compose instrumentation needs RESUMED. This do
 production app's manifest or runtime permission policy. Test Activity configuration handling matches
 RouteActivity and emits fixed lifecycle/focus probes for diagnosing lost UI roots.
 
+The x86_64 guest additionally needs the [pinned test-only PRoot fork overlay](proot-x86_64/README.md):
+Android rejects musl's legacy fork, which otherwise aborts the existing stty preamble with exit 2.
+The dedicated test asset converts it to clone(SIGCHLD); normal arm64 Release stays unchanged.
+Every test manifest and result records the overlay, compiler, patch and source hashes. `suite=all`
+runs the transport preflight first and the full-page samples second using the same APK/device,
+preserving their separate logs. A transport failure is never ignored to proceed to page timing.
+
 This first step measures the current renderer without changing output batching, synchronized-output
 hold, TUI resize, scroll animation handoff or the renderer default. It is a diagnostic baseline; no
 speedup is established until a controlled same-device comparison succeeds.

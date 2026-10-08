@@ -123,6 +123,7 @@ android {
     sourceSets {
         getByName("androidTest").assets.directories.add("$projectDir/schemas")
         if (terminalPipelineTests) getByName("androidTest").kotlin.srcDir("src/terminaltestAndroidTest/java")
+        if (terminalPipelineTests) getByName("terminaltest").assets.srcDir(layout.buildDirectory.dir("generated/pipelineAssets"))
     }
     androidResources {
         generateLocaleConfig = true

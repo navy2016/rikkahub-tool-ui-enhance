@@ -6,7 +6,7 @@ on:
       suite:
         description: 'Full page samples or bounded transport preflight'
         type: choice
-        options: [pipeline, transport]
+        options: [pipeline, transport, all]
         default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'
@@ -27,6 +27,9 @@ on:
       - 'app/build.gradle.kts'
       - '.github/scripts/run-terminal-pipeline.py'
       - '.github/scripts/test_terminal_pipeline.py'
+      - '.github/scripts/build-terminal-proot.py'
+      - '.github/scripts/test_terminal_proot.py'
+      - 'benchmarks/proot-x86_64/**'
       - '.github/workflows/terminal-pipeline-tests.yml'
       - 'benchmarks/production_emulator.py'
       - 'gradle/libs.versions.toml'
@@ -126,6 +129,8 @@ jobs:
         with:
           node-version: '20'
       - uses: gradle/actions/setup-gradle@v4
+      - name: Build pinned x86_64 fork-compatibility asset for test variant only
+        run: python3 .github/scripts/build-terminal-proot.py
       - name: Validate diagnostics and build Release-derived full-page test pair
         run: |
           python3 -m unittest discover -s .github/scripts -p 'test_*.py'
@@ -143,5 +148,6 @@ jobs:
           path: |
             artifacts/terminal-pipeline/
             artifacts/terminal-validation/
+            artifacts/pipeline-proot-build/build.log
           if-no-files-found: error
           retention-days: 14

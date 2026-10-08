@@ -208,13 +208,14 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
         }
     }
 
-    private fun outputHeight(): Int = compose.onNodeWithTag("terminal-trace-output").fetchSemanticsNode().size.height
+    private fun outputHeight(): Int = compose.onNodeWithTag("terminal-trace-output", useUnmergedTree = true)
+        .fetchSemanticsNode().size.height
 
     private fun waitVisible(marker: String, exact: Boolean = true) {
         try {
             compose.waitUntil(20_000) {
                 val viewport = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.TestTag,
-                    "terminal-trace-output")).fetchSemanticsNodes().singleOrNull() ?: return@waitUntil false
+                    "terminal-trace-output"), useUnmergedTree = true).fetchSemanticsNodes().singleOrNull() ?: return@waitUntil false
                 compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
                     .fetchSemanticsNodes().any { node ->
                         val top = node.positionInRoot.y - viewport.positionInRoot.y
@@ -252,7 +253,7 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
             .fetchSemanticsNodes().last { n -> n.config[SemanticsProperties.Text].any {
                 if (exact) it.text.trimEnd() == marker else it.text.contains(marker)
             } }
-        val viewport = compose.onNodeWithTag("terminal-trace-output").fetchSemanticsNode()
+        val viewport = compose.onNodeWithTag("terminal-trace-output", useUnmergedTree = true).fetchSemanticsNode()
         val top = node.positionInRoot.y - viewport.positionInRoot.y
         assertTrue("Actual echo row outside viewport: top=$top height=${node.size.height} viewport=${viewport.size.height}",
             top >= -1f && top + node.size.height <= viewport.size.height + 1f)

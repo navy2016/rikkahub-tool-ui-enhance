@@ -61,6 +61,8 @@ def sources():
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPtyTransportInstrumentedTest.kt',
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPipelineWorkload.kt',
         '.github/scripts/run-terminal-pipeline.py',
+        '.github/scripts/build-terminal-proot.py',
+        'benchmarks/proot-x86_64/fork-to-clone.patch',
         'benchmarks/production_emulator.py',
         'gradle/libs.versions.toml', 'app/compose_compiler_config.conf',
         'app/src/main/res/font/jetbrains_mono.ttf',
@@ -75,6 +77,9 @@ def output(command, seconds=30):
 def prepare():
     sha, run = identity()
     OUT.mkdir(parents=True, exist_ok=True)
+    overlay = json.loads((OUT / 'proot-overlay.json').read_text())
+    if overlay['source_sha'] != sha or overlay['build_run'] != run or not overlay['overlay_only']:
+        raise ValueError('Test-only PRoot overlay provenance mismatch')
     tools = sorted((Path(os.environ['ANDROID_HOME']) / 'build-tools').glob('*/aapt'),
                    key=lambda p: tuple(int(n) for n in re.findall(r'\d+', p.parent.name)))[-1].parent
     apks = {}
@@ -102,14 +107,19 @@ def prepare():
                     raise ValueError('Embedded target revision mismatch')
                 if 'lib/x86_64/librikkahub-pty.so' not in archive.namelist():
                     raise ValueError('Missing x86_64 native PTY')
+                if hashlib.sha256(archive.read('assets/proot/proot-x86_64')).hexdigest() != overlay['overlay_sha256']:
+                    raise ValueError('Missing test-only PRoot fork compatibility overlay')
+                for name in ('proot-aarch64', 'loader-x86_64', 'loader32-x86_64', 'libtalloc-x86_64.so.2'):
+                    if hashlib.sha256(archive.read('assets/proot/' + name)).hexdigest() != digest(ROOT / 'app/src/main/assets/proot' / name):
+                        raise ValueError('Unexpected production runtime asset modification: ' + name)
         apks[role] = dict(file=str(apk.relative_to(ROOT)), sha256=digest(apk), bytes=apk.stat().st_size,
                           package=package, certificate_sha256=certificates)
     if apks['target']['certificate_sha256'] != apks['test']['certificate_sha256']:
         raise ValueError('Instrumentation signer differs from target')
     manifest = dict(suite='terminal-pipeline-v1', sourceSha=sha, runId=run, sources=sources(), apks=apks,
-                    target_debuggable=False, target_minified=False, target_release_derived=True)
+                    target_debuggable=False, target_minified=False, target_release_derived=True, proot_overlay=overlay)
     (OUT / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
-    notice('notice', 'Terminal pipeline APK identity', json.dumps({k: v for k, v in manifest.items() if k != 'sources'}))
+    notice('notice', 'Terminal pipeline APK identity', json.dumps({k: v for k, v in manifest.items() if k not in ('sources', 'proot_overlay')}))
 
 
 def validate_samples(lines):
@@ -165,7 +175,7 @@ def require_instrumentation(text, expected=3):
         raise ValueError('Pipeline instrumentation failed or skipped a case')
 
 
-def run():
+def run(suite=None):
     sha, run_id = identity()
     manifest = json.loads((OUT / 'manifest.json').read_text())
     if manifest['sourceSha'] != sha or manifest['runId'] != run_id or manifest['sources'] != sources():
@@ -195,7 +205,7 @@ def run():
         ('fingerprint', ['getprop', 'ro.build.fingerprint']), ('size', ['wm', 'size']),
         ('density', ['wm', 'density']), ('ime', ['settings', 'get', 'secure', 'default_input_method']))}
     (OUT / 'device.json').write_text(json.dumps(device, indent=2) + '\n')
-    transport = os.environ.get('TERMINAL_PIPELINE_SUITE', 'pipeline') == 'transport'
+    transport = (suite or os.environ.get('TERMINAL_PIPELINE_SUITE', 'pipeline')) == 'transport'
     methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
         'pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
         'pipelineStableVirtualPtyEchoKeyboardAndRemount')
@@ -309,7 +319,18 @@ def emulator():
             guest.wait_for_boot(process, env)
             os.environ.update(PATH=env['PATH'], ANDROID_SERIAL=guest.SERIAL)
             output(['adb', 'shell', 'input', 'keyevent', '82'])
-            run()
+            if os.environ.get('TERMINAL_PIPELINE_SUITE') == 'all':
+                run('transport')
+                # Keep the successful preflight's logs; the page run has independent lifecycle,
+                # fresh captures and completion receipts but uses the very same APK and guest.
+                import shutil
+                preflight = OUT / 'transport-preflight'
+                preflight.mkdir(exist_ok=True)
+                for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
+                    shutil.copyfile(OUT / name, preflight / name)
+                run('pipeline')
+            else:
+                run()
     finally:
         guest.stop_emulator(process, env)
 
