@@ -62,7 +62,10 @@ class TerminalPanelSubscriptionInstrumentedTest {
         val beforeOld = legacy.compositions
         val beforeNew = projected.compositions
         repeat(30) { index ->
-            compose.runOnIdle { controller.restoreItemAnchor(ViewportAnchor(100L + index, index % 20), 20) }
+            compose.runOnIdle {
+                controller.restoreItemAnchor(
+                    ViewportAnchor(100L + index, index % 20, screenGeneration = null, historyGeneration = null), 20)
+            }
             compose.waitForIdle() // Every update gets a completed composition, not a conflated burst.
         }
         repeat(12) {
@@ -103,7 +106,9 @@ class TerminalPanelSubscriptionInstrumentedTest {
         assertTrue(counts.values.drop(before).isNotEmpty())
         assertTrue("old controller value leaked into first replacement composition", counts.values.drop(before).all { !it })
         val replaced = counts.compositions
-        compose.runOnIdle { old.restoreItemAnchor(ViewportAnchor(300, 5), 20) }
+        compose.runOnIdle {
+            old.restoreItemAnchor(ViewportAnchor(300, 5, screenGeneration = null, historyGeneration = null), 20)
+        }
         compose.waitForIdle()
         assertEquals(replaced, counts.compositions)
         compose.runOnIdle { replacement.setFollow(true, 0) }
@@ -127,7 +132,9 @@ class TerminalPanelSubscriptionInstrumentedTest {
         compose.runOnIdle { owner.lifecycle.currentState = Lifecycle.State.CREATED }
         compose.waitForIdle()
         val stopped = counts.compositions
-        compose.runOnIdle { controller.restoreItemAnchor(ViewportAnchor(100, 3), 20) }
+        compose.runOnIdle {
+            controller.restoreItemAnchor(ViewportAnchor(100, 3, screenGeneration = null, historyGeneration = null), 20)
+        }
         compose.waitForIdle()
         assertEquals(stopped, counts.compositions)
         compose.runOnIdle { owner.lifecycle.currentState = Lifecycle.State.RESUMED }
@@ -139,7 +146,7 @@ class TerminalPanelSubscriptionInstrumentedTest {
         val nextStop = counts.compositions
         compose.runOnIdle {
             controller.setFollow(true, 0)
-            controller.restoreItemAnchor(ViewportAnchor(101, 7), 20)
+            controller.restoreItemAnchor(ViewportAnchor(101, 7, screenGeneration = null, historyGeneration = null), 20)
             controller.setFollow(true, 0)
         }
         compose.waitForIdle()

@@ -39,7 +39,8 @@ class TerminalViewportFollowStateTest {
         val values = flow {
             repeat(1000) { index ->
                 emit(TerminalViewportControllerState(ViewportMode.LOCKED,
-                    anchor = ViewportAnchor(index.toLong(), index % 20), anchorRowHeightPx = 20 + index,
+                    anchor = ViewportAnchor(index.toLong(), index % 20, screenGeneration = null, historyGeneration = null),
+                    anchorRowHeightPx = 20 + index,
                     anchorCellHeightPx = 18 + index, initialized = index > 0))
             }
         }.terminalFollowChanges().toList()
@@ -75,7 +76,9 @@ class TerminalViewportFollowStateTest {
             controller.endUserScroll(gesture)
         }
         assertEquals(listOf(true), values)
-        repeat(100) { controller.restoreItemAnchor(ViewportAnchor(it.toLong(), 5), 20) }
+        repeat(100) {
+            controller.restoreItemAnchor(ViewportAnchor(it.toLong(), 5, screenGeneration = null, historyGeneration = null), 20)
+        }
         assertEquals(listOf(true, false), values)
         controller.setFollow(true, 0)
         assertEquals(listOf(true, false, true), values)
