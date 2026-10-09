@@ -14,6 +14,7 @@ class TerminalSmoothnessSourceTest {
     private val bindingSource = terminalUiSource("TerminalViewportBinding")
     private val transcriptSource = terminalUiSource("TerminalTranscriptViewport")
     private val policySource = terminalUiSource("TerminalVirtualHistoryPolicy")
+    private val followStateSource = terminalUiSource("TerminalViewportFollowState")
     private val processSessionSource = listOf(
         File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt"),
         File("src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt")
@@ -127,7 +128,9 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("commandIsTui || terminalFrameIsAlternateScreen || shouldPreserveFullTerminalGrid"))
         assertTrue(controllerSource.contains("terminalTuiViewportScrollTarget("))
         assertTrue(processSessionSource.contains("Only the rendered terminal tail belongs to the scroll content. Input and extra-key bars"))
-        assertTrue(processSessionSource.contains("val autoScroll = viewportState.autoScroll"))
+        assertTrue(processSessionSource.contains("val autoScroll by rememberTerminalFollowEnabled(viewportController)"))
+        assertTrue(followStateSource.contains("controller.state.terminalFollowChanges()"))
+        assertTrue(followStateSource.contains("map { it.autoScroll }.distinctUntilChanged()"))
         assertEquals(1, bindingSource.split("runTerminalViewportScrollEffects(").size - 1)
         assertFalse(processSessionSource.contains("var terminalCellWidthPx by remember"))
     }
@@ -344,7 +347,8 @@ class TerminalSmoothnessSourceTest {
         assertFalse(processSessionSource.contains("terminalWasFollowingBeforeIme("))
         assertTrue(processSessionSource.contains("recordImeTransition(currentImeVisible)"))
         assertTrue(processSessionSource.contains("viewportHeightPx = outputViewportHeightPx"))
-        assertTrue(processSessionSource.contains("val autoScroll = viewportState.autoScroll"))
+        assertTrue(processSessionSource.contains("val autoScroll by rememberTerminalFollowEnabled(viewportController)"))
+        assertTrue(followStateSource.contains("changes.collectAsStateWithLifecycle(initialValue = controller.state.value.autoScroll)"))
         assertTrue(processSessionSource.contains("(!imeTransitionActive || fullOutputViewportHeightPx.get() == 0)"))
         assertTrue(processSessionSource.contains("shouldAvoidIme || customImeRequiresExtraAvoidance"))
         assertTrue(processSessionSource.contains("val transitionStillActive = currentImeVisible || currentActualImeHeightPx > 0"))
