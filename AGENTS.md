@@ -17,6 +17,14 @@ CHUNKED_LAYERS 和 TUI／全网格策略不变；基准协议升为 V4，不重�
 54 用例／162 测量通过；新版本 359 JVM、116 视口测试通过。证据见
 `benchmarks/results/c9c082d-eager-height-blocks.md`。不可将独立 Runner 结果解释为受控提速。
 
+`3f33ee3` 收窄面板订阅为生命周期感知的 AUTO/LOCK 冷投影，保留完整控制器、手势、滚动
+和持久化路径。同控制器 54 次锚点／手势更新的额外重组为旧 54／新 0；三次布尔转换、
+控制器替换和生命周期恢复通过。生产代码对应 374 JVM、126 视口、18 组件冒烟及真实页面
+15 传输探针／36 回显全部通过。JVM 测试 SHA 为 `e2ddf0f`，视口测试为 `e55e693`，两者
+只修测试，与 Release `3f33ee3` 的生产树完全相同。证据及 APK 见
+`benchmarks/results/3f33ee3-terminal-acceptance.md`。不得将订阅工作量结果称为手机整体加速，
+也不得将本轮冒烟称为完整 V4。测试用 x86_64 PRoot 覆盖不进入正式 arm64 Release。
+
 ## Build, Test, and Development Commands
 
 使用 Android Studio 或命令行 Gradle：

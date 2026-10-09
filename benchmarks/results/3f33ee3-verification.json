@@ -1,0 +1,318 @@
+{
+  "productionSha": "3f33ee3ae030e39692e5bb09358e6ca073ab3296",
+  "viewportTestSha": "e55e6933ced4e75348bae44f98376426e4718c9b",
+  "jvmTestSha": "e2ddf0f4b2cc5a9e2975a525a746d6798a7de2b4",
+  "productionTrees": {
+    "3f33ee3ae030e39692e5bb09358e6ca073ab3296": "2c4a0b44276938e925ac56fbd209ad34806f4601",
+    "e55e6933ced4e75348bae44f98376426e4718c9b": "2c4a0b44276938e925ac56fbd209ad34806f4601",
+    "e2ddf0f4b2cc5a9e2975a525a746d6798a7de2b4": "2c4a0b44276938e925ac56fbd209ad34806f4601"
+  },
+  "testOnlyChanges": [
+    "app/src/test/java/me/rerere/rikkahub/data/container/TerminalSmoothnessSourceTest.kt",
+    "app/src/test/java/me/rerere/rikkahub/data/container/TerminalViewportFollowStateTest.kt",
+    "benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/TerminalPanelSubscriptionInstrumentedTest.kt"
+  ],
+  "runs": {
+    "release": {
+      "run": {
+        "id": 37875610936,
+        "head_sha": "3f33ee3ae030e39692e5bb09358e6ca073ab3296",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/release.yml",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37875610936"
+      },
+      "jobs": [
+        {
+          "id": 113643400478,
+          "name": "build",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113643400478",
+          "annotations": []
+        }
+      ]
+    },
+    "pipeline": {
+      "run": {
+        "id": 37875611033,
+        "head_sha": "3f33ee3ae030e39692e5bb09358e6ca073ab3296",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/terminal-pipeline-tests.yml",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37875611033"
+      },
+      "jobs": [
+        {
+          "id": 113643400627,
+          "name": "pipeline",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113643400627",
+          "annotations": [
+            {
+              "title": "Terminal pipeline evidence 3/3",
+              "message": "zlib-base64 sha256=55b3e6a515b1d193c64acebc9d878642ea6f15548198a5333c907e9582230ba7\n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"
+            },
+            {
+              "title": "Terminal pipeline evidence 2/3",
+              "message": "zlib-base64 sha256=55b3e6a515b1d193c64acebc9d878642ea6f15548198a5333c907e9582230ba7\n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"
+            },
+            {
+              "title": "Terminal pipeline evidence 1/3",
+              "message": "zlib-base64 sha256=55b3e6a515b1d193c64acebc9d878642ea6f15548198a5333c907e9582230ba7\n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"
+            },
+            {
+              "title": "Terminal pipeline 36 samples verified",
+              "message": "chunkedLayers/mounted: firstDraw=70.84ms visibleCheck=178.97ms panelCompositions=2\nchunkedLayers/imeVisible: firstDraw=86.02ms visibleCheck=232.89ms panelCompositions=2\nchunkedLayers/imeHidden: firstDraw=49.52ms visibleCheck=154.47ms panelCompositions=2\nchunkedLayers/remount: firstDraw=43.23ms visibleCheck=146.24ms panelCompositions=2\nlazyHistory/mounted: firstDraw=55.32ms visibleCheck=161.72ms panelCompositions=1\nlazyHistory/imeVisible: firstDraw=108.48ms visibleCheck=247.86ms panelCompositions=2\nlazyHistory/imeHidden: firstDraw=48.98ms visibleCheck=156.50ms panelCompositions=2\nlazyHistory/remount: firstDraw=45.29ms visibleCheck=148.44ms panelCompositions=1\nlazyHistoryIme/mounted: firstDraw=50.00ms visibleCheck=146.05ms panelCompositions=1\nlazyHistoryIme/imeVisible: firstDraw=101.33ms visibleCheck=234.80ms panelCompositions=1\nlazyHistoryIme/imeHidden: firstDraw=50.66ms visibleCheck=165.05ms panelCompositions=1\nlazyHistoryIme/remount: firstDraw=38.02ms visibleCheck=145.08ms panelCompositions=1"
+            },
+            {
+              "title": "Terminal transport probes verified 4",
+              "message": "[{\"probe\": \"directWorkload\", \"State\": \"S (sleeping)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"do_wait\", \"alive\": true, \"matched\": true, \"stdoutBytes\": 13, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"managerPrintf\", \"matched\": true, \"timedOut\": false, \"readerFailure\": null, \"stdoutBytes\": 15, \"stderrBytes\": 0, \"status\": \"COMPLETED\", \"exit\": 0, \"backend\": \"native-pty\"}, {\"probe\": \"managerWorkload\", \"matched\": true, \"timedOut\": false, \"readerFailure\": null, \"stdoutBytes\": 13, \"stderrBytes\": 0, \"status\": \"RUNNING\", \"backend\": \"native-pty\", \"State\": \"S (sleeping)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"do_wait\"}]"
+            },
+            {
+              "title": "Terminal transport probes verified 3",
+              "message": "[{\"probe\": \"rawExternal\", \"State\": \"R (running)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": true, \"matched\": true, \"stdoutBytes\": 15, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"pipePrefix\", \"alive\": true, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 18, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"redirectOnly\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 16, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"cookedLogin\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 14, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}]"
+            },
+            {
+              "title": "Terminal transport probes verified 2",
+              "message": "[{\"probe\": \"rawLogin\", \"State\": \"R (running)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": true, \"matched\": true, \"stdoutBytes\": 16, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"cookedLoginOnly\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 13, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"pipeLogin\", \"alive\": true, \"matched\": true, \"stdoutBytes\": 17, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"cookedSttyOnly\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 25, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}]"
+            },
+            {
+              "title": "Terminal transport probes verified 1",
+              "message": "[{\"probe\": \"androidPty\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 18, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"prootPipe\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 17, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"prootPty\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 16, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"cookedBuiltin\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 22, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}]"
+            },
+            {
+              "title": "Terminal pipeline APK identity",
+              "message": "{\"suite\": \"terminal-pipeline-v1\", \"sourceSha\": \"3f33ee3ae030e39692e5bb09358e6ca073ab3296\", \"runId\": \"37875611033\", \"apks\": {\"target\": {\"file\": \"app/build/outputs/apk/terminaltest/app-terminaltest.apk\", \"sha256\": \"04d10abbe96b6c03b4ed48395843320d0d86ebd14fe63b757b4064ccad40e769\", \"bytes\": 118854412, \"package\": \"me.rerere.rikkahub.dev.next.terminaltest\", \"certificate_sha256\": [\"985add7b7d70bb9a6ddb12f08fafce1d0fba3b5194b5aeff323f55473197cbf1\"]}, \"test\": {\"file\": \"app/build/outputs/apk/androidTest/terminaltest/app-terminaltest-androidTest.apk\", \"sha256\": \"5b2267f8a970703d1992663df085acb1bdfc52777198ec9ff9fc6e5ab3754214\", \"bytes\": 934122, \"package\": \"me.rerere.rikkahub.dev.next.terminaltest.test\", \"certificate_sha256\": [\"985add7b7d70bb9a6ddb12f08fafce1d0fba3b5194b5aeff323f55473197cbf1\"]}}, \"target_debuggable\": false, \"target_minified\": false, \"target_release_derived\": true}"
+            },
+            {
+              "title": "Test-only PRoot fork overlay",
+              "message": "{\"proot_commit\": \"58aad2cb1c36ea6af7b32d76ccd5bf8d0a967939\", \"patch_sha256\": \"db6ea9dcea0a77c1ac234cf27cef9abeb881809cb610c668e898ddc40f0604f2\", \"ndk\": \"27.2.12479018\", \"header_patch_sha256\": \"4f493afd9b782e0bbdf8089dca8a67358b5df05dcbb5f0bb9287af9eef1c4349\", \"talloc_header_sha256\": \"e01fb092aaed2b431be26674e2b791c77fb5984537c29b514e957582c6b31465\", \"talloc_library_sha256\": \"77be445f4ec245fff9c19e9874ebcf99618244cf48737f5fca938316daaa70da\", \"overlay_sha256\": \"8e6e7eee0d4e18dac795ad48b1cfd98c200d4f070d7ed98b5f6846f5e0c35d23\", \"source_sha\": \"3f33ee3ae030e39692e5bb09358e6ca073ab3296\", \"build_run\": \"37875611033\", \"overlay_only\": true, \"compiler\": \"Android (12470979, +pgo, +bolt, +lto, +mlgo, based on r522817c) clang version 18.0.3 (https://android.googlesource.com/toolchain/llvm-project d8003a456d14a3deb8054cdaa529ffbf02d9b262)\"}"
+            }
+          ]
+        }
+      ]
+    },
+    "smoke": {
+      "run": {
+        "id": 37875610945,
+        "head_sha": "3f33ee3ae030e39692e5bb09358e6ca073ab3296",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/terminal-production-benchmark.yml",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37875610945"
+      },
+      "jobs": [
+        {
+          "id": 113643400437,
+          "name": "build",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113643400437",
+          "annotations": [
+            {
+              "title": "Production benchmark build",
+              "message": "{\"sourceSha\": \"3f33ee3ae030e39692e5bb09358e6ca073ab3296\", \"buildRun\": \"37875610945\", \"suite\": \"production-viewport-v4\", \"apks\": {\"target\": {\"file\": \"target.apk\", \"sha256\": \"9c40cae984a1b869c8b70ef7e6064aa5c9a833a335ad0d77848c10cf860d0d75\", \"bytes\": 24522423, \"package\": \"me.rerere.rikkahub.terminalbenchmark\"}, \"driver\": {\"file\": \"driver.apk\", \"sha256\": \"3391edf236f0c6bce4a6d66a4e4c0a6247a25aeb9db60282aa7aef2eff4b2ee2\", \"bytes\": 46274753, \"package\": \"me.rerere.rikkahub.terminalbenchmark.test\"}}, \"instrumentation\": \"me.rerere.rikkahub.terminalbenchmark.test/androidx.test.runner.AndroidJUnitRunner\"}"
+            },
+            {
+              "title": "Terminal regression test counts",
+              "message": "25 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.benchmark.ProductionBenchmarkSpecTest: 6\nme.rerere.rikkahub.benchmark.TerminalBenchmarkLayoutTest: 10\nme.rerere.rikkahub.benchmark.TerminalBenchmarkWidthIndexTest: 8\nme.rerere.rikkahub.benchmark.TerminalBenchmarkWorkloadTest: 1"
+            }
+          ]
+        },
+        {
+          "id": 113644462086,
+          "name": "scenario (detachRestore)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113644462086",
+          "annotations": [
+            {
+              "title": "Production viewport detachRestore",
+              "message": "production-viewport-v4 detachRestore sha=3f33ee3ae030e39692e5bb09358e6ca073ab3296 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 948.39 | — | 581.20 | — | 138.12\n1000 | lazyHistory | 1 | — | 328.05 | — | 124.57 | 49.88 | 101.87\n1000 | lazyHistoryIme | 1 | — | 356.32 | — | 141.30 | 64.01 | 101.98"
+            }
+          ]
+        },
+        {
+          "id": 113644462097,
+          "name": "scenario (semanticJump)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113644462097",
+          "annotations": [
+            {
+              "title": "Production viewport semanticJump",
+              "message": "production-viewport-v4 semanticJump sha=3f33ee3ae030e39692e5bb09358e6ca073ab3296 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 1381.33 | — | 127.31 | — | 105.51\n1000 | lazyHistory | 1 | — | 799.42 | — | 169.95 | — | 109.32\n1000 | lazyHistoryIme | 1 | — | 1197.31 | — | 153.86 | — | 110.04"
+            }
+          ]
+        },
+        {
+          "id": 113644462109,
+          "name": "scenario (imeRoundTrip)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113644462109",
+          "annotations": [
+            {
+              "title": "Production viewport imeRoundTrip",
+              "message": "production-viewport-v4 imeRoundTrip sha=3f33ee3ae030e39692e5bb09358e6ca073ab3296 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 4185.93 | 212.37 | 250.81 | — | 106.56\n1000 | lazyHistory | 1 | — | 5822.19 | 216.55 | 307.43 | 1.57 | 133.87\n1000 | lazyHistoryIme | 1 | — | 4169.99 | 230.95 | 270.53 | 1.06 | 97.14"
+            }
+          ]
+        },
+        {
+          "id": 113644462120,
+          "name": "scenario (appendAndTrim)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113644462120",
+          "annotations": [
+            {
+              "title": "Production viewport appendAndTrim",
+              "message": "production-viewport-v4 appendAndTrim sha=3f33ee3ae030e39692e5bb09358e6ca073ab3296 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 4297.10 | 143.23 | 98.24 | — | 132.33\n1000 | lazyHistory | 1 | — | 5084.69 | 169.48 | 96.29 | 0.78 | 101.67\n1000 | lazyHistoryIme | 1 | — | 5271.30 | 175.70 | 93.82 | 1.95 | 101.91"
+            }
+          ]
+        },
+        {
+          "id": 113644462129,
+          "name": "scenario (initialCompose)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113644462129",
+          "annotations": [
+            {
+              "title": "Production viewport initialCompose",
+              "message": "production-viewport-v4 initialCompose sha=3f33ee3ae030e39692e5bb09358e6ca073ab3296 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | 392.88 | — | — | 218.30 | — | 104.63\n1000 | lazyHistory | 1 | 345.71 | — | — | 119.51 | 15.62 | 93.99\n1000 | lazyHistoryIme | 1 | 262.88 | — | — | 122.98 | 16.00 | 93.77"
+            }
+          ]
+        },
+        {
+          "id": 113644462160,
+          "name": "scenario (activeRowUpdate)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113644462160",
+          "annotations": [
+            {
+              "title": "Production viewport activeRowUpdate",
+              "message": "production-viewport-v4 activeRowUpdate sha=3f33ee3ae030e39692e5bb09358e6ca073ab3296 smoke=True; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 1 | — | 4259.46 | 141.96 | 101.84 | — | 107.39\n1000 | lazyHistory | 1 | — | 4590.29 | 153.00 | 110.73 | 0.40 | 98.38\n1000 | lazyHistoryIme | 1 | — | 4407.36 | 146.90 | 104.71 | 0.44 | 98.20"
+            }
+          ]
+        }
+      ]
+    },
+    "viewport": {
+      "run": {
+        "id": 37921711714,
+        "head_sha": "e55e6933ced4e75348bae44f98376426e4718c9b",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/terminal-viewport-interactions.yml",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37921711714"
+      },
+      "jobs": [
+        {
+          "id": 113790950309,
+          "name": "gestures",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113790950309",
+          "annotations": [
+            {
+              "title": "Terminal panel subscription evidence 1/1",
+              "message": "zlib-base64 sha256=7b6fb3a69b155c793461da9b15b620b69e5b138d198dc1d00573e28c25c9e592\neNqtVttu20YQ/RVCz7G094vfkrRpgwaIYRnNQ9GH2dlZiTFFErzYMYL8e4eS47iNU/ghkAQCy92ZM2fmnNXn1TjXE63OVxMNh7qF5qyHlpqzcU4jDnU/1V17diNXL1ZjNw9I2z3wZrKWXNQaKRvyVpuQgIwpMWjvjHJkvAwYEx8b5vZt5iPaRyW95K95CPY7jHsaV+efV9D3m3HAzQHqdvMRbmBzoM1Ay2cz1NfXsJ/TZq43Pexo3GDXTryRhs3VPeo/a7rtu2F60zVNd7udYKL19cRpg2eQLhgnMmqwKcssg1MhGp2LtCJTpoRorUxGWSSjMCQF2qF1xgMx1mdhyzDB/+B6zW8GxkbDCZYHcEXnlDhtkFlHG0POnkQknawCCiSztUKIIhMEi6V4KSDxSrSFzE+C9Ygoi1y6wBiUJ2mDiMGBC5p8EmAtCCgYPOpMYDBHVDYHlQ0UYYCBav+TEF1SnvErS5FAcVsKuhJ5fnKyOpHKQlqjedi8Y1AiKkYLqUgKxYlCTgSjolFaPJulJwbrYuiQxnHLP1bABb89QdKhKO6PpSJD4EdURVuvQkiO8xMIZaWVUBZ1SO8EZJfI6ZIyODApMKRELe4PMFyPmwfR3dyXfzbROI1HxNDmoavzFS/8EPjXY8upByovFgFvH+n3bTtOw3ygdqJjuPuG62IQpUMdjAzCY8nBS89CIKuVDiGDyUp5y2MhPEW57OeB1KL4lJJ7XiVprpu83g2Qm4VBFvuKxSVDydFZo7iLOsUijfCcwMYkhS5AzhVkcRYdhTE8XMobVimzmpQQz0vMvnOG9Xrcc0apLOvd5ZyJ0ERtrEcXvRfo0FmeaZsUCWaCoZArxitBBl0Cqy0FD5xxvaunhfETqRye7nP90DXX/d3Csg2BZ6JEiRq5NO1EgpgLoQy+iKgtk4yY0UahpDSGiFhQgjtjUXr/KPVtN1wXdrenaq65twPgkndc3x0azoyStKZC0XpTuMdeiFDYTWRgOZvoCxuPEChsEjFzT7FElT2yPy+zevTuU9s2TZ3G9Q0N4zH61B3Dh6wMBJl0jMknXUJOMTkAG8iWrGRURNllZj7awLxn0pwVVSHp2OFw9WUR5/W3K6DUn6Z5oGO7tGIANgA6zW6jQ7RGWlUUJJ5M6bSLSJqoGKe5kYoHipDlqLzPJVpGfpyBhYRi2WTZxaBEQdkqB5T4vE4FMJaQtBWKy8+aJCB45ywZWzQAFcc3xILy49zWLJi/Vv1/hfXN1S+pbwBp0Rh76jCNH7hnb6fx/W179NiXbf6FJkCu9X2T37fLvfJduHc1j8UdNnTJ6GHxQsjjO1hqedV1DUG7RO1mvk04Jze73X3Y1w1tp67vKT8V8gLqYdzOfT+wkb1k0XQDQ/mNIzLVl4Tdoe/G+jg2r+bpD6L+PtPVAO39i9XffF/DoW9oadPc5wXR6tyaF6uGdoB3rx9FOa33Q/eRAVL+9yvByv0+/Llmktvu+C/kVTftq8cqGqsujTTcUDXtqWIYVOED61XdVl1L1aGbF2+rTtl462Jy1a9MdwXHmje7U8XVCX010jQ1NPKzh4EXmrs1H+YgY0WfsJnzfUxmeF1d7eux4i819aK6JdFjhNWiyxcVF1CVuVmcYEdVw9tavKu6oer3C8Q3F9v16ss/NyIpkw=="
+            },
+            {
+              "title": "Terminal panel subscription verified",
+              "message": "{\"updates\": 54, \"legacyCompositions\": 54, \"projectedCompositions\": 0, \"booleanTransitions\": 3}"
+            },
+            {
+              "title": "Terminal scroll completion evidence 1/1",
+              "message": "zlib-base64 sha256=d015e4d0f4b9a62f1b0f0972617bbe4b58f2181c44d141bf02a98e53da5a7522\neNq1mNtu20YQhl+F0LVd7fngXiVG3Rhw0iJOGxRBL4a7sxZjihS4pBM3yLt3KNmJHcQgGbSwLiyS+2n2n9MOP61yO3QBLzewOlmh1mi8lAGjQqulciWgUsk7aY0SBpXlLvhydbTqhuY80hJpveCW00fR1TxUPdLVHrtt1UB9nEPX1vVxaLe7GvuqbY5vOD0X2qanG4df5cpZpli03itlDEfLnIwmCZ2UZw5V0CnZ9GDd8zbe0lqhDS0vvdAcIDCpQGoWlWQx6sQgxVIakZj0oEM0TPsQsNQsGUQ0oBy3ISUzmr3X4AXkDebVyadViU3YbKG7zusvO7mp8MOu7frjHnOf17kLa2hi11bxDV1Yv4cbWG9x3eH4t+6q62vYDOX6ftm4an2BVxBu39whL+Cf2/Met798xDD0bffTdU/bscpaEwyZblMAjRCNjqVIPglblh4VuMAjKVYKnzRjIgQvQ4rRMg5Kj775v8y/N/xy79TTLz49b3LfDVtsetzTDhuRKIQXgTsUycQUDIUTcKeZDkJFDxHG3ZTJ6YjB0k5UYK4M6DkT3pWeNgK73d7SLVTNkyYO1XoHV5jXY3DQg9itpxSOpKKNypGW0oKh8DUsSRAKfMQyQUqOyZi0Yx51aWKwXOAYiRi9m21YhB6+Y9Ro0J93sh4MMrzUgoEB5hUkxoBbK3UppCmdNyVKLx2zmpLROyttkIkLE0BhCk75KP5DpV4i5KHD0Zf5YFxKpZelYhKsAArOpCLlJpCXnFbMxZJHHX3gJUbklKtkMnJBZofAVUlV4fNo3fXX5ErVx55+Ykx8IYXxpXYwBkeI0nmtuBZJQCmF5EYaH1AiJmVkMJ4E4RicA2FtTF7TvvfRTKiQKElKiRaSZxi1MIAlrZfkzeCTK6kyCB9ZlMghgDVGo9Lkc8BkyNWjle+HpqIdv1vlb+L7ZZVz1Vw90OYtVH1+PvSn0ASsaxifeoU32L3G0a35cqBSk/NYWr5h/ZYSXUJs3kB3hf2zJp6RM0430JBjLvuqrl8jhM0vHyHQzbBpu+9Afoeqw3i555zRnfbDHxnz201b4ysgcaF+gdXVpj888STgzypXZY0vqky5cXvadh2G8e4Iu4Qt/ortFvvu9m3Vb9qhPxsD5ayjG98jtrl/OfTwQK/fusO24j1nv72/KqxjniC8aa+xOc+nGwzXGJ9jajt8RpLu+q9+iE+LfNlDXWO8gFsy+zw/b4cmYiSt9z66X/c3LYRxCQXQu0+rAHkMyvxAVULvSKnVCTta1fvavTqhSodHFMRd7u+/fBijYXXCj1YNNO34H/UzwZ38fDQbm6DOX7l33+7A7AtYCCM0M1Nc/hT3kb0PsYwxKxdgH6nw2NoHMhjPlBRqiisWqyu9sH4Bdqa62nHJ2RRXLlXXMDpTiQXYeepaJrT3k+aqheoaOltwZhdgZ6rLFRVwN8XVS9WVzDGtFmBnxq61yvjJVDML1aUWJ721C7Dz1OUUCdLxKa5dqi4jsNYLsHMrg7eeTeaEWxq7VBeoNizAzlVXc6MmC6RfqC73wtHUswA7u+5a/ygnNoce/+VE8UNtTVJKcO7cEu48fQ0Fg+KT3KV9TXupH3XhSezMyktTADWhSfDixmY1kc0S7jx9LbdK2Enu0s5mNCXFIuwsfamkW8Zm6KAW62tpJlVLuDPjV3GpprlLexsd9oThS7Bz45fRdDVtr/mB+OVWL+HO1FcIOjtMcpd2N0PH00fnyEnsTH0dTZtu2t6l7c0a5oxaxJ2nr+M0YYtJrl9eH8yM+rC4v1lrlKKjJE1wTbt/4TiOq8WW5rweY9Eh1MX4RuOi2r+1+tj/XGTsh13RfmhysWtzNU6JNEoeFU1b3L1UrLEr4tDR1eIwFsYC798bFeNs2WYsxvcNx7GrbrAp0jgKF6Fuw/XPBdawy7TkBuoBc1E1oR7i4fkihw3Gob77vb7YbdoGixp6bMJt0XbF2e+XP60+/wtasR63"
+            },
+            {
+              "title": "Terminal scroll completion verified",
+              "message": "historyAnchor legacy=True: n=10 waits=1 fixtureElapsedMedianMs=17.811\nhistoryAnchor legacy=False: n=10 waits=0 fixtureElapsedMedianMs=0.649\nscreenFollow legacy=True: n=10 waits=1 fixtureElapsedMedianMs=16.963\nscreenFollow legacy=False: n=10 waits=0 fixtureElapsedMedianMs=2.171"
+            },
+            {
+              "title": "Terminal regression test counts",
+              "message": "126 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest: 7\nme.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest: 6\nme.rerere.rikkahub.viewporttest.TerminalIntrinsicWidthInstrumentedTest: 7\nme.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest: 20\nme.rerere.rikkahub.viewporttest.TerminalLazyNaturalGeometryInstrumentedTest: 22\nme.rerere.rikkahub.viewporttest.TerminalPanelSubscriptionInstrumentedTest: 3\nme.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest: 2\nme.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest: 8\nme.rerere.rikkahub.viewporttest.TerminalScrollCompletionInstrumentedTest: 7\nme.rerere.rikkahub.viewporttest.TerminalTextCompatibilityInstrumentedTest: 3\nme.rerere.rikkahub.viewporttest.TerminalTranscriptGeometryInstrumentedTest: 8\nme.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest: 24\nme.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest: 9"
+            }
+          ]
+        }
+      ]
+    },
+    "jvm": {
+      "run": {
+        "id": 37922512552,
+        "head_sha": "e2ddf0f4b2cc5a9e2975a525a746d6798a7de2b4",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/terminal-emulator-tests.yml",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37922512552"
+      },
+      "jobs": [
+        {
+          "id": 113793588577,
+          "name": "Run TerminalEmulator unit tests",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113793588577",
+          "annotations": [
+            {
+              "title": "Terminal regression test counts",
+              "message": "374 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.data.container.BunCompatibilitySourceTest: 4\nme.rerere.rikkahub.data.container.ControlInputTest: 6\nme.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest: 1\nme.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest: 13\nme.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest: 1\nme.rerere.rikkahub.data.container.PtyModeInferenceTest: 7\nme.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest: 18\nme.rerere.rikkahub.data.container.TerminalFastFlingTest: 15\nme.rerere.rikkahub.data.container.TerminalHistorySnapshotTest: 12\nme.rerere.rikkahub.data.container.TerminalItemViewportTest: 22\nme.rerere.rikkahub.data.container.TerminalLazyViewportAdapterTest: 7\nme.rerere.rikkahub.data.container.TerminalLazyViewportMeasurementTest: 14\nme.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest: 5\nme.rerere.rikkahub.data.container.TerminalPipelineTraceTest: 7\nme.rerere.rikkahub.data.container.TerminalRenderPreferencesTest: 6\nme.rerere.rikkahub.data.container.TerminalRenderedRowsTest: 29\nme.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest: 22\nme.rerere.rikkahub.data.container.TerminalTranscriptWidthIndexTest: 18\nme.rerere.rikkahub.data.container.TerminalUiSourceTest: 12\nme.rerere.rikkahub.data.container.TerminalViewportControllerTest: 29\nme.rerere.rikkahub.data.container.TerminalViewportFollowStateTest: 5\nme.rerere.rikkahub.data.container.TerminalViewportItemGeometryTest: 6\nme.rerere.rikkahub.data.container.TerminalViewportReducerTest: 27\nme.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest: 4\nme.rerere.rikkahub.utils.TerminalEmulatorTest: 84"
+            }
+          ]
+        }
+      ]
+    },
+    "apk": {
+      "run": {
+        "id": 37921712290,
+        "head_sha": "e55e6933ced4e75348bae44f98376426e4718c9b",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/verify-release-apk.yml",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/37921712290"
+      },
+      "jobs": [
+        {
+          "id": 113790950411,
+          "name": "verify",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/113790950411",
+          "annotations": [
+            {
+              "title": "Release APK verified",
+              "message": "{\"source_sha\": \"3f33ee3ae030e39692e5bb09358e6ca073ab3296\", \"release_run_id\": \"37875610936\", \"apk\": \"app-release.apk\", \"bytes\": 83699907, \"sha256\": \"c3fcd6a96de574c07a639a47ca61ece240de8a39308b1b0caabb22f75680ca7d\", \"package\": \"me.rerere.rikkahub.dev.next.mod\", \"version_code\": \"151\", \"version_name\": \"2.1.62\", \"debuggable\": false, \"native_abis\": [\"arm64-v8a\"], \"signer_certificate_sha256\": [\"f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265\"], \"signature_verified\": true, \"zip_verified\": true}"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "evidenceSha256": {
+    "panel": "7b6fb3a69b155c793461da9b15b620b69e5b138d198dc1d00573e28c25c9e592",
+    "scroll": "d015e4d0f4b9a62f1b0f0972617bbe4b58f2181c44d141bf02a98e53da5a7522",
+    "pipeline": "55b3e6a515b1d193c64acebc9d878642ea6f15548198a5333c907e9582230ba7"
+  },
+  "apk": {
+    "source_sha": "3f33ee3ae030e39692e5bb09358e6ca073ab3296",
+    "release_run_id": "37875610936",
+    "apk": "app-release.apk",
+    "bytes": 83699907,
+    "sha256": "c3fcd6a96de574c07a639a47ca61ece240de8a39308b1b0caabb22f75680ca7d",
+    "package": "me.rerere.rikkahub.dev.next.mod",
+    "version_code": "151",
+    "version_name": "2.1.62",
+    "debuggable": false,
+    "native_abis": [
+      "arm64-v8a"
+    ],
+    "signer_certificate_sha256": [
+      "f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265"
+    ],
+    "signature_verified": true,
+    "zip_verified": true
+  },
+  "artifacts": [
+    {
+      "id": 11592741772,
+      "name": "rikkahub-release-3f33ee3ae030e39692e5bb09358e6ca073ab3296",
+      "size_in_bytes": 81438662,
+      "expired": false,
+      "expires_at": "2026-10-23T02:52:34Z"
+    }
+  ],
+  "limitations": "Work-count comparison is isolated and controlled; full-page timings are not old/new paired. Only 18 component smoke cases at this production SHA, not a new full V4 54/162 run."
+}
