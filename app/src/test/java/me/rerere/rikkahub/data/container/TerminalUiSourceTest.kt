@@ -11,6 +11,16 @@ class TerminalUiSourceTest {
         File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt"),
         File("src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt")
     ).first { it.isFile }.readText()
+
+    @Test
+    fun panelCollectsOnlyFollowWhilePersistenceKeepsCompleteLiveControllerState() {
+        assertTrue(processSessionSource.contains("val autoScroll by rememberTerminalFollowEnabled(viewportController)"))
+        assertFalse(processSessionSource.contains("viewportController.state.collectAsStateWithLifecycle()"))
+        assertTrue(processSessionSource.contains("val state = viewportController.state.value"))
+        assertTrue(processSessionSource.contains("anchorLineId = state.anchor?.lineId"))
+        assertTrue(processSessionSource.contains("viewportController.state,\n        ) { _, state -> state }"))
+        assertFalse(processSessionSource.contains("var autoScroll by"))
+    }
     private val chatInputSource = listOf(
         File("app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt"),
         File("src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt")

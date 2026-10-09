@@ -139,10 +139,15 @@ jobs:
             --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest \
             --require-case-group 'stability:9' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalScrollCompletionInstrumentedTest \
-            --require-case-group 'scrollCompletion:7'
+            --require-case-group 'scrollCompletion:7' \
+            --require-suite me.rerere.rikkahub.viewporttest.TerminalPanelSubscriptionInstrumentedTest \
+            --require-case-group 'panelSubscription:3'
       - name: Require complete frozen-control paired scroll evidence
         if: ${{ always() && env.TERMINAL_VIEWPORT_SUITE == 'all' }}
         run: python3 .github/scripts/report-terminal-scroll-completion.py
+      - name: Require paired panel subscription work and lifecycle correctness
+        if: ${{ always() && env.TERMINAL_VIEWPORT_SUITE == 'all' }}
+        run: python3 .github/scripts/report-terminal-panel-subscription.py
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

@@ -51,6 +51,7 @@ def sources():
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalPipelineInstrumentation.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportFollowState.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemExecutor.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportScrollEffects.kt',
         'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt',
@@ -142,6 +143,8 @@ def validate_samples(lines):
             raise ValueError('Incorrect pipeline backend')
         if type(row.get('frameRevision')) is not int or row['frameRevision'] < 0:
             raise ValueError('Invalid pipeline frame revision')
+        if 'panelCompositions' in row and (type(row['panelCompositions']) is not int or row['panelCompositions'] < 1):
+            raise ValueError('Invalid full-page composition count')
         expected_bytes = len(f'ECHO:{key[1]}-{key[2]}\r\n'.encode())
         if type(row.get('outputBytes')) is not int or row['outputBytes'] != expected_bytes:
             raise ValueError('Incorrect echo byte count')
@@ -255,6 +258,8 @@ def run(suite=None):
             notice('notice', f'Terminal transport probes verified {start // 4 + 1}', json.dumps(probes[start:start + 4]))
         return
     rows = validate_samples(logcat.splitlines())
+    if any('panelCompositions' not in row for row in rows):
+        raise ValueError('Current pipeline target must report panel composition work')
     report = dict(manifest=manifest, device=device, samples=rows,
                   note='Full production page + native PTY in an emulator; synthetic input, traced first draw, '
                        'and separately timed test visibility confirmation. Neither GPU presentation nor phone FPS.')
@@ -265,7 +270,8 @@ def run(suite=None):
         for phase in PHASES:
             group = [r for r in rows if r['mode'] == mode and r['phase'] == phase]
             summary.append(f'{mode}/{phase}: firstDraw={statistics.median(r["inputToDrawMs"] for r in group):.2f}ms '
-                           f'visibleCheck={statistics.median(r["inputToVisibleCheckMs"] for r in group):.2f}ms')
+                           f'visibleCheck={statistics.median(r["inputToVisibleCheckMs"] for r in group):.2f}ms '
+                           f'panelCompositions={statistics.median(r["panelCompositions"] for r in group):g}')
     notice('notice', 'Terminal pipeline 36 samples verified', '\n'.join(summary))
     encoded = base64.b64encode(zlib.compress(data, 9)).decode()
     parts = [encoded[i:i + 2600] for i in range(0, len(encoded), 2600)]

@@ -186,12 +186,15 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
             val published = rows.first { it.stage == TerminalPipelineStage.FRAME_PUBLISHED && it.frameRevision >= fed.frameRevision }
             val drawn = rows.first { it.stage == TerminalPipelineStage.FRAME_DRAWN && it.frameRevision >= published.frameRevision }
             val finalDraw = rows.last { it.stage == TerminalPipelineStage.FRAME_DRAWN && it.frameRevision >= published.frameRevision }
+            val panelCompositions = rows.count { it.stage == TerminalPipelineStage.PANEL_COMPOSED }
+            assertTrue("Full-page composition probe missing", panelCompositions > 0)
             assertEquals("Incorrect renderer for keyboard phase", expectVirtual, finalDraw.virtual)
             assertEquals("Incomplete trace sample", 0L, capture.dropped)
             assertTrue("Echo must be actually drawn after submission", drawn.timeNanos >= ui.timeNanos)
             val report = JSONObject().put("launch", launch).put("mode", mode.id).put("phase", phase).put("iteration", index)
                 .put("inputToDrawMs", (drawn.timeNanos - ui.timeNanos) / 1_000_000.0)
                 .put("inputToVisibleCheckMs", (visibleCheckedAt - ui.timeNanos) / 1_000_000.0)
+                .put("panelCompositions", panelCompositions)
                 .put("frameRevision", drawn.frameRevision).put("outputBytes", expectedBytes).put("virtual", finalDraw.virtual)
             for (stage in listOf(TerminalPipelineStage.INPUT_ENQUEUE_STARTED, TerminalPipelineStage.INPUT_WRITE_STARTED,
                 TerminalPipelineStage.OUTPUT_READ, TerminalPipelineStage.EMULATOR_FED,

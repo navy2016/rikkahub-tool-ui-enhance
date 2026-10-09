@@ -37,6 +37,17 @@ class TerminalPipelineValidationTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate(values)
 
+    def test_composition_counts_are_optional_for_archived_v1_but_never_invented(self):
+        self.assertEqual(36, len(validate(rows())))
+        for value in (0, -1, True, None):
+            values = rows()
+            values[0]['panelCompositions'] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                validate(values)
+        values = rows()
+        values[0]['panelCompositions'] = 3
+        self.assertEqual(3, validate(values)[0]['panelCompositions'])
+
     def test_wrong_backend_identity_bytes_and_frame_are_rejected(self):
         for field, value in (('virtual', True), ('virtual', 0), ('launch', 'stale'), ('outputBytes', 10),
                              ('frameRevision', -1), ('iteration', True), ('mode', 'other')):

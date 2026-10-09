@@ -55,6 +55,7 @@ val syncViewportSources by tasks.registering(SyncViewportSources::class) {
         "me/rerere/rikkahub/ui/pages/container/TerminalLazyItemExecutor.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalViewportFollowState.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalVirtualHistoryTranscript.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalVirtualHistoryPolicy.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalTranscriptWidth.kt",
@@ -126,6 +127,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.ui)
     implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:${libs.versions.lifecycleRuntimeKtx.get()}")
     releaseImplementation(libs.androidx.ui.test.manifest)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)

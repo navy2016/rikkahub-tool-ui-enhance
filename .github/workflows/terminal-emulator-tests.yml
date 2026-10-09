@@ -158,6 +158,7 @@ jobs:
               --tests me.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest \
               --tests me.rerere.rikkahub.data.container.TerminalHistorySnapshotTest \
               --tests me.rerere.rikkahub.data.container.TerminalPipelineTraceTest \
+              --tests me.rerere.rikkahub.data.container.TerminalViewportFollowStateTest \
               --stacktrace; then
               exit 0
             fi
@@ -186,7 +187,8 @@ jobs:
             --require-suite me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalHistorySnapshotTest \
-            --require-suite me.rerere.rikkahub.data.container.TerminalPipelineTraceTest
+            --require-suite me.rerere.rikkahub.data.container.TerminalPipelineTraceTest \
+            --require-suite me.rerere.rikkahub.data.container.TerminalViewportFollowStateTest
 
       - name: Upload test reports
         if: always()

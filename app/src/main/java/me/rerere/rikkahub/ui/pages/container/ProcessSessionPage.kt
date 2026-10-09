@@ -50,6 +50,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -766,6 +767,9 @@ private fun TerminalInteractivePanel(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val processId = process.processId
+    if (TerminalPipelineTrace.isRecording(processId)) {
+        SideEffect { TerminalPipelineTrace.record(processId, TerminalPipelineStage.PANEL_COMPOSED) }
+    }
     val restoredViewportState = remember(processId) { bgManager.getTerminalViewportState(processId) }
     val initialVerticalOffsetPx = restoredViewportState?.let { restored ->
         if (restored.autoScroll) Int.MAX_VALUE else restored.verticalOffsetPx
@@ -868,8 +872,7 @@ private fun TerminalInteractivePanel(
     val viewportController = remember(processId) {
         TerminalViewportController(restoredViewportState, followInitially = savedPreference?.autoScroll ?: true)
     }
-    val viewportState by viewportController.state.collectAsStateWithLifecycle()
-    val autoScroll = viewportState.autoScroll
+    val autoScroll by rememberTerminalFollowEnabled(viewportController)
     var rawInputMode by remember(processId, settings.terminalCustomTuiCommands) { mutableStateOf(savedPreference?.rawInputMode ?: isTuiCommand(process.command, settings.terminalCustomTuiCommands)) }
     var showExtraKeys by remember(processId) { mutableStateOf(savedPreference?.showExtraKeys ?: !fullscreen) }
     var selectionMode by remember { mutableStateOf(false) }

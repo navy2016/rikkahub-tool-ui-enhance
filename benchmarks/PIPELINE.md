@@ -28,6 +28,15 @@ need not yet be aligned inside the viewport at that first draw. `inputToVisibleC
 test-observed upper bound including semantics/idle wait overhead, after the actual row is wholly
 inside the viewport. Neither proves GPU presentation time, phone FPS or an input latency percentile.
 
+Current runs also require `panelCompositions`: committed `TerminalInteractivePanel` compositions in
+the complete sample window, starting before SetText and ending after the visibility/idle check.
+It includes input and submission work, not just output rendering. The probe is absent when capture
+is disabled. Earlier V1 archives have no such field and must not be assigned a fabricated zero.
+The panel now observes only the controller's distinct AUTO/LOCK projection; anchor, gesture and
+effect updates still flow to the original binding, executor and persistence consumers. The viewport
+suite separately compares both subscriptions on the same controller, including lifecycle restart and
+controller replacement. Its work-count evidence is not a full-page old/new timing comparison.
+
 The runner verifies source SHA, target/test package IDs, matching signers, ZIP integrity, x86_64 native
 PTY and target hash, fully compiles the installed target with `cmd package compile -m speed`, and uses
 the existing non-root KVM startup primitives. Output artifacts include exact source hashes, APK hashes,
