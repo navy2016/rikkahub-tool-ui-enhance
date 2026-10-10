@@ -184,7 +184,22 @@ def run(suite=None):
     manifest = json.loads((OUT / 'manifest.json').read_text())
     if manifest['sourceSha'] != sha or manifest['runId'] != run_id or manifest['sources'] != sources():
         raise ValueError('Pipeline bundle does not match the requested source')
-    for role, apk in manifest['apks'].items():
+    return run_verified_bundle(manifest, suite)
+
+
+def run_verified_bundle(manifest, suite=None, emit_evidence=True):
+    """Run a bound bundle. The paired harness separately verifies its frozen source difference."""
+    sha, run_id = identity()
+    if manifest['sourceSha'] != sha or manifest['runId'] != run_id:
+        raise ValueError('Pipeline bundle does not match the requested run')
+    if set(manifest['apks']) != {'target', 'test'}:
+        raise ValueError('Pipeline bundle needs exactly one target and test APK')
+    installed_hashes = {}
+    for role in ('target', 'test'):
+        apk = manifest['apks'][role]
+        package = PACKAGE if role == 'target' else TEST_PACKAGE
+        if apk['package'] != package:
+            raise ValueError('Pipeline bundle has an unexpected package')
         path = ROOT / apk['file']
         if digest(path) != apk['sha256']:
             raise ValueError('Pipeline APK hash mismatch')
@@ -193,6 +208,13 @@ def run(suite=None):
         install = output(['adb', 'shell', 'pm', 'install', '-r', '-t', remote], 180)
         if 'Success' not in install:
             raise ValueError('Pipeline install rejected: ' + install[-500:])
+        installed = output(['adb', 'shell', 'pm', 'path', package]).strip().splitlines()
+        if len(installed) != 1 or not installed[0].startswith('package:/data/app/'):
+            raise ValueError('Expected one installed pipeline base APK')
+        installed_digest = output(['adb', 'shell', 'sha256sum', installed[0][len('package:'):]]).split()
+        if not installed_digest or installed_digest[0] != apk['sha256']:
+            raise ValueError('Installed pipeline APK differs from the verified bundle')
+        installed_hashes[role] = installed_digest[0]
     # Target SDK 28 delegates the first notification prompt to Android 13+. A foreground-service
     # channel can pause the test Activity after its first draw and remove RESUMED Compose roots.
     # Preset ONLY this disposable test package; never change the release app or production policy.
@@ -253,18 +275,22 @@ def run(suite=None):
             raise ValueError('Missing transport probe matrix')
         if not all(p['matched'] and not p['timedOut'] and p['readerFailure'] is None for p in probes):
             raise ValueError('Transport probes failed')
-        (OUT / 'transport-results.json').write_text(json.dumps(dict(manifest=manifest, device=device, probes=probes), indent=2) + '\n')
-        for start in range(0, len(probes), 4):
-            notice('notice', f'Terminal transport probes verified {start // 4 + 1}', json.dumps(probes[start:start + 4]))
-        return
+        report = dict(manifest=manifest, device=device, installedApkHashes=installed_hashes, probes=probes)
+        (OUT / 'transport-results.json').write_text(json.dumps(report, indent=2) + '\n')
+        if emit_evidence:
+            for start in range(0, len(probes), 4):
+                notice('notice', f'Terminal transport probes verified {start // 4 + 1}', json.dumps(probes[start:start + 4]))
+        return report
     rows = validate_samples(logcat.splitlines())
     if any('panelCompositions' not in row for row in rows):
         raise ValueError('Current pipeline target must report panel composition work')
-    report = dict(manifest=manifest, device=device, samples=rows,
+    report = dict(manifest=manifest, device=device, installedApkHashes=installed_hashes, samples=rows,
                   note='Full production page + native PTY in an emulator; synthetic input, traced first draw, '
                        'and separately timed test visibility confirmation. Neither GPU presentation nor phone FPS.')
     data = json.dumps(report, separators=(',', ':')).encode()
     (OUT / 'pipeline-results.json').write_text(json.dumps(report, indent=2) + '\n')
+    if not emit_evidence:
+        return report
     summary = []
     for mode in MODES:
         for phase in PHASES:
@@ -280,9 +306,10 @@ def run(suite=None):
     for number, part in enumerate(parts, 1):
         notice('notice', f'Terminal pipeline evidence {number}/{len(parts)}',
                'zlib-base64 sha256=' + hashlib.sha256(data).hexdigest() + '\n' + part)
+    return report
 
 
-def emulator():
+def emulator(operation=None):
     """Use the same verified non-root KVM primitives as the component benchmark."""
     import pwd
     sys.path.insert(0, str(ROOT / 'benchmarks'))
@@ -326,7 +353,9 @@ def emulator():
             guest.wait_for_boot(process, env)
             os.environ.update(PATH=env['PATH'], ANDROID_SERIAL=guest.SERIAL)
             output(['adb', 'shell', 'input', 'keyevent', '82'])
-            if os.environ.get('TERMINAL_PIPELINE_SUITE') == 'all':
+            if operation is not None:
+                operation()
+            elif os.environ.get('TERMINAL_PIPELINE_SUITE') == 'all':
                 run('transport')
                 # Keep the successful preflight's logs; the page run has independent lifecycle,
                 # fresh captures and completion receipts but uses the very same APK and guest.

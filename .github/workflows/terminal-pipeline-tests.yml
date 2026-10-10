@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'Full page samples or bounded transport preflight'
+        description: 'Full page samples, transport preflight, or same-device AB/BA experiment'
         type: choice
-        options: [pipeline, transport, all]
+        options: [pipeline, transport, all, paired]
         default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'
@@ -26,6 +26,10 @@ on:
       - 'app/src/terminaltestAndroidTest/**'
       - 'app/build.gradle.kts'
       - '.github/scripts/run-terminal-pipeline.py'
+      - '.github/scripts/run-terminal-pipeline-paired.py'
+      - '.github/scripts/test_terminal_pipeline_paired.py'
+      - '.github/workflows/terminal-pipeline-paired.yml'
+      - 'benchmarks/terminal-pipeline-paired/**'
       - '.github/scripts/test_terminal_pipeline.py'
       - '.github/scripts/build-terminal-proot.py'
       - '.github/scripts/test_terminal_proot.py'
@@ -39,6 +43,9 @@ permissions:
   actions: read
 
 jobs:
+  paired:
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'paired' }}
+    uses: ./.github/workflows/terminal-pipeline-paired.yml
   evidence:
     if: ${{ inputs.evidence_run_id != '' }}
     runs-on: ubuntu-latest
@@ -112,7 +119,7 @@ jobs:
           note('Original pipeline failure callers', callers)
           PY
   pipeline:
-    if: ${{ inputs.evidence_run_id == '' }}
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite != 'paired' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:

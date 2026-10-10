@@ -59,3 +59,9 @@ preserving their separate logs. A transport failure is never ignored to proceed 
 This first step measures the current renderer without changing output batching, synchronized-output
 hold, TUI resize, scroll animation handoff or the renderer default. It is a diagnostic baseline; no
 speedup is established until a controlled same-device comparison succeeds.
+
+The separate [`suite=paired` experiment](terminal-pipeline-paired/README.md) builds a frozen
+one-site legacy subscription control and the current production page with the identical driver.
+Both pass transport and excluded warmup runs before four AB/BA pairs on one booted guest.
+It preserves 288 measured echoes, 72 excluded warmup echoes and installed APK hashes; paired
+launch-median differences are exported without requiring either arm to be faster.

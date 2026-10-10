@@ -1,0 +1,66 @@
+name: Terminal Paired Full Page PTY Benchmark
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  paired:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Require the isolated optimization branch
+        run: test "$GITHUB_REF" = refs/heads/opt/terminal-verified-a79e7b6
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test protocol validation and source safeguards
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+      - name: Build one pinned test-only PRoot overlay for both arms
+        run: python3 .github/scripts/build-terminal-proot.py
+      - name: Build frozen legacy and production Release-derived targets with one driver
+        run: |
+          chmod +x gradlew
+          python3 .github/scripts/run-terminal-pipeline-paired.py build
+      - name: Preflight, warm up and run four AB-BA pairs on one non-root KVM guest
+        run: python3 .github/scripts/run-terminal-pipeline-paired.py emulator
+      - name: Validate all samples and publish paired provenance and summary
+        run: python3 .github/scripts/run-terminal-pipeline-paired.py report
+      - name: Export excluded warmups and transport receipts
+        run: python3 .github/scripts/run-terminal-pipeline-paired.py report --setup
+      - name: Export exact paired samples 0
+        run: python3 .github/scripts/run-terminal-pipeline-paired.py report --pair 0
+      - name: Export exact paired samples 1
+        run: python3 .github/scripts/run-terminal-pipeline-paired.py report --pair 1
+      - name: Export exact paired samples 2
+        run: python3 .github/scripts/run-terminal-pipeline-paired.py report --pair 2
+      - name: Export exact paired samples 3
+        run: python3 .github/scripts/run-terminal-pipeline-paired.py report --pair 3
+      - name: Preserve both APK arms, full receipts and bounded diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-pipeline-paired-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-pipeline-paired/
+            artifacts/pipeline-paired-build/
+            artifacts/terminal-pipeline/
+            artifacts/terminal-validation/
+            artifacts/pipeline-proot-build/build.log
+          if-no-files-found: error
+          retention-days: 14

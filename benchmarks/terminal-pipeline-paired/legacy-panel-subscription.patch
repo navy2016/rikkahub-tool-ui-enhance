@@ -1,0 +1,13 @@
+diff --git a/app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt b/app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt
+@@ -872,7 +872,8 @@
+     val viewportController = remember(processId) {
+         TerminalViewportController(restoredViewportState, followInitially = savedPreference?.autoScroll ?: true)
+     }
+-    val autoScroll by rememberTerminalFollowEnabled(viewportController)
++    val viewportState by viewportController.state.collectAsStateWithLifecycle()
++    val autoScroll = viewportState.autoScroll
+     var rawInputMode by remember(processId, settings.terminalCustomTuiCommands) { mutableStateOf(savedPreference?.rawInputMode ?: isTuiCommand(process.command, settings.terminalCustomTuiCommands)) }
+     var showExtraKeys by remember(processId) { mutableStateOf(savedPreference?.showExtraKeys ?: !fullscreen) }
+     var selectionMode by remember { mutableStateOf(false) }
