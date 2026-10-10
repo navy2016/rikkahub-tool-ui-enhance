@@ -1,0 +1,34 @@
+{
+  "suite": "terminal-panel-subscription-v1",
+  "sourceSha": "ac47787cf2939a91779f2563fa40bb8b610a07e7",
+  "runId": "38048241632",
+  "sourceHashes": {
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportFollowState.kt": "873ce68460dc3a5bd1d18628943df150dedebcc551b425ce42c8b2a36c5647ae",
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt": "7aa6f3dbb1b481d39598dd7e09e3b52ae8e1d55000f1ba85cff710ab50095fe4",
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportState.kt": "5c42c0c9827e1580986a683e7b0a55a0afc87c3dea4cd9c25d82d4af04ad5537",
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportReducer.kt": "9ea2b42fc6f9379db53be2d015434f976afc092580abf1e8f60fe60842942304",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt": "38f252a5ef188a5e92f357288b6e8fea025151af69331760ad6be63fbda6a4b8",
+    "benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/TerminalPanelSubscriptionInstrumentedTest.kt": "53f4cc16c3841807cfd871751be532388da4d22752c007e913f4c00030f7bbb6",
+    "benchmarks/terminal-viewport-tests/build.gradle.kts": "a3618fd965424f93b9f140791359b103fae66fc150f39044537274ebcaf6b200",
+    "benchmarks/terminal-viewport-tests/run-ci.sh": "8c4eec1094c5a6163181b59c28881cdc5031ff0353e99731dc1633609e4057ce",
+    ".github/scripts/report-terminal-panel-subscription.py": "b54a58c380b3127ac0fbae9519db66fb38b957143b0a83c800da709101c657ce",
+    ".github/workflows/terminal-viewport-interactions.yml": "a393a07989bb39e98509c6784326046a36820a4bd108c8184e1841bd75760659",
+    "gradle/libs.versions.toml": "8d24a81b399b7b3f8db9b6aa58e5fd2192eed6d259958deede3a49c2fe16b52c"
+  },
+  "apkHashes": {
+    "fixture": "c697a00a76e61be71710f43a1e131ab7a53e7c3ac2508db2e4d74ee2c5e3baa9",
+    "tests": "139c341d2ebb659c2ff6928436152a76c7943c62f6f0b40893290f36f8cf995c"
+  },
+  "junit": [
+    "panelSubscriptionControllerReplacementStartsWithItsOwnStateAndDetachesOldOne",
+    "panelSubscriptionLifecycleRestartReadsLatestBooleanWithoutCollectingWhileStopped",
+    "panelSubscriptionPairsSuppressAnchorAndGestureRecompositionsButKeepBooleanTransitions"
+  ],
+  "sample": {
+    "updates": 54,
+    "legacyCompositions": 54,
+    "projectedCompositions": 0,
+    "booleanTransitions": 3
+  },
+  "note": "Both subscriptions observe the same controller in one mounted Compose test. Each anchor/gesture update settles separately. Counts exclude mounting. This is eliminated subscription work, not full-page latency or phone FPS."
+}

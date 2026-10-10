@@ -1,0 +1,321 @@
+{
+  "sourceSha": "ac47787cf2939a91779f2563fa40bb8b610a07e7",
+  "productionChanges": [
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt"
+  ],
+  "runs": {
+    "release": {
+      "run": {
+        "id": 38048241765,
+        "head_sha": "ac47787cf2939a91779f2563fa40bb8b610a07e7",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/release.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/38048241765"
+      },
+      "jobs": [
+        {
+          "id": 114202002461,
+          "name": "build",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114202002461",
+          "annotations": []
+        }
+      ]
+    },
+    "pipeline": {
+      "run": {
+        "id": 38048241980,
+        "head_sha": "ac47787cf2939a91779f2563fa40bb8b610a07e7",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/terminal-pipeline-tests.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/38048241980"
+      },
+      "jobs": [
+        {
+          "id": 114202003328,
+          "name": "pipeline",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114202003328",
+          "annotations": [
+            {
+              "title": "Terminal pipeline evidence 3/3",
+              "message": "zlib-base64 sha256=24632fde92f4c647cfc76a816a8c57b7b5cdb922062c40156f41e2878333ab81\n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"
+            },
+            {
+              "title": "Terminal pipeline evidence 2/3",
+              "message": "zlib-base64 sha256=24632fde92f4c647cfc76a816a8c57b7b5cdb922062c40156f41e2878333ab81\n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"
+            },
+            {
+              "title": "Terminal pipeline evidence 1/3",
+              "message": "zlib-base64 sha256=24632fde92f4c647cfc76a816a8c57b7b5cdb922062c40156f41e2878333ab81\neNq9XGtzGze2/Css1VZlt1Yc4v3wLX+QbTnRlh+6eiR3azelAgaAxIgiVeTQsZLKf7+N4cM2Z4aWLYlxLFkkNcCcxunTfQDyz70bNx6mOKv2nv25N5sPq7j3bK+K05vh2I36t8PbOBqOY/8D3dvfm03m0zKeXjm8xJVCa6PLxCy3zlKtbWJS8eQE8d54RYkjOmr82nQ+Pgr4FW6IMExQa8j6YrM8rLu9Hcym5eDGDceD39wHN7iJg2nMfwbT4fW1u5r7QXCVG5STcYUXxenghSuvL6eT+TgcTye4zuytG7vLOC2uqzwUCawMIvHScqOoMWUUTnrMMRLtoo9RlslJ45L2uIHEqCt9TCQIo0rpDOb3PZN656rhh3hc3b2YDsNlXMzFKsTBs8ipRXyYj1yySJyQhKmgRZKlN04ggsTYqJSmplQBP5ZaxyBjfOhclvFZTKaMVFmOyARKguKCGhto4kpjAlJwa10wGNom6l1QliUvaDQiJMyZxRS+czLHJ5NJ9SVCIeHufNQ0RpMMZVSVhnvFHReCKeuSxJiMMC2kkAkzsZrF0hNbsiCY/c6JnC1X9vFyYZ9NXbnEicRIAjEYLCTLdUKUgqeKsdIESUsTrSbJSCLKoFKijvnSCmGCd6XzVvL7zmg+HNwiDrMtszoaz6rp/Cbi+Wo4GS/mFxIXLnGCxErcaCqMdZF5rzQWN6fMUOu0ctYLrw0xymoTVBA+Op6o1PQB81suoVP8xXSO3Wppc4OcZ07GhBTDN6DEpWYG6Q9QoyNMUkldwpLjVCuCJeUjOMIHp5zw5hFC9vMw/n47mVYvhuMwHF8uU44qTEfohHCQssQ0YgjWCuUp0p5ToZ1Tgjkly2g8oplAFdYoAqCTMvER5/V6MhpNfj8FkMuYGc3LqIzAYCUHJwUaqFHMWIGUoJKEGKIvSympFwzzE1h/njkOXlKY92PM7Y374+6oijeHH2M5rybLjNQigCQ1KFA4w7UDE1FFEndMOIs5JZeSIZikNMRG6VUoNQWTmShisMY+YtBOyynCdphSLKslcREftGFKYMkrcBjqCNa11QlRQxKWwA6JyhNCplNAOsrEfZk4txxBE98AaTUczdYTOryZj9w6Qtwyam3yzDhHqeWogUQTLcEKkoOxuQeHotZwTX0QykkuJSZHgxQEjMY251Dih9XAF7fVXYEHMkd7jvkri7BSUAsShmmqhAItsZgJkhKb6xXjKFiqJFFJBioNLjiJx1Yc7efDUSgupy6M8tJDpd3znJOSJgKUtaeGs5JwByrTlBsG2o+4gGBeugQu5EGivHPmfCbcVOLWP7uBlUSoIB0GB+MwnQzD26WUKD7ejPJ9gKyMsIRTGRAzrr0GG0RtSwJOp46Da0EYpYgG9GG8tTEyMFli2kotaddoXdCtxEqT5PFbByXK4RAxXpRBZ2RevzJwlDpaouImownlARU4Jh55YBp1OJpITSDaJK6j0sHryGh0qWNqyzicfdcsP5F+rK+wpAsQKi8pFIL01msB2sI6KwOCqrhGKUKEfWSlB5sIkAlwzSoG7Bpc1Iw96kyrO9TL8SynaPtsVZASss9E74lU0INOpFRmySN9SSnoLASerKRYDNFLq3P0hUGp1w4igD5FXH+ZTK9HExeWVRQcQTwWmSPGmcg5ZohMlTYY6D8UdaV9CM6KUiLPiBWZhCB9wMyMa5v1bHE5rPKIs3I6vK1mA+jbfkMxF7d3eZ3ZQDgSySAKXAkKxqQIDSVSqxiRq9EEi0EEZwrDehG5VhyKCxAyjNcyWp3Wn403hbJaDBYhkTQBaxhhtEQqiUST9zwmKN4E4QRKtNSDRGQ0UlvvnGNMyCgQD87yovZxXF7duOn1bFBfuP/RqAslBgkx7FeTfjma5FtzVXmVY4kyj9IA2gCj6BKcxLiAIwCRJAvi8gaJjXGzGSgV6qqxJgSQZiKKiMS2DDgO130sMFT0/lV0AapxNahIAsybApLBoPp4j8yFcg5IaZQsLo2XIREZSu9lwtOWGawtUEuipeDCNgYN8zKLrIu44vo6mCzlomdVIJFHrBYTmEK0UAFQabTxhKQIqMCXkPY2K1mvoIPwkHcEIccwC+odjIZ+VnyI0yydZkU1qbkRl0OVpWB63IfnCTLSeuVgSSL0J8oMixHqjUlrpQn4d8RChfRNqH1esnKZKOXk5nYyixf5+3AUp/jHOA0vi/ytlozCcY8SiTWHIqKdL5mCjIcLIEgDuCIPqII3WCFgRGdgObyF9nCyxMJtqP0pqnZC1R78Fis/xSOzi5vJeFJUVR5NKeYoIobVTlFcfGJBa8EgBoME/SesdyGpos4TRiFLBeEKGhp3XLqSULX3Vx7uuraElZtextqTJtxX9purijaYzKvbORIBL/2yLuAl/c8fKPCKbDSvHIgorxwRNPPZslJoVA+0oghwh1wSmBANTZqtItxaWTKmiLfcQ+1TSA2OGYZsWv1dlS0rbs9AXjKxv3cLHwo1g8vfxGLBScWKk4oQPxTj+LEqPp8WLlPGaTVMwxKi8GI1vf/saaLwP4oyL7GGoUkVqJM4rEMHF4YH8Z+KDAqH4WfloSmgNSyKWFkmGsPerwhgtbTy"
+            },
+            {
+              "title": "Terminal pipeline 36 samples verified",
+              "message": "chunkedLayers/mounted: firstDraw=40.58ms visibleCheck=142.86ms panelCompositions=1\nchunkedLayers/imeVisible: firstDraw=58.62ms visibleCheck=185.08ms panelCompositions=1\nchunkedLayers/imeHidden: firstDraw=42.26ms visibleCheck=143.98ms panelCompositions=1\nchunkedLayers/remount: firstDraw=33.81ms visibleCheck=134.74ms panelCompositions=1\nlazyHistory/mounted: firstDraw=41.39ms visibleCheck=146.05ms panelCompositions=1\nlazyHistory/imeVisible: firstDraw=58.41ms visibleCheck=179.35ms panelCompositions=1\nlazyHistory/imeHidden: firstDraw=40.49ms visibleCheck=136.69ms panelCompositions=1\nlazyHistory/remount: firstDraw=28.88ms visibleCheck=126.70ms panelCompositions=1\nlazyHistoryIme/mounted: firstDraw=44.87ms visibleCheck=137.37ms panelCompositions=1\nlazyHistoryIme/imeVisible: firstDraw=54.39ms visibleCheck=145.51ms panelCompositions=1\nlazyHistoryIme/imeHidden: firstDraw=40.62ms visibleCheck=139.52ms panelCompositions=1\nlazyHistoryIme/remount: firstDraw=29.34ms visibleCheck=111.93ms panelCompositions=1"
+            },
+            {
+              "title": "Terminal transport probes verified 4",
+              "message": "[{\"probe\": \"directWorkload\", \"State\": \"S (sleeping)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"do_wait\", \"alive\": true, \"matched\": true, \"stdoutBytes\": 13, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"managerPrintf\", \"matched\": true, \"timedOut\": false, \"readerFailure\": null, \"stdoutBytes\": 15, \"stderrBytes\": 0, \"status\": \"COMPLETED\", \"exit\": 0, \"backend\": \"native-pty\"}, {\"probe\": \"managerWorkload\", \"matched\": true, \"timedOut\": false, \"readerFailure\": null, \"stdoutBytes\": 13, \"stderrBytes\": 0, \"status\": \"RUNNING\", \"backend\": \"native-pty\", \"State\": \"S (sleeping)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"do_wait\"}]"
+            },
+            {
+              "title": "Terminal transport probes verified 3",
+              "message": "[{\"probe\": \"rawExternal\", \"State\": \"R (running)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": true, \"matched\": true, \"stdoutBytes\": 15, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"pipePrefix\", \"alive\": true, \"matched\": true, \"stdoutBytes\": 18, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"redirectOnly\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 16, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"cookedLogin\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 14, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}]"
+            },
+            {
+              "title": "Terminal transport probes verified 2",
+              "message": "[{\"probe\": \"rawLogin\", \"State\": \"R (running)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": true, \"matched\": true, \"stdoutBytes\": 16, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"cookedLoginOnly\", \"State\": \"R (running)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": true, \"matched\": true, \"stdoutBytes\": 13, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"pipeLogin\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 17, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"cookedSttyOnly\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 25, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}]"
+            },
+            {
+              "title": "Terminal transport probes verified 1",
+              "message": "[{\"probe\": \"androidPty\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 18, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"prootPipe\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 17, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"prootPty\", \"State\": \"R (running)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": true, \"matched\": true, \"stdoutBytes\": 16, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}, {\"probe\": \"cookedBuiltin\", \"State\": \"Z (zombie)\", \"TracerPid\": \"0\", \"Threads\": \"1\", \"wchan\": \"0\", \"alive\": false, \"exit\": 0, \"matched\": true, \"stdoutBytes\": 22, \"stderrBytes\": 0, \"timedOut\": false, \"readerFailure\": null}]"
+            },
+            {
+              "title": "Terminal pipeline APK identity",
+              "message": "{\"suite\": \"terminal-pipeline-v1\", \"sourceSha\": \"ac47787cf2939a91779f2563fa40bb8b610a07e7\", \"runId\": \"38048241980\", \"apks\": {\"target\": {\"file\": \"app/build/outputs/apk/terminaltest/app-terminaltest.apk\", \"sha256\": \"44d72b7cf21728b5efe4d8613501ee7da68618607cc2260b93b504182435cad0\", \"bytes\": 118854724, \"package\": \"me.rerere.rikkahub.dev.next.terminaltest\", \"certificate_sha256\": [\"70670632c3cb5d8f46fcb0aa9dab413cbbbb6e22572b416b0698c3975dccf1ed\"]}, \"test\": {\"file\": \"app/build/outputs/apk/androidTest/terminaltest/app-terminaltest-androidTest.apk\", \"sha256\": \"0423eca57a2e7b1074abd5fbacf3d880782e5e111015865484e9227192a23079\", \"bytes\": 934122, \"package\": \"me.rerere.rikkahub.dev.next.terminaltest.test\", \"certificate_sha256\": [\"70670632c3cb5d8f46fcb0aa9dab413cbbbb6e22572b416b0698c3975dccf1ed\"]}}, \"target_debuggable\": false, \"target_minified\": false, \"target_release_derived\": true}"
+            },
+            {
+              "title": "Test-only PRoot fork overlay",
+              "message": "{\"proot_commit\": \"58aad2cb1c36ea6af7b32d76ccd5bf8d0a967939\", \"patch_sha256\": \"db6ea9dcea0a77c1ac234cf27cef9abeb881809cb610c668e898ddc40f0604f2\", \"ndk\": \"27.2.12479018\", \"header_patch_sha256\": \"4f493afd9b782e0bbdf8089dca8a67358b5df05dcbb5f0bb9287af9eef1c4349\", \"talloc_header_sha256\": \"e01fb092aaed2b431be26674e2b791c77fb5984537c29b514e957582c6b31465\", \"talloc_library_sha256\": \"77be445f4ec245fff9c19e9874ebcf99618244cf48737f5fca938316daaa70da\", \"overlay_sha256\": \"8e6e7eee0d4e18dac795ad48b1cfd98c200d4f070d7ed98b5f6846f5e0c35d23\", \"source_sha\": \"ac47787cf2939a91779f2563fa40bb8b610a07e7\", \"build_run\": \"38048241980\", \"overlay_only\": true, \"compiler\": \"Android (12470979, +pgo, +bolt, +lto, +mlgo, based on r522817c) clang version 18.0.3 (https://android.googlesource.com/toolchain/llvm-project d8003a456d14a3deb8054cdaa529ffbf02d9b262)\"}"
+            }
+          ]
+        }
+      ]
+    },
+    "viewport": {
+      "run": {
+        "id": 38048241632,
+        "head_sha": "ac47787cf2939a91779f2563fa40bb8b610a07e7",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/terminal-viewport-interactions.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/38048241632"
+      },
+      "jobs": [
+        {
+          "id": 114202001706,
+          "name": "gestures",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114202001706",
+          "annotations": [
+            {
+              "title": "Terminal binding projection evidence 1/1",
+              "message": "zlib-base64 sha256=3ede2a98eee32df7a3b408ce4603512eedf4e5e80ec342a5adf8f155855cc79d\n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"
+            },
+            {
+              "title": "Terminal binding projection verified",
+              "message": "{\"layoutChanges\": 24, \"legacyCompositions\": 24, \"projectedCompositions\": 0, \"bottomChecks\": 24, \"bindingStable\": true}"
+            },
+            {
+              "title": "Terminal panel subscription evidence 1/1",
+              "message": "zlib-base64 sha256=ccb6fc8edad44d6b23ddc41ed376058912eb9b1edfb7dd53279d62ad5a21dba2\neNqtVttu20YQ/RVCz7G094vfkrRpgwaIYRnNQ9GH2d1ZizFFErukHSPIv2coKY6bS+GHQCIokLszZ87MOauPqzq3E67OVxOWfdtDdzZCj91ZnUONpR2ndujPbvnq2aoOc4m43QEthqisdTZm4aUHz631WWgjMygWgguGM2AWLW0rc/860RbpmHJCcSPFQ7A/oe6wrs4/rmAcN7XEzR7afvMebmGzx03B5bMp7c0N7OawmdvNCNdYN3HoJ1qIZXN1Qv13i3fjUKZXQ9cNd9sJJlzfTJTWWRnROGVYihJ0SDxxZ4TzSqbMNUuYMMSoNQ9K6IhKRBcESBO1URaQsD4JW4IJ/gfXS3pTCBuWIywLYLJMIVBax5P02ruULDKPMmgB6JAnrRljmQdwOuZsidNAT7zOqH4RrEdE6Uils+idsMi1Y94ZME6iDQy0BgY5UsNlQlAx+Sh0ciIpyEwBAZX2FyG6xDTHLyx5BEFtydFkL61PQcuAIjGulVTZW0OgmBeEFkLm6LJhGQ1zSnglJHsySz8YrIsyRKx1Sxcp4ILeHiFJR4MuQGPmztHNiyy1FY5mnvIjMKG55pCNl5JbwyCZgCSMkMCACo4gBezjbg/lpm4eRHd7Kv9swjrVA2LoUxnadEUPfgr8y7Zl1wOVF4uAt4/0+7qvU5n32E94CHdquMwqRm6idIo7RmJOznJLQkAthXQugUpCWE1jQVr2fFlPAylZtiEE87RKwtx2aX1dIHULg3UxD2m4y8kbrQR1UQafuWKWEmgfOCMTQWNyJHFm6ZlSNFzCKlIpsRoEY09LTL5zFtt13S0mEBVi5MyrqMGQBXHHg6Yhds7xmKJmkufMpJbovZU8ES1SGhKjYtrGxQTW1+20MH4klcLjKddPXXM93lPqoBVoRxyzILmwEFkOgF5zmmaqMkgXvLZcSZKZk9ExlsAyzxmP5pvUd0O5yeRuP6q5pd4WiEveur7fdweavSQT9s6HID16p5mPxjolhWHKUBecYDSSiTMXHXcK6eIhWU1ja7SnzMe2bbo21PUtlnqIPg2H8C4JBUSj9D7YILNLwQcDVCzqnAT3AjGZJLT32iX6jRIUUZ6RG3K4uPq0iPPm6xGQ2w/TXJajKBpvgTGwBg1NIw0lZ1lJ4Mglh2CB+kRWBGRCjNIKVInmA0XUZJ4AC/LDDFAoLn2UiieBNLFLxzMpUxAHhpOKrYmWDoJoRDaZBcWcl8LT2JnsYibgB5Tv574lwfyzGr8V1ldXv8Sxg4iLxshTy1TfUc9eT/XtXX/w2Od9+g0niFTr2y697Ze+fhfuTZsx3scOLwk9LF4Iqb6BpZYXw9Ah9EvUYabThHJSs/vrd7u2w+00jCOmH4W8gLbU7TyOhYzsOYlmKATlD4pIVF9iHPbjUNvD2LyYp78Qx1OmqwL96cXqXzqvYT92uLRpHtOCaHWu1bNVh9cQ718+inJ8PpbhPQHE9N9XjJT7ffhzSST3w+FfyIth2jWPVVSbIVQst9hMO2wIBjbxgfWm7Zuhx2Y/zIu3NcdstHQxueZ3oruBQ82b62PFzRF9U3GaOqx0H6HQg+5+TZspSG3wQ+zmdIpJDK+bq11bG/pi1y6qWxI9RtgsunzWUAFNnrvFCa6x6WhZH++boTTjboH46mK7Xn36DF2sJUE="
+            },
+            {
+              "title": "Terminal panel subscription verified",
+              "message": "{\"updates\": 54, \"legacyCompositions\": 54, \"projectedCompositions\": 0, \"booleanTransitions\": 3}"
+            },
+            {
+              "title": "Terminal scroll completion evidence 1/1",
+              "message": "zlib-base64 sha256=2dca16f1c8efe3b047233c7fb5e21371189b7fdebfd9bca54a5c0286da2b8e10\neNq1mF1v3MYOhv+KsNd2d74/3KvGqE8MJG0Rpw2KohfUDMerWistNJITN8h/L7W2E7tIIM3BOTAM2JLmEfmSQw71cZP7aQh4tYPN2QaCstbZkISXHjy31iehjUygWF272nAGzKLdnGyGqbuMtEQ6ppxQ3EhBV/PUjEhXRxz2TQftaQ5D37anod8fWhybvju95fRc6LuRbty/lStnmWLReq+UMRwtczIaenNSnjlUQadk05N1L/p4R2vJNFpee6E5QGBSgdQsKsli1IlBirU0IjFyRYdomPYhYK1ZMohoQDlOniYzm33U4CXkHebN2cdNjV3Y7WG4ydvPntw2+P7QD+PpiHnM2zyELXRx6Jv4li5s/4Jb2O5xO+D8sx2amxvYTfX2cdm8avsKryHcvX1AvoK/7y5H3P/4AcM09sN3NyO5YykEJhgy3aYAGiEaHWuRKBK2rj0qcIFHUqwWPmnGRAhehhSjZRyUrsmd/5f5j4ZfHYN6/jmml10eh2mP3YhH2r0jEoXwInCHIpmYgpHKAXea6SBU9BBh9qZOTkcMljxRgbk6oOdMeFd7cgQOh6Ole2i6b5o4NdsDXGPezslBD+KwXVI4koo2KkdaSgvGcm5YkiAU+Ih1gpQckzFpxzzq2sRgucA5EzF6t9qwCCN8xajZoN8eZL03yPBaCwYGmFeQGAPaeFLXQpraeVOj9LTLrHY1eGelDTJxYQIoTMEpH8X/UKnXCHkacI5lvjcupdrLWjEJVgAlZ1KR9iYVB+a0Yi7WPOroA68xIqe9SiYjF2R2CFzVXG0+zdbdfNlcqfkw0isIHYy3QO5agyQBWm45S0oCRy451Ba0RPIWgtDziwSqaBWiCBplDTAH4pjNcw2RPkjFo8C6NrTRBW1sL5yShmsy2wTrlQxUDUxi5IzzUngKuUkuJO91mK38a+oa8viPTf5Xfr9ucm666yfavINmzC+m8Ry6gG0L81M/4S0Ob3AOa76aqNTkPJeWf7F+TokuIXZvYbjG8YcuXlAwznfQUWCuxqZt3yCE3Y8fINDNsOuHr0B+gWbAeHXkXNCd/v2vGfO7Xd/iT0DiQvsSm+vdeP/ENwG/NbmpW3zZZNobd+f9MGCY786wK9jjf7Df4zjcvWvGXT+NF3OiXAx042vEPo+vpxGe6PXzcO9WfOQc3fu9wTbmBcLb/ga7y3y+w3CD8QWmfsAfSNLD+CUO8dsiX43QthhfwR2ZfZlf9FMXMZLWxxg9rvuTFsK8hBLoj4+bAHlOyvxEVUIfSKnNGTvZtMfavTmjSocnlMRDHh//eT9nw+aMn2w66Pr5L+OpnFn/6WQ1NkGbv3Af/nsAs89gway3ji9x+be4z+x9guWGyrIrwD5T4bm1T2SwklOPXpRBFKpr2XzmkAXYlepyNVfeJa4sVVdSHXIl2HXqGielYYvqqtLcpZ4ilSzArlVXKKXtEleX5660zhRg16rrlWNsiWuK1aVDhSvBrlVXO8kXt7AtVVcwaZwuwK5U1zNOh/Ulriuuu5oZKQuw69TldHywYnGr+UJ1OU08lusC7PrcpcPZE+7uvsd/PlH8d23Naq25dSXcdfo67syzkvN1bmlfM46O9q4Eu7Kvac2sEIvg4sZGY4B8ViIXuev0NVR45TK3tLMZwYT0JdjV+irLlu1VxfoSeYXBxb2N8kwLvsgt7W2GW/WsPCxiV+prJP0u529pc7NSertC3+LuZhwTankjl3Y3o41UogS7Nn+ZZkotgl15/aUhWZRw1+pLk/Kyvb44f6U1rAS7Ul8nOI3wn2iC6/rjB8d5XK32NOeNGKsBoa3mLxqvmuNXqw/j91XGcTpU/fsuV4c+N/OUSKPkSdX11cNHxRaHKk4DXa3ux8JY4eN3o2qeLfuM1fy94TQOzS12VZpH4Sq0fbj5vsIWDpmW3EI7Ya6aLrRTvH++ymGHcWof3jdWh13fYdXCiF24q/qhuvjl6rvNp38AeckdUA=="
+            },
+            {
+              "title": "Terminal scroll completion verified",
+              "message": "historyAnchor legacy=True: n=10 waits=1 fixtureElapsedMedianMs=17.555\nhistoryAnchor legacy=False: n=10 waits=0 fixtureElapsedMedianMs=0.668\nscreenFollow legacy=True: n=10 waits=1 fixtureElapsedMedianMs=16.898\nscreenFollow legacy=False: n=10 waits=0 fixtureElapsedMedianMs=2.150"
+            },
+            {
+              "title": "Terminal regression test counts",
+              "message": "129 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.viewporttest.TerminalBindingProjectionInstrumentedTest: 3\nme.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest: 7\nme.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest: 6\nme.rerere.rikkahub.viewporttest.TerminalIntrinsicWidthInstrumentedTest: 7\nme.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest: 20\nme.rerere.rikkahub.viewporttest.TerminalLazyNaturalGeometryInstrumentedTest: 22\nme.rerere.rikkahub.viewporttest.TerminalPanelSubscriptionInstrumentedTest: 3\nme.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest: 2\nme.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest: 8\nme.rerere.rikkahub.viewporttest.TerminalScrollCompletionInstrumentedTest: 7\nme.rerere.rikkahub.viewporttest.TerminalTextCompatibilityInstrumentedTest: 3\nme.rerere.rikkahub.viewporttest.TerminalTranscriptGeometryInstrumentedTest: 8\nme.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest: 24\nme.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest: 9"
+            }
+          ]
+        }
+      ]
+    },
+    "jvm": {
+      "run": {
+        "id": 38048241638,
+        "head_sha": "ac47787cf2939a91779f2563fa40bb8b610a07e7",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/terminal-emulator-tests.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/38048241638"
+      },
+      "jobs": [
+        {
+          "id": 114202001630,
+          "name": "Run TerminalEmulator unit tests",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114202001630",
+          "annotations": [
+            {
+              "title": "Terminal regression test counts",
+              "message": "374 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.data.container.BunCompatibilitySourceTest: 4\nme.rerere.rikkahub.data.container.ControlInputTest: 6\nme.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest: 1\nme.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest: 13\nme.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest: 1\nme.rerere.rikkahub.data.container.PtyModeInferenceTest: 7\nme.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest: 18\nme.rerere.rikkahub.data.container.TerminalFastFlingTest: 15\nme.rerere.rikkahub.data.container.TerminalHistorySnapshotTest: 12\nme.rerere.rikkahub.data.container.TerminalItemViewportTest: 22\nme.rerere.rikkahub.data.container.TerminalLazyViewportAdapterTest: 7\nme.rerere.rikkahub.data.container.TerminalLazyViewportMeasurementTest: 14\nme.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest: 5\nme.rerere.rikkahub.data.container.TerminalPipelineTraceTest: 7\nme.rerere.rikkahub.data.container.TerminalRenderPreferencesTest: 6\nme.rerere.rikkahub.data.container.TerminalRenderedRowsTest: 29\nme.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest: 22\nme.rerere.rikkahub.data.container.TerminalTranscriptWidthIndexTest: 18\nme.rerere.rikkahub.data.container.TerminalUiSourceTest: 12\nme.rerere.rikkahub.data.container.TerminalViewportControllerTest: 29\nme.rerere.rikkahub.data.container.TerminalViewportFollowStateTest: 5\nme.rerere.rikkahub.data.container.TerminalViewportItemGeometryTest: 6\nme.rerere.rikkahub.data.container.TerminalViewportReducerTest: 27\nme.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest: 4\nme.rerere.rikkahub.utils.TerminalEmulatorTest: 84"
+            }
+          ]
+        }
+      ]
+    },
+    "full": {
+      "run": {
+        "id": 38048241693,
+        "head_sha": "ac47787cf2939a91779f2563fa40bb8b610a07e7",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/terminal-production-benchmark.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/38048241693"
+      },
+      "jobs": [
+        {
+          "id": 114202001719,
+          "name": "build",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114202001719",
+          "annotations": [
+            {
+              "title": "Production benchmark build",
+              "message": "{\"sourceSha\": \"ac47787cf2939a91779f2563fa40bb8b610a07e7\", \"buildRun\": \"38048241693\", \"suite\": \"production-viewport-v4\", \"apks\": {\"target\": {\"file\": \"target.apk\", \"sha256\": \"b55891c784089ea5eee06a3609b8fd5e9b9b48919d9a70f4da296de2985b0afd\", \"bytes\": 24522423, \"package\": \"me.rerere.rikkahub.terminalbenchmark\"}, \"driver\": {\"file\": \"driver.apk\", \"sha256\": \"0d1d28969c4d038dcf13b92229441ab5b518060c02024a9ce7255daa93235611\", \"bytes\": 46274753, \"package\": \"me.rerere.rikkahub.terminalbenchmark.test\"}}, \"instrumentation\": \"me.rerere.rikkahub.terminalbenchmark.test/androidx.test.runner.AndroidJUnitRunner\"}"
+            },
+            {
+              "title": "Terminal regression test counts",
+              "message": "25 JUnit cases; failures/errors/skips/missing suites: 0\nme.rerere.rikkahub.benchmark.ProductionBenchmarkSpecTest: 6\nme.rerere.rikkahub.benchmark.TerminalBenchmarkLayoutTest: 10\nme.rerere.rikkahub.benchmark.TerminalBenchmarkWidthIndexTest: 8\nme.rerere.rikkahub.benchmark.TerminalBenchmarkWorkloadTest: 1"
+            }
+          ]
+        },
+        {
+          "id": 114202635777,
+          "name": "scenario (detachRestore)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114202635777",
+          "annotations": [
+            {
+              "title": "Production viewport detachRestore",
+              "message": "production-viewport-v4 detachRestore sha=ac47787cf2939a91779f2563fa40bb8b610a07e7 smoke=False; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 3 | — | 420.36 | — | 223.49 | — | 140.08\n1000 | lazyHistory | 3 | — | 204.07 | — | 90.31 | 42.60 | 102.08\n1000 | lazyHistoryIme | 3 | — | 279.52 | — | 103.00 | 32.60 | 102.13\n5000 | chunkedLayers | 3 | — | 2241.69 | — | 1908.53 | — | 234.75\n5000 | lazyHistory | 3 | — | 450.20 | — | 272.86 | 172.15 | 165.95\n5000 | lazyHistoryIme | 3 | — | 521.55 | — | 327.44 | 218.41 | 165.02\n10000 | chunkedLayers | 3 | — | 5758.30 | — | 172.16 | — | 352.69\n10000 | lazyHistory | 3 | — | 893.41 | — | 921.50 | 608.21 | 205.21\n10000 | lazyHistoryIme | 3 | — | 653.10 | — | 517.10 | 412.36 | 205.03"
+            }
+          ]
+        },
+        {
+          "id": 114202635785,
+          "name": "scenario (semanticJump)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114202635785",
+          "annotations": [
+            {
+              "title": "Production viewport semanticJump",
+              "message": "production-viewport-v4 semanticJump sha=ac47787cf2939a91779f2563fa40bb8b610a07e7 smoke=False; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 3 | — | 1298.06 | — | 120.76 | — | 105.23\n1000 | lazyHistory | 3 | — | 787.65 | — | 166.65 | — | 108.25\n1000 | lazyHistoryIme | 3 | — | 838.92 | — | 169.26 | — | 109.97\n5000 | chunkedLayers | 3 | — | 1394.39 | — | 125.97 | — | 165.05\n5000 | lazyHistory | 3 | — | 848.06 | — | 151.35 | — | 131.46\n5000 | lazyHistoryIme | 3 | — | 898.41 | — | 135.99 | — | 148.05\n10000 | chunkedLayers | 3 | — | 1421.27 | — | 127.35 | — | 246.06\n10000 | lazyHistory | 3 | — | 845.13 | — | 168.99 | — | 163.02\n10000 | lazyHistoryIme | 3 | — | 980.18 | — | 165.13 | — | 162.42"
+            }
+          ]
+        },
+        {
+          "id": 114202635794,
+          "name": "scenario (appendAndTrim)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114202635794",
+          "annotations": [
+            {
+              "title": "Production viewport appendAndTrim",
+              "message": "production-viewport-v4 appendAndTrim sha=ac47787cf2939a91779f2563fa40bb8b610a07e7 smoke=False; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 3 | — | 5493.19 | 183.08 | 121.03 | — | 132.12\n1000 | lazyHistory | 3 | — | 6377.39 | 212.56 | 115.58 | 1.84 | 112.80\n1000 | lazyHistoryIme | 3 | — | 6436.66 | 214.53 | 118.32 | 1.23 | 112.54\n5000 | chunkedLayers | 3 | — | 6895.50 | 229.83 | 156.94 | — | 178.83\n5000 | lazyHistory | 3 | — | 6420.07 | 213.98 | 115.31 | 0.87 | 123.07\n5000 | lazyHistoryIme | 3 | — | 6476.89 | 215.87 | 118.74 | 3.13 | 122.77\n10000 | chunkedLayers | 3 | — | 8946.72 | 298.21 | 217.56 | — | 268.34\n10000 | lazyHistory | 3 | — | 6526.84 | 217.55 | 112.18 | 0.98 | 156.01\n10000 | lazyHistoryIme | 3 | — | 6228.26 | 207.58 | 111.42 | 1.19 | 165.78"
+            }
+          ]
+        },
+        {
+          "id": 114202635815,
+          "name": "scenario (activeRowUpdate)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114202635815",
+          "annotations": [
+            {
+              "title": "Production viewport activeRowUpdate",
+              "message": "production-viewport-v4 activeRowUpdate sha=ac47787cf2939a91779f2563fa40bb8b610a07e7 smoke=False; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 3 | — | 3513.13 | 117.09 | 83.93 | — | 107.69\n1000 | lazyHistory | 3 | — | 3575.91 | 119.18 | 86.25 | 0.51 | 98.60\n1000 | lazyHistoryIme | 3 | — | 3529.07 | 117.63 | 87.17 | 0.44 | 98.53\n5000 | chunkedLayers | 3 | — | 3582.53 | 119.41 | 84.94 | — | 169.98\n5000 | lazyHistory | 3 | — | 3738.29 | 124.60 | 88.20 | 0.31 | 118.88\n5000 | lazyHistoryIme | 3 | — | 3605.67 | 120.17 | 88.10 | 0.25 | 137.08\n10000 | chunkedLayers | 3 | — | 4006.11 | 133.52 | 92.78 | — | 256.97\n10000 | lazyHistory | 3 | — | 3759.27 | 125.29 | 93.61 | 0.58 | 151.34\n10000 | lazyHistoryIme | 3 | — | 3749.26 | 124.96 | 94.23 | 0.39 | 196.14"
+            }
+          ]
+        },
+        {
+          "id": 114202635842,
+          "name": "scenario (initialCompose)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114202635842",
+          "annotations": [
+            {
+              "title": "Production viewport initialCompose",
+              "message": "production-viewport-v4 initialCompose sha=ac47787cf2939a91779f2563fa40bb8b610a07e7 smoke=False; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 3 | 857.29 | — | — | 716.15 | — | 104.22\n1000 | lazyHistory | 3 | 401.79 | — | — | 192.30 | 33.60 | 93.44\n1000 | lazyHistoryIme | 3 | 405.13 | — | — | 209.24 | 60.51 | 93.55\n5000 | chunkedLayers | 3 | 4713.82 | — | — | 234.81 | — | 202.54\n5000 | lazyHistory | 3 | 1007.04 | — | — | 809.99 | 502.17 | 136.99\n5000 | lazyHistoryIme | 3 | 723.69 | — | — | 662.73 | 416.29 | 136.99\n10000 | chunkedLayers | 3 | 8246.65 | — | — | 166.92 | — | 261.68\n10000 | lazyHistory | 3 | 2037.44 | — | — | 2025.02 | 1473.10 | 185.49\n10000 | lazyHistoryIme | 3 | 2466.65 | — | — | 2324.56 | 1979.04 | 184.38"
+            }
+          ]
+        },
+        {
+          "id": 114202635883,
+          "name": "scenario (imeRoundTrip)",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114202635883",
+          "annotations": [
+            {
+              "title": "Production viewport imeRoundTrip",
+              "message": "production-viewport-v4 imeRoundTrip sha=ac47787cf2939a91779f2563fa40bb8b610a07e7 smoke=False; one scenario/device/invocation, not FPS.\nHistory | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB\n1000 | chunkedLayers | 3 | — | 4116.86 | 204.82 | 246.33 | — | 106.77\n1000 | lazyHistory | 3 | — | 5080.24 | 219.82 | 272.82 | 1.14 | 127.21\n1000 | lazyHistoryIme | 3 | — | 3949.71 | 221.48 | 243.09 | 0.49 | 97.11\n5000 | chunkedLayers | 3 | — | 4084.64 | 218.42 | 253.00 | — | 164.48\n5000 | lazyHistory | 3 | — | 9350.62 | 219.11 | 222.95 | 0.94 | 222.16\n5000 | lazyHistoryIme | 3 | — | 4099.54 | 223.73 | 241.63 | 0.24 | 136.14\n10000 | chunkedLayers | 3 | — | 4219.31 | 216.20 | 258.51 | — | 262.09\n10000 | lazyHistory | 3 | — | 11816.15 | 214.44 | 237.24 | 0.89 | 255.73\n10000 | lazyHistoryIme | 3 | — | 3994.68 | 220.05 | 218.72 | 0.21 | 150.61"
+            }
+          ]
+        }
+      ]
+    },
+    "apk": {
+      "run": {
+        "id": 38049340982,
+        "head_sha": "ac47787cf2939a91779f2563fa40bb8b610a07e7",
+        "head_branch": "opt/terminal-verified-a79e7b6",
+        "path": ".github/workflows/verify-release-apk.yml",
+        "status": "completed",
+        "conclusion": "success",
+        "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/38049340982"
+      },
+      "jobs": [
+        {
+          "id": 114205145080,
+          "name": "verify",
+          "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114205145080",
+          "annotations": [
+            {
+              "title": "Release APK verified",
+              "message": "{\"source_sha\": \"ac47787cf2939a91779f2563fa40bb8b610a07e7\", \"release_run_id\": \"38048241765\", \"apk\": \"app-release.apk\", \"bytes\": 83699827, \"sha256\": \"391b95cfd82ae4001118ce379dbc35b56aa9b4b48b6f16f640f12fa1ca5067e6\", \"package\": \"me.rerere.rikkahub.dev.next.mod\", \"version_code\": \"151\", \"version_name\": \"2.1.62\", \"debuggable\": false, \"native_abis\": [\"arm64-v8a\"], \"signer_certificate_sha256\": [\"f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265\"], \"signature_verified\": true, \"zip_verified\": true}"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "evidenceSha256": {
+    "binding": "3ede2a98eee32df7a3b408ce4603512eedf4e5e80ec342a5adf8f155855cc79d",
+    "panel": "ccb6fc8edad44d6b23ddc41ed376058912eb9b1edfb7dd53279d62ad5a21dba2",
+    "scroll": "2dca16f1c8efe3b047233c7fb5e21371189b7fdebfd9bca54a5c0286da2b8e10",
+    "pipeline": "24632fde92f4c647cfc76a816a8c57b7b5cdb922062c40156f41e2878333ab81"
+  },
+  "fullMatrix": {
+    "run": 38048241693,
+    "evidenceRun": 38049802921,
+    "sourceSha": "ac47787cf2939a91779f2563fa40bb8b610a07e7",
+    "cases": 54,
+    "measurements": 162,
+    "verifiedSourceHashes": 42,
+    "archiveSha256": "ede903e6b70e789f0167d22a229f68d378e00657a04e943276caf9d6c58dbb87"
+  },
+  "apk": {
+    "source_sha": "ac47787cf2939a91779f2563fa40bb8b610a07e7",
+    "release_run_id": "38048241765",
+    "apk": "app-release.apk",
+    "bytes": 83699827,
+    "sha256": "391b95cfd82ae4001118ce379dbc35b56aa9b4b48b6f16f640f12fa1ca5067e6",
+    "package": "me.rerere.rikkahub.dev.next.mod",
+    "version_code": "151",
+    "version_name": "2.1.62",
+    "debuggable": false,
+    "native_abis": [
+      "arm64-v8a"
+    ],
+    "signer_certificate_sha256": [
+      "f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265"
+    ],
+    "signature_verified": true,
+    "zip_verified": true
+  },
+  "artifacts": [
+    {
+      "id": 11668453753,
+      "name": "rikkahub-release-ac47787cf2939a91779f2563fa40bb8b610a07e7",
+      "size_in_bytes": 81438447,
+      "expired": false,
+      "expires_at": "2026-10-24T11:33:52Z"
+    }
+  ],
+  "limitations": "24 real layout-only changes eliminate panel recomposition with exact Text geometry. Full V4 and 36 PTY samples are same-SHA acceptance, not paired old/new phone performance."
+}

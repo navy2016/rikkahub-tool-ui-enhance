@@ -25,6 +25,14 @@ CHUNKED_LAYERS 和 TUI／全网格策略不变；基准协议升为 V4，不重�
 `benchmarks/results/3f33ee3-terminal-acceptance.md`。不得将订阅工作量结果称为手机整体加速，
 也不得将本轮冒烟称为完整 V4。测试用 x86_64 PRoot 覆盖不进入正式 arm64 Release。
 
+最新生产 `ac47787` 仅修改 `TerminalViewportBinding.kt`：组合只观察最新指标 supplier 的
+TUI 布尔投影，并记忆未变的测量 scope／绑定对象。原 snapshotFlow 仍观察全部实时指标，
+真实行高、首布局门控和唯一滚动执行器不变。24 次真实布局变化的额外面板重组旧 24／新 0，
+24 次底行检查通过；374 JVM、129 视口、完整 V4 54／162、15 传输探针／36 回显及 Release
+校验全部通过。证据见 `benchmarks/results/ac47787-binding-projection.md`。下一重点是默认
+长历史冷组合／测量和虚拟历史冷测宽，不得用旧 Runner 数值计算提升率。上一轮订阅同设备
+AB／BA 288 样本已归档在 `benchmarks/results/3b5c3e0-paired-subscription.md`，耗时有升有降。
+
 ## Build, Test, and Development Commands
 
 使用 Android Studio 或命令行 Gradle：

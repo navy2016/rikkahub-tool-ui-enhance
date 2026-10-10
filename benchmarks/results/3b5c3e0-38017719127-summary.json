@@ -1,0 +1,470 @@
+[
+  {
+    "mode": "chunkedLayers",
+    "phase": "mounted",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 3.0,
+      "candidateMedian": 2.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 33.949395,
+      "candidateMedian": 31.221443999999998,
+      "pairedMedianDelta": -1.6624440000000007,
+      "pairedDeltas": [
+        -5.610058000000002,
+        2.285170000000001,
+        9.709120000000002,
+        -14.651279999999996
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 140.3401075,
+      "candidateMedian": 123.21158700000001,
+      "pairedMedianDelta": -17.303048999999994,
+      "pairedDeltas": [
+        -16.27015999999999,
+        -28.46608900000001,
+        13.960655000000003,
+        -18.335938
+      ]
+    }
+  },
+  {
+    "mode": "chunkedLayers",
+    "phase": "imeVisible",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 3.0,
+      "candidateMedian": 2.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 45.8838955,
+      "candidateMedian": 37.305599,
+      "pairedMedianDelta": -7.150257999999997,
+      "pairedDeltas": [
+        -4.988023999999996,
+        -7.288331999999997,
+        -7.012183999999998,
+        -10.868184000000007
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 162.367345,
+      "candidateMedian": 141.6618205,
+      "pairedMedianDelta": -18.009110500000006,
+      "pairedDeltas": [
+        -17.780455000000018,
+        -18.237765999999993,
+        -32.20270599999998,
+        -17.081776999999988
+      ]
+    }
+  },
+  {
+    "mode": "chunkedLayers",
+    "phase": "imeHidden",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 3.0,
+      "candidateMedian": 2.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 30.092409500000002,
+      "candidateMedian": 29.1949055,
+      "pairedMedianDelta": -0.07549949999999939,
+      "pairedDeltas": [
+        1.2750659999999954,
+        0.23263700000000043,
+        -3.1836149999999996,
+        -0.3836359999999992
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 128.978545,
+      "candidateMedian": 128.0338955,
+      "pairedMedianDelta": -1.9758209999999963,
+      "pairedDeltas": [
+        -2.011316999999991,
+        2.928424000000007,
+        -8.286284999999992,
+        -1.9403250000000014
+      ]
+    }
+  },
+  {
+    "mode": "chunkedLayers",
+    "phase": "remount",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 3.0,
+      "candidateMedian": 2.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 37.726104,
+      "candidateMedian": 27.026013499999998,
+      "pairedMedianDelta": -10.700090499999998,
+      "pairedDeltas": [
+        -24.428624999999997,
+        29.128073999999998,
+        3.0284440000000004,
+        -34.94511
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 134.9428265,
+      "candidateMedian": 125.36019350000001,
+      "pairedMedianDelta": -14.852527999999992,
+      "pairedDeltas": [
+        -18.74326499999998,
+        23.034154000000015,
+        -10.961791000000005,
+        -34.949050000000014
+      ]
+    }
+  },
+  {
+    "mode": "lazyHistory",
+    "phase": "mounted",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 2.0,
+      "candidateMedian": 1.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 27.5391895,
+      "candidateMedian": 27.614508999999998,
+      "pairedMedianDelta": 0.3003025000000008,
+      "pairedDeltas": [
+        -0.2715609999999984,
+        9.235353,
+        0.872166,
+        -0.7215269999999983
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 125.874556,
+      "candidateMedian": 127.90522899999999,
+      "pairedMedianDelta": 2.647295999999997,
+      "pairedDeltas": [
+        0.08364999999999156,
+        8.089122000000017,
+        5.210942000000003,
+        -0.8308240000000069
+      ]
+    }
+  },
+  {
+    "mode": "lazyHistory",
+    "phase": "imeVisible",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 3.0,
+      "candidateMedian": 2.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 45.1489685,
+      "candidateMedian": 62.397580500000004,
+      "pairedMedianDelta": 19.229418000000003,
+      "pairedDeltas": [
+        28.971650000000004,
+        9.487186000000001,
+        59.84347499999999,
+        -0.7214179999999999
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 175.251005,
+      "candidateMedian": 172.42780299999998,
+      "pairedMedianDelta": 5.769292000000007,
+      "pairedDeltas": [
+        12.964838000000015,
+        6.123993000000013,
+        5.4145910000000015,
+        -21.64642699999999
+      ]
+    }
+  },
+  {
+    "mode": "lazyHistory",
+    "phase": "imeHidden",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 3.0,
+      "candidateMedian": 2.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 34.9665865,
+      "candidateMedian": 35.1449265,
+      "pairedMedianDelta": -5.502582,
+      "pairedDeltas": [
+        -22.12623,
+        -16.085464999999996,
+        5.080300999999995,
+        27.637644
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 133.1078125,
+      "candidateMedian": 138.6832905,
+      "pairedMedianDelta": -4.1850934999999865,
+      "pairedDeltas": [
+        -12.833983999999987,
+        -15.04303800000001,
+        4.463797000000014,
+        24.413691999999998
+      ]
+    }
+  },
+  {
+    "mode": "lazyHistory",
+    "phase": "remount",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 2.0,
+      "candidateMedian": 1.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 27.6702875,
+      "candidateMedian": 27.462633000000004,
+      "pairedMedianDelta": 0.9607285000000036,
+      "pairedDeltas": [
+        3.346042000000004,
+        -1.4245849999999969,
+        -10.562649,
+        25.295184
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 126.8455455,
+      "candidateMedian": 127.84219200000001,
+      "pairedMedianDelta": -3.9261169999999836,
+      "pairedDeltas": [
+        3.1574660000000137,
+        14.085609000000005,
+        -15.781101000000007,
+        -11.009699999999981
+      ]
+    }
+  },
+  {
+    "mode": "lazyHistoryIme",
+    "phase": "mounted",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 2.0,
+      "candidateMedian": 1.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 29.0888545,
+      "candidateMedian": 28.507977,
+      "pairedMedianDelta": -0.7227265000000003,
+      "pairedDeltas": [
+        -0.8495080000000002,
+        -0.5959450000000004,
+        -0.34794000000000125,
+        -1.6247860000000003
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 127.282389,
+      "candidateMedian": 127.99465699999999,
+      "pairedMedianDelta": -0.049453499999998485,
+      "pairedDeltas": [
+        0.6064750000000032,
+        2.8422959999999904,
+        -0.9065790000000078,
+        -0.7053820000000002
+      ]
+    }
+  },
+  {
+    "mode": "lazyHistoryIme",
+    "phase": "imeVisible",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 2.0,
+      "candidateMedian": 1.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 35.7332155,
+      "candidateMedian": 34.8839345,
+      "pairedMedianDelta": -5.85797,
+      "pairedDeltas": [
+        -16.890344999999996,
+        4.182556000000005,
+        -5.914741999999997,
+        -5.801198000000003
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 149.612899,
+      "candidateMedian": 154.835329,
+      "pairedMedianDelta": 4.518360000000001,
+      "pairedDeltas": [
+        -10.34461300000001,
+        9.364474999999999,
+        9.686304000000007,
+        -0.32775499999999624
+      ]
+    }
+  },
+  {
+    "mode": "lazyHistoryIme",
+    "phase": "imeHidden",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 2.0,
+      "candidateMedian": 1.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 27.2458445,
+      "candidateMedian": 30.085695,
+      "pairedMedianDelta": 4.229073999999999,
+      "pairedDeltas": [
+        5.7443729999999995,
+        2.7137749999999983,
+        -28.232436000000003,
+        26.4688
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 127.93749249999999,
+      "candidateMedian": 125.334277,
+      "pairedMedianDelta": -1.6512699999999967,
+      "pairedDeltas": [
+        -1.9549780000000112,
+        -1.3475619999999822,
+        -9.167018999999996,
+        14.800220999999993
+      ]
+    }
+  },
+  {
+    "mode": "lazyHistoryIme",
+    "phase": "remount",
+    "pairs": 4,
+    "samplesPerArm": 12,
+    "panelCompositions": {
+      "legacyMedian": 2.0,
+      "candidateMedian": 1.0,
+      "pairedMedianDelta": -1.0,
+      "pairedDeltas": [
+        -1,
+        -1,
+        -1,
+        -1
+      ]
+    },
+    "inputToDrawMs": {
+      "legacyMedian": 25.547902,
+      "candidateMedian": 50.887923,
+      "pairedMedianDelta": 13.755314499999999,
+      "pairedDeltas": [
+        -2.6760690000000054,
+        30.181008999999996,
+        -2.670379999999998,
+        39.703586
+      ]
+    },
+    "inputToVisibleCheckMs": {
+      "legacyMedian": 128.581355,
+      "candidateMedian": 136.1792195,
+      "pairedMedianDelta": 7.999347999999998,
+      "pairedDeltas": [
+        -12.458898000000005,
+        16.917125999999996,
+        -0.9184300000000007,
+        18.496613999999994
+      ]
+    }
+  }
+]
