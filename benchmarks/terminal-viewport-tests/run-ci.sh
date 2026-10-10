@@ -66,4 +66,5 @@ run_arm default-bottom TerminalDefaultBottomInstrumentedTest 240
 run_arm stability TerminalViewportStabilityInstrumentedTest 240
 run_arm scroll-completion TerminalScrollCompletionInstrumentedTest 180
 run_arm panel-subscription TerminalPanelSubscriptionInstrumentedTest 120
+run_arm binding-projection TerminalBindingProjectionInstrumentedTest 180
 exit "$overall_status"

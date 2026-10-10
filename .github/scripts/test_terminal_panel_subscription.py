@@ -9,6 +9,28 @@ SPEC.loader.exec_module(report)
 
 
 class PanelSubscriptionReportTest(unittest.TestCase):
+    def test_binding_projection_requires_real_layout_changes_and_no_panel_recomposition(self):
+        good = dict(layoutChanges=24, legacyCompositions=24, projectedCompositions=0, bottomChecks=24, bindingStable=True)
+        self.assertEqual(good, report.validate_binding([good]))
+        for key, value in (('layoutChanges', 0), ('bottomChecks', 23), ('projectedCompositions', 1),
+                           ('legacyCompositions', 23), ('legacyCompositions', True), ('bindingStable', 1)):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                report.validate_binding([dict(good, **{key: value})])
+        for rows in ([], [good, good], [None], [dict(good, extra=1)]):
+            with self.assertRaises(ValueError):
+                report.validate_binding(rows)
+
+    def test_binding_identity_tui_and_layout_tests_are_all_required(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'TEST-binding.xml'
+            cases = [f'<testcase classname="{report.BINDING_CLASS}" name="{name}"/>' for name in sorted(report.BINDING_CASES)]
+            path.write_text('<testsuite>' + ''.join(cases) + '</testsuite>')
+            self.assertEqual(sorted(report.BINDING_CASES), report.require_junit(root, report.BINDING_CLASS, report.BINDING_CASES))
+            path.write_text('<testsuite>' + ''.join(cases[:-1]) + '</testsuite>')
+            with self.assertRaises(ValueError):
+                report.require_junit(root, report.BINDING_CLASS, report.BINDING_CASES)
+
     def test_exact_paired_work_is_accepted(self):
         self.assertEqual(report.EXPECTED, report.validate([dict(report.EXPECTED)]))
 

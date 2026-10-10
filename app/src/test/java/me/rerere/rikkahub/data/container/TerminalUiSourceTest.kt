@@ -117,7 +117,10 @@ class TerminalUiSourceTest {
             File("src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt"),
         ).first { it.isFile }.readText()
         val gate = binding.lineSequence().single { it.trimStart().startsWith("val measuredEager =") }.trim()
-        assertEquals("val measuredEager = !virtual && !metrics().usesTuiViewport", gate)
+        assertEquals("val measuredEager = !virtual && !usesTuiViewport", gate)
+        assertTrue(binding.contains("derivedStateOf(structuralEqualityPolicy()) { latestMetrics().usesTuiViewport }"))
+        assertTrue(binding.contains("current.measureEager, current.metrics(), latestWants,"))
+        assertTrue(binding.contains("remember(measuredEager, pass, measurements)"))
         assertTrue(binding.contains("requireMeasuredGeometry = current.measureEager"))
         assertTrue(binding.contains("if (measuredEager) TerminalRowMeasurementScope(pass, measurements)"))
     }
