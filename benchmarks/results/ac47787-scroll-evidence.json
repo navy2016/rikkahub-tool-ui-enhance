@@ -1,0 +1,350 @@
+{
+  "sourceSha": "ac47787cf2939a91779f2563fa40bb8b610a07e7",
+  "runId": "38048241632",
+  "suite": "terminal-scroll-completion-v1",
+  "controlSha": "1487040d79944661e7083d6f25f4908e4c5ff7f1",
+  "controlBodySha256": "b9251aac034a350d430dd5f0afdb362f039a5cd6059cceb50f6eee6a4817cff6",
+  "sourceHashes": {
+    "benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/LegacyTerminalLazyItemExecutor.kt": "74776c6b367fca5ead65db2f9f27bb9e4a8c1d870b29f5002cc93cfdd701a45b",
+    "benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/TerminalScrollCompletionInstrumentedTest.kt": "3e2292c18e2f6dfc6348a18505c24d9adab9e4bf85dec75004c08bce910298b9",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemExecutor.kt": "74de4a7d484a837a671160f3a24a9debfaff803df5809e5b6dc712e08e4ed989",
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalItemViewport.kt": "61b520a6a094af00a17735b236b896be39380758ba98737c3f126ca4efc849d2",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt": "ffb93b403a72a747f4dd6fa91085408db1d5d9c1bede1e4cb89e1296bcc14b14"
+  },
+  "apkHashes": {
+    "fixture": "c697a00a76e61be71710f43a1e131ab7a53e7c3ac2508db2e4d74ee2c5e3baa9",
+    "tests": "139c341d2ebb659c2ff6928436152a76c7943c62f6f0b40893290f36f8cf995c"
+  },
+  "junit": [
+    "scrollCompletionMissingMeasurementWaitsButCancellationNeverReportsSuccess",
+    "scrollCompletionOffscreenTargetAndFontChangesStillReachExactAnchor",
+    "scrollCompletionPairedScreenFollowUsesWholeNaturalHeightScreen",
+    "scrollCompletionPairedVisibleHistoryCorrectionUsesSameGeometryWithoutFinalFrame",
+    "scrollCompletionPostMutationMissingOrChangedGeometryStillYields",
+    "scrollCompletionPostMutationTokenIsCheckedBeforeAcceptingMeasuredSuccess",
+    "scrollCompletionStalledLayoutIsBoundedAndNeverSuccess"
+  ],
+  "samples": [
+    {
+      "case": "screenFollow",
+      "pair": 0,
+      "legacy": true,
+      "first": true,
+      "waits": 1,
+      "nanos": 16900479
+    },
+    {
+      "case": "screenFollow",
+      "pair": 0,
+      "legacy": false,
+      "first": false,
+      "waits": 0,
+      "nanos": 2079781
+    },
+    {
+      "case": "screenFollow",
+      "pair": 1,
+      "legacy": false,
+      "first": true,
+      "waits": 0,
+      "nanos": 2165058
+    },
+    {
+      "case": "screenFollow",
+      "pair": 1,
+      "legacy": true,
+      "first": false,
+      "waits": 1,
+      "nanos": 17312569
+    },
+    {
+      "case": "screenFollow",
+      "pair": 2,
+      "legacy": true,
+      "first": true,
+      "waits": 1,
+      "nanos": 17004823
+    },
+    {
+      "case": "screenFollow",
+      "pair": 2,
+      "legacy": false,
+      "first": false,
+      "waits": 0,
+      "nanos": 2141773
+    },
+    {
+      "case": "screenFollow",
+      "pair": 3,
+      "legacy": false,
+      "first": true,
+      "waits": 0,
+      "nanos": 2384383
+    },
+    {
+      "case": "screenFollow",
+      "pair": 3,
+      "legacy": true,
+      "first": false,
+      "waits": 1,
+      "nanos": 16833609
+    },
+    {
+      "case": "screenFollow",
+      "pair": 4,
+      "legacy": true,
+      "first": true,
+      "waits": 1,
+      "nanos": 16849343
+    },
+    {
+      "case": "screenFollow",
+      "pair": 4,
+      "legacy": false,
+      "first": false,
+      "waits": 0,
+      "nanos": 2124457
+    },
+    {
+      "case": "screenFollow",
+      "pair": 5,
+      "legacy": false,
+      "first": true,
+      "waits": 0,
+      "nanos": 2163786
+    },
+    {
+      "case": "screenFollow",
+      "pair": 5,
+      "legacy": true,
+      "first": false,
+      "waits": 1,
+      "nanos": 16894800
+    },
+    {
+      "case": "screenFollow",
+      "pair": 6,
+      "legacy": true,
+      "first": true,
+      "waits": 1,
+      "nanos": 16880980
+    },
+    {
+      "case": "screenFollow",
+      "pair": 6,
+      "legacy": false,
+      "first": false,
+      "waits": 0,
+      "nanos": 2158318
+    },
+    {
+      "case": "screenFollow",
+      "pair": 7,
+      "legacy": false,
+      "first": true,
+      "waits": 0,
+      "nanos": 2203685
+    },
+    {
+      "case": "screenFollow",
+      "pair": 7,
+      "legacy": true,
+      "first": false,
+      "waits": 1,
+      "nanos": 16901350
+    },
+    {
+      "case": "screenFollow",
+      "pair": 8,
+      "legacy": true,
+      "first": true,
+      "waits": 1,
+      "nanos": 16950633
+    },
+    {
+      "case": "screenFollow",
+      "pair": 8,
+      "legacy": false,
+      "first": false,
+      "waits": 0,
+      "nanos": 1794729
+    },
+    {
+      "case": "screenFollow",
+      "pair": 9,
+      "legacy": false,
+      "first": true,
+      "waits": 0,
+      "nanos": 1994715
+    },
+    {
+      "case": "screenFollow",
+      "pair": 9,
+      "legacy": true,
+      "first": false,
+      "waits": 1,
+      "nanos": 16894540
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 0,
+      "legacy": true,
+      "first": true,
+      "waits": 1,
+      "nanos": 17555178
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 0,
+      "legacy": false,
+      "first": false,
+      "waits": 0,
+      "nanos": 818643
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 1,
+      "legacy": false,
+      "first": true,
+      "waits": 0,
+      "nanos": 687118
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 1,
+      "legacy": true,
+      "first": false,
+      "waits": 1,
+      "nanos": 17550722
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 2,
+      "legacy": true,
+      "first": true,
+      "waits": 1,
+      "nanos": 17520357
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 2,
+      "legacy": false,
+      "first": false,
+      "waits": 0,
+      "nanos": 645737
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 3,
+      "legacy": false,
+      "first": true,
+      "waits": 0,
+      "nanos": 620239
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 3,
+      "legacy": true,
+      "first": false,
+      "waits": 1,
+      "nanos": 17554707
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 4,
+      "legacy": true,
+      "first": true,
+      "waits": 1,
+      "nanos": 17575539
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 4,
+      "legacy": false,
+      "first": false,
+      "waits": 0,
+      "nanos": 871521
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 5,
+      "legacy": false,
+      "first": true,
+      "waits": 0,
+      "nanos": 617415
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 5,
+      "legacy": true,
+      "first": false,
+      "waits": 1,
+      "nanos": 17631762
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 6,
+      "legacy": true,
+      "first": true,
+      "waits": 1,
+      "nanos": 17339739
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 6,
+      "legacy": false,
+      "first": false,
+      "waits": 0,
+      "nanos": 680248
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 7,
+      "legacy": false,
+      "first": true,
+      "waits": 0,
+      "nanos": 656342
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 7,
+      "legacy": true,
+      "first": false,
+      "waits": 1,
+      "nanos": 17505044
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 8,
+      "legacy": true,
+      "first": true,
+      "waits": 1,
+      "nanos": 17557172
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 8,
+      "legacy": false,
+      "first": false,
+      "waits": 0,
+      "nanos": 684364
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 9,
+      "legacy": false,
+      "first": true,
+      "waits": 0,
+      "nanos": 613760
+    },
+    {
+      "case": "historyAnchor",
+      "pair": 9,
+      "legacy": true,
+      "first": false,
+      "waits": 1,
+      "nanos": 17821893
+    }
+  ],
+  "note": "Same mounted real LazyList/Text; setup owns positioning, no controller during sampled executor. Compose test-driven frame clock; elapsed values include test scheduling, not phone latency or FPS."
+}

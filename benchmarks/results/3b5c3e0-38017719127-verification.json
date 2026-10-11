@@ -1,0 +1,45 @@
+{
+  "run": {
+    "id": 38017719127,
+    "head_sha": "3b5c3e0cb4a1ec663ec16a380069589fe970ba81",
+    "head_branch": "opt/terminal-verified-a79e7b6",
+    "path": ".github/workflows/terminal-pipeline-tests.yml",
+    "run_attempt": 1,
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/navy2016/rikkahub-tool-ui-enhance/actions/runs/38017719127"
+  },
+  "job": {
+    "id": 114111626404,
+    "name": "paired / paired",
+    "conclusion": "success",
+    "check_run_url": "https://api.github.com/repos/navy2016/rikkahub-tool-ui-enhance/check-runs/114111626404"
+  },
+  "resultSha256": "f6cbd1e8f0498ecdc131fa20da48502ed8b29f5a88c128cbdb1c9bae792a4d62",
+  "sectionSha256": {
+    "provenance": "c3ece888b31ed37356fed77bec11860b217f50047cd4dec280858e5d228ea3fc",
+    "setup": "1dc76ae78412f87fc5ba616ea8ddeb5417427da917aab58e69d5b02703e78d6e",
+    "pairs": [
+      "0fdf4e7c7ff504622bec4dbc9f28d9447c052de16afac16199abc677fdad71e7",
+      "089d225b3e44504028c005488bb022cf683bd2a1f1615a20f7f1c8f362f7a9a2",
+      "14daec27dbf0af40c86bc698701b72331ab4042a8ca4895b38eceb5419437379",
+      "b5142db0bfa392213de4ebca7ca859d51ce9fe8b1f85ce46156604cdd84282bb"
+    ]
+  },
+  "artifacts": [
+    {
+      "id": 11656924502,
+      "name": "terminal-pipeline-paired-3b5c3e0cb4a1ec663ec16a380069589fe970ba81-1",
+      "size_in_bytes": 232137950,
+      "expired": false,
+      "expires_at": "2026-10-24T02:58:42Z"
+    }
+  ],
+  "sourcesVerified": {
+    "legacy": 27,
+    "candidate": 27
+  },
+  "measuredEchoes": 288,
+  "excludedWarmupEchoes": 72,
+  "limitations": "Four same-boot AB/BA launch pairs per mode/phase. Differences are candidate minus legacy of within-launch medians; echoes are not independent device trials. Synthetic semantics input and traced draw are not physical typing, GPU presentation, phone FPS or cold startup."
+}
