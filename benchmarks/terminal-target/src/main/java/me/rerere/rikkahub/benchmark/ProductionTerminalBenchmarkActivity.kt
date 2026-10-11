@@ -459,12 +459,16 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             check(viewport.measurements.retainedRows < 128) { "Virtual history retained an eager row tree" }
             check(viewport.measurements.retainedEagerHistoryRows == 0)
         } else if (mode == TerminalRenderMode.DEFAULT) {
-            check(viewport.measurements.retainedRows == 0) { "Default eager added virtual measurements" }
+            check(viewport.bound.eagerMeasurement != null) { "Fresh default did not measure actual Text heights" }
+            check(viewport.measurements.retainedRows == viewport.frame.rows.size)
+            check(viewport.measurements.retainedEagerHistoryRows == viewport.frame.historyCount)
             check(!viewport.bound.binding.widthIndex.hasRetainedState)
             check(viewport.bound.binding.widthIndex.measuredHistoryRows == 0L)
-            check(viewport.measurements.createdRowNodes == 0L)
-            check(viewport.measurements.measuredRowCount == 0L)
-            check(viewport.measurements.publishedNotifications == 0L)
+            check(viewport.measurements.createdRowNodes > 0L)
+            check(viewport.measurements.measuredRowCount > 0L)
+        }
+        if (!expected) check(viewport.bound.binding.widthIndex.retainedScreenRows == 0) {
+            "Compatibility fallback retained physical screen text keys"
         }
         Trace.setCounter("Prod.createdRowNodes", viewport.measurements.createdRowNodes)
         Trace.setCounter("Prod.measuredRowCount", viewport.measurements.measuredRowCount)

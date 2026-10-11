@@ -213,6 +213,12 @@ counters, not timing estimates. First virtual mount still requires a full width 
 remount measures only surviving new archives and the active screen.
 
 The follow-up measurement-node optimization is recorded in [419636a IME results](results/419636a-ime-v2.md).
+Fresh ordinary eager sessions now measure natural Text row heights from the first layout instead of
+waiting for a virtual-history visit or using nominal cell arithmetic. This makes the initial tail,
+manual drag release and restored anchors follow actual measured geometry, including fallback fonts,
+spans and pixel rounding. TUI/physical-grid paths keep their existing screen-coordinate policy.
+The cache work is instrumented as `HEIGHT_WORK`; it is not an accepted production baseline until a
+complete device run records and verifies those counters.
 It removes the per-row eager measurement wrapper and passes 95 viewport tests, including geometry,
 intrinsic, owner replacement and pooled-content release. Its 10k IME run reports 0.55 ms width work,
 but 6122.77 ms show/fallback and 8360.06 ms total virtual operation on an independent Runner. The
