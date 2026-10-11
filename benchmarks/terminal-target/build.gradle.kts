@@ -59,6 +59,7 @@ val syncTerminalSources by tasks.registering(SyncTerminalFiles::class) {
         "me/rerere/rikkahub/ui/pages/container/TerminalVirtualHistoryTranscript.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalVirtualHistoryPolicy.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalTranscriptWidth.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalRowWidthMeasurer.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalTranscriptViewport.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalRenderControls.kt",
         "me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt",

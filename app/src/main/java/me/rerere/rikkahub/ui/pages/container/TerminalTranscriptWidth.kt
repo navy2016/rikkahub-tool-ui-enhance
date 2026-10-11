@@ -6,7 +6,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.MultiParagraphIntrinsics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -17,7 +16,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndex
 import me.rerere.rikkahub.utils.TerminalEmulator
-import kotlin.math.ceil
 
 /** Identity equality avoids scanning RenderFrame.rows and also distinguishes same-revision frames. */
 internal class TerminalFrameReference(val frame: TerminalEmulator.RenderFrame) {
@@ -69,11 +67,8 @@ internal fun rememberTerminalTranscriptWidth(
         Trace.beginSection("Terminal.productionWidth")
         try {
             val resolved = resolveDefaults(style, metrics.direction)
-            index.width(frame, metrics) { text ->
-                ceil(MultiParagraphIntrinsics(annotatedString = text, style = resolved, placeholders = emptyList(),
-                    density = metrics.density, fontFamilyResolver = metrics.resolver)
-                    .maxIntrinsicWidth).toInt()
-            }
+            val measurer = TerminalRowWidthMeasurer(frame, resolved, metrics.density, metrics.resolver)
+            index.width(frame, metrics, measurer::width)
         } finally { Trace.endSection() }
     }
 }

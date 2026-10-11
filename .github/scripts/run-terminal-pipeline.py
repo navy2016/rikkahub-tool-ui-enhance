@@ -52,6 +52,8 @@ def sources():
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportFollowState.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptWidth.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRowWidthMeasurer.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemExecutor.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportScrollEffects.kt',
         'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt',

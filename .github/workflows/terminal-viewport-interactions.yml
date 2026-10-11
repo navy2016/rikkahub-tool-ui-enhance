@@ -23,6 +23,7 @@ on:
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalVirtual*.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptWidth.kt'
+      - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRowWidthMeasurer.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptViewport.kt'
       - 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderControls.kt'
       - 'app/src/main/java/me/rerere/rikkahub/data/container/TerminalEagerViewportGeometry.kt'
@@ -124,7 +125,7 @@ jobs:
             --require-case-group 'widthIntrinsics=false:11' \
             --require-case-group 'widthIntrinsics=true:11' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalIntrinsicWidthInstrumentedTest \
-            --require-case-group 'intrinsicWidth:7' \
+            --require-case-group 'intrinsicWidth:10' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest \
             --require-case-group 'measurementNode:8' \
@@ -153,6 +154,9 @@ jobs:
       - name: Require live layout projection work and exact bottom visibility
         if: ${{ always() && env.TERMINAL_VIEWPORT_SUITE == 'all' }}
         run: python3 .github/scripts/report-terminal-panel-subscription.py --binding
+      - name: Require exact row widths and alternating uncached-pass evidence
+        if: ${{ always() && env.TERMINAL_VIEWPORT_SUITE == 'all' }}
+        run: python3 .github/scripts/report-terminal-row-width.py
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

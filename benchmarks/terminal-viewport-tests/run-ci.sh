@@ -56,7 +56,9 @@ run_arm true
 run_arm geometry TerminalTranscriptGeometryInstrumentedTest
 run_arm natural-layout TerminalLazyNaturalGeometryInstrumentedTest
 run_arm natural-intrinsic TerminalLazyNaturalGeometryInstrumentedTest
-run_arm intrinsic TerminalIntrinsicWidthInstrumentedTest
+run_arm intrinsic TerminalIntrinsicWidthInstrumentedTest 240
+# Preserve this early suite's fixed scalar evidence before later tests fill the logcat ring.
+adb logcat -d -v threadtime TerminalRowWidth:I '*:S' > artifacts/terminal-validation/row-width-logcat.txt
 run_arm render-mode TerminalRenderModeInstrumentedTest
 run_arm measurement-node TerminalRowMeasurementInstrumentedTest
 run_arm text-compatibility TerminalTextCompatibilityInstrumentedTest

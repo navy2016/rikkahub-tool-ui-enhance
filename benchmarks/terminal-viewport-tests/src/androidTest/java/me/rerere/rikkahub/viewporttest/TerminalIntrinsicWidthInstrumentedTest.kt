@@ -1,15 +1,19 @@
 package me.rerere.rikkahub.viewporttest
 
+import android.util.Log
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.Bullet
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.ParagraphStyle
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.resolveDefaults
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -24,18 +28,23 @@ import androidx.compose.ui.unit.sp
 import me.rerere.rikkahub.benchmark.TerminalBenchmarkWidthIndex
 import me.rerere.rikkahub.benchmark.TerminalIntrinsicWidthMeasurer
 import me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndex
+import me.rerere.rikkahub.ui.pages.container.TerminalRowWidthMeasurer
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.TerminalEmulator
+import org.json.JSONObject
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
+import java.nio.ByteBuffer
+import java.security.MessageDigest
 
 /** Exact integer widths, not a performance benchmark. No font/character-width approximation. */
 class TerminalIntrinsicWidthInstrumentedTest {
     @get:Rule val compose = createComposeRule()
-    @get:Rule val timeout = Timeout.seconds(45)
+    @get:Rule val timeout = Timeout.seconds(90)
     private lateinit var resolver: FontFamily.Resolver
 
     private val terminalStyle = TextStyle(
@@ -203,6 +212,139 @@ class TerminalIntrinsicWidthInstrumentedTest {
                     assertEquals(if (update == 0) 40 else 1, index.lastMeasuredHistoryRows)
                     assertTrue(index.retainedCandidates <= 40)
                     terminal.feed("\r\n\u001B[1mnext:$update 中文\u001B[0m")
+                }
+            }
+        }
+    }
+
+    @Test fun intrinsicWidthOwnedSingleParagraphMatchesFullAndMultiAtAllMetrics() {
+        ready()
+        val terminal = TerminalEmulator(80, 6, 80).apply {
+            val lines = listOf("ffi -> !== 0123", "中文 日本語 한국어", "e\u0301\u0327 👩‍💻 🇨🇳 ⚙️",
+                "עברית العربية 123", "\u001B[1;3;31mbold italic\u001B[0m plain",
+                "\u001B]8;;https://example.invalid/test\u001B\\URL 中文\u001B]8;;\u001B\\ end",
+                "\u001B[4;7;9m inverse strike \u001B[0m", "    spaces  ")
+            feed("\u001B[?25l" + (0 until 86).joinToString("\r\n") { lines[it % lines.size] })
+        }
+        val frames = mutableListOf(terminal.renderFrame())
+        for (input in listOf("\u001B[?25h\u001B[2;5H", "\u001B[?5h", "\u001B[?1049hALT", "\u001B[?1049l")) {
+            terminal.feed(input)
+            frames += terminal.renderFrame()
+        }
+        terminal.resize(45, 8)
+        frames += terminal.renderFrame()
+        compose.runOnIdle {
+            for (density in densities) for (direction in listOf(LayoutDirection.Ltr, LayoutDirection.Rtl)) {
+                for (style in listOf(terminalStyle, terminalStyle.copy(fontFamily = FontFamily.Serif,
+                    fontSize = 17.sp, letterSpacing = 0.3.sp, textIndent = TextIndent(7.sp, 2.sp)))) {
+                    val full = TextMeasurer(resolver, density, direction, cacheSize = 0)
+                    val old = TerminalIntrinsicWidthMeasurer(style, density, direction, resolver)
+                    for (frame in frames) {
+                        val candidate = TerminalRowWidthMeasurer(frame, resolveDefaults(style, direction), density, resolver)
+                        frame.rows.forEachIndexed { index, row ->
+                            val expected = full.measure(row.text, style, softWrap = false, maxLines = 1, skipCache = true).size.width
+                            assertEquals("full row=$index density=$density direction=$direction", expected, candidate.width(row.text))
+                            assertEquals("multi row=$index density=$density direction=$direction", old.width(row.text), expected)
+                        }
+                        assertEquals(frame.rows.size, candidate.singleParagraphCalls)
+                        assertEquals(0, candidate.multiParagraphCalls)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test fun intrinsicWidthSingleParagraphFallbackPreservesComplexAnnotationsAndSeparators() {
+        ready()
+        val frame = TerminalEmulator(80, 6).renderFrame()
+        val texts = listOf(
+            AnnotatedString("", spanStyles = listOf(AnnotatedString.Range(SpanStyle(fontSize = 20.sp), 0, 0))),
+            AnnotatedString("\nlong second paragraph\n"),
+            AnnotatedString("a\u0085b\u2028c\u2029d"),
+            AnnotatedString("paragraph indent", paragraphStyles = listOf(
+                AnnotatedString.Range(ParagraphStyle(textDirection = TextDirection.Rtl,
+                    textIndent = TextIndent(11.sp, 3.sp)), 0, 16))),
+            AnnotatedString("bullet and link", annotations = listOf(
+                AnnotatedString.Range(Bullet.Default, 0, 15),
+                AnnotatedString.Range(LinkAnnotation.Url("https://example.invalid"), 7, 15),
+                AnnotatedString.Range(SpanStyle(fontSize = 27.sp, fontFamily = FontFamily.Cursive), 2, 10))),
+        )
+        compose.runOnIdle {
+            for (density in densities) for (direction in listOf(LayoutDirection.Ltr, LayoutDirection.Rtl)) {
+                val style = terminalStyle.copy(textIndent = TextIndent(13.sp, 3.sp))
+                val old = TerminalIntrinsicWidthMeasurer(style, density, direction, resolver)
+                val synthetic = frame.copy(rows = texts.map { TerminalEmulator.RenderedRow(it) })
+                val candidate = TerminalRowWidthMeasurer(synthetic, resolveDefaults(style, direction), density, resolver)
+                for (text in texts) assertEquals(old.width(text), candidate.width(text))
+                assertEquals(0, candidate.singleParagraphCalls)
+                assertEquals(texts.size, candidate.multiParagraphCalls)
+                // Unicode separators can be printable emulator cell contents; ownership alone
+                // is deliberately insufficient for the optimized physical-row path.
+                val terminal = TerminalEmulator(80, 6).apply { feed("a\u2028b\u2029c") }
+                val owned = terminal.renderFrame()
+                val mixed = TerminalRowWidthMeasurer(owned, resolveDefaults(style, direction), density, resolver)
+                for (row in owned.rows) assertEquals(old.width(row.text), mixed.width(row.text))
+                assertTrue(mixed.multiParagraphCalls > 0)
+            }
+        }
+    }
+
+    @Test fun intrinsicWidthSingleParagraphPairedPassesVisitEveryRowWithoutWidthCaches() {
+        ready()
+        // Typeface warmup is excluded for BOTH paths. No measured pass reuses a width index,
+        // TextMeasurer LRU or Paragraph instance; native font caches remain normal Android caches.
+        val density = Density(2.75f, 1.15f)
+        val direction = LayoutDirection.Ltr
+        val style = terminalStyle
+        val resolved = resolveDefaults(style, direction)
+        data class Pass(val widths: IntArray, val nanos: Long, val single: Int, val multi: Int)
+        for (size in listOf(1000, 5000, 10000)) {
+            val terminal = TerminalEmulator(80, 6, size).apply {
+                feed("\u001B[?25l" + (0 until size + 6).joinToString("\r\n") { index ->
+                    "\u001B[36m${index.toString().padStart(6, '0')}\u001B[0m " + when (index % 3) {
+                        0 -> "PASS compile terminal renderer 0123456789"
+                        1 -> "\u001B[1;32m中文 e\u0301 👩‍💻\u001B[0m output retained"
+                        else -> "العربية 123 עברית 0123456789"
+                    }
+                })
+            }
+            val frame = terminal.renderFrame()
+            compose.runOnIdle {
+                val warmOld = TerminalIntrinsicWidthMeasurer(style, density, direction, resolver)
+                val warmNew = TerminalRowWidthMeasurer(frame, resolved, density, resolver)
+                for (row in frame.rows.take(128)) assertEquals(warmOld.width(row.text), warmNew.width(row.text))
+            }
+            fun pass(legacy: Boolean): Pass = compose.runOnIdle {
+                val old = TerminalIntrinsicWidthMeasurer(style, density, direction, resolver)
+                val candidate = TerminalRowWidthMeasurer(frame, resolved, density, resolver)
+                val start = System.nanoTime()
+                val widths = IntArray(frame.rows.size) { index ->
+                    val text = frame.rows[index].text
+                    if (legacy) old.width(text) else candidate.width(text)
+                }
+                Pass(widths, System.nanoTime() - start, candidate.singleParagraphCalls, candidate.multiParagraphCalls)
+            }
+            repeat(4) { pair ->
+                val oldFirst = pair % 2 == 0
+                val first = pass(oldFirst)
+                val second = pass(!oldFirst)
+                val old = if (oldFirst) first else second
+                val candidate = if (oldFirst) second else first
+                assertArrayEquals("size=$size pair=$pair", old.widths, candidate.widths)
+                assertEquals(frame.rows.size, candidate.single)
+                assertEquals(0, candidate.multi)
+                for (legacy in listOf(true, false)) {
+                    val result = if (legacy) old else candidate
+                    // Export the full width vector identity AFTER timing, never just its sum.
+                    val bytes = ByteBuffer.allocate(result.widths.size * Int.SIZE_BYTES)
+                    result.widths.forEach { bytes.putInt(it) }
+                    val digest = MessageDigest.getInstance("SHA-256").digest(bytes.array())
+                        .joinToString("") { "%02x".format(it) }
+                    Log.i("TerminalRowWidth", "ROW_WIDTH_SAMPLE " + JSONObject().put("size", size).put("pair", pair)
+                        .put("legacy", legacy).put("first", legacy == oldFirst).put("rows", frame.rows.size)
+                        .put("singleCalls", result.single).put("multiCalls", if (legacy) frame.rows.size else result.multi)
+                        .put("nanos", result.nanos).put("widthSum", result.widths.sumOf { it.toLong() })
+                        .put("widthSha256", digest))
                 }
             }
         }
