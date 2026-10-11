@@ -10,6 +10,12 @@ keep identical trace instrumentation and all other production and test sources. 
 entire candidate/control page hashes, source maps and exact patch are checked. The
 builder reverses its patch in `finally`; it refuses a dirty content checkout.
 
+This completed v1 experiment is archived at commit `3b5c3e0cb4a1ec663ec16a380069589fe970ba81`.
+Subsequent production page fixes intentionally fail its unchanged full-page hash gate. Do not
+dispatch `suite=paired` against a newer page expecting a new v1 comparison, and do not update
+the original hashes to accommodate the page. A new experiment needs its own version and source
+contract. Unit tests validate the archived source identities and the exact byte rejection gate.
+
 The candidate Release-derived, non-debuggable, unminified target and driver are built
 first. Only the target is rebuilt for the legacy arm. Both arms must use the byte-identical
 test APK, signer, Android manifest, resources, native libraries and pinned PRoot overlay.

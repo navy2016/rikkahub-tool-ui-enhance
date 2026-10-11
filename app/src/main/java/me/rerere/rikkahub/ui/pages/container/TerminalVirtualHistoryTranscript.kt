@@ -35,7 +35,7 @@ internal fun TerminalVirtualHistoryTranscript(
     widthIndex: TerminalTranscriptWidthIndex,
     modifier: Modifier = Modifier,
 ) {
-    require(pass.frame === frame && rows.size == frame.rows.size)
+    requireTerminalRenderPair(pass, frame, rows)
     val widthPx = rememberTerminalTranscriptWidth(frame, style, widthIndex)
     val density = LocalDensity.current
     LazyColumn(

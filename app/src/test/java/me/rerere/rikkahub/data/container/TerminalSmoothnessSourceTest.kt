@@ -310,7 +310,7 @@ class TerminalSmoothnessSourceTest {
 
     @Test
     fun productionChunksUseArchivalMetadataButKeepTheExistingScrollAndSelectionOwners() {
-        assertTrue(processSessionSource.contains("rows = terminalRenderedRows.toList()"))
+        assertTrue(processSessionSource.contains("rows = renderSnapshot.rows"))
         assertTrue(processSessionSource.contains("terminalHistoryStartSequence = frame.historyStartSequence"))
         assertTrue(processSessionSource.contains("historyCount = terminalScreenStartRow"))
         assertTrue(processSessionSource.contains("val terminalHistoryChunkPlan = remember("))

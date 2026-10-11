@@ -1051,13 +1051,16 @@ private fun TerminalInteractivePanel(
         avoidIme = currentShouldAvoidIme,
     )
 
+    // Capture values at the binding's scope. Child content can recompose independently and must
+    // not combine a fresh live frame/list with the pass captured by an older parent invocation.
+    val renderSnapshot = TerminalRenderSnapshot.capture(terminalViewportFrame, terminalRenderedRows)
     val boundViewport = rememberTerminalBoundViewport(
         sessionKey = processId,
         controller = viewportController,
         eager = outputScroll,
         lazy = lazyHistoryState,
         measurements = lazyHistoryMeasurements,
-        frame = terminalViewportFrame,
+        frame = renderSnapshot.frame,
         style = terminalTextStyle,
         wantsVirtual = wantsVirtualHistory,
         metrics = { viewportMetrics() },
@@ -1841,9 +1844,8 @@ private fun TerminalInteractivePanel(
                     // auto-scroll bottom anchor and grid rows consistent.
                     Spacer(modifier = Modifier.height(terminalVisualTopPadding))
                     TerminalTranscriptViewport(
-                        frame = terminalViewportFrame,
-                        // O(1) immutable SnapshotStateList view, paired with this published frame.
-                        rows = terminalRenderedRows.toList(),
+                        frame = renderSnapshot.frame,
+                        rows = renderSnapshot.rows,
                         style = terminalTextStyle,
                         historyChunks = terminalHistoryChunkPlan,
                         mode = appliedTerminalRenderMode,
@@ -1852,7 +1854,7 @@ private fun TerminalInteractivePanel(
                         panEnabled = terminalPanMode,
                         selectionMode = selectionMode,
                         modifier = Modifier.weight(1f).fillMaxWidth()
-                            .terminalPipelineDraw(processId, terminalViewportFrame.revision, virtualHistoryEnabled),
+                            .terminalPipelineDraw(processId, renderSnapshot.frame.revision, virtualHistoryEnabled),
                     )
                 }
             }

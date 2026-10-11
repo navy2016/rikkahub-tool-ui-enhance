@@ -13,6 +13,22 @@ class TerminalUiSourceTest {
     ).first { it.isFile }.readText()
 
     @Test
+    fun frameRowsBindingAndDrawTraceAreCapturedBeforeChildContent() {
+        val capture = processSessionSource.indexOf("val renderSnapshot = TerminalRenderSnapshot.capture(")
+        val binding = processSessionSource.indexOf("val boundViewport = rememberTerminalBoundViewport(")
+        val output = processSessionSource.substringAfter("                    TerminalTranscriptViewport(")
+            .substringBefore("                    )")
+        assertTrue(capture >= 0 && capture < binding)
+        assertTrue(processSessionSource.substring(binding).substringBefore("val viewportBinding")
+            .contains("frame = renderSnapshot.frame"))
+        assertTrue(output.contains("frame = renderSnapshot.frame"))
+        assertTrue(output.contains("rows = renderSnapshot.rows"))
+        assertTrue(output.contains(".terminalPipelineDraw(processId, renderSnapshot.frame.revision"))
+        assertFalse(output.contains("terminalViewportFrame"))
+        assertFalse(output.contains("terminalRenderedRows"))
+    }
+
+    @Test
     fun panelCollectsOnlyFollowWhilePersistenceKeepsCompleteLiveControllerState() {
         assertTrue(processSessionSource.contains("val autoScroll by rememberTerminalFollowEnabled(viewportController)"))
         assertFalse(processSessionSource.contains("viewportController.state.collectAsStateWithLifecycle()"))
@@ -82,7 +98,8 @@ class TerminalUiSourceTest {
         assertTrue(processSessionSource.contains("rememberTerminalVirtualHistoryPolicy(processId, appliedTerminalRenderMode, imeVisible)"))
         assertTrue(processSessionSource.contains("virtualHistoryPolicy.reapplied(currentImeVisible)"))
         assertTrue(processSessionSource.contains("latestSaveTerminalViewport"))
-        assertTrue(processSessionSource.contains("rows = terminalRenderedRows.toList(),"))
+        assertTrue(processSessionSource.contains("TerminalRenderSnapshot.capture(terminalViewportFrame, terminalRenderedRows)"))
+        assertTrue(processSessionSource.contains("rows = renderSnapshot.rows,"))
         assertTrue(lazyMeasurementsSource.contains("metricKey"))
         assertTrue(lazyMeasurementsSource.contains("it.text == frame.rows[index].text"))
         assertTrue(lazyMeasurementsSource.contains("heights[lineId]?.owner === owner"))

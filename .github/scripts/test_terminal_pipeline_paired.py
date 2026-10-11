@@ -92,9 +92,19 @@ class PairedPipelineTest(unittest.TestCase):
             command.assert_not_called()
 
     def test_control_patch_restores_only_the_frozen_subscription_site(self):
-        before = paired.original_bytes()
-        self.assertEqual(paired.PRODUCTION_PAGE_SHA, hashlib.sha256(before).hexdigest())
-        self.assertEqual(paired.CONTROL_PAGE_SHA, hashlib.sha256(before.replace(paired.NEW.encode(), paired.OLD.encode())).hexdigest())
+        # The published v1 is frozen. New production fixes must not rewrite its page hashes.
+        archive = json.loads((paired.ROOT / 'benchmarks/results/3b5c3e0-38017719127-paired.json').read_text())
+        self.assertEqual(paired.PRODUCTION_PAGE_SHA, archive['plan']['manifests']['candidate']['sources'][paired.PAGE])
+        self.assertEqual(paired.CONTROL_PAGE_SHA, archive['plan']['manifests']['legacy']['sources'][paired.PAGE])
+        # Exercise the exact byte gate with a synthetic fixture, including rejection of a new page.
+        before = b'prefix\n' + paired.NEW.encode() + b'suffix\n'
+        with patch.object(Path, 'read_bytes', return_value=before), \
+                patch.object(paired, 'PRODUCTION_PAGE_SHA', hashlib.sha256(before).hexdigest()), \
+                patch.object(paired, 'CONTROL_PAGE_SHA', hashlib.sha256(before.replace(paired.NEW.encode(), paired.OLD.encode())).hexdigest()):
+            self.assertEqual(before, paired.original_bytes())
+        with patch.object(Path, 'read_bytes', return_value=before):
+            with self.assertRaisesRegex(ValueError, 'frozen paired experiment'):
+                paired.original_bytes()
         text = paired.PATCH.read_text()
         self.assertEqual(1, text.count('diff --git'))
         body = text.split('\n@@', 1)[1].split('\n', 1)[1].splitlines()
