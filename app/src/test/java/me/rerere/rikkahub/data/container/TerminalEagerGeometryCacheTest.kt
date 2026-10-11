@@ -2,12 +2,15 @@ package me.rerere.rikkahub.data.container
 
 import androidx.compose.ui.text.AnnotatedString
 import me.rerere.rikkahub.utils.TerminalEmulator
+import me.rerere.rikkahub.utils.ownedRows
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.random.Random
 
 /** The oracle sums independent row heights; it does not use either cached prefix implementation. */
 class TerminalEagerGeometryCacheTest {
@@ -115,12 +118,14 @@ class TerminalEagerGeometryCacheTest {
         val terminal = seeded()
         val cache = TerminalEagerGeometryCache()
         val initial = terminal.renderFrame()
-        val values = heights(initial)
+        // Surviving row sizes are stable by ID/text. A position-dependent height change must
+        // invalidate the contributing block; it is covered separately, not silently simulated.
+        val values = stableHeights(initial)
         val before = requireNotNull(cache.read(initial, 1) { values[it] })
         for (command in listOf("\r\nappended", "\u001B[3J")) {
             terminal.feed(command)
             val next = terminal.renderFrame()
-            val nextHeights = heights(next)
+            val nextHeights = stableHeights(next)
             val after = requireNotNull(cache.read(next, 1) { nextHeights[it] })
             assertNotSame(before.historyPrefix, after.historyPrefix)
             checkGeometry(after, nextHeights)
@@ -219,5 +224,215 @@ class TerminalEagerGeometryCacheTest {
         assertThrows(ArithmeticException::class.java) {
             TerminalMeasuredHeightPrefix.measure(2) { Int.MAX_VALUE }
         }
+    }
+
+    private fun stableHeights(frame: TerminalEmulator.RenderFrame) = IntArray(frame.rows.size) { index ->
+        val id = if (index < frame.historyCount) frame.historyLineIds[index] else frame.screenLineIds[index - frame.historyCount]
+        19 + (id % 11).toInt() + frame.rows[index].text.length % 5
+    }
+
+    private class Registry(val cache: TerminalEagerGeometryCache) {
+        val tokens = mutableMapOf<Long, TerminalEagerHistoryBlockToken>()
+        fun read(frame: TerminalEmulator.RenderFrame, values: IntArray, missing: Int = -1,
+            fail: Int = -1, metric: Any = "font"): TerminalEagerViewportGeometry? =
+            cache.read(frame, metric, onHistoryRowMeasured = { index, token -> tokens[frame.historyLineIds[index]] = token }) {
+                if (it == fail) error("measurement failed")
+                if (it == missing) null else values[it]
+            }
+
+        fun remove(id: Long) { cache.invalidateBlock(tokens.remove(id)) }
+    }
+
+    @Test fun fifoAppendsAndTrimsAtOneFiveAndTenThousandRowsReadOnlyBoundaryBlocks() {
+        for (size in listOf(1_000, 5_000, 10_000)) {
+            val terminal = seeded(size)
+            val cache = TerminalEagerGeometryCache()
+            val registry = Registry(cache)
+            var frame = terminal.renderFrame()
+            val initialHeights = stableHeights(frame)
+            val original = requireNotNull(registry.read(frame, initialHeights))
+            val oldTotal = original.contentHeightPx
+            val initialVisits = cache.visitedHistoryRows
+            repeat(140) { update ->
+                val removed = frame.historyLineIds.first()
+                val oldSource = requireNotNull(frame.ownedRows()).history
+                terminal.feed("\r\nrow:append-$update")
+                frame = terminal.renderFrame()
+                registry.remove(removed) // Production's detached head must not invalidate every block.
+                val before = cache.visitedHistoryRows
+                val values = stableHeights(frame)
+                val result = requireNotNull(registry.read(frame, values))
+                val changedRows = requireNotNull(frame.ownedRows()).history.blocks.filter { block ->
+                    oldSource.blocks.none { it === block }
+                }.sumOf { it.size }
+                assertEquals("size=$size update=$update", changedRows.toLong(), cache.visitedHistoryRows - before)
+                assertTrue(cache.visitedHistoryRows - before <= 256)
+                assertEquals(size, cache.retainedHistoryRows)
+                assertEquals(requireNotNull(frame.ownedRows()).history.blocks.size, cache.retainedHistoryBlocks)
+                assertEquals(values.sum(), result.contentHeightPx)
+                if (update % 35 == 0) checkGeometry(result, values)
+            }
+            assertTrue(cache.visitedHistoryRows - initialVisits <= 140L * 256)
+            assertTrue(cache.reusedHistoryRows >= 140L * (size - 256))
+            assertEquals("previous published prefix was mutated", oldTotal, original.contentHeightPx)
+            checkGeometry(original, initialHeights)
+        }
+    }
+
+    @Test fun oneRemeasuredHistoricalRowRevokesOnlyItsBlockAndStaleTokenCannotRevokeReplacement() {
+        val frame = seeded(1_000).renderFrame()
+        val cache = TerminalEagerGeometryCache()
+        val registry = Registry(cache)
+        val values = stableHeights(frame)
+        val original = requireNotNull(registry.read(frame, values))
+        val id = frame.historyLineIds[300]
+        val stale = requireNotNull(registry.tokens[id])
+        cache.invalidateBlock(stale)
+        assertNull(cache.peek(frame, "font"))
+        assertEquals(1_000 - 128, cache.retainedHistoryRows)
+        values[300] += 40
+        val visits = cache.visitedHistoryRows
+        val changed = requireNotNull(registry.read(frame, values))
+        assertEquals(128L, cache.visitedHistoryRows - visits)
+        assertNotSame(stale, registry.tokens[id])
+        val now = cache.visitedHistoryRows
+        cache.invalidateBlock(stale)
+        val again = requireNotNull(registry.read(frame, values))
+        assertSame(changed.historyPrefix, again.historyPrefix)
+        assertEquals(now, cache.visitedHistoryRows)
+        checkGeometry(changed, values)
+        assertEquals(values[300] - 40, original.height(300))
+        val current = requireNotNull(registry.tokens[id])
+        cache.clear()
+        registry.read(frame, values)
+        val afterClear = cache.visitedHistoryRows
+        cache.invalidateBlock(current)
+        registry.read(frame, values)
+        assertEquals("old capability crossed a cache clear", afterClear, cache.visitedHistoryRows)
+    }
+
+    @Test fun missingBoundaryMeasurementKeepsAllOtherBlocksButPublishesNoPartialGeometry() {
+        val terminal = seeded(1_000)
+        val cache = TerminalEagerGeometryCache()
+        val registry = Registry(cache)
+        val initial = terminal.renderFrame()
+        registry.read(initial, stableHeights(initial))
+        terminal.feed("\r\nnew")
+        val next = terminal.renderFrame()
+        registry.remove(initial.historyLineIds.first())
+        val values = stableHeights(next)
+        assertNull(registry.read(next, values, missing = 0))
+        assertNull(cache.peek(next, "font"))
+        assertEquals(768, cache.retainedHistoryRows) // Six complete middle blocks survive first-boundary failure.
+        val before = cache.visitedHistoryRows
+        assertNull(registry.read(next, values, missing = next.historyCount - 1))
+        assertEquals(895, cache.retainedHistoryRows) // Head was complete; incomplete tail not published.
+        assertEquals(232L, cache.visitedHistoryRows - before)
+        val retry = cache.visitedHistoryRows
+        val completed = requireNotNull(registry.read(next, values))
+        assertEquals(105L, cache.visitedHistoryRows - retry)
+        checkGeometry(completed, values)
+        val tailToken = requireNotNull(registry.tokens[next.historyLineIds.last()])
+        cache.invalidateBlock(tailToken)
+        assertThrows(IllegalStateException::class.java) { registry.read(next, values, fail = 950) }
+        assertNull(cache.peek(next, "font"))
+        assertEquals(895, cache.retainedHistoryRows)
+        checkGeometry(requireNotNull(registry.read(next, values)), values)
+    }
+
+    @Test fun trimAcrossWholeBucketsNeverRetainsRetiredHeightBlocks() {
+        val terminal = seeded(1_000)
+        val cache = TerminalEagerGeometryCache()
+        val registry = Registry(cache)
+        val first = terminal.renderFrame()
+        val values = stableHeights(first)
+        val original = requireNotNull(registry.read(first, values))
+        terminal.setMaxScrollbackLines(350)
+        val trimmed = terminal.renderFrame()
+        first.historyLineIds.take(650).forEach { registry.remove(it) }
+        val visits = cache.visitedHistoryRows
+        checkGeometry(requireNotNull(registry.read(trimmed, stableHeights(trimmed))), stableHeights(trimmed))
+        assertEquals(118L, cache.visitedHistoryRows - visits)
+        assertEquals(350, cache.retainedHistoryRows)
+        assertEquals(3, cache.retainedHistoryBlocks)
+        checkGeometry(original, values)
+        terminal.setMaxScrollbackLines(1)
+        val last = terminal.renderFrame()
+        checkGeometry(requireNotNull(registry.read(last, stableHeights(last))), stableHeights(last))
+        assertEquals(1, cache.retainedHistoryRows)
+        assertEquals(1, cache.retainedHistoryBlocks)
+        terminal.clearScrollbackOnly()
+        val cleared = terminal.renderFrame()
+        registry.read(cleared, stableHeights(cleared))
+        assertEquals(0, cache.retainedHistoryRows)
+        assertEquals(0, cache.retainedHistoryBlocks)
+    }
+
+    @Test fun randomFifoHeightInvalidationAndMetricResetMatchIndependentGeometry() {
+        val random = Random(917)
+        val terminal = seeded(1_200)
+        val cache = TerminalEagerGeometryCache()
+        val registry = Registry(cache)
+        val overrides = mutableMapOf<Long, Int>()
+        var scale = 1
+        var frame = terminal.renderFrame()
+        repeat(180) { round ->
+            val before = frame
+            when (round % 5) {
+                0 -> repeat(random.nextInt(1, 25)) { terminal.feed("\r\nrandom-$round-$it") }
+                1 -> {
+                    val id = frame.historyLineIds[random.nextInt(frame.historyCount)]
+                    overrides[id] = random.nextInt(12, 61)
+                    cache.invalidateBlock(registry.tokens[id])
+                }
+                2 -> terminal.feed("\r\u001B[2Kscreen-$round")
+                3 -> scale = if (scale == 1) 2 else 1
+                else -> terminal.setMaxScrollbackLines(random.nextInt(200, 1_500))
+            }
+            frame = terminal.renderFrame()
+            val live = frame.historyLineIds.toSet()
+            before.historyLineIds.filter { it !in live }.forEach { registry.remove(it) }
+            val values = stableHeights(frame).also { heights ->
+                for (index in heights.indices) {
+                    val id = if (index < frame.historyCount) frame.historyLineIds[index]
+                        else frame.screenLineIds[index - frame.historyCount]
+                    heights[index] = (overrides[id] ?: heights[index]) * scale
+                }
+            }
+            val result = requireNotNull(registry.read(frame, values, metric = scale))
+            checkGeometry(result, values)
+            assertEquals(frame.historyCount, cache.retainedHistoryRows)
+            assertEquals(requireNotNull(frame.ownedRows()).history.blocks.size, cache.retainedHistoryBlocks)
+        }
+    }
+
+    @Test fun scalarBlockDirectoryOffsetsMatchFlatPrefixAtEveryBoundaryAlignment() {
+        for (first in listOf(0L, 1L, 63L, 127L, 128L, Long.MAX_VALUE - 2_048)) {
+            for (size in listOf(0, 1, 127, 128, 129, 256, 1_024)) {
+                val heights = IntArray(size) { 3 + it % 17 }
+                val parts = mutableListOf<TerminalMeasuredHeightPrefix>()
+                var cursor = 0
+                while (cursor < size) {
+                    val count = minOf(128 - ((first + cursor) % 128).toInt(), size - cursor)
+                    parts.add(TerminalMeasuredHeightPrefix.fromHeights(heights, cursor, cursor + count))
+                    cursor += count
+                }
+                val prefix = TerminalMeasuredHeightPrefix.fromBlocks(first, parts)
+                assertEquals(size, prefix.size)
+                var sum = 0
+                for (index in 0..size) {
+                    assertEquals("first=$first size=$size index=$index", sum, prefix.offset(index))
+                    if (index < size) sum += heights[index]
+                }
+                assertEquals(sum, prefix.totalHeightPx)
+                assertThrows(IndexOutOfBoundsException::class.java) { prefix.offset(-1) }
+                assertThrows(IndexOutOfBoundsException::class.java) { prefix.offset(size + 1) }
+            }
+        }
+        val one = TerminalMeasuredHeightPrefix.fromHeights(intArrayOf(10), 0, 1)
+        assertThrows(IllegalArgumentException::class.java) { TerminalMeasuredHeightPrefix.fromBlocks(0, listOf(one, one)) }
+        assertThrows(ArithmeticException::class.java) { TerminalMeasuredHeightPrefix.fromBlocks(Long.MAX_VALUE, listOf(one)) }
+        val maximum = requireNotNull(TerminalMeasuredHeightPrefix.measure(128) { if (it == 0) Int.MAX_VALUE - 127 else 1 })
+        assertThrows(ArithmeticException::class.java) { TerminalMeasuredHeightPrefix.fromBlocks(0, listOf(maximum, one)) }
     }
 }

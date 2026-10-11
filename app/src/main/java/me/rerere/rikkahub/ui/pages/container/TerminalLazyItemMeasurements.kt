@@ -21,6 +21,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import me.rerere.rikkahub.data.container.TerminalEagerGeometryCache
+import me.rerere.rikkahub.data.container.TerminalEagerHistoryBlockToken
 import me.rerere.rikkahub.data.container.TerminalEagerViewportGeometry
 import me.rerere.rikkahub.data.container.TerminalItemViewport
 import me.rerere.rikkahub.data.container.TerminalVisibleRow
@@ -72,9 +73,9 @@ internal class TerminalMeasurementInvalidations {
  */
 internal class TerminalLazyItemMeasurements {
     private data class Height(val owner: Any, val metricKey: Any, val text: AnnotatedString, val pixels: Int) {
-        // Set only after a successful validation contributes to an eager history prefix. Not part
-        // of data equality: a same-size callback must not reset a contributor's invalidation flag.
-        var usedByHistory = false
+        // Scalar-only capability, not a reference to a cache block/source/UI. Keep it on equal
+        // remeasurement; a changed/disposed owner must revoke its block's height proof.
+        var historyBlock: TerminalEagerHistoryBlockToken? = null
     }
     private val heights = mutableMapOf<Long, Height>()
     private val invalidations = TerminalMeasurementInvalidations()
@@ -87,6 +88,11 @@ internal class TerminalLazyItemMeasurements {
     val eagerHistoryBuildCount: Long get() = eagerCache.historyBuildCount
     val eagerVisitedHistoryRows: Long get() = eagerCache.visitedHistoryRows
     val eagerVisitedScreenRows: Long get() = eagerCache.visitedScreenRows
+    val retainedEagerHistoryBlocks: Int get() = eagerCache.retainedHistoryBlocks
+    val eagerVisitedHistoryBlocks: Long get() = eagerCache.visitedHistoryBlocks
+    val eagerMeasuredHistoryBlocks: Long get() = eagerCache.measuredHistoryBlocks
+    val eagerReusedHistoryBlocks: Long get() = eagerCache.reusedHistoryBlocks
+    val eagerReusedHistoryRows: Long get() = eagerCache.reusedHistoryRows
     var createdRowNodes = 0L
         private set
     var measuredRowCount = 0L
@@ -99,7 +105,7 @@ internal class TerminalLazyItemMeasurements {
     var onRowComposed: ((Long) -> Unit)? = null
 
     private fun changed(previous: Height?) {
-        eagerCache.invalidate(historyChanged = previous?.usedByHistory == true)
+        eagerCache.invalidateBlock(previous?.historyBlock)
         if (heights.isEmpty()) eagerCache.clear()
         invalidations.invalidate()
     }
@@ -218,14 +224,12 @@ internal class TerminalLazyItemMeasurements {
             frame.historyLineIds.size == frame.historyCount &&
             frame.screenLineIds.size == frame.rows.size - frame.historyCount
 
-    private fun height(pass: TerminalLazyLayoutPass, index: Int, contributeHistory: Boolean = false): Int? {
+    private fun height(pass: TerminalLazyLayoutPass, index: Int): Int? {
         val frame = pass.frame
         val id = if (index < frame.historyCount) frame.historyLineIds[index]
             else frame.screenLineIds[index - frame.historyCount]
         return heights[id]?.takeIf {
             it.metricKey == pass.metricKey && it.text == frame.rows[index].text && it.pixels > 0
-        }?.also {
-            if (contributeHistory && index < frame.historyCount) it.usedByHistory = true
         }?.pixels
     }
 
@@ -257,13 +261,13 @@ internal class TerminalLazyItemMeasurements {
             cellHeightPx, tailPaddingPx, state.canScrollBackward, state.canScrollForward)
     }
 
-    /** Only used for a renderer handoff/fallback, never adds an O(H) cache to the default renderer. */
+    /** Stamp only measured history rows; unchanged trusted blocks retain their original tokens. */
     fun readEager(pass: TerminalLazyLayoutPass): TerminalEagerViewportGeometry? {
         Trace.beginSection("Terminal.productionEagerGeometry")
         return try {
-            eagerCache.read(pass.frame, pass.metricKey) { index ->
-                height(pass, index, contributeHistory = true)
-            }
+            eagerCache.read(pass.frame, pass.metricKey, onHistoryRowMeasured = { index, token ->
+                checkNotNull(heights[pass.frame.historyLineIds[index]]).historyBlock = token
+            }) { index -> height(pass, index) }
         } finally { Trace.endSection() }
     }
 }

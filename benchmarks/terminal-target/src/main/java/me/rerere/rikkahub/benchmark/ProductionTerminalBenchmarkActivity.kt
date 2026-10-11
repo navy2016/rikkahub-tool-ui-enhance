@@ -232,6 +232,15 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             return@productionAsyncTrace
         }
         val viewport = checkNotNull(current)
+        val widths = viewport.bound.binding.widthIndex
+        val screenWorkBefore = widths.measuredScreenRows
+        val historyWorkBefore = widths.measuredHistoryRows
+        val reusedBefore = widths.reusedScreenRows
+        val heights = viewport.measurements
+        val heightHistoryBefore = heights.eagerVisitedHistoryRows
+        val heightBlocksBefore = heights.eagerMeasuredHistoryBlocks
+        val heightReusedBefore = heights.eagerReusedHistoryRows
+        val heightDirectoryBefore = heights.eagerVisitedHistoryBlocks
         when (scenario) {
             "activeRowUpdate", "appendAndTrim" -> repeat(ProductionBenchmarkSpec.UPDATE_COUNT) { index ->
                 val deadline = SystemClock.uptimeMillis() + ProductionBenchmarkSpec.UPDATE_INTERVAL_MS
@@ -257,7 +266,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
                         check(sessionWidthIndex.lastMeasuredHistoryRows == expectedHistory) {
                             "$scenario scanned ${sessionWidthIndex.lastMeasuredHistoryRows} history rows"
                         }
-                        check(sessionWidthIndex.lastMeasuredScreenRows == TerminalBenchmarkWorkload.SCREEN_ROWS)
+                        check(sessionWidthIndex.lastMeasuredScreenRows in 0..TerminalBenchmarkWorkload.SCREEN_ROWS)
                     }
                     validate(viewport)
                 }
@@ -281,6 +290,28 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             }
             "imeRoundTrip" -> imeRoundTrip(viewport)
             else -> error("Unsupported production operation: $scenario")
+        }
+        if (mode.isVirtualHistory && scenario in listOf("activeRowUpdate", "appendAndTrim")) {
+            val measured = widths.measuredScreenRows - screenWorkBefore
+            val updates = ProductionBenchmarkSpec.UPDATE_COUNT.toLong()
+            if (scenario == "activeRowUpdate") {
+                check(measured <= updates) { "Active row output remeasured unchanged screen widths: $measured" }
+                check(widths.measuredHistoryRows == historyWorkBefore)
+            } else {
+                check(measured in updates..updates * 2) {
+                    "Append did not reuse surviving screen widths: $measured"
+                }
+                check(widths.measuredHistoryRows - historyWorkBefore == updates)
+            }
+            check(widths.reusedScreenRows - reusedBefore >= updates * (TerminalBenchmarkWorkload.SCREEN_ROWS - 2))
+        }
+        if (scenario in listOf("activeRowUpdate", "appendAndTrim")) {
+            Log.i("ProductionTerminalBenchmark", "HEIGHT_WORK scenario=$scenario size=$size mode=${mode.id} token=$phaseToken " +
+                "historyRead=${heights.eagerVisitedHistoryRows - heightHistoryBefore} " +
+                "blocksMeasured=${heights.eagerMeasuredHistoryBlocks - heightBlocksBefore} " +
+                "historyReused=${heights.eagerReusedHistoryRows - heightReusedBefore} " +
+                "directoryVisits=${heights.eagerVisitedHistoryBlocks - heightDirectoryBefore} " +
+                "retainedRows=${heights.retainedEagerHistoryRows} retainedBlocks=${heights.retainedEagerHistoryBlocks}")
         }
     }
 
@@ -443,8 +474,14 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         Trace.setCounter("Prod.coalescedMeasurements", viewport.measurements.coalescedChanges)
         Trace.setCounter("Prod.widthMeasuredHistory", viewport.bound.binding.widthIndex.measuredHistoryRows)
         Trace.setCounter("Prod.widthMeasuredScreen", viewport.bound.binding.widthIndex.measuredScreenRows)
+        Trace.setCounter("Prod.widthReusedScreen", viewport.bound.binding.widthIndex.reusedScreenRows)
+        Trace.setCounter("Prod.widthRetainedScreen", viewport.bound.binding.widthIndex.retainedScreenRows.toLong())
         Trace.setCounter("Prod.retainedMeasurements", viewport.measurements.retainedRows.toLong())
         Trace.setCounter("Prod.eagerHistoryRows", viewport.measurements.retainedEagerHistoryRows.toLong())
+        Trace.setCounter("Prod.eagerHeightReads", viewport.measurements.eagerVisitedHistoryRows)
+        Trace.setCounter("Prod.eagerHeightReused", viewport.measurements.eagerReusedHistoryRows)
+        Trace.setCounter("Prod.eagerHeightBlocks", viewport.measurements.eagerMeasuredHistoryBlocks)
+        Trace.setCounter("Prod.eagerHeightDirectory", viewport.measurements.eagerVisitedHistoryBlocks)
         Trace.setCounter("Prod.scrollEffects", viewport.bound.binding.effectCount.toLong())
         Trace.setCounter("Prod.maximumWriters", viewport.bound.binding.maximumWriters.toLong())
     }

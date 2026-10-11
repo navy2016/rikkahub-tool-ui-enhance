@@ -57,6 +57,14 @@ The detach continuation completes before the replacement is allocated; only the 
 state crosses that boundary. The harness does not intentionally retain the old row tree/controller
 through the remount. This is not a forced-GC or object-collection proof; heap acceptance stays separate.
 
+The eager geometry cache now reuses exact measured height prefixes through immutable 128-row history
+blocks. A FIFO append or trim remeasures only changed boundary blocks, while unchanged blocks retain
+scalar prefixes and directory aggregation remains O(H / 128). Each measured block is protected by a
+scalar invalidation token; changed/disposed rows evict only their current block, stale detached tokens
+cannot evict replacements, and incomplete measurements publish neither a partial block nor geometry.
+This is an implementation optimization; it does not claim a new accepted production baseline until a
+complete benchmark run records the corresponding HEIGHT_WORK evidence.
+
 ## Metrics and provenance
 
 The frame-history builder now shares immutable 128-ordinal blocks. A normal one-line archive reads
