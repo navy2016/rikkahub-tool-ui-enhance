@@ -51,6 +51,10 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
   exit "$overall_status"
 fi
 
+group="${TERMINAL_VIEWPORT_GROUP:-all}"
+case "$group" in all|geometry|interaction) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
+
+if [ "$group" = all ] || [ "$group" = geometry ]; then
 run_arm false
 run_arm true
 run_arm geometry TerminalTranscriptGeometryInstrumentedTest
@@ -62,6 +66,9 @@ adb logcat -d -v threadtime TerminalRowWidth:I '*:S' > artifacts/terminal-valida
 run_arm render-mode TerminalRenderModeInstrumentedTest
 run_arm measurement-node TerminalRowMeasurementInstrumentedTest
 run_arm text-compatibility TerminalTextCompatibilityInstrumentedTest
+fi
+
+if [ "$group" = all ] || [ "$group" = interaction ]; then
 run_arm item-viewport TerminalItemViewportInstrumentedTest
 run_arm ime-stable TerminalImeVirtualHistoryInstrumentedTest 240
 run_arm default-bottom TerminalDefaultBottomInstrumentedTest 240
@@ -70,4 +77,5 @@ run_arm scroll-completion TerminalScrollCompletionInstrumentedTest 180
 run_arm panel-subscription TerminalPanelSubscriptionInstrumentedTest 120
 run_arm binding-projection TerminalBindingProjectionInstrumentedTest 180
 run_arm render-snapshot TerminalRenderSnapshotInstrumentedTest 240
+fi
 exit "$overall_status"

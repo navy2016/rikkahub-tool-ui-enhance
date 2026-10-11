@@ -51,10 +51,16 @@ permissions:
 
 jobs:
   gestures:
+    name: viewport (${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || '["geometry","interaction"]') }}
     env:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
+      TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
     steps:
       - uses: actions/checkout@v4
       - name: Bind optional old production source to current fresh-default regression tests
@@ -104,7 +110,7 @@ jobs:
           # Keep an instrumentation/ADB deadlock from consuming the whole job without
           # reaching the JUnit and logcat reporting steps below.
           script: python3 .github/scripts/run-terminal-with-timeout.py 900 bash benchmarks/terminal-viewport-tests/run-ci.sh
-      - name: Require both gesture arms and both chunk geometry modes
+      - name: Require every case assigned to this shard
         if: always()
         run: |
           if [ "$TERMINAL_VIEWPORT_SUITE" = defaultBottom ]; then
@@ -114,6 +120,28 @@ jobs:
               --require-case-group 'defaultBottom:7'
             exit $?
           fi
+          if [ "$TERMINAL_VIEWPORT_GROUP" = interaction ]; then
+            python3 .github/scripts/report-terminal-tests.py \
+              benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest \
+              --require-case-group 'itemNative:20' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest \
+              --require-case-group 'imeStable:6' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest \
+              --require-case-group 'defaultBottom:7' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest \
+              --require-case-group 'stability:9' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalScrollCompletionInstrumentedTest \
+              --require-case-group 'scrollCompletion:7' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalPanelSubscriptionInstrumentedTest \
+              --require-case-group 'panelSubscription:3' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalBindingProjectionInstrumentedTest \
+              --require-case-group 'bindingProjection:3' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderSnapshotInstrumentedTest \
+              --require-case-group 'renderSnapshot:4'
+            exit $?
+          fi
+          [ "$TERMINAL_VIEWPORT_GROUP" = geometry ]
           python3 .github/scripts/report-terminal-tests.py \
             benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest \
@@ -128,43 +156,29 @@ jobs:
             --require-suite me.rerere.rikkahub.viewporttest.TerminalIntrinsicWidthInstrumentedTest \
             --require-case-group 'intrinsicWidth:10' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest \
+            --require-case-group 'rendererSwitchKeepsNaturalGeometrySelectionAndBothScrollOffsets:1' \
+            --require-case-group 'renderButtonCancelApplyResetAndLongPressAreExplicit:1' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest \
             --require-case-group 'measurementNode:8' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalTextCompatibilityInstrumentedTest \
-            --require-case-group 'terminalText:3' \
-            --require-suite me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest \
-            --require-case-group 'itemNative:20' \
-            --require-suite me.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest \
-            --require-case-group 'imeStable:6' \
-            --require-suite me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest \
-            --require-case-group 'defaultBottom:7' \
-            --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest \
-            --require-case-group 'stability:9' \
-            --require-suite me.rerere.rikkahub.viewporttest.TerminalScrollCompletionInstrumentedTest \
-            --require-case-group 'scrollCompletion:7' \
-            --require-suite me.rerere.rikkahub.viewporttest.TerminalPanelSubscriptionInstrumentedTest \
-            --require-case-group 'panelSubscription:3' \
-            --require-suite me.rerere.rikkahub.viewporttest.TerminalBindingProjectionInstrumentedTest \
-            --require-case-group 'bindingProjection:3' \
-            --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderSnapshotInstrumentedTest \
-            --require-case-group 'renderSnapshot:4'
+            --require-case-group 'terminalText:3'
       - name: Require complete frozen-control paired scroll evidence
-        if: ${{ always() && env.TERMINAL_VIEWPORT_SUITE == 'all' }}
+        if: ${{ always() && matrix.group == 'interaction' }}
         run: python3 .github/scripts/report-terminal-scroll-completion.py
       - name: Require paired panel subscription work and lifecycle correctness
-        if: ${{ always() && env.TERMINAL_VIEWPORT_SUITE == 'all' }}
+        if: ${{ always() && matrix.group == 'interaction' }}
         run: python3 .github/scripts/report-terminal-panel-subscription.py
       - name: Require live layout projection work and exact bottom visibility
-        if: ${{ always() && env.TERMINAL_VIEWPORT_SUITE == 'all' }}
+        if: ${{ always() && matrix.group == 'interaction' }}
         run: python3 .github/scripts/report-terminal-panel-subscription.py --binding
       - name: Require exact row widths and alternating uncached-pass evidence
-        if: ${{ always() && env.TERMINAL_VIEWPORT_SUITE == 'all' }}
+        if: ${{ always() && matrix.group == 'geometry' }}
         run: python3 .github/scripts/report-terminal-row-width.py
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: terminal-viewport-interactions-${{ github.sha }}
+          name: terminal-viewport-interactions-${{ github.sha }}-${{ matrix.group }}-${{ github.run_attempt }}
           path: |
             benchmarks/terminal-viewport-tests/build/outputs/**
             benchmarks/terminal-viewport-tests/build/reports/**
