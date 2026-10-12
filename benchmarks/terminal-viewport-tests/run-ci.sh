@@ -46,6 +46,18 @@ run_arm() {
   fi
 }
 
+if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = textMetrics ]; then
+  run_arm text-metrics TerminalTextMetricsInstrumentedTest 240
+  adb logcat -d -v threadtime TerminalTextMetrics:I '*:S' > artifacts/terminal-validation/text-metrics-logcat.txt
+  run_arm intrinsic TerminalIntrinsicWidthInstrumentedTest 240
+  adb logcat -d -v threadtime TerminalRowWidth:I '*:S' > artifacts/terminal-validation/row-width-logcat.txt
+  run_arm measurement-node TerminalRowMeasurementInstrumentedTest 180
+  run_arm binding-projection TerminalBindingProjectionInstrumentedTest 180
+  run_arm default-bottom TerminalDefaultBottomInstrumentedTest 240
+  run_arm ime-stable TerminalImeVirtualHistoryInstrumentedTest 240
+  exit "$overall_status"
+fi
+
 if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = renderSnapshot ]; then
   run_arm render-snapshot TerminalRenderSnapshotInstrumentedTest 240
   adb logcat -d -v threadtime TerminalRenderSnapshot:I '*:S' > artifacts/terminal-validation/render-snapshot-logcat.txt
@@ -65,6 +77,8 @@ group="${TERMINAL_VIEWPORT_GROUP:-all}"
 case "$group" in all|geometry|interaction) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
 
 if [ "$group" = all ] || [ "$group" = geometry ]; then
+run_arm text-metrics TerminalTextMetricsInstrumentedTest 240
+adb logcat -d -v threadtime TerminalTextMetrics:I '*:S' > artifacts/terminal-validation/text-metrics-logcat.txt
 run_arm false
 run_arm true
 run_arm geometry TerminalTranscriptGeometryInstrumentedTest

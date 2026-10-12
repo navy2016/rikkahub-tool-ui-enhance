@@ -59,9 +59,9 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'renderSnapshot runs only publication, row synchronization and page contract tests, once'
+        description: 'Focused suites run once: renderSnapshot publication/rows; textMetrics width/height cache invalidation'
         type: choice
-        options: [all, renderSnapshot]
+        options: [all, renderSnapshot, textMetrics]
         default: all
 
 jobs:
@@ -131,15 +131,15 @@ jobs:
           EOFGS
 
       - name: Run PTY mode inference tests
-        if: ${{ env.TERMINAL_UNIT_SUITE != 'renderSnapshot' }}
+        if: ${{ env.TERMINAL_UNIT_SUITE == 'all' }}
         run: bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest --stacktrace
 
       - name: Run Bun and terminal UI source tests
-        if: ${{ env.TERMINAL_UNIT_SUITE != 'renderSnapshot' }}
+        if: ${{ env.TERMINAL_UNIT_SUITE == 'all' }}
         run: bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest --tests me.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest --stacktrace
 
       - name: Run focused unit tests
-        if: ${{ env.TERMINAL_UNIT_SUITE != 'renderSnapshot' }}
+        if: ${{ env.TERMINAL_UNIT_SUITE == 'all' }}
         run: |
           for attempt in 1 2 3; do
             echo "Gradle test attempt ${attempt}/3"
@@ -188,9 +188,22 @@ jobs:
             --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest \
             --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest --stacktrace
 
+      - name: Run text metric cache invalidation contracts once
+        if: ${{ env.TERMINAL_UNIT_SUITE == 'textMetrics' }}
+        run: |
+          bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest \
+            --tests me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndexTest \
+            --tests me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest --stacktrace
+
       - name: Publish focused regression results
         if: always()
         run: |
+          if [ "$TERMINAL_UNIT_SUITE" = textMetrics ]; then
+            python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndexTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest
+            exit $?
+          fi
           if [ "$TERMINAL_UNIT_SUITE" = renderSnapshot ]; then
             python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
               --require-suite me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest \

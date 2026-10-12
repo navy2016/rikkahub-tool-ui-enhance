@@ -6,7 +6,7 @@ on:
       suite:
         description: 'all, fresh default, publication regressions, or lint/Release type checking without tests'
         type: choice
-        options: [all, defaultBottom, renderSnapshot, staticChecks]
+        options: [all, defaultBottom, renderSnapshot, textMetrics, staticChecks]
         default: all
       production_sha:
         description: 'Optional exact archived production SHA for defaultBottom only; tests remain from this ref'
@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction"]') }}
+        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction"]') }}
     env:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
       TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
@@ -87,6 +87,9 @@ jobs:
           if [ "$TERMINAL_VIEWPORT_SUITE" = renderSnapshot ]; then
             cd .github/scripts
             python3 -m unittest test_terminal_viewport_shards test_terminal_render_snapshot test_terminal_panel_subscription
+          elif [ "$TERMINAL_VIEWPORT_SUITE" = textMetrics ]; then
+            cd .github/scripts
+            python3 -m unittest test_terminal_viewport_shards test_terminal_text_metrics test_terminal_row_width test_terminal_panel_subscription
           else
             python3 -m unittest discover -s .github/scripts -p 'test_*.py'
           fi
@@ -147,6 +150,23 @@ jobs:
       - name: Require every case assigned to this shard
         if: ${{ always() && matrix.group != 'staticChecks' }}
         run: |
+          if [ "$TERMINAL_VIEWPORT_SUITE" = textMetrics ]; then
+            python3 .github/scripts/report-terminal-tests.py \
+              benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalTextMetricsInstrumentedTest \
+              --require-case-group 'textMetrics:6' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalBindingProjectionInstrumentedTest \
+              --require-case-group 'bindingProjection:3' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalIntrinsicWidthInstrumentedTest \
+              --require-case-group 'intrinsicWidth:10' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest \
+              --require-case-group 'measurementNode:8' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest \
+              --require-case-group 'defaultBottom:7' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest \
+              --require-case-group 'imeStable:6'
+            exit $?
+          fi
           if [ "$TERMINAL_VIEWPORT_SUITE" = renderSnapshot ]; then
             python3 .github/scripts/report-terminal-tests.py \
               benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
@@ -193,6 +213,8 @@ jobs:
           [ "$TERMINAL_VIEWPORT_GROUP" = geometry ]
           python3 .github/scripts/report-terminal-tests.py \
             benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+            --require-suite me.rerere.rikkahub.viewporttest.TerminalTextMetricsInstrumentedTest \
+            --require-case-group 'textMetrics:6' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest \
             --require-case-group 'lazyHistory=false:12' \
             --require-case-group 'lazyHistory=true:12' \
@@ -218,14 +240,17 @@ jobs:
         if: ${{ always() && matrix.group == 'interaction' }}
         run: python3 .github/scripts/report-terminal-panel-subscription.py
       - name: Require live layout projection work and exact bottom visibility
-        if: ${{ always() && (matrix.group == 'interaction' || matrix.group == 'renderSnapshot') }}
+        if: ${{ always() && (matrix.group == 'interaction' || matrix.group == 'renderSnapshot' || matrix.group == 'textMetrics') }}
         run: python3 .github/scripts/report-terminal-panel-subscription.py --binding
       - name: Require all publication tests and exact no-output reuse evidence
         if: ${{ always() && (matrix.group == 'interaction' || matrix.group == 'renderSnapshot') }}
         run: python3 .github/scripts/report-terminal-render-snapshot.py
       - name: Require exact row widths and alternating uncached-pass evidence
-        if: ${{ always() && matrix.group == 'geometry' }}
+        if: ${{ always() && (matrix.group == 'geometry' || matrix.group == 'textMetrics') }}
         run: python3 .github/scripts/report-terminal-row-width.py
+      - name: Require exact text-metric work and asynchronous font compatibility
+        if: ${{ always() && (matrix.group == 'geometry' || matrix.group == 'textMetrics') }}
+        run: python3 .github/scripts/report-terminal-text-metrics.py
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4
