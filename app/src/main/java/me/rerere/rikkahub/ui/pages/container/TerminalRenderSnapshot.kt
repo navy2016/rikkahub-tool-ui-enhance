@@ -4,22 +4,28 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import me.rerere.rikkahub.utils.TerminalEmulator
 
 /**
- * The frame and immutable row-list structure read in ONE caller snapshot. Capture at the scope
- * that creates the viewport binding, before passing content lambdas to child/subcompositions.
- * Never re-read a live frame/list in a child while retaining its parent's older layout pass.
+ * The frame and immutable row-list structure read in ONE caller snapshot. Capture once at initial
+ * mount and after row synchronization INSIDE the publisher's mutable snapshot; publish this object
+ * in that transaction. The binding's scope reads the published value before making child lambdas.
+ * Neither child recomposition nor input/layout updates recapture or compare the history structure.
  *
  * toList() is O(1); row objects keep their existing per-row observable text and stable line IDs.
- * This does not freeze/copy Text, retain a second history, change publication or own a coroutine.
+ * This does not freeze/copy Text, retain a second history or own a coroutine. Every publication,
+ * including same-frame forced blank commits, gets a fresh identity; this is not a revision cache.
  */
 internal class TerminalRenderSnapshot private constructor(
     val frame: TerminalEmulator.RenderFrame,
     val rows: List<TerminalRenderedRowState>,
 ) {
     companion object {
-        fun capture(frame: TerminalEmulator.RenderFrame, rows: SnapshotStateList<TerminalRenderedRowState>): TerminalRenderSnapshot {
+        fun capture(
+            frame: TerminalEmulator.RenderFrame,
+            rows: SnapshotStateList<TerminalRenderedRowState>,
+        ): TerminalRenderSnapshot {
             val view = rows.toList()
             require(view.size == frame.rows.size) {
-                "Terminal render capture mismatch: frameRevision=${frame.revision} frameRows=${frame.rows.size} rows=${view.size}"
+                "Terminal render capture mismatch: frameRevision=${frame.revision} " +
+                    "frameRows=${frame.rows.size} rows=${view.size}"
             }
             return TerminalRenderSnapshot(frame, view)
         }

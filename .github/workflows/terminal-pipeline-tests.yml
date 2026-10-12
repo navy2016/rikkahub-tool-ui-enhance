@@ -143,7 +143,11 @@ jobs:
         run: python3 .github/scripts/build-terminal-proot.py
       - name: Validate diagnostics and build Release-derived full-page test pair
         run: |
-          python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+          if [ "$TERMINAL_PIPELINE_SUITE" = pipeline ]; then
+            (cd .github/scripts && python3 -m unittest test_terminal_pipeline test_terminal_pipeline_paired)
+          else
+            python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+          fi
           chmod +x gradlew
           bash .github/scripts/run-terminal-gradle.sh -PterminalPipelineTests=true -PincludeX86_64AbiForTests=true \
             :app:assembleTerminaltest :app:assembleTerminaltestAndroidTest --stacktrace

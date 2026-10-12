@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: 'all runs the complete regression; defaultBottom isolates the fresh-session bug'
+        description: 'all, fresh default, publication regressions, or lint/Release type checking without tests'
         type: choice
-        options: [all, defaultBottom]
+        options: [all, defaultBottom, renderSnapshot, staticChecks]
         default: all
       production_sha:
         description: 'Optional exact archived production SHA for defaultBottom only; tests remain from this ref'
@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || '["geometry","interaction"]') }}
+        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction"]') }}
     env:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
       TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
@@ -82,7 +82,39 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
       - name: Test JUnit validation reporting
-        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+        if: ${{ matrix.group != 'staticChecks' }}
+        run: |
+          if [ "$TERMINAL_VIEWPORT_SUITE" = renderSnapshot ]; then
+            cd .github/scripts
+            python3 -m unittest test_terminal_viewport_shards test_terminal_render_snapshot test_terminal_panel_subscription
+          else
+            python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+          fi
+      - name: Lint only the Release terminal fixture before compiling the test pair
+        if: ${{ matrix.group == 'staticChecks' }}
+        run: |
+          chmod +x gradlew
+          bash .github/scripts/run-terminal-gradle.sh -PterminalViewportTests=true \
+            :benchmarks:terminal-viewport-tests:lintRelease --stacktrace
+      - name: Publish bounded lint errors without downloading the full build log
+        if: ${{ failure() && matrix.group == 'staticChecks' }}
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          for report in Path('benchmarks/terminal-viewport-tests/build/reports').glob('lint-results-*.xml'):
+              count = 0
+              for issue in ET.parse(report).getroot().iter('issue'):
+                  if issue.get('severity') not in ('Error', 'Fatal'):
+                      continue
+                  if count >= 8:
+                      break
+                  location = issue.find('location')
+                  where = '' if location is None else str(location.attrib)
+                  text = (issue.get('id', '') + ': ' + issue.get('message', '') + '\n' + where)[:2400]
+                  print('::error title=Terminal fixture lint::' + text.replace('%','%25').replace('\n','%0A').replace('\r','%0D'))
+                  count += 1
+          PY
       - name: Build isolated gesture fixture and instrumented tests
         run: |
           chmod +x gradlew
@@ -90,11 +122,13 @@ jobs:
             :benchmarks:terminal-viewport-tests:assembleRelease \
             :benchmarks:terminal-viewport-tests:assembleReleaseAndroidTest --stacktrace
       - name: Enable KVM
+        if: ${{ matrix.group != 'staticChecks' }}
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
       - name: Test pointer gestures and natural transcript geometry
+        if: ${{ matrix.group != 'staticChecks' }}
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -111,8 +145,23 @@ jobs:
           # reaching the JUnit and logcat reporting steps below.
           script: python3 .github/scripts/run-terminal-with-timeout.py 900 bash benchmarks/terminal-viewport-tests/run-ci.sh
       - name: Require every case assigned to this shard
-        if: always()
+        if: ${{ always() && matrix.group != 'staticChecks' }}
         run: |
+          if [ "$TERMINAL_VIEWPORT_SUITE" = renderSnapshot ]; then
+            python3 .github/scripts/report-terminal-tests.py \
+              benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderSnapshotInstrumentedTest \
+              --require-case-group 'renderSnapshot:6' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalBindingProjectionInstrumentedTest \
+              --require-case-group 'bindingProjection:3' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest \
+              --require-case-group 'defaultBottom:7' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest \
+              --require-case-group 'imeStable:6' \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest \
+              --require-case-group 'stability:9'
+            exit $?
+          fi
           if [ "$TERMINAL_VIEWPORT_SUITE" = defaultBottom ]; then
             python3 .github/scripts/report-terminal-tests.py \
               benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
@@ -138,7 +187,7 @@ jobs:
               --require-suite me.rerere.rikkahub.viewporttest.TerminalBindingProjectionInstrumentedTest \
               --require-case-group 'bindingProjection:3' \
               --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderSnapshotInstrumentedTest \
-              --require-case-group 'renderSnapshot:4'
+              --require-case-group 'renderSnapshot:6'
             exit $?
           fi
           [ "$TERMINAL_VIEWPORT_GROUP" = geometry ]
@@ -169,8 +218,11 @@ jobs:
         if: ${{ always() && matrix.group == 'interaction' }}
         run: python3 .github/scripts/report-terminal-panel-subscription.py
       - name: Require live layout projection work and exact bottom visibility
-        if: ${{ always() && matrix.group == 'interaction' }}
+        if: ${{ always() && (matrix.group == 'interaction' || matrix.group == 'renderSnapshot') }}
         run: python3 .github/scripts/report-terminal-panel-subscription.py --binding
+      - name: Require all publication tests and exact no-output reuse evidence
+        if: ${{ always() && (matrix.group == 'interaction' || matrix.group == 'renderSnapshot') }}
+        run: python3 .github/scripts/report-terminal-render-snapshot.py
       - name: Require exact row widths and alternating uncached-pass evidence
         if: ${{ always() && matrix.group == 'geometry' }}
         run: python3 .github/scripts/report-terminal-row-width.py

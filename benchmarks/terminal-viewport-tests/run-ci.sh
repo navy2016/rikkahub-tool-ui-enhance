@@ -46,6 +46,16 @@ run_arm() {
   fi
 }
 
+if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = renderSnapshot ]; then
+  run_arm render-snapshot TerminalRenderSnapshotInstrumentedTest 240
+  adb logcat -d -v threadtime TerminalRenderSnapshot:I '*:S' > artifacts/terminal-validation/render-snapshot-logcat.txt
+  run_arm binding-projection TerminalBindingProjectionInstrumentedTest 180
+  run_arm default-bottom TerminalDefaultBottomInstrumentedTest 240
+  run_arm ime-stable TerminalImeVirtualHistoryInstrumentedTest 240
+  run_arm stability TerminalViewportStabilityInstrumentedTest 240
+  exit "$overall_status"
+fi
+
 if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
   run_arm default-bottom TerminalDefaultBottomInstrumentedTest 240
   exit "$overall_status"
@@ -77,5 +87,6 @@ run_arm scroll-completion TerminalScrollCompletionInstrumentedTest 180
 run_arm panel-subscription TerminalPanelSubscriptionInstrumentedTest 120
 run_arm binding-projection TerminalBindingProjectionInstrumentedTest 180
 run_arm render-snapshot TerminalRenderSnapshotInstrumentedTest 240
+adb logcat -d -v threadtime TerminalRenderSnapshot:I '*:S' > artifacts/terminal-validation/render-snapshot-logcat.txt
 fi
 exit "$overall_status"

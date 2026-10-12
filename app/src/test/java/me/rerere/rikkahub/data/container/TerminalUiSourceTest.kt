@@ -13,8 +13,8 @@ class TerminalUiSourceTest {
     ).first { it.isFile }.readText()
 
     @Test
-    fun frameRowsBindingAndDrawTraceAreCapturedBeforeChildContent() {
-        val capture = processSessionSource.indexOf("val renderSnapshot = TerminalRenderSnapshot.capture(")
+    fun frameRowsBindingAndDrawTraceUseOneAtomicPublicationWithoutRecapturingInComposition() {
+        val capture = processSessionSource.indexOf("val renderSnapshot = publishedRenderSnapshot")
         val binding = processSessionSource.indexOf("val boundViewport = rememberTerminalBoundViewport(")
         val output = processSessionSource.substringAfter("                    TerminalTranscriptViewport(")
             .substringBefore("                    )")
@@ -26,6 +26,17 @@ class TerminalUiSourceTest {
         assertTrue(output.contains(".terminalPipelineDraw(processId, renderSnapshot.frame.revision"))
         assertFalse(output.contains("terminalViewportFrame"))
         assertFalse(output.contains("terminalRenderedRows"))
+        assertFalse(output.contains("publishedRenderSnapshot"))
+        assertEquals(2, processSessionSource.split("TerminalRenderSnapshot.capture(").size - 1)
+        val publication = processSessionSource.substringAfter("Snapshot.withMutableSnapshot {")
+            .substringBefore("TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_PUBLISHED")
+        val sync = publication.indexOf("synchronizeTerminalRenderedRows(")
+        val publish = publication.indexOf(
+            "publishedRenderSnapshot = TerminalRenderSnapshot.capture(frame, terminalRenderedRows)"
+        )
+        assertTrue(sync >= 0 && publish > sync)
+        assertTrue(processSessionSource.contains("TerminalRenderSnapshot.capture(initialTerminalRenderFrame,"))
+        assertFalse(processSessionSource.contains("var terminalViewportFrame"))
     }
 
     @Test
@@ -98,7 +109,7 @@ class TerminalUiSourceTest {
         assertTrue(processSessionSource.contains("rememberTerminalVirtualHistoryPolicy(processId, appliedTerminalRenderMode, imeVisible)"))
         assertTrue(processSessionSource.contains("virtualHistoryPolicy.reapplied(currentImeVisible)"))
         assertTrue(processSessionSource.contains("latestSaveTerminalViewport"))
-        assertTrue(processSessionSource.contains("TerminalRenderSnapshot.capture(terminalViewportFrame, terminalRenderedRows)"))
+        assertTrue(processSessionSource.contains("val renderSnapshot = publishedRenderSnapshot"))
         assertTrue(processSessionSource.contains("rows = renderSnapshot.rows,"))
         assertTrue(lazyMeasurementsSource.contains("metricKey"))
         assertTrue(lazyMeasurementsSource.contains("it.text == frame.rows[index].text"))

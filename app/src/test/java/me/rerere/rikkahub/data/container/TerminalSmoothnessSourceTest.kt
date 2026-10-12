@@ -444,7 +444,9 @@ class TerminalSmoothnessSourceTest {
 
     @Test
     fun semanticViewportReducerOwnsTerminalScrollReconciliation() {
-        assertTrue(processSessionSource.contains("terminalViewportFrame = frame"))
+        assertTrue(processSessionSource.contains(
+            "publishedRenderSnapshot = TerminalRenderSnapshot.capture(frame, terminalRenderedRows)"
+        ))
         assertTrue(controllerSource.contains("ViewportInput("))
         assertTrue(controllerSource.contains("reduceViewport("))
         assertTrue(controllerSource.contains("captureViewportAnchor("))

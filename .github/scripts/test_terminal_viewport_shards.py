@@ -32,7 +32,7 @@ class ViewportShardTest(unittest.TestCase):
         self.assertIn('${{ matrix.group }}-${{ github.run_attempt }}', workflow)
         self.assertIn('run-terminal-with-timeout.py 900', workflow)
         tokens = set(re.findall(r"--require-case-group '([^']+)'", workflow))
-        self.assertEqual(136, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
+        self.assertEqual(138, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
         # Most groups use a shared method prefix; render controls retain two distinct names.
         methods = [name for path in TESTS.glob('*InstrumentedTest.kt')
                    for name in re.findall(r'@Test\s+fun\s+(\w+)\(', path.read_text())]
@@ -45,6 +45,26 @@ class ViewportShardTest(unittest.TestCase):
                               ('report-terminal-row-width.py', 'geometry')):
             for prefix in workflow.split('run: python3 .github/scripts/' + script)[:-1]:
                 self.assertIn("matrix.group == '" + group + "'", prefix.rsplit('- name:', 1)[1])
+
+    def test_publication_entry_runs_only_its_five_classes_and_is_separate_from_static_checks(self):
+        source = (ROOT / 'benchmarks/terminal-viewport-tests/run-ci.sh').read_text()
+        entry = source.split('" = renderSnapshot ]; then\n', 1)[1].split('\nfi', 1)[0]
+        classes = re.findall(r'^  run_arm \S+ (\w+)', entry, re.M)
+        self.assertEqual(['TerminalRenderSnapshotInstrumentedTest', 'TerminalBindingProjectionInstrumentedTest',
+                          'TerminalDefaultBottomInstrumentedTest', 'TerminalImeVirtualHistoryInstrumentedTest',
+                          'TerminalViewportStabilityInstrumentedTest'], classes)
+        self.assertNotIn('run_arm false', entry)
+        self.assertIn('render-snapshot-logcat.txt', entry)
+        workflow = (ROOT / '.github/workflows/terminal-viewport-interactions.yml').read_text()
+        checks = workflow.split('if [ "$TERMINAL_VIEWPORT_SUITE" = renderSnapshot ]; then', 2)[2].split('fi', 1)[0]
+        self.assertEqual(set(classes), set(re.findall(r'--require-suite me\.rerere\.rikkahub\.viewporttest\.(\w+)', checks)))
+        self.assertIn(':benchmarks:terminal-viewport-tests:lintRelease', workflow)
+        self.assertIn("if: ${{ matrix.group != 'staticChecks' }}", workflow)
+        unit = (ROOT / '.github/workflows/terminal-emulator-tests.yml').read_text()
+        focused = unit.split('- name: Run publication and consumer contracts once', 1)[1].split('- name:', 1)[0]
+        self.assertEqual(4, len(re.findall(r'--tests ', focused)))
+        self.assertNotIn('attempt', focused)
+        self.assertNotIn('for ', focused)
 
 
 if __name__ == '__main__':

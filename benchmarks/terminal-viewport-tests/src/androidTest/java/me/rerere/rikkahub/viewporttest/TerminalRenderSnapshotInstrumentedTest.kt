@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.viewporttest
 
+import android.util.Log
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.referentialEqualityPolicy
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
@@ -53,8 +55,10 @@ import me.rerere.rikkahub.ui.pages.container.synchronizeTerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.terminalHistoryChunks
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.TerminalEmulator
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -108,13 +112,17 @@ class TerminalRenderSnapshotInstrumentedTest {
         }
     }
 
-    private class Fixture(val mode: TerminalRenderMode) {
+    private class Fixture(val mode: TerminalRenderMode, private val legacyCapture: Boolean = false) {
         val terminal = TerminalEmulator(80, 6, 128).apply {
             feed("\u001B[?25l" + (0 until 22).joinToString("\r\n") { "row-$it 中文" })
         }
-        var frame by mutableStateOf(terminal.renderFrame(), referentialEqualityPolicy())
-        val rows = createTerminalRenderedRows(frame)
-        val sync = createTerminalRenderedRowsSyncState(frame, rows)
+        private val initialFrame = terminal.renderFrame()
+        val rows = createTerminalRenderedRows(initialFrame)
+        val sync = createTerminalRenderedRowsSyncState(initialFrame, rows)
+        var captureCalls = 0
+        var published by mutableStateOf(capture(initialFrame), referentialEqualityPolicy())
+            private set
+        val frame: TerminalEmulator.RenderFrame get() = published.frame
         val controller = TerminalViewportController()
         val eager = ScrollState(Int.MAX_VALUE)
         val lazy = LazyListState()
@@ -124,19 +132,31 @@ class TerminalRenderSnapshotInstrumentedTest {
         var mounted by mutableStateOf(true)
         var mountId by mutableIntStateOf(0)
         var childPulse by mutableIntStateOf(0)
+        var panelPulse by mutableIntStateOf(0)
         var viewportHeight by mutableIntStateOf(0)
         lateinit var scope: CoroutineScope
         lateinit var bound: TerminalBoundViewport
         var renderedFrame: TerminalEmulator.RenderFrame? = null
         var consumed = 0
         var visibleModeMask = 0
+        var panelCompositions = 0
+        var committedPulse = -1
+        var consumedSnapshot: TerminalRenderSnapshot? = null
+
+        private fun capture(frame: TerminalEmulator.RenderFrame): TerminalRenderSnapshot {
+            captureCalls++ // Test-only factory invocation count, not a production trace/counter.
+            return TerminalRenderSnapshot.capture(frame, rows)
+        }
 
         fun publish(index: Int) {
             terminal.feed("\r\noutput-$index 中文")
-            val next = terminal.renderFrame()
+            publishFrame(terminal.renderFrame(), index.toLong())
+        }
+
+        fun publishFrame(next: TerminalEmulator.RenderFrame, nowMs: Long = 100) {
             Snapshot.withMutableSnapshot {
-                synchronizeTerminalRenderedRows(rows, next, false, nowMs = index.toLong(), syncState = sync)
-                frame = next
+                synchronizeTerminalRenderedRows(rows, next, false, nowMs = nowMs, syncState = sync)
+                published = capture(next)
                 childPulse++
             }
         }
@@ -147,14 +167,19 @@ class TerminalRenderSnapshotInstrumentedTest {
         }
 
         @Composable private fun Panel() {
+            val pulse = panelPulse
             val style = TextStyle(color = Color.Green, fontFamily = JetbrainsMono,
                 fontSize = 12.sp, lineHeight = 12.sp, platformStyle = PlatformTextStyle(includeFontPadding = false),
                 lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both))
             val density = LocalDensity.current
             val cell = rememberTextMeasurer().measure("W", style).size.height.coerceAtLeast(1)
             val tail = with(density) { 8.dp.roundToPx() }
-            val captured = TerminalRenderSnapshot.capture(frame, rows)
-            val chunks = terminalHistoryChunks(captured.frame.historyCount, captured.frame.historyStartSequence, false)
+            // The control is the former call site; both arms use the SAME factory and renderer.
+            val captured = if (legacyCapture) capture(frame) else published
+            SideEffect { panelCompositions++; committedPulse = pulse }
+            val chunks = remember(captured.frame.historyCount, captured.frame.historyStartSequence) {
+                terminalHistoryChunks(captured.frame.historyCount, captured.frame.historyStartSequence, false)
+            }
             val policy = rememberTerminalVirtualHistoryPolicy(mountId, mode, ime)
             val wants = mode.isVirtualHistory && policy.allows(chunks.isNotEmpty(), true, false, false, ime, true)
             val current = rememberTerminalBoundViewport(mountId, controller, eager, lazy, measurements,
@@ -170,6 +195,7 @@ class TerminalRenderSnapshotInstrumentedTest {
                     SideEffect {
                         check(pulse >= 0)
                         consumed++
+                        consumedSnapshot = captured
                         visibleModeMask = visibleModeMask or if (current.virtualHistoryEnabled) 2 else 1
                     }
                     TerminalTranscriptViewport(captured.frame, captured.rows, style, chunks, mode, current,
@@ -191,6 +217,79 @@ class TerminalRenderSnapshotInstrumentedTest {
         }
         compose.waitForIdle()
         compose.runOnIdle { assertTrue(f.bound.binding.maximumWriters <= 1) }
+    }
+
+    @Test fun renderSnapshotNoOutputRecompositionsReusePublicationAndMeasureRetainedChildWork() {
+        val legacy = Fixture(TerminalRenderMode.DEFAULT, legacyCapture = true)
+        val candidate = Fixture(TerminalRenderMode.DEFAULT)
+        compose.setContent { Column { legacy.Content(); candidate.Content() } }
+        settle(legacy)
+        settle(candidate)
+        val original = compose.runOnIdle { candidate.published }
+        val rowView = original.rows
+        val capturesBefore = compose.runOnIdle { legacy.captureCalls to candidate.captureCalls }
+        val panelsBefore = compose.runOnIdle { legacy.panelCompositions to candidate.panelCompositions }
+        val childrenBefore = compose.runOnIdle { legacy.consumed to candidate.consumed }
+        repeat(32) { index ->
+            compose.runOnIdle { legacy.panelPulse++; candidate.panelPulse++ }
+            compose.waitForIdle() // Every update must produce an independently committed panel.
+            compose.runOnIdle {
+                assertEquals(index + 1, legacy.committedPulse)
+                assertEquals(index + 1, candidate.committedPulse)
+                assertSame(original, candidate.published)
+                assertSame(original, candidate.consumedSnapshot)
+                assertSame(rowView, candidate.published.rows)
+            }
+        }
+        compose.runOnIdle {
+            val legacyCaptures = legacy.captureCalls - capturesBefore.first
+            val publishedCaptures = candidate.captureCalls - capturesBefore.second
+            assertEquals(32, legacyCaptures)
+            assertEquals(0, publishedCaptures)
+            assertEquals(32, legacy.panelCompositions - panelsBefore.first)
+            assertEquals(32, candidate.panelCompositions - panelsBefore.second)
+            // Report child commits rather than assuming that factory savings imply Text/FPS gains.
+            Log.i("TerminalRenderSnapshot", "SNAPSHOT_WORK " + JSONObject()
+                .put("updates", 32)
+                .put("legacyCaptures", legacyCaptures)
+                .put("publishedCaptures", publishedCaptures)
+                .put("legacyPanelCompositions", legacy.panelCompositions - panelsBefore.first)
+                .put("publishedPanelCompositions", candidate.panelCompositions - panelsBefore.second)
+                .put("legacyChildCompositions", legacy.consumed - childrenBefore.first)
+                .put("publishedChildCompositions", candidate.consumed - childrenBefore.second)
+                .put("sameSnapshotChecks", 32)
+                .put("sameRowViewChecks", 32))
+        }
+    }
+
+    @Test fun renderSnapshotSameFrameAndSameRevisionPublicationsStillReachTheChild() {
+        val f = Fixture(TerminalRenderMode.VIRTUAL_HISTORY_IME)
+        compose.setContent { f.Content() }
+        settle(f)
+        val before = compose.runOnIdle { f.published }
+        val passBefore = compose.runOnIdle { f.bound.pass }
+        compose.runOnIdle { f.publishFrame(before.frame) }
+        settle(f)
+        val sameFrame = compose.runOnIdle {
+            assertNotSame(before, f.published)
+            assertSame(before.frame, f.published.frame)
+            assertSame(before.rows, f.published.rows)
+            assertSame(f.published, f.consumedSnapshot)
+            assertSame(passBefore, f.bound.pass)
+            f.published
+        }
+        val replacement = sameFrame.frame.copy()
+        compose.runOnIdle { f.publishFrame(replacement) }
+        settle(f)
+        compose.runOnIdle {
+            assertNotSame(sameFrame, f.published)
+            assertSame(replacement, f.published.frame)
+            assertEquals(before.frame.revision, f.published.frame.revision)
+            assertSame(before.rows, f.published.rows)
+            assertSame(f.published, f.consumedSnapshot)
+            assertNotSame(passBefore, f.bound.pass)
+            assertSame(replacement, f.bound.pass.frame)
+        }
     }
 
     private fun exercise(mode: TerminalRenderMode) {

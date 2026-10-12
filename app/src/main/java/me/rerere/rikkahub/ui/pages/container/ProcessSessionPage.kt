@@ -862,10 +862,13 @@ private fun TerminalInteractivePanel(
     var terminalFrameRevision by remember(processId) {
         mutableLongStateOf(initialTerminalRenderFrame.revision)
     }
-    var terminalViewportFrame by remember(processId) {
-        // Rows and metadata are published as one frame. Do not structurally compare a 10k-row
-        // frame here; revision guards above the publisher already suppress unchanged updates.
-        mutableStateOf(initialTerminalRenderFrame, referentialEqualityPolicy())
+    var publishedRenderSnapshot by remember(processId) {
+        // Publish frame and row-list structure together. Reads during input/layout recomposition
+        // reuse this object without recapturing the row view or comparing a 10k-row frame.
+        mutableStateOf(
+            TerminalRenderSnapshot.capture(initialTerminalRenderFrame, terminalRenderedRows),
+            referentialEqualityPolicy(),
+        )
     }
     var terminalModeSummary by remember { mutableStateOf(initialTerminalRenderFrame.modeSummary) }
     var terminalStatus by remember { mutableStateOf("就绪") }
@@ -1051,9 +1054,9 @@ private fun TerminalInteractivePanel(
         avoidIme = currentShouldAvoidIme,
     )
 
-    // Capture values at the binding's scope. Child content can recompose independently and must
-    // not combine a fresh live frame/list with the pass captured by an older parent invocation.
-    val renderSnapshot = TerminalRenderSnapshot.capture(terminalViewportFrame, terminalRenderedRows)
+    // Read once at the binding's scope. Retained child content receives the same publication,
+    // never a live state read paired with a pass from a different parent invocation.
+    val renderSnapshot = publishedRenderSnapshot
     val boundViewport = rememberTerminalBoundViewport(
         sessionKey = processId,
         controller = viewportController,
@@ -1134,7 +1137,9 @@ private fun TerminalInteractivePanel(
             )
             terminalFrameIsAlternateScreen = frame.isAlternateScreen
             terminalFrameRevision = frame.revision
-            terminalViewportFrame = frame
+            // Do not suppress same-revision or same-frame forced blank commits: row Text may
+            // have changed after its grace period even when the emulator frame is unchanged.
+            publishedRenderSnapshot = TerminalRenderSnapshot.capture(frame, terminalRenderedRows)
             terminalModeSummary = frame.modeSummary
         }
         TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_PUBLISHED, frameRevision = frame.revision)

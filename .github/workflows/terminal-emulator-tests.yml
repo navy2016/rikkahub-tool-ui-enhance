@@ -57,6 +57,12 @@ on:
       - 'gradle/libs.versions.toml'
       - 'gradle/wrapper/gradle-wrapper.properties'
   workflow_dispatch:
+    inputs:
+      suite:
+        description: 'renderSnapshot runs only publication, row synchronization and page contract tests, once'
+        type: choice
+        options: [all, renderSnapshot]
+        default: all
 
 jobs:
   unit-test:
@@ -65,6 +71,7 @@ jobs:
     timeout-minutes: 30
     env:
       ORG_GRADLE_PROJECT_terminalReleaseTests: 'true'
+      TERMINAL_UNIT_SUITE: ${{ inputs.suite || 'all' }}
 
     steps:
       - name: Checkout
@@ -124,12 +131,15 @@ jobs:
           EOFGS
 
       - name: Run PTY mode inference tests
+        if: ${{ env.TERMINAL_UNIT_SUITE != 'renderSnapshot' }}
         run: bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest --stacktrace
 
       - name: Run Bun and terminal UI source tests
+        if: ${{ env.TERMINAL_UNIT_SUITE != 'renderSnapshot' }}
         run: bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest --tests me.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest --stacktrace
 
       - name: Run focused unit tests
+        if: ${{ env.TERMINAL_UNIT_SUITE != 'renderSnapshot' }}
         run: |
           for attempt in 1 2 3; do
             echo "Gradle test attempt ${attempt}/3"
@@ -169,9 +179,26 @@ jobs:
             sleep $((attempt * 20))
           done
 
+      - name: Run publication and consumer contracts once after Release compilation
+        if: ${{ env.TERMINAL_UNIT_SUITE == 'renderSnapshot' }}
+        run: |
+          bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest \
+            --tests me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest \
+            --tests me.rerere.rikkahub.data.container.TerminalRenderedRowsTest \
+            --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest \
+            --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest --stacktrace
+
       - name: Publish focused regression results
         if: always()
         run: |
+          if [ "$TERMINAL_UNIT_SUITE" = renderSnapshot ]; then
+            python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalRenderedRowsTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalUiSourceTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest
+            exit $?
+          fi
           python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
             --require-suite me.rerere.rikkahub.utils.TerminalEmulatorTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalRenderedRowsTest \
