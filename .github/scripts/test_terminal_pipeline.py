@@ -93,7 +93,8 @@ class TerminalPipelineValidationTest(unittest.TestCase):
     def test_sources_cover_real_page_session_native_io_and_trace(self):
         names = pipeline.sources()
         for suffix in ('ProcessSessionPage.kt', 'BackgroundProcessManager.kt', 'rikkahub_pty.cpp',
-                       'TerminalPipelineTrace.kt', 'TerminalPipelineInstrumentedTest.kt'):
+                       'TerminalPipelineTrace.kt', 'TerminalPipelineInstrumentedTest.kt',
+                       'TerminalRenderedRows.kt', 'TerminalRenderControls.kt'):
             self.assertTrue(any(name.endswith(suffix) for name in names), suffix)
 
     def test_failure_excerpt_preserves_initial_error_and_lifecycle_with_bounded_output(self):

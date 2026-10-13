@@ -27,7 +27,12 @@ internal fun TerminalTranscriptViewport(
     panEnabled: Boolean,
     selectionMode: Boolean,
     modifier: Modifier = Modifier,
+    rowSource: TerminalRenderSnapshot? = null,
+    compositionObserver: TerminalTranscriptCompositionObserver? = null,
 ) {
+    if (rowSource != null) require(rowSource.frame === frame && rowSource.rows === rows) {
+        "Terminal viewport row source mismatch"
+    }
     if (bound.virtualHistoryEnabled) {
         TerminalVirtualHistoryTranscript(frame, rows, style, bound.pass, bound.binding.measurements,
             bound.binding.lazy, horizontalScroll, panEnabled && !selectionMode,
@@ -38,7 +43,7 @@ internal fun TerminalTranscriptViewport(
                 flingBehavior = bound.gestures.flingBehavior)) {
             val content: @Composable () -> Unit = {
                 TerminalConfiguredTranscript(rows, style, historyChunks, mode,
-                    measurement = bound.eagerMeasurement)
+                    measurement = bound.eagerMeasurement, rowSource = rowSource, observer = compositionObserver)
             }
             if (selectionMode) SelectionContainer { Column { content() } } else content()
             Spacer(Modifier.height(8.dp))

@@ -6,7 +6,7 @@ on:
       suite:
         description: 'all, fresh default, publication regressions, or lint/Release type checking without tests'
         type: choice
-        options: [all, defaultBottom, renderSnapshot, textMetrics, staticChecks]
+        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, staticChecks]
         default: all
       production_sha:
         description: 'Optional exact archived production SHA for defaultBottom only; tests remain from this ref'
@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction"]') }}
+        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction"]') }}
     env:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
       TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
@@ -90,6 +90,9 @@ jobs:
           elif [ "$TERMINAL_VIEWPORT_SUITE" = textMetrics ]; then
             cd .github/scripts
             python3 -m unittest test_terminal_viewport_shards test_terminal_text_metrics test_terminal_row_width test_terminal_panel_subscription
+          elif [ "$TERMINAL_VIEWPORT_SUITE" = chunkViews ]; then
+            cd .github/scripts
+            python3 -m unittest test_terminal_viewport_shards test_terminal_chunk_views
           else
             python3 -m unittest discover -s .github/scripts -p 'test_*.py'
           fi
@@ -150,6 +153,37 @@ jobs:
       - name: Require every case assigned to this shard
         if: ${{ always() && matrix.group != 'staticChecks' }}
         run: |
+          if [ "$TERMINAL_VIEWPORT_SUITE" = chunkViews ]; then
+            if [ "$TERMINAL_VIEWPORT_GROUP" = chunksRender ]; then
+              python3 .github/scripts/report-terminal-tests.py \
+                benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+                --require-suite me.rerere.rikkahub.viewporttest.TerminalChunkViewsInstrumentedTest \
+                --require-case-group 'chunkViews:7' \
+                --require-suite me.rerere.rikkahub.viewporttest.TerminalTranscriptGeometryInstrumentedTest \
+                --require-case-group 'chunkLayers=false:4' \
+                --require-case-group 'chunkLayers=true:4' \
+                --require-suite me.rerere.rikkahub.viewporttest.TerminalTextCompatibilityInstrumentedTest \
+                --require-case-group 'terminalText:3' \
+                --require-suite me.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest \
+                --require-case-group 'measurementNode:8'
+            else
+              [ "$TERMINAL_VIEWPORT_GROUP" = chunksViewport ]
+              python3 .github/scripts/report-terminal-tests.py \
+                benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+                --require-suite me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest \
+                --require-case-group 'defaultBottom:7' \
+                --require-suite me.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest \
+                --require-case-group 'imeStable:6' \
+                --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest \
+                --require-case-group 'stabilityDefaultTenThousandFifoUpdatesReadOnlyBoundaryHeightsAndKeepLockedAnchor:1' \
+                --require-case-group 'stabilityDetachAndRecreateRestoresMeasuredAnchorAfterBackgroundTrim:1' \
+                --require-case-group 'stabilityTenThousandRowFallbackSharesHistoryAndReleasesPrefixOnReturn:1' \
+                --require-case-group 'stabilityOutputDuringRepeatedModeAndImeFallbackChangesSettlesAtLatestTail:1' \
+                --require-suite me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest \
+                --require-case-group 'itemNativeEagerFallbackDoesNotRecomposeArchivedHistoryOnActiveUpdates:1'
+            fi
+            exit $?
+          fi
           if [ "$TERMINAL_VIEWPORT_SUITE" = textMetrics ]; then
             python3 .github/scripts/report-terminal-tests.py \
               benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
@@ -213,6 +247,8 @@ jobs:
           [ "$TERMINAL_VIEWPORT_GROUP" = geometry ]
           python3 .github/scripts/report-terminal-tests.py \
             benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+            --require-suite me.rerere.rikkahub.viewporttest.TerminalChunkViewsInstrumentedTest \
+            --require-case-group 'chunkViews:7' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalTextMetricsInstrumentedTest \
             --require-case-group 'textMetrics:6' \
             --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportGestureInstrumentedTest \
@@ -251,6 +287,9 @@ jobs:
       - name: Require exact text-metric work and asynchronous font compatibility
         if: ${{ always() && (matrix.group == 'geometry' || matrix.group == 'textMetrics') }}
         run: python3 .github/scripts/report-terminal-text-metrics.py
+      - name: Require exact chunk-view construction counts and lifecycle correctness
+        if: ${{ always() && (matrix.group == 'geometry' || matrix.group == 'chunksRender') }}
+        run: python3 .github/scripts/report-terminal-chunk-views.py
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

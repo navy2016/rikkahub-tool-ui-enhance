@@ -23,6 +23,7 @@ class TerminalUiSourceTest {
             .contains("frame = renderSnapshot.frame"))
         assertTrue(output.contains("frame = renderSnapshot.frame"))
         assertTrue(output.contains("rows = renderSnapshot.rows"))
+        assertTrue(output.contains("rowSource = renderSnapshot"))
         assertTrue(output.contains(".terminalPipelineDraw(processId, renderSnapshot.frame.revision"))
         assertFalse(output.contains("terminalViewportFrame"))
         assertFalse(output.contains("terminalRenderedRows"))

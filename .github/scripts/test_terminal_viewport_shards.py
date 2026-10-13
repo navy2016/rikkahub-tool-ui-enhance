@@ -31,8 +31,10 @@ class ViewportShardTest(unittest.TestCase):
         self.assertIn('TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}', workflow)
         self.assertIn('${{ matrix.group }}-${{ github.run_attempt }}', workflow)
         self.assertIn('run-terminal-with-timeout.py 900', workflow)
-        tokens = set(re.findall(r"--require-case-group '([^']+)'", workflow))
-        self.assertEqual(144, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
+        # Full-suite branches only; focused entries may repeat names or choose individual methods.
+        full = workflow.split('if [ "$TERMINAL_VIEWPORT_GROUP" = interaction ]; then', 1)[1]
+        tokens = set(re.findall(r"--require-case-group '([^']+)'", full))
+        self.assertEqual(151, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
         # Most groups use a shared method prefix; render controls retain two distinct names.
         methods = [name for path in TESTS.glob('*InstrumentedTest.kt')
                    for name in re.findall(r'@Test\s+fun\s+(\w+)\(', path.read_text())]
@@ -64,6 +66,37 @@ class ViewportShardTest(unittest.TestCase):
         unit = (ROOT / '.github/workflows/terminal-emulator-tests.yml').read_text()
         focused = unit.split('- name: Run publication and consumer contracts once', 1)[1].split('- name:', 1)[0]
         self.assertEqual(4, len(re.findall(r'--tests ', focused)))
+        self.assertNotIn('attempt', focused)
+        self.assertNotIn('for ', focused)
+
+    def test_chunk_views_shards_are_disjoint_complete_and_keep_case_timeouts(self):
+        source = (ROOT / 'benchmarks/terminal-viewport-tests/run-ci.sh').read_text()
+        entry = source.split('" = chunkViews ]; then\n', 1)[1].split('\nfi', 1)[0]
+        assigned = re.findall(r'^      run_arm (\S+) (\S+) (\d+)', entry, re.M)
+        self.assertEqual(11, len(assigned))
+        self.assertEqual(11, len({arm for arm, _, _ in assigned}))
+        self.assertTrue(all(0 < int(seconds) <= 360 for _, _, seconds in assigned))
+        methods = {name.split('#')[1] for _, name, _ in assigned if '#' in name}
+        self.assertEqual(5, len(methods))
+        for _, name, _ in assigned:
+            klass, _, method = name.partition('#')
+            body = (TESTS / (klass + '.kt')).read_text()
+            if method:
+                self.assertIn('fun ' + method + '(', body)
+        workflow = (ROOT / '.github/workflows/terminal-viewport-interactions.yml').read_text()
+        self.assertIn('["chunksRender","chunksViewport"]', workflow)
+        reporting = workflow.split('- name: Require every case assigned to this shard', 1)[1]
+        checks = reporting.split('if [ "$TERMINAL_VIEWPORT_SUITE" = chunkViews ]; then', 1)[1]
+        checks = checks.split('if [ "$TERMINAL_VIEWPORT_SUITE" = textMetrics ]; then', 1)[0]
+        tokens = re.findall(r"--require-case-group '([^']+)'", checks)
+        self.assertEqual(44, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
+        self.assertTrue(all(method + ':1' in tokens for method in methods))
+        required = set(re.findall(r'--require-suite me\.rerere\.rikkahub\.viewporttest\.(\w+)', checks))
+        self.assertEqual({name.split('#')[0] for _, name, _ in assigned}, required)
+        unit = (ROOT / '.github/workflows/terminal-emulator-tests.yml').read_text()
+        focused = unit.split('- name: Run chunk view identity and row publication contracts once', 1)[1]
+        focused = focused.split('- name:', 1)[0]
+        self.assertEqual(5, focused.count('--tests '))
         self.assertNotIn('attempt', focused)
         self.assertNotIn('for ', focused)
 

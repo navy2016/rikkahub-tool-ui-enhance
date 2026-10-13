@@ -5,11 +5,13 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -361,6 +363,16 @@ internal const val TERMINAL_HISTORY_CHUNK_ROWS = 128
 /** A composition partition, NOT a scroll item, row ID, measured height or viewport coordinate. */
 internal data class TerminalHistoryChunk(val bucket: Long, val start: Int, val endExclusive: Int)
 
+/** Only the generator can provide immutable partition provenance; arbitrary Lists stay uncached. */
+private class TerminalHistoryChunkPlan(
+    val historyCount: Int,
+    val firstSequence: Long,
+    private val chunks: List<TerminalHistoryChunk>,
+) : AbstractList<TerminalHistoryChunk>(), RandomAccess {
+    override val size: Int get() = chunks.size
+    override fun get(index: Int): TerminalHistoryChunk = chunks[index]
+}
+
 /**
  * History is a FIFO sequence even when its stable line IDs have gaps or are out of order. Bucketing
  * the archival ordinal bounds BOTH rows per group and number of groups. Positional chunking would
@@ -376,7 +388,7 @@ internal fun terminalHistoryChunks(
     if (usesTuiViewport || historyCount <= 0 || firstSequence == null || firstSequence < 0L ||
         firstSequence > Long.MAX_VALUE - (historyCount - 1).toLong()
     ) return emptyList()
-    return buildList {
+    return TerminalHistoryChunkPlan(historyCount, firstSequence, buildList {
         var start = 0
         while (start < historyCount) {
             val sequence = firstSequence + start
@@ -387,13 +399,55 @@ internal fun terminalHistoryChunks(
             add(TerminalHistoryChunk(sequence / TERMINAL_HISTORY_CHUNK_ROWS, start, start + count))
             start += count
         }
-    }
+    })
 }
 
 /** Non-observable diagnostics used by isolated fixtures, absent in production. Never drive UI state. */
 internal interface TerminalTranscriptCompositionObserver {
     fun historyChunkDelta(chunks: Int, rows: Int)
     fun activeScreenDelta(screens: Int)
+    fun transcriptComposed(cached: Boolean) {}
+    fun chunkViewsCreated(chunks: Int, slices: Int) {}
+    fun cachedViewDelta(delta: Int) {}
+}
+
+/** O(1) identity comparisons; never invoke List.equals/hashCode on 10k observable row objects. */
+internal class TerminalChunkViewIdentity(private val rows: Any, private val plan: Any) {
+    override fun equals(other: Any?): Boolean = other is TerminalChunkViewIdentity &&
+        rows === other.rows && plan === other.plan
+    override fun hashCode(): Int = 31 * System.identityHashCode(rows) + System.identityHashCode(plan)
+}
+
+/** The optional source is a capability from SnapshotStateList.toList(), not a Boolean assertion. */
+internal fun terminalChunkViewIdentity(
+    source: TerminalRenderSnapshot?,
+    rows: List<TerminalRenderedRowState>,
+    plan: List<TerminalHistoryChunk>,
+): TerminalChunkViewIdentity? {
+    if (source == null) return null
+    require(source.rows === rows) { "Terminal chunk row source mismatch" }
+    if (plan !is TerminalHistoryChunkPlan) return null
+    require(plan.historyCount == source.frame.historyCount && plan.firstSequence == source.frame.historyStartSequence) {
+        "Terminal chunk partition source mismatch"
+    }
+    return TerminalChunkViewIdentity(rows, plan)
+}
+
+/** Current row-list slices only: no copied Text, geometry, frame, or chain of previous entries. */
+internal class TerminalChunkViews(
+    val history: List<TerminalHistoryChunkContent>,
+    val screen: List<TerminalRenderedRowState>,
+)
+
+internal fun createTerminalChunkViews(
+    source: TerminalRenderSnapshot,
+    plan: List<TerminalHistoryChunk>,
+): TerminalChunkViews {
+    requireNotNull(terminalChunkViewIdentity(source, source.rows, plan))
+    return TerminalChunkViews(
+        history = plan.map { TerminalHistoryChunkContent(it.bucket, source.rows.subList(it.start, it.endExclusive)) },
+        screen = source.rows.subList(plan.last().endExclusive, source.rows.size),
+    )
 }
 
 /**
@@ -413,15 +467,31 @@ internal fun TerminalRenderedTranscript(
     historyChunks: List<TerminalHistoryChunk>,
     isolateChunkDrawing: Boolean = false,
     observer: TerminalTranscriptCompositionObserver? = null,
+    rowSource: TerminalRenderSnapshot? = null,
 ) {
+    val identity = terminalChunkViewIdentity(rowSource, rows, historyChunks)
+    if (observer != null) SideEffect { observer.transcriptComposed(identity != null) }
     if (historyChunks.isEmpty()) {
         TerminalRenderedRows(rows, style)
         return
     }
-    historyChunks.forEach { chunk ->
+    // Conditional remember drops its only entry on fallback/flat rendering and on disposal.
+    // A new frame can retain exactly the same row view; no frame is part of the cache key/value.
+    val views = if (identity == null) null else remember(identity) {
+        createTerminalChunkViews(requireNotNull(rowSource), historyChunks).also {
+            observer?.chunkViewsCreated(it.history.size, it.history.size + 1)
+        }
+    }
+    if (views != null && observer != null) DisposableEffect(views, observer) {
+        observer.cachedViewDelta(1)
+        onDispose { observer.cachedViewDelta(-1) }
+    }
+    historyChunks.forEachIndexed { index, chunk ->
         key(chunk.bucket) {
             TerminalHistoryChunkRows(
-                chunk = TerminalHistoryChunkContent(chunk.bucket, rows.subList(chunk.start, chunk.endExclusive)),
+                chunk = views?.history?.get(index) ?: TerminalHistoryChunkContent(
+                    chunk.bucket, rows.subList(chunk.start, chunk.endExclusive),
+                ).also { observer?.chunkViewsCreated(1, 1) },
                 style = style,
                 isolateDrawing = isolateChunkDrawing,
                 observer = observer,
@@ -437,13 +507,16 @@ internal fun TerminalRenderedTranscript(
                 onDispose { observer.activeScreenDelta(-1) }
             }
         }
-        Column { TerminalRenderedRows(rows.subList(historyChunks.last().endExclusive, rows.size), style) }
+        val screen = views?.screen ?: rows.subList(historyChunks.last().endExclusive, rows.size).also {
+            observer?.chunkViewsCreated(0, 1)
+        }
+        Column { TerminalRenderedRows(screen, style) }
     }
 }
 
 /** The list is an immutable view; observable @Stable row states inside it may update their text. */
 @Stable
-private data class TerminalHistoryChunkContent(val bucket: Long, val rows: List<TerminalRenderedRowState>)
+internal data class TerminalHistoryChunkContent(val bucket: Long, val rows: List<TerminalRenderedRowState>)
 
 @Composable
 private fun TerminalHistoryChunkRows(

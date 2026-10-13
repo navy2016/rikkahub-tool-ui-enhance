@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
@@ -35,6 +37,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderedTranscript
+import me.rerere.rikkahub.ui.pages.container.TerminalRenderSnapshot
 import me.rerere.rikkahub.ui.pages.container.TerminalTranscriptCompositionObserver
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.createTerminalRenderedRowsSyncState
@@ -228,9 +231,13 @@ class TerminalTranscriptGeometryInstrumentedTest(private val chunkLayers: Boolea
         val terminal = TerminalEmulator(initialColumns = 80, initialRows = 24, maxScrollbackLines = 260).apply {
             feed("\u001B[?25l" + (0 until 260 + 24 + 125).joinToString("\r\n") { line(it) })
         }
-        var frame by mutableStateOf(terminal.renderFrame())
-        private val rows = createTerminalRenderedRows(frame)
-        private val rowSyncState = createTerminalRenderedRowsSyncState(frame, rows)
+        private val initialFrame = terminal.renderFrame()
+        private val rows = createTerminalRenderedRows(initialFrame)
+        private val rowSyncState = createTerminalRenderedRowsSyncState(initialFrame, rows)
+        private var published by mutableStateOf(
+            TerminalRenderSnapshot.capture(initialFrame, rows), referentialEqualityPolicy(),
+        )
+        val frame: TerminalEmulator.RenderFrame get() = published.frame
         var grouped by mutableStateOf(false)
         var selection by mutableStateOf(false)
         var tui by mutableStateOf(false)
@@ -261,7 +268,7 @@ class TerminalTranscriptGeometryInstrumentedTest(private val chunkLayers: Boolea
                 synchronizeTerminalRenderedRows(
                     rows, next, tui || next.isAlternateScreen, nowMs = 1_000L, syncState = rowSyncState,
                 )
-                frame = next
+                published = TerminalRenderSnapshot.capture(next, rows)
             }
         }
 
@@ -275,6 +282,11 @@ class TerminalTranscriptGeometryInstrumentedTest(private val chunkLayers: Boolea
         @Composable
         fun Content() {
             scope = rememberCoroutineScope()
+            val source = published
+            val frame = source.frame
+            val plan = remember(frame.historyCount, frame.historyStartSequence, tui, frame.isAlternateScreen) {
+                terminalHistoryChunks(frame.historyCount, frame.historyStartSequence, tui || frame.isAlternateScreen)
+            }
             val density = LocalDensity.current
             CompositionLocalProvider(
                 LocalDensity provides Density(density.density, fontScale),
@@ -287,11 +299,10 @@ class TerminalTranscriptGeometryInstrumentedTest(private val chunkLayers: Boolea
                     Column(Modifier.size(width.dp, height.dp).horizontalScroll(horizontal).verticalScroll(vertical)) {
                         val text: @Composable () -> Unit = {
                             if (grouped) TerminalRenderedTranscript(
-                                rows.toList(), style,
-                                terminalHistoryChunks(frame.historyCount, frame.historyStartSequence,
-                                    tui || frame.isAlternateScreen),
+                                source.rows, style, plan,
                                 isolateChunkDrawing = chunkLayers, observer = this@Fixture,
-                            ) else TerminalRenderedRows(rows.toList(), style)
+                                rowSource = source,
+                            ) else TerminalRenderedRows(source.rows, style)
                         }
                         if (selection) SelectionContainer { Column { text() } } else text()
                         Spacer(Modifier.height(8.dp))

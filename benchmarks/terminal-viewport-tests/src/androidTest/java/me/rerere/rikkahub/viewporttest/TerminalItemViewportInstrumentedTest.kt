@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.referentialEqualityPolicy
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
@@ -72,6 +73,7 @@ import me.rerere.rikkahub.ui.pages.container.TerminalLazyItemMeasurements
 import me.rerere.rikkahub.ui.pages.container.TerminalViewportGestureConfig
 import me.rerere.rikkahub.ui.pages.container.TerminalBoundViewport
 import me.rerere.rikkahub.ui.pages.container.TerminalTranscriptViewport
+import me.rerere.rikkahub.ui.pages.container.TerminalRenderSnapshot
 import me.rerere.rikkahub.ui.pages.container.TerminalVirtualHistoryPolicy
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderModeDialog
 import me.rerere.rikkahub.ui.pages.container.rememberTerminalBoundViewport
@@ -572,12 +574,16 @@ class TerminalItemViewportInstrumentedTest {
                 })
             })
         }
-        var frame by mutableStateOf(render(), referentialEqualityPolicy())
+        private val initialFrame = render()
+        val rows = createTerminalRenderedRows(initialFrame)
+        private val sync = createTerminalRenderedRowsSyncState(initialFrame, rows)
+        private var published by mutableStateOf(
+            TerminalRenderSnapshot.capture(initialFrame, rows), referentialEqualityPolicy(),
+        )
+        val frame: TerminalEmulator.RenderFrame get() = published.frame
         val saved = restored ?: TerminalViewportState(autoScroll = false, anchorLineId = frame.historyLineIds[frame.historyCount / 2],
             anchorClippedTopPx = 7, anchorHistoryGeneration = frame.historyGeneration)
         val controller = TerminalViewportController(saved)
-        val rows = createTerminalRenderedRows(frame)
-        private val sync = createTerminalRenderedRowsSyncState(frame, rows)
         val lazy = LazyListState()
         val horizontal = ScrollState(saved.horizontalOffsetPx)
         val measurements = TerminalLazyItemMeasurements()
@@ -645,7 +651,7 @@ class TerminalItemViewportInstrumentedTest {
             Snapshot.withMutableSnapshot {
                 synchronizeTerminalRenderedRows(rows, next, false, forcePendingGridBlanks = true,
                     nowMs = 1_000L, syncState = sync)
-                frame = next
+                published = TerminalRenderSnapshot.capture(next, rows)
             }
         }
 
@@ -661,6 +667,8 @@ class TerminalItemViewportInstrumentedTest {
 
         @OptIn(ExperimentalLayoutApi::class)
         @Composable private fun Output() {
+            val source = published
+            val frame = source.frame
             val density = LocalDensity.current
             val actualIme = WindowInsets.isImeVisible
             keyboard = LocalSoftwareKeyboardController.current
@@ -671,15 +679,19 @@ class TerminalItemViewportInstrumentedTest {
             val textMeasurer = rememberTextMeasurer()
             cellHeight = textMeasurer.measure("W", style).size.height.coerceAtLeast(1)
             tailPadding = with(density) { 8.dp.roundToPx() }
-            val chunks = terminalHistoryChunks(frame.historyCount, frame.historyStartSequence, tui || frame.isAlternateScreen)
+            val chunks = remember(frame.historyCount, frame.historyStartSequence, tui, frame.isAlternateScreen) {
+                terminalHistoryChunks(frame.historyCount, frame.historyStartSequence, tui || frame.isAlternateScreen)
+            }
             policy = rememberTerminalVirtualHistoryPolicy(this, mode, ime)
             val wants = mode.isVirtualHistory &&
                 policy.allows(chunks.isNotEmpty(), config.panEnabled, config.selectionMode,
                     tui || frame.isAlternateScreen, ime, avoidIme)
-            bound = rememberTerminalBoundViewport(this, controller, eager, lazy, measurements, frame, style, wants,
+            val currentBound = rememberTerminalBoundViewport(
+                this, controller, eager, lazy, measurements, frame, style, wants,
                 metrics = { TerminalViewportMetrics(eager.maxValue, viewportHeight, cellHeight, tailPadding,
                     usesTuiViewport = tui || frame.isAlternateScreen, imeVisible = ime, avoidIme = ime && avoidIme) },
                 gestureConfig = config)
+            bound = currentBound
             SideEffect {
                 bound.binding.onEffectStarted = { effect ->
                     if (effect.animated && outputDuringJump) {
@@ -692,9 +704,10 @@ class TerminalItemViewportInstrumentedTest {
                 val output: @Composable (Modifier) -> Unit = { modifier ->
                     Box(modifier.testTag("item-output")
                         .onSizeChanged { viewportHeight = it.height; viewportWidth = it.width }
-                        .nestedScroll(bound.gestures.connection)) {
-                        TerminalTranscriptViewport(frame, rows.toList(), style, chunks, mode, bound,
-                            horizontal, config.panEnabled, config.selectionMode, Modifier.fillMaxSize())
+                        .nestedScroll(currentBound.gestures.connection)) {
+                        TerminalTranscriptViewport(frame, source.rows, style, chunks, mode, currentBound,
+                            horizontal, config.panEnabled, config.selectionMode, Modifier.fillMaxSize(),
+                            rowSource = source)
                     }
                 }
                 if (systemIme) {

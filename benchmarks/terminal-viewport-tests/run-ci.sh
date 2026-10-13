@@ -46,6 +46,29 @@ run_arm() {
   fi
 }
 
+if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = chunkViews ]; then
+  case "${TERMINAL_VIEWPORT_GROUP:-}" in
+    chunksRender)
+      run_arm chunk-views TerminalChunkViewsInstrumentedTest 360
+      adb logcat -d -v threadtime TerminalChunkViews:I '*:S' > artifacts/terminal-validation/chunk-views-logcat.txt
+      run_arm geometry TerminalTranscriptGeometryInstrumentedTest 180
+      run_arm text-compatibility TerminalTextCompatibilityInstrumentedTest 180
+      run_arm measurement-node TerminalRowMeasurementInstrumentedTest 180
+      ;;
+    chunksViewport)
+      run_arm default-bottom TerminalDefaultBottomInstrumentedTest 240
+      run_arm ime-stable TerminalImeVirtualHistoryInstrumentedTest 240
+      run_arm chunk-fifo TerminalViewportStabilityInstrumentedTest#stabilityDefaultTenThousandFifoUpdatesReadOnlyBoundaryHeightsAndKeepLockedAnchor 180
+      run_arm chunk-restore TerminalViewportStabilityInstrumentedTest#stabilityDetachAndRecreateRestoresMeasuredAnchorAfterBackgroundTrim 120
+      run_arm chunk-prefix TerminalViewportStabilityInstrumentedTest#stabilityTenThousandRowFallbackSharesHistoryAndReleasesPrefixOnReturn 180
+      run_arm chunk-modes TerminalViewportStabilityInstrumentedTest#stabilityOutputDuringRepeatedModeAndImeFallbackChangesSettlesAtLatestTail 180
+      run_arm chunk-active TerminalItemViewportInstrumentedTest#itemNativeEagerFallbackDoesNotRecomposeArchivedHistoryOnActiveUpdates 120
+      ;;
+    *) echo 'chunkViews requires its explicit render/viewport shard' >&2; exit 2 ;;
+  esac
+  exit "$overall_status"
+fi
+
 if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = textMetrics ]; then
   run_arm text-metrics TerminalTextMetricsInstrumentedTest 240
   adb logcat -d -v threadtime TerminalTextMetrics:I '*:S' > artifacts/terminal-validation/text-metrics-logcat.txt
@@ -77,6 +100,8 @@ group="${TERMINAL_VIEWPORT_GROUP:-all}"
 case "$group" in all|geometry|interaction) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
 
 if [ "$group" = all ] || [ "$group" = geometry ]; then
+run_arm chunk-views TerminalChunkViewsInstrumentedTest 360
+adb logcat -d -v threadtime TerminalChunkViews:I '*:S' > artifacts/terminal-validation/chunk-views-logcat.txt
 run_arm text-metrics TerminalTextMetricsInstrumentedTest 240
 adb logcat -d -v threadtime TerminalTextMetrics:I '*:S' > artifacts/terminal-validation/text-metrics-logcat.txt
 run_arm false

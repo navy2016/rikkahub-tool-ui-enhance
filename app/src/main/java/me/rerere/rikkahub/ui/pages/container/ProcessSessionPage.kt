@@ -1851,6 +1851,7 @@ private fun TerminalInteractivePanel(
                     TerminalTranscriptViewport(
                         frame = renderSnapshot.frame,
                         rows = renderSnapshot.rows,
+                        rowSource = renderSnapshot,
                         style = terminalTextStyle,
                         historyChunks = terminalHistoryChunkPlan,
                         mode = appliedTerminalRenderMode,

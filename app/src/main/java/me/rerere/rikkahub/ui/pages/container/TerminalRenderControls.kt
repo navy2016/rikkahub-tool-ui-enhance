@@ -49,12 +49,14 @@ internal fun TerminalConfiguredTranscript(
     mode: TerminalRenderMode,
     observer: TerminalTranscriptCompositionObserver? = null,
     measurement: TerminalRowMeasurementScope? = null,
+    rowSource: TerminalRenderSnapshot? = null,
 ) {
     val effective = effectiveTerminalRenderMode(mode, historyChunks.isNotEmpty(), virtualHistoryAllowed = false)
     val content: @Composable () -> Unit = {
         TerminalRenderedTranscript(rows, style,
             if (effective == TerminalRenderMode.FLAT) emptyList() else historyChunks,
-            isolateChunkDrawing = effective == TerminalRenderMode.CHUNKED_LAYERS, observer = observer)
+            isolateChunkDrawing = effective == TerminalRenderMode.CHUNKED_LAYERS, observer = observer,
+            rowSource = rowSource)
     }
     if (measurement == null) content() else {
         val measurements = measurement.measurements
