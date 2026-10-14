@@ -29,6 +29,10 @@ on:
         type: choice
         options: [all, initialCompose, activeRowUpdate, appendAndTrim, semanticJump, imeRoundTrip, detachRestore]
         default: all
+      evidence_v5:
+        description: 'Read V5 original metrics/publication records only; no benchmark or build'
+        type: boolean
+        default: false
   # Archived renderer-only experiments stay manually runnable. Automatic regression now uses
   # terminal-production-benchmark.yml and the actual production viewport/controller.
 
@@ -38,8 +42,15 @@ permissions:
 
 jobs:
   evidence:
-    if: ${{ inputs.evidence_run_id != '' }}
+    if: ${{ inputs.evidence_run_id != '' && !inputs.evidence_v5 }}
     uses: ./.github/workflows/terminal-production-evidence.yml
+    with:
+      run_id: ${{ inputs.evidence_run_id }}
+      source_sha: ${{ inputs.evidence_sha }}
+      scenario: ${{ inputs.evidence_scenario }}
+  evidence_v5:
+    if: ${{ inputs.evidence_run_id != '' && inputs.evidence_v5 }}
+    uses: ./.github/workflows/terminal-v5-evidence.yml
     with:
       run_id: ${{ inputs.evidence_run_id }}
       source_sha: ${{ inputs.evidence_sha }}
