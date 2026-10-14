@@ -108,6 +108,27 @@ independent launches. Root measure includes lazy subcomposition and omits some c
 phase maxima are not a census of all main-thread long tasks. Perfetto traces remain available for
 that diagnosis. No phase totals are added/subtracted to infer unrecorded work.
 
+V5 capture revision `tail-drain-500ms-v1` adds a 500ms driver-only drain after the completed
+target operation and its publication receipt. It changes the capture window, not production or
+the target's mount/operation timers. Frame/RSS sampling includes this dwell and must not be compared
+with the initial V5 capture as an unchanged-window experiment. The dwell is a mitigation, not a
+flush acknowledgement: every iteration must still contain one complete driver `Prod.captureTail`
+and `measureBlock` slice, all required target slices, and frame counts aligned with sampled arrays.
+The manifest/request/context bind the revision; missing data is never filled or silently discarded.
+
+Initial B0 run `38500483010` at `60e6566` passed five full scenarios but failed cold-mount
+validation. In the 5k default case all three launch/publication receipts and frame sample groups
+exist; all 52 scalar metric arrays contain only iterations 1 and 2. Exact AndroidX 1.4.1 source
+`MetricResultExtensions.mergeToSingleMetricResults()` drops an entire iteration when its scalar
+key set differs. Original trace 0 confirms unfinished `Prod.mountToSettledDraw` and `measureBlock`
+(`dur=-1`) and no validation/stop marker. Traces 1 and 2 are complete. Memory counters exist in all
+three; the discarded-chunk/patch statistics are also present in the complete traces and alone do
+not establish the underlying Perfetto defect. The missing tail is established, its internal cause
+is not. Source JAR SHA-256: `7eee75b0a5982329906d2ae074c5cc05e4d25500a35d580a3401bb97dbfce2c4`.
+Diagnostics: runs `38502087438`, `38503412913`, `38554574999`; trace 0 SHA-256:
+`318042f083e2f4555f3ce0b9cd480ba2514d60009beacbf8d22311f2898baed1`.
+This failed run remains failed; the revised capture requires the second full validation round.
+
 The frame-history builder now shares immutable 128-ordinal blocks. A normal one-line archive reads
 one new source row; a head-only trim reads none. Changed head/tail blocks copy at most 256 retained/new
 entries, while directory construction and exact content-bound aggregation still visit O(H / 128)

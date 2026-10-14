@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from production_ci import require_preflight, source_files
-from production_summary import (CLASS, MODES, PUBLICATION, SCENARIOS, SIZES, VERSION, report, result_key,
+from production_summary import (CAPTURE, CLASS, MODES, PUBLICATION, SCENARIOS, SIZES, VERSION, report, result_key,
                                 runs, validate, validate_publications)
 
 MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
@@ -46,6 +46,7 @@ def verify_evidence(evidence, sha, run_id, sources, production_tree):
     manifest = evidence.get('manifest', {})
     require(manifest.get('sourceSha') == sha and manifest.get('buildRun') == run_id and
             manifest.get('suite') == VERSION and manifest.get('publication') == PUBLICATION and
+            manifest.get('capture') == CAPTURE and
             manifest.get('sources') == sources and manifest.get('productionTree') == production_tree,
             'Evidence does not match exact SHA/run/source tree')
     scenario = request.get('scenario')
@@ -71,6 +72,7 @@ def verify_evidence(evidence, sha, run_id, sources, production_tree):
     require(evidence.get('installedApkHashes') == expected_hashes, 'Installed APK identity mismatch')
     require(request.get('sourceSha') == sha and request.get('runId') == run_id and
             request.get('suite') == VERSION and request.get('publication') == PUBLICATION and
+            request.get('capture') == CAPTURE and
             request.get('targetApkSha256') == expected_hashes['target'] and
             request.get('driverApkSha256') == expected_hashes['driver'], 'Evidence request mismatch')
     results, context = cases_from(evidence.get('document'))
@@ -155,7 +157,8 @@ def collect(root, sha, run_id, scenario, iterations, sources=None, production_tr
         smoke = groups[name, True]['evidence']
         require(full['preflight'] == smoke['validation'] and full['device'] == smoke['device'],
                 'Full baseline is not bound to its actual verified preflight')
-    result = dict(suite=VERSION, sourceSha=sha, runId=run_id, complete=scenario == 'all', scenarios=list(selected),
+    result = dict(suite=VERSION, capture=CAPTURE, sourceSha=sha, runId=run_id,
+                  complete=scenario == 'all', scenarios=list(selected),
                   cases=len(selected) * len(SIZES) * len(MODES), iterations=iterations,
                   measurements=len(table), preflightMeasurements=len(selected) * len(MODES),
                   productionTree=production_tree, groups={

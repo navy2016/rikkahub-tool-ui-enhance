@@ -9,6 +9,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.os.Trace
 import androidx.benchmark.macro.CompilationMode
 import androidx.benchmark.macro.ExperimentalMetricApi
 import androidx.benchmark.macro.FrameTimingMetric
@@ -84,6 +86,7 @@ class ProductionTerminalBenchmark(private val history: Int, private val scenario
         val iterations = arguments.getString("terminalIterations")?.toInt() ?: 3
         require(iterations in 1..50)
         ProductionBenchmarkSpec.validate(history, scenario, mode)
+        ProductionBenchmarkSpec.requireCapture(arguments.getString("androidx.benchmark.output.payload.capture"))
         var measuredIteration = 0
         val sections = listOf(
             "Prod.mountToSettledDraw" to "mount",
@@ -113,6 +116,11 @@ class ProductionTerminalBenchmark(private val history: Int, private val scenario
             for ((section, label) in sections) {
                 add(TraceSectionMetric(section, label = label))
                 add(TraceSectionMetric(section, TraceSectionMetric.Mode.Max, label))
+            }
+            // These sections belong to the driver, not the target. Missing closure is a failed capture.
+            for ((section, label) in listOf("Prod.captureTail" to "captureTail", "measureBlock" to "captureWindow")) {
+                add(TraceSectionMetric(section, label = label, targetPackageOnly = false))
+                add(TraceSectionMetric(section, TraceSectionMetric.Mode.Max, label, targetPackageOnly = false))
             }
         }
         benchmark.measureRepeated(
@@ -158,8 +166,21 @@ class ProductionTerminalBenchmark(private val history: Int, private val scenario
                 InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
                     putString("stream", "\n$records\nMEASURED_LAUNCH $measured\n")
                 })
+                drainTraceTail()
             },
         )
+    }
+
+    /** Outside every target operation timer. A dwell is not proof of a flush: closure gates still apply. */
+    private fun drainTraceTail() {
+        Trace.beginSection("Prod.captureTail")
+        Trace.endSection()
+        val deadline = SystemClock.elapsedRealtimeNanos() + ProductionBenchmarkSpec.CAPTURE_DRAIN_MS * 1_000_000
+        var remaining = deadline - SystemClock.elapsedRealtimeNanos()
+        while (remaining > 0) {
+            SystemClock.sleep((remaining + 999_999) / 1_000_000)
+            remaining = deadline - SystemClock.elapsedRealtimeNanos()
+        }
     }
 
     private fun UiDevice.clickControl(id: String) {

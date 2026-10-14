@@ -11,6 +11,7 @@ from summarize import format_number, median, overrun_percent, per_operation, per
 
 VERSION = "production-viewport-v5"
 PUBLICATION = "atomic-snapshot-chunk-provenance-v1"
+CAPTURE = "tail-drain-500ms-v1"
 SIZES = (1000, 5000, 10000)
 MODES = ("chunkedLayers", "lazyHistory", "lazyHistoryIme")
 SCENARIOS = ("initialCompose", "activeRowUpdate", "appendAndTrim", "semanticJump", "imeRoundTrip", "detachRestore")
@@ -79,7 +80,8 @@ def validate(results, context, sha, run_id, group_id, scenario, iterations, smok
         raise ValueError("Expected verified target and driver APK hashes")
     expected_payload = {"sourceSha": sha, "runId": str(run_id), "groupId": group_id,
                         "suite": VERSION, "scenario": scenario, "smoke": str(smoke).lower(),
-                        "targetApkSha256": apk_sha, "driverApkSha256": driver_sha, "publication": PUBLICATION}
+                        "targetApkSha256": apk_sha, "driverApkSha256": driver_sha, "publication": PUBLICATION,
+                        "capture": CAPTURE}
     if any(payload.get(key) != value for key, value in expected_payload.items()):
         raise ValueError(f"Missing/mismatched provenance payload; expected {expected_payload}")
     expected = {(size, scenario, mode) for size in ((1000,) if smoke else SIZES) for mode in MODES}
@@ -88,6 +90,8 @@ def validate(results, context, sha, run_id, group_id, scenario, iterations, smok
     for (_, _, mode), case in results.items():
         if type(case.get("repeatIterations")) is not int or case["repeatIterations"] != iterations or iterations <= 0:
             raise ValueError(f"Repetition mismatch: {case['name']}")
+        trace(case, "captureTail", count=1)
+        trace(case, "captureWindow", count=1)
         if any(value <= 0 or int(value) != value for value in runs(case, "frameCount")):
             raise ValueError(f"No frame samples: {case['name']}")
         for metric in ("frameDurationCpuMs", "frameOverrunMs"):
@@ -99,6 +103,8 @@ def validate(results, context, sha, run_id, group_id, scenario, iterations, smok
                 raise ValueError(f"Incomplete frame metric {metric}: {case['name']}")
             if metric == "frameDurationCpuMs" and any(value < 0 for sample in samples for value in sample):
                 raise ValueError(f"Negative CPU duration: {case['name']}")
+            if any(len(sample) != count for sample, count in zip(samples, runs(case, "frameCount"))):
+                raise ValueError(f"Frame count/sample alignment mismatch: {case['name']}")
         for metric in ("memoryRssAnonMaxKb",):
             if metric in case.get("metrics", {}) and any(value < 0 for value in runs(case, metric)):
                 raise ValueError(f"Invalid optional memory metric: {case['name']}")
@@ -119,6 +125,10 @@ def validate(results, context, sha, run_id, group_id, scenario, iterations, smok
         trace(case, "output", count=updates)
         trace(case, "mount", count=int(scenario == "initialCompose"))
         trace(case, "operation", count=int(scenario != "initialCompose"))
+        primary = "mountSumMs" if scenario == "initialCompose" else "operationSumMs"
+        if any(window < operation + 500 for window, operation in
+               zip(runs(case, "captureWindowSumMs"), runs(case, primary))):
+            raise ValueError(f"Capture drain window missing: {case['name']}")
         validations = {"initialCompose": 1, "activeRowUpdate": 30, "appendAndTrim": 30,
                        "semanticJump": 2, "imeRoundTrip": 11, "detachRestore": 1}[scenario]
         trace(case, "validation", count=validations)
@@ -261,6 +271,8 @@ def report(results, context, sha, scenario, smoke):
              "This is an unminified Release-derived component harness, not ProcessSessionPage, PTY/input echo or app startup.",
              "Updates include production reconciliation and two stable draw confirmations. Validation/wait overhead is included.",
              "V5 publishes one immutable frame/row snapshot and exercises chunk provenance; V4/V3 are not relabelled.",
+             f"Capture: {CAPTURE}. A separate 500ms drain follows the operation and is inside the trace only.",
+             "Mount/operation timers exclude drain; frame and RSS samples include it. Do not compare capture variants.",
              "Root measure includes lazy subcomposition. Phase durations overlap; do not subtract them from frame percentiles.",
              "Missing memory is —, not zero. RSS anon is sampled anonymous RSS, not PSS/Java/native/GPU peak memory.", "",
              "| History | Mode | n | Mount ms | Operation ms | Output/op ms | CPU p95 ms | Overrun % | RSS anon MiB |",
@@ -306,7 +318,7 @@ def report(results, context, sha, scenario, smoke):
 
 
 def notices(results, sha, scenario, smoke):
-    lines = [f"{VERSION} {scenario} sha={sha} smoke={smoke}; one scenario/device/invocation, not FPS.",
+    lines = [f"{VERSION} {scenario} sha={sha} smoke={smoke}; capture={CAPTURE}, not FPS.",
              "History | Mode | n | Mount ms | Operation ms | Output/op | CPU p95 | Width/call | RSS anon MiB"]
     for (size, _, mode), case in ordered(results):
         rss = median(case, "memoryRssAnonMaxKb")

@@ -5,6 +5,8 @@ internal object ProductionBenchmarkSpec {
     const val VERSION = "production-viewport-v5"
     const val CONTRACT_KEY = "production.contract.version"
     const val PUBLICATION = "atomic-snapshot-chunk-provenance-v1"
+    const val CAPTURE = "tail-drain-500ms-v1"
+    const val CAPTURE_DRAIN_MS = 500L
     const val PUBLICATION_KEY = "production.publication.evidence"
     const val PHASE_TOKEN = "production.phase.token"
     const val PHASE_VALUE = "production.phase.value"
@@ -24,6 +26,10 @@ internal object ProductionBenchmarkSpec {
 
     fun requireVersion(version: String?) {
         require(version == VERSION) { "Production benchmark target/driver contract mismatch" }
+    }
+
+    fun requireCapture(capture: String?) {
+        require(capture == CAPTURE) { "Production benchmark capture contract mismatch" }
     }
 
     fun cases(group: String, smoke: Boolean = false): List<Array<Any>> {

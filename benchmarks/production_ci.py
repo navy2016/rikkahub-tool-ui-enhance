@@ -13,7 +13,7 @@ import zipfile
 from collections import deque
 from pathlib import Path
 
-from production_summary import (CLASS, MODES, PUBLICATION, SCENARIOS, SIZES, VERSION, load, notices, report,
+from production_summary import (CAPTURE, CLASS, MODES, PUBLICATION, SCENARIOS, SIZES, VERSION, load, notices, report,
                                 validate, validate_publications)
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -100,7 +100,7 @@ def package():
     sha, run_id = env_identity()
     BUNDLE.mkdir(parents=True, exist_ok=True)
     verify_generated_sources()
-    manifest = {"sourceSha": sha, "buildRun": run_id, "suite": VERSION, "publication": PUBLICATION,
+    manifest = {"sourceSha": sha, "buildRun": run_id, "suite": VERSION, "publication": PUBLICATION, "capture": CAPTURE,
                 "productionTree": subprocess.check_output(['git', 'rev-parse', 'HEAD:app/src/main'], text=True).strip(),
                 "sources": source_files(), "apks": {}}
     tools = sorted((Path(os.environ["ANDROID_HOME"]) / "build-tools").glob("*/aapt"),
@@ -138,6 +138,7 @@ def verify_bundle():
     manifest = json.loads((BUNDLE / "manifest.json").read_text())
     if (manifest.get("sourceSha") != sha or manifest.get("buildRun") != run_id or
             manifest.get("suite") != VERSION or manifest.get('publication') != PUBLICATION or
+            manifest.get('capture') != CAPTURE or
             manifest.get("sources") != source_files()):
         raise ValueError("APK bundle does not match this run/SHA/production source tree")
     for role in ("target", "driver"):
@@ -201,7 +202,7 @@ def require_preflight(manifest, scenario, preflight):
             not isinstance(preflight.get('groupId'), str) or not preflight['groupId'].endswith('-' + scenario + '-smoke') or
             preflight.get('targetApkSha256') != manifest['apks']['target']['sha256'] or
             preflight.get('driverApkSha256') != manifest['apks']['driver']['sha256'] or
-            preflight.get('publication') != PUBLICATION):
+            preflight.get('publication') != PUBLICATION or preflight.get('capture') != CAPTURE):
         raise ValueError('Full baseline requires this exact bundle/scenario successful smoke preflight')
 
 
@@ -268,7 +269,7 @@ def run_group(scenario, iterations, smoke, preflight=None):
     target = manifest["apks"]["target"]["package"]
     device_output = f"/sdcard/Android/media/{driver}/production-{group_id}"
     payload = {"sourceSha": sha, "runId": run_id, "groupId": group_id, "suite": VERSION,
-               "scenario": scenario, "smoke": str(smoke).lower(), "publication": PUBLICATION,
+               "scenario": scenario, "smoke": str(smoke).lower(), "publication": PUBLICATION, "capture": CAPTURE,
                "targetApkSha256": manifest["apks"]["target"]["sha256"],
                "driverApkSha256": manifest['apks']['driver']['sha256']}
     (out / "request.json").write_text(json.dumps(dict(payload, iterations=iterations), indent=2) + "\n")

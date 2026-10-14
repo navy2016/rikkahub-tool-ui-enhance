@@ -2,7 +2,7 @@ import re
 import unittest
 from pathlib import Path
 
-from production_summary import MODES, PUBLICATION, SCENARIOS, SIZES, VERSION
+from production_summary import CAPTURE, MODES, PUBLICATION, SCENARIOS, SIZES, VERSION
 
 
 ROOT = Path(__file__).resolve().parent
@@ -113,6 +113,7 @@ class ProductionContractTest(unittest.TestCase):
         self.assertIn(f'const val VERSION = "{VERSION}"', source)
         self.assertEqual('production-viewport-v5', VERSION)
         self.assertIn(f'const val PUBLICATION = "{PUBLICATION}"', source)
+        self.assertIn(f'const val CAPTURE = "{CAPTURE}"', source)
         for name, expected in (('scenarios', SCENARIOS), ('modes', MODES)):
             body = re.search(r'val ' + name + r' = listOf\((.*?)\)', source, re.S)[1]
             self.assertEqual(list(expected), re.findall(r'"([^"]+)"', body))
@@ -138,6 +139,20 @@ class ProductionContractTest(unittest.TestCase):
         self.assertNotIn('ResultReceiver', source + driver)  # am start drops Parcelable extras.
         manifest = (ROOT / 'terminal-target/src/main/AndroidManifest.xml').read_text()
         self.assertIn('android:protectionLevel="signature"', manifest)
+
+    def test_drain_is_driver_only_after_measured_receipt_and_keeps_all_original_metrics(self):
+        driver = (ROOT / 'terminal-macrobenchmark/src/main/java/me/rerere/rikkahub/benchmark/'
+                  'ProductionTerminalBenchmark.kt').read_text()
+        target = TARGET.read_text()
+        self.assertLess(driver.index('sendStatus(0, Bundle()'), driver.index('drainTraceTail()'))
+        self.assertIn('"Prod.captureTail" to "captureTail", "measureBlock" to "captureWindow"', driver)
+        self.assertIn('targetPackageOnly = false', driver)
+        self.assertIn('ProductionBenchmarkSpec.requireCapture(', driver)
+        self.assertIn('SystemClock.elapsedRealtimeNanos()', driver)
+        self.assertIn('add(FrameTimingMetric())', driver)
+        self.assertIn('add(MemoryUsageMetric(MemoryUsageMetric.Mode.Max))', driver)
+        self.assertNotIn('captureTail', target)
+        self.assertNotIn('CAPTURE_DRAIN_MS', target)
 
 
 if __name__ == '__main__':

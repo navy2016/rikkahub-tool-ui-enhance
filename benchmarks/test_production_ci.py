@@ -97,12 +97,13 @@ class ProductionCiTest(unittest.TestCase):
                 path.write_bytes(role.encode())
                 apks[role] = {'file': path.name, 'sha256': ci.digest(path), 'bytes': path.stat().st_size}
             manifest = {'sourceSha': 'a' * 40, 'buildRun': '123', 'suite': ci.VERSION,
-                        'publication': ci.PUBLICATION, 'sources': {'production.kt': 'hash'}, 'apks': apks}
+                        'publication': ci.PUBLICATION, 'capture': ci.CAPTURE,
+                        'sources': {'production.kt': 'hash'}, 'apks': apks}
             path = root / 'manifest.json'
             path.write_text(json.dumps(manifest))
             with patch.object(ci, 'BUNDLE', root), patch.object(ci, 'source_files', return_value={'production.kt': 'hash'}):
                 self.assertEqual(manifest, ci.verify_bundle())
-                for field in ('sourceSha', 'buildRun', 'suite', 'sources', 'publication'):
+                for field in ('sourceSha', 'buildRun', 'suite', 'sources', 'publication', 'capture'):
                     broken = dict(manifest, **{field: 'wrong'})
                     path.write_text(json.dumps(broken))
                     with self.subTest(field=field), self.assertRaises(ValueError):
@@ -136,7 +137,8 @@ class ProductionCiTest(unittest.TestCase):
     def test_preflight_cannot_use_a_different_sha_bundle_scenario_or_failed_run(self):
         manifest = dict(sourceSha='a' * 40, buildRun='123',
                         apks={role: dict(sha256=char * 64) for role, char in (('target', 'b'), ('driver', 'c'))})
-        good = dict(suite=ci.VERSION, publication=ci.PUBLICATION, sourceSha='a' * 40, runId='123',
+        good = dict(suite=ci.VERSION, publication=ci.PUBLICATION, capture=ci.CAPTURE,
+                    sourceSha='a' * 40, runId='123',
                     groupId='123-1-initialCompose-smoke', scenario='initialCompose', smoke='true',
                     iterations=1, cases=3, measuredLaunches=3, verified=True, device={'bootId': 'boot'},
                     targetApkSha256='b' * 64, driverApkSha256='c' * 64)
@@ -144,7 +146,8 @@ class ProductionCiTest(unittest.TestCase):
         for key, value in (('sourceSha', 'd' * 40), ('runId', 'other'), ('scenario', 'appendAndTrim'),
                            ('iterations', True), ('smoke', 'false'), ('verified', False), ('cases', 2),
                            ('targetApkSha256', 'e' * 64), ('driverApkSha256', 'e' * 64),
-                           ('publication', 'old'), ('groupId', ''), ('device', None), ('measuredLaunches', 0)):
+                           ('publication', 'old'), ('capture', 'old'), ('groupId', ''),
+                           ('device', None), ('measuredLaunches', 0)):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 ci.require_preflight(manifest, 'initialCompose', dict(good, **{key: value}))
         with self.assertRaises(ValueError):

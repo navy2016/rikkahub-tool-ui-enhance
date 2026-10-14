@@ -5,6 +5,14 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class ProductionPublicationProbeTest {
+    @Test fun captureContractCannotMixOriginalAndDrainedWindows() {
+        ProductionBenchmarkSpec.requireCapture("tail-drain-500ms-v1")
+        assertEquals(500L, ProductionBenchmarkSpec.CAPTURE_DRAIN_MS)
+        for (capture in listOf(null, "", "old-window")) {
+            assertThrows(IllegalArgumentException::class.java) { ProductionBenchmarkSpec.requireCapture(capture) }
+        }
+    }
+
     @Test fun phasePublicationIsStoredBeforeWakeupAndConflictingDuplicatesFail() {
         val progress = ProductionBenchmarkProgress("launch")
         progress.accept("launch", "prepared")

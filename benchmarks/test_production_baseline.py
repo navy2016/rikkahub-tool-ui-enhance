@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 import production_baseline as baseline
-from production_summary import MODES, PUBLICATION, SCENARIOS, VERSION, report, result_key, validate_publications
+from production_summary import CAPTURE, PUBLICATION, SCENARIOS, VERSION, report, validate_publications
 from test_production_summary import APK_SHA, DRIVER_SHA, RUN, SHA, context, matrix, publication_lines
 
 SOURCES = {'production.kt': 'd' * 64}
@@ -25,7 +25,7 @@ def evidence(scenario, smoke, iterations=3, preflight=None):
     group = f'{RUN}-1-{scenario}-{"smoke" if smoke else "full"}'
     ctx['payload']['groupId'] = group
     request = dict(ctx['payload'], iterations=count)
-    manifest = dict(sourceSha=SHA, buildRun=RUN, suite=VERSION, publication=PUBLICATION,
+    manifest = dict(sourceSha=SHA, buildRun=RUN, suite=VERSION, publication=PUBLICATION, capture=CAPTURE,
                     sources=SOURCES, productionTree=TREE, apks={
                         role: dict(file=role + '.apk', sha256=sha, bytes=123, package=package)
                         for role, sha, package in (
@@ -125,6 +125,7 @@ class ProductionBaselineTest(unittest.TestCase):
         mutations = (
             lambda value: value['manifest'].update(sourceSha='f' * 40),
             lambda value: value['manifest'].update(productionTree='0' * 40),
+            lambda value: value['manifest'].update(capture='old-window'),
             lambda value: value['installedApkHashes'].update(target='0' * 64),
             lambda value: value['validation'].update(verified=False),
             lambda value: value['validation'].update(measuredLaunches=0),

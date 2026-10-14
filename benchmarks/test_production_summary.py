@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from production_summary import (CLASS, MODES, PUBLICATION, SCENARIOS, SIZES, VERSION, load, notices, report,
+from production_summary import (CAPTURE, CLASS, MODES, PUBLICATION, SCENARIOS, SIZES, VERSION, load, notices, report,
                                 result_key, validate, validate_publications)
 
 
@@ -18,7 +18,7 @@ GROUP = "12345-1-initialCompose-full"
 def context(scenario="initialCompose", smoke=False):
     return {"device": "same-emulator", "payload": {"sourceSha": SHA, "runId": RUN, "groupId": GROUP,
             "suite": VERSION, "scenario": scenario, "smoke": str(smoke).lower(), "targetApkSha256": APK_SHA,
-            "driverApkSha256": DRIVER_SHA, "publication": PUBLICATION}}
+            "driverApkSha256": DRIVER_SHA, "publication": PUBLICATION, "capture": CAPTURE}}
 
 
 def measurement(size, scenario, mode):
@@ -53,6 +53,9 @@ def measurement(size, scenario, mode):
         if count:
             metrics[name + "SumMs"] = {"runs": [count * 2, count * 4]}
             metrics[name + "MaxMs"] = {"runs": [2, 4]}
+    metrics.update(captureTailCount={'runs': [1, 1]}, captureTailSumMs={'runs': [0.01, 0.02]},
+                   captureTailMaxMs={'runs': [0.01, 0.02]}, captureWindowCount={'runs': [1, 1]},
+                   captureWindowSumMs={'runs': [1000, 1100]}, captureWindowMaxMs={'runs': [1000, 1100]})
     return {"className": CLASS, "name": f"production[history={size},scenario={scenario},mode={mode}]",
             "repeatIterations": 2, "metrics": metrics,
             "sampledMetrics": {"frameDurationCpuMs": {"P50": 10, "P95": 20, "runs": [[5, 10, 20], [5, 10, 20]]},
@@ -159,6 +162,23 @@ class ProductionSummaryTest(unittest.TestCase):
         results = matrix()
         results[(1000, "initialCompose", "chunkedLayers")]["sampledMetrics"]["frameDurationCpuMs"]["runs"] = [[], [10]]
         with self.assertRaisesRegex(ValueError, "frame metric"):
+            self.valid(results)
+
+    def test_capture_tail_closure_drain_and_frame_alignment_are_required(self):
+        for metric, values in (('captureTailCount', [0, 1]), ('captureWindowCount', [1, 0]),
+                               ('captureWindowSumMs', [500, 500]), ('captureTailMaxMs', [0, 0]),
+                               ('frameCount', [2, 3])):
+            results = matrix()
+            results[(1000, 'initialCompose', 'chunkedLayers')]['metrics'][metric] = {'runs': values}
+            with self.subTest(metric=metric), self.assertRaises(ValueError):
+                self.valid(results)
+
+    def test_partial_scalar_iteration_still_fails_with_complete_frames_and_capture_receipts(self):
+        results = matrix()
+        case = results[(5000, 'initialCompose', 'chunkedLayers')]
+        for metric in case['metrics'].values():
+            metric['runs'] = metric['runs'][1:]
+        with self.assertRaises(ValueError):
             self.valid(results)
 
     def test_old_benchmark_names_and_unknown_modes_never_pass(self):
