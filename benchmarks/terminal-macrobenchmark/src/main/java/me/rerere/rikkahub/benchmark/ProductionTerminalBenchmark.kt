@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.benchmark.macro.CompilationMode
@@ -25,6 +26,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import java.util.UUID
+import org.json.JSONObject
 
 /** One complete scenario, ALL selected sizes and ALL THREE adjacent production modes per size. */
 @LargeTest
@@ -44,6 +46,7 @@ class ProductionTerminalBenchmark(private val history: Int, private val scenario
     @get:Rule val benchmark = MacrobenchmarkRule()
     private lateinit var progress: ProductionBenchmarkProgress
     private var phaseReceiver: BroadcastReceiver? = null
+    private lateinit var launchToken: String
 
     @After fun closePhaseReceiver() {
         phaseReceiver?.let { InstrumentationRegistry.getInstrumentation().context.unregisterReceiver(it) }
@@ -58,7 +61,8 @@ class ProductionTerminalBenchmark(private val history: Int, private val scenario
             override fun onReceive(context: Context, intent: Intent) {
                 if (intent.action == ProductionBenchmarkSpec.PHASE_ACTION) receipt.accept(
                     intent.getStringExtra(ProductionBenchmarkSpec.PHASE_TOKEN),
-                    intent.getStringExtra(ProductionBenchmarkSpec.PHASE_VALUE))
+                    intent.getStringExtra(ProductionBenchmarkSpec.PHASE_VALUE),
+                    intent.getStringExtra(ProductionBenchmarkSpec.PUBLICATION_KEY))
             }
         }
         val context = InstrumentationRegistry.getInstrumentation().context
@@ -80,6 +84,7 @@ class ProductionTerminalBenchmark(private val history: Int, private val scenario
         val iterations = arguments.getString("terminalIterations")?.toInt() ?: 3
         require(iterations in 1..50)
         ProductionBenchmarkSpec.validate(history, scenario, mode)
+        var measuredIteration = 0
         val sections = listOf(
             "Prod.mountToSettledDraw" to "mount",
             "Prod.operation" to "operation",
@@ -119,12 +124,14 @@ class ProductionTerminalBenchmark(private val history: Int, private val scenario
                 killProcess()
                 // Fresh receiver + nonce per Activity launch: old or cached completion cannot pass.
                 val token = UUID.randomUUID().toString()
+                launchToken = token
                 newPhaseReceiver(token)
                 startActivityAndWait(Intent().apply {
                     component = ComponentName(ProductionBenchmarkSpec.PACKAGE, ProductionBenchmarkSpec.ACTIVITY)
                     putExtra("history_rows", history)
                     putExtra("scenario", scenario)
                     putExtra("renderer", mode)
+                    putExtra(ProductionBenchmarkSpec.CONTRACT_KEY, ProductionBenchmarkSpec.VERSION)
                     putExtra(ProductionBenchmarkSpec.PHASE_TOKEN, token)
                 })
                 awaitPhase("prepared")
@@ -138,6 +145,19 @@ class ProductionTerminalBenchmark(private val history: Int, private val scenario
                 device.clickControl(if (scenario == "initialCompose") "benchmark_mount" else "benchmark_run")
                 awaitPhase(if (scenario == "initialCompose") "mounted" else "done")
                 device.waitForIdle()
+                val measured = JSONObject()
+                    .put("suite", ProductionBenchmarkSpec.VERSION).put("scenario", scenario)
+                    .put("size", history).put("mode", mode).put("token", launchToken)
+                    .put("iteration", measuredIteration++)
+                val phases = if (scenario == "initialCompose") listOf("mounted") else listOf("mounted", "done")
+                val records = phases.joinToString("\n") { phase ->
+                    "PUBLICATION_WORK " + checkNotNull(progress.publication(phase)) {
+                        "Missing V5 target publication receipt: $phase"
+                    }
+                }
+                InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
+                    putString("stream", "\n$records\nMEASURED_LAUNCH $measured\n")
+                })
             },
         )
     }

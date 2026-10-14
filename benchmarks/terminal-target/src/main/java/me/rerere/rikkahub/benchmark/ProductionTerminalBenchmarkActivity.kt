@@ -79,6 +79,8 @@ import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalViewportState
 import me.rerere.rikkahub.ui.pages.container.TerminalBoundViewport
 import me.rerere.rikkahub.ui.pages.container.TerminalLazyItemMeasurements
+import me.rerere.rikkahub.ui.pages.container.TerminalRenderSnapshot
+import me.rerere.rikkahub.ui.pages.container.TerminalTranscriptCompositionObserver
 import me.rerere.rikkahub.ui.pages.container.TerminalTranscriptViewport
 import me.rerere.rikkahub.ui.pages.container.TerminalViewportGestureConfig
 import me.rerere.rikkahub.ui.pages.container.TerminalVirtualHistoryPolicy
@@ -90,6 +92,7 @@ import me.rerere.rikkahub.ui.pages.container.synchronizeTerminalRenderedRows
 import me.rerere.rikkahub.ui.pages.container.terminalHistoryChunks
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.TerminalEmulator
+import org.json.JSONObject
 import kotlin.coroutines.resume
 
 /**
@@ -112,12 +115,15 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
     private var keyboard: SoftwareKeyboardController? = null
     private val focus = FocusRequester()
     private var input by mutableStateOf("")
+    private var viewportGeneration = 0
+    private var detachedPublication: ProductionPublicationProbe.Work? = null
 
     @OptIn(ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        ProductionBenchmarkSpec.requireVersion(intent.getStringExtra(ProductionBenchmarkSpec.CONTRACT_KEY))
         size = intent.getIntExtra("history_rows", 1000)
         scenario = intent.getStringExtra("scenario") ?: "initialCompose"
         val modeId = intent.getStringExtra("renderer") ?: "chunkedLayers"
@@ -171,7 +177,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         lifecycleScope.launch(AndroidUiDispatcher.Main) {
             try {
                 withTimeout(120_000) { block() }
-                publishPhase(done)
+                publishPhase(done, publicationEvidence(done))
                 Log.i("ProductionTerminalBenchmark", "validated size=$size scenario=$scenario mode=${mode.id} phase=$done")
             } catch (error: TimeoutCancellationException) {
                 fail(error)
@@ -188,12 +194,31 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         publishPhase("failed:${error.javaClass.simpleName}:${error.message}")
     }
 
+    /** One receipt per completed phase, outside phase traces; token binds the actual target launch. */
+    private fun publicationEvidence(phase: String): String {
+        val viewport = checkNotNull(current)
+        fun ProductionPublicationProbe.Work.json() = JSONObject()
+            .put("publications", publications).put("panelCommits", panelCommits).put("pairingChecks", pairingChecks)
+            .put("transcriptEntries", transcriptEntries).put("cachedEntries", cachedEntries)
+            .put("viewBuilds", viewBuilds).put("chunkWrappers", chunkWrappers).put("rowSlices", rowSlices)
+            .put("liveViews", liveViews)
+        return JSONObject()
+            .put("suite", ProductionBenchmarkSpec.VERSION).put("publication", ProductionBenchmarkSpec.PUBLICATION)
+            .put("scenario", scenario).put("size", size).put("mode", mode.id).put("token", phaseToken)
+            .put("phase", phase).put("viewportGeneration", viewport.generation)
+            .put("virtual", viewport.bound.virtualHistoryEnabled).put("work", viewport.publication.snapshot().json())
+            .put("detached", detachedPublication?.json() ?: JSONObject.NULL).toString().also {
+                Log.i("ProductionTerminalBenchmark", "PUBLICATION_WORK " + it)
+            }
+    }
+
     /** A receipt reports completed validation; it never drives or substitutes for viewport work. */
-    private fun publishPhase(phase: String) {
+    private fun publishPhase(phase: String, publication: String? = null) {
         status.text = phase // Visible diagnostics remain useful, but accessibility is not a latch.
         sendBroadcast(Intent(ProductionBenchmarkSpec.PHASE_ACTION)
             .setPackage(ProductionBenchmarkSpec.DRIVER_PACKAGE)
             .putExtra(ProductionBenchmarkSpec.PHASE_TOKEN, phaseToken)
+            .putExtra(ProductionBenchmarkSpec.PUBLICATION_KEY, publication)
             .putExtra(ProductionBenchmarkSpec.PHASE_VALUE, phase), ProductionBenchmarkSpec.PHASE_PERMISSION)
     }
 
@@ -395,8 +420,9 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             current = null
             awaitCondition { !viewport.attached && viewport.measurements.retainedRows == 0 &&
                 viewport.measurements.retainedEagerHistoryRows == 0 && viewport.bound.binding.activeWriters == 0 &&
-                !viewport.bound.binding.widthIndex.hasRetainedState }
+                !viewport.bound.binding.widthIndex.hasRetainedState && viewport.publication.liveViews == 0 }
         }
+        detachedPublication = viewport.publication.snapshot() // Scalars only; never retain the old viewport/source.
         return saved
     }
 
@@ -436,6 +462,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
 
     private fun validate(viewport: Viewport) = productionTrace("Prod.validation") {
         check(viewport.ready())
+        viewport.checkPublication()
         check(viewport.bound.binding.maximumWriters <= 1) { "Multiple production scroll writers" }
         check(viewport.frame === viewport.bound.pass.frame && viewport.drawnFrame === viewport.frame)
         val expected = mode.isVirtualHistory && !viewport.policy.imeFallback &&
@@ -478,9 +505,14 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
     }
 
     private inner class Viewport(initial: TerminalEmulator.RenderFrame, restored: TerminalViewportState? = null) {
-        var frame by mutableStateOf(initial, referentialEqualityPolicy())
+        val generation = ++viewportGeneration
+        val publication = ProductionPublicationProbe()
         val rows = createTerminalRenderedRows(initial)
         val sync = createTerminalRenderedRowsSyncState(initial, rows)
+        private var published by mutableStateOf(
+            TerminalRenderSnapshot.capture(initial, rows).also { publication.published() }, referentialEqualityPolicy(),
+        )
+        val frame: TerminalEmulator.RenderFrame get() = published.frame
         val controller = TerminalViewportController(restored)
         val eager = ScrollState(if (restored?.autoScroll != false) Int.MAX_VALUE else restored.verticalOffsetPx)
         val lazy = LazyListState()
@@ -493,9 +525,20 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         var cellHeight = 1
         var tailPadding = 0
         var attached = false
-        var drawnFrame: TerminalEmulator.RenderFrame? = null
+        private var committedSource: TerminalRenderSnapshot? = null
+        private var drawnSource: TerminalRenderSnapshot? = null
+        val drawnFrame: TerminalEmulator.RenderFrame? get() = drawnSource?.frame
+        private val compositionObserver = object : TerminalTranscriptCompositionObserver {
+            override fun historyChunkDelta(chunks: Int, rows: Int) = Unit
+            override fun activeScreenDelta(screens: Int) = Unit
+            override fun transcriptComposed(cached: Boolean) = publication.transcriptComposed(cached)
+            override fun chunkViewsCreated(chunks: Int, slices: Int) = publication.viewsCreated(chunks, slices)
+            override fun cachedViewDelta(delta: Int) = publication.viewLifetime(delta)
+        }
 
         @Composable fun Content(ime: Boolean) {
+            val source = published
+            val frame = source.frame
             val style = remember { TextStyle(color = Color(0xFF00E676), fontFamily = JetbrainsMono,
                 fontSize = 14.sp, lineHeight = 14.sp, platformStyle = PlatformTextStyle(includeFontPadding = false),
                 lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both)) }
@@ -509,27 +552,33 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             policy = rememberTerminalVirtualHistoryPolicy(this, mode, ime)
             val wants = mode.isVirtualHistory &&
                 policy.allows(chunks.isNotEmpty(), true, false, false, ime, avoidIme = ime)
-            bound = rememberTerminalBoundViewport(this, controller, eager, lazy, measurements, frame, style, wants,
+            val currentBound = rememberTerminalBoundViewport(this, controller, eager, lazy, measurements,
+                frame, style, wants,
                 metrics = { TerminalViewportMetrics(eager.maxValue, viewportHeight, cellHeight, tailPadding,
                     imeVisible = ime, avoidIme = ime) },
                 gestureConfig = TerminalViewportGestureConfig(true, false, 2))
+            SideEffect {
+                bound = currentBound
+                committedSource = source
+                publication.panelCommitted()
+            }
             DisposableEffect(Unit) {
                 attached = true
-                onDispose { attached = false; drawnFrame = null }
+                onDispose { attached = false; drawnSource = null; committedSource = null }
             }
-            val drawing = frame
             Box(Modifier.fillMaxSize().onSizeChanged { viewportHeight = it.height }
-                .nestedScroll(bound.gestures.connection)
+                .nestedScroll(currentBound.gestures.connection)
                 .layout { measurable, constraints ->
                     productionTrace("Prod.measure") {
                         val child = measurable.measure(constraints)
                         layout(child.width, child.height) { child.place(0, 0) }
                     }
                 }.drawWithContent {
-                    productionTrace("Prod.draw") { drawContent(); drawnFrame = drawing }
+                    productionTrace("Prod.draw") { drawContent(); drawnSource = source }
                 }) {
-                TerminalTranscriptViewport(frame, rows.toList(), style, chunks, mode, bound, horizontal,
-                    panEnabled = true, selectionMode = false, modifier = Modifier.fillMaxSize())
+                TerminalTranscriptViewport(source.frame, source.rows, style, chunks, mode, currentBound, horizontal,
+                    panEnabled = true, selectionMode = false, modifier = Modifier.fillMaxSize(),
+                    rowSource = source, compositionObserver = compositionObserver)
             }
         }
 
@@ -538,9 +587,17 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             productionTrace("Prod.rowSync") {
                 Snapshot.withMutableSnapshot {
                     synchronizeTerminalRenderedRows(rows, next, false, nowMs = SystemClock.uptimeMillis(), syncState = sync)
-                    frame = next
+                    published = TerminalRenderSnapshot.capture(next, rows)
                 }
+                publication.published()
             }
+        }
+
+        fun checkPublication() {
+            val source = published
+            check(source === committedSource && source === drawnSource && source.frame === bound.pass.frame &&
+                source.rows === rows.toList()) { "V5 publication/frame/row view pair mismatch" }
+            publication.paired(cachedExpected = !bound.virtualHistoryEnabled)
         }
 
         fun effectCount(): Int = if (::bound.isInitialized) bound.binding.effectCount else -1
@@ -548,6 +605,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         /** Read-only completion guard. Never calls updateViewport, scrollTo, or a handoff callback. */
         fun ready(): Boolean {
             if (!attached || !::bound.isInitialized || drawnFrame !== frame || bound.pass.frame !== frame ||
+                committedSource !== published || drawnSource !== published ||
                 viewportHeight <= 0 || !controller.state.value.initialized || controller.state.value.scrollEffect != null ||
                 controller.state.value.gesture != null || bound.binding.activeWriters != 0) return false
             if (bound.virtualHistoryEnabled) {

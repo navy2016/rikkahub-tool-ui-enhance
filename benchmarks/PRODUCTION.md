@@ -1,13 +1,21 @@
 # Production viewport benchmark
 
 This is the current production-component benchmark, distinct from the archived renderer-only
-experiments in README.md. Contract: `production-viewport-v4`. No old measurements are relabelled.
+experiments in README.md. Contract: `production-viewport-v5`. No old measurements are relabelled.
 
 Active development branch: `opt/terminal-verified-a79e7b6`, forked from the locally verified baseline.
 Explicitly dispatch workflows and push to that branch; do not merge or overwrite later commits on
 `fix/terminal-viewport-semantic-reducer` without the user's direction.
 
 ## What is measured
+
+V5 aligns the fixture with the current production publication path. The viewport publishes a
+`TerminalRenderSnapshot` in the same mutable snapshot as row synchronization. Its parent reads that
+publication once; binding, child rendering and draw callbacks consume that exact source. The eager
+transcript receives `rowSource`, so its immutable chunk-view fast path is exercised. V4's fixture did
+not pass this capability, even when newer production helpers were copied into its APK. V4 remains
+historical evidence, not an interchangeable baseline. The archived full-page paired experiment is
+unchanged; V5 does not dispatch it or update its frozen source hashes.
 
 The target compiles the actual production `TerminalTranscriptViewport`, `TerminalViewportBinding`,
 compatibility policy, gestures, row synchronizer, width index and height measurements from app sources.
@@ -81,6 +89,25 @@ through the remount. This is not a forced-GC or object-collection proof; heap ac
 
 ## Metrics and provenance
 
+V5 adds fixture-only non-observable publication/cache counters and identity checks. A completion
+receipt carries only numbers and fixed identifiers, never terminal content. The signature-protected,
+launch-token-bound broadcast stores this evidence before waking the driver. Only actual measured
+iterations are exported through the instrumentation stream, so logcat rotation cannot erase the
+required evidence and unmeasured setup launches cannot stand in for a measured iteration.
+
+Each measured launch must have its mounted receipt and (except initial composition) its completed
+operation receipt. They prove exact publication/validation counts, committed source identity and
+one live eager cache or no virtual cache. Active output cannot rebuild unchanged eager chunk views;
+original virtual IME fallback must exercise the cached eager path. Detach retains only a scalar
+receipt; all cache ownership must be released before the replacement is validated. Observer calls,
+identity checks and receipt overhead are part of this V5 fixture, not new app production work.
+
+The report includes raw primary-operation iterations, median and min/max. A three-iteration run
+does not estimate a dependable launch/operation P95. Frame CPU P95 refers to sampled frames, not
+independent launches. Root measure includes lazy subcomposition and omits some child-only layout;
+phase maxima are not a census of all main-thread long tasks. Perfetto traces remain available for
+that diagnosis. No phase totals are added/subtracted to infer unrecorded work.
+
 The frame-history builder now shares immutable 128-ordinal blocks. A normal one-line archive reads
 one new source row; a head-only trim reads none. Changed head/tail blocks copy at most 256 retained/new
 entries, while directory construction and exact content-bound aggregation still visit O(H / 128)
@@ -98,6 +125,10 @@ make the entire append pipeline O(1). The baseline at `16ab7c0` predates this bl
   remain absent. `meminfo-after.txt` is a post-run diagnostic, not a per-case peak measurement.
 - Source SHA, run ID, attempt/scenario group ID, target APK hash, copied production source/font hashes,
   AndroidX device context, display size/density, heap and input-method identity.
+- V5 verifies generated source/font copies byte-for-byte, both APK signatures/packages and
+  non-debuggable flags, and both installed base APK hashes before/after instrumentation. `ProcessSessionPage`
+  is hashed only as a publication reference; it is NOT compiled into this component fixture. Boot ID,
+  display, density, heap and IME identity must stay fixed from preflight through the measured invocation.
 - `Prod.createdHeightRecords`, `Prod.measurementNotifications` and `Prod.coalescedMeasurements` are
   cumulative work counters, not time samples. `IME_WORK` log lines bind per-round node/notification
   deltas to the Activity's launch token. Stable IME requires zero eager history builds and fewer than
@@ -132,13 +163,35 @@ After smoke and existing regression tests pass, request all sizes / three repeat
 ```bash
 gh workflow run terminal-production-benchmark.yml \
   --ref opt/terminal-verified-a79e7b6 \
-  -f scenario=all -f smoke=false -f iterations=3
+  -f scenario=all -f smoke=false -f iterations=3 -f checks_only=false
 ```
 
-Full V4 collection is 54 cases / 162 measured iterations; each scenario has a 15-minute instrumentation
-bound and uploads its raw JSON/traces/summary immediately when its job ends. Partial artifacts remain
+Full V5 collection is 54 cases / 162 measured iterations. Each scenario first runs a separate 1k /
+one-iteration preflight (18 measurements total); only its success unlocks the full same-device run.
+Preflight has its own invocation and directory, is not merged into timing statistics, and is required
+as original evidence by the final gate. Each invocation retains the 15-minute instrumentation
+bound and uploads its raw JSON/traces/summary when its job ends. Partial artifacts remain
 diagnostics, never a passed baseline. Failed-job reruns reuse the build job's original named/hash-checked
 bundle; a new source SHA requires a new build. No background Actions monitoring service is used.
+
+The build job orders fixture `lintBenchmark`, Release-derived target/driver compilation, five focused
+Python modules and three exact JVM suites (workload, protocol, publication probe). Both APKs are
+non-debuggable and use installation-only test signing; there is no formal app Release or Debug build.
+`checks_only=true` stops before all device work. Project dependencies and production sources are unchanged.
+
+Each scenario uploads `production-baseline-<scenario>-<sha>-<attempt>` with a gzipped compact document,
+original benchmark JSON text/hashes, full per-iteration metrics/frame samples, installed APK identities,
+publication records, summary and integrity receipt. `production_baseline.py` rechecks all documents and
+requires one smoke/full pair per requested scenario, one APK pair/source tree and exact measurement counts.
+Only `scenario=all` can report a complete baseline. Independent scenario samples are never pooled.
+The older evidence-export workflow stays available for archived V4 artifacts; V5 uses these direct
+compact artifacts and the final `production-baseline-summary-<sha>-<attempt>` instead.
+
+For this B0 batch, commits use `[skip ci]` to avoid the repository's automatic app Release workflow,
+then dispatch the command above explicitly on `opt/terminal-verified-a79e7b6`. No full app regression,
+PTY pipeline or frozen paired experiment is implied by the component result. Maximum two validation
+rounds: initial checks, then one batched correction/affected rerun if needed. Local work is limited to
+format/diff, Python AST and YAML/shell syntax checks; Android/Kotlin compilation stays in Actions.
 
 Only the selected test class is invoked directly through ADB with benchmark `CompilationMode.Full()`;
 there is no Gradle rebuild on the scenario runners. The emulator requires hardware acceleration and

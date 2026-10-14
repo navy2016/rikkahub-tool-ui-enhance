@@ -92,6 +92,13 @@ def stop_emulator(process, env):
             process.wait(timeout=10)
 
 
+def run_invocations(scenario, iterations, smoke):
+    # A separate invocation and result directory, not silently discarded warmup samples.
+    preflight = ci.run_group(scenario, 1, True)
+    if not smoke:
+        ci.run_group(scenario, iterations, False, preflight=preflight)
+
+
 def run(scenario, iterations, smoke):
     ci.verify_bundle()  # Reject another SHA before installing SDK packages or starting a guest.
     _, run_id = ci.env_identity()
@@ -141,7 +148,7 @@ def run(scenario, iterations, smoke):
             wait_for_boot(process, env)
             logged(['adb', '-s', SERIAL, 'shell', 'input', 'keyevent', '82'], evidence / 'unlock.log', env, 15)
             os.environ.update(PATH=env['PATH'], ANDROID_SERIAL=SERIAL)
-            ci.run_group(scenario, iterations, smoke)
+            run_invocations(scenario, iterations, smoke)
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         ci.annotation('error', 'Production benchmark environment failed', ci.describe_error(error))
         if emulator_log.exists():

@@ -82,7 +82,8 @@ class ProductionCiTest(unittest.TestCase):
         sources = ci.source_files()
         for suffix in ('TerminalViewportBinding.kt', 'TerminalTranscriptViewport.kt',
                        'TerminalLazyItemMeasurements.kt', 'TerminalTranscriptWidth.kt',
-                       'TerminalViewportController.kt', 'TerminalEagerGeometryCache.kt', 'jetbrains_mono.ttf'):
+                       'TerminalViewportController.kt', 'TerminalEagerGeometryCache.kt', 'jetbrains_mono.ttf',
+                       'ProcessSessionPage.kt', 'ProductionPublicationProbe.kt', 'production_baseline.py'):
             matches = [value for path, value in sources.items() if path.endswith(suffix)]
             self.assertEqual(1, len(matches), suffix)
             self.assertEqual(64, len(matches[0]))
@@ -96,12 +97,12 @@ class ProductionCiTest(unittest.TestCase):
                 path.write_bytes(role.encode())
                 apks[role] = {'file': path.name, 'sha256': ci.digest(path), 'bytes': path.stat().st_size}
             manifest = {'sourceSha': 'a' * 40, 'buildRun': '123', 'suite': ci.VERSION,
-                        'sources': {'production.kt': 'hash'}, 'apks': apks}
+                        'publication': ci.PUBLICATION, 'sources': {'production.kt': 'hash'}, 'apks': apks}
             path = root / 'manifest.json'
             path.write_text(json.dumps(manifest))
             with patch.object(ci, 'BUNDLE', root), patch.object(ci, 'source_files', return_value={'production.kt': 'hash'}):
                 self.assertEqual(manifest, ci.verify_bundle())
-                for field in ('sourceSha', 'buildRun', 'suite', 'sources'):
+                for field in ('sourceSha', 'buildRun', 'suite', 'sources', 'publication'):
                     broken = dict(manifest, **{field: 'wrong'})
                     path.write_text(json.dumps(broken))
                     with self.subTest(field=field), self.assertRaises(ValueError):
@@ -118,6 +119,62 @@ class ProductionCiTest(unittest.TestCase):
         with patch.dict(os.environ, {'GITHUB_SHA': 'unknown', 'GITHUB_RUN_ID': '123'}):
             with self.assertRaises(ValueError):
                 ci.env_identity()
+
+    def test_installed_hashes_are_checked_for_both_apks(self):
+        manifest = {'apks': {role: {'package': 'package.' + role, 'sha256': char * 64}
+                            for role, char in (('target', 'a'), ('driver', 'b'))}}
+        responses = ['package:/data/app/target/base.apk\n', 'a' * 64 + ' base.apk\n',
+                     'package:/data/app/driver/base.apk\n', 'b' * 64 + ' base.apk\n']
+        with patch.object(ci, 'adb', side_effect=responses):
+            self.assertEqual(dict(target='a' * 64, driver='b' * 64), ci.installed_apks(manifest))
+        for invalid in ('package:/other/base.apk', 'package:/data/app/a\npackage:/data/app/b', ''):
+            with patch.object(ci, 'adb', return_value=invalid), self.assertRaises(ValueError):
+                ci.installed_apks(manifest)
+        with patch.object(ci, 'adb', side_effect=[responses[0], 'c' * 64 + ' base.apk']), self.assertRaises(ValueError):
+            ci.installed_apks(manifest)
+
+    def test_preflight_cannot_use_a_different_sha_bundle_scenario_or_failed_run(self):
+        manifest = dict(sourceSha='a' * 40, buildRun='123',
+                        apks={role: dict(sha256=char * 64) for role, char in (('target', 'b'), ('driver', 'c'))})
+        good = dict(suite=ci.VERSION, publication=ci.PUBLICATION, sourceSha='a' * 40, runId='123',
+                    groupId='123-1-initialCompose-smoke', scenario='initialCompose', smoke='true',
+                    iterations=1, cases=3, measuredLaunches=3, verified=True, device={'bootId': 'boot'},
+                    targetApkSha256='b' * 64, driverApkSha256='c' * 64)
+        ci.require_preflight(manifest, 'initialCompose', good)
+        for key, value in (('sourceSha', 'd' * 40), ('runId', 'other'), ('scenario', 'appendAndTrim'),
+                           ('iterations', True), ('smoke', 'false'), ('verified', False), ('cases', 2),
+                           ('targetApkSha256', 'e' * 64), ('driverApkSha256', 'e' * 64),
+                           ('publication', 'old'), ('groupId', ''), ('device', None), ('measuredLaunches', 0)):
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                ci.require_preflight(manifest, 'initialCompose', dict(good, **{key: value}))
+        with self.assertRaises(ValueError):
+            ci.require_preflight(manifest, 'initialCompose', None)
+
+    def test_workflow_gates_tests_after_lint_and_compilation_and_preserves_compact_evidence(self):
+        text = (ci.ROOT / '.github/workflows/terminal-production-benchmark.yml').read_text()
+        lint = text.index(':benchmarks:terminal-target:lintBenchmark')
+        build = text.index(':benchmarks:terminal-target:assembleBenchmark')
+        tests = text.index('python3 -m unittest test_production_contract')
+        unit = text.index(':benchmarks:terminal-target:testBenchmarkUnitTest')
+        self.assertLess(lint, build)
+        self.assertLess(build, tests)
+        self.assertLess(tests, unit)
+        self.assertNotIn("-p 'test_*.py'", text)
+        self.assertIn('ProductionPublicationProbeTest', text)
+        self.assertIn('inputs.checks_only', text)
+        self.assertIn('artifacts/production-baseline/', text)
+        self.assertIn('production_baseline.py', text)
+
+    def test_failed_preflight_prevents_full_invocation(self):
+        import production_emulator as emulator
+        with patch.object(ci, 'run_group', side_effect=ValueError('preflight failed')) as run:
+            with self.assertRaisesRegex(ValueError, 'preflight failed'):
+                emulator.run_invocations('initialCompose', 3, False)
+            run.assert_called_once_with('initialCompose', 1, True)
+        with patch.object(ci, 'run_group', side_effect=[{'verified': True}, 'full']) as run:
+            emulator.run_invocations('initialCompose', 3, False)
+            self.assertEqual(2, run.call_count)
+            self.assertEqual({'preflight': {'verified': True}}, run.call_args.kwargs)
 
 
 if __name__ == '__main__':

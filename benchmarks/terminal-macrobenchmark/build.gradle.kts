@@ -14,7 +14,7 @@ android {
     }
     buildTypes {
         create("benchmark") {
-            isDebuggable = true // Test driver only; the target is non-debuggable and profileable.
+            isDebuggable = false // Installation-only test signature; no debuggable APK in the V5 baseline.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

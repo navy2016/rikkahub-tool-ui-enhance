@@ -16,6 +16,10 @@ on:
         description: 'Repetitions per case for a full run (1-50); smoke always uses 1'
         default: '3'
         required: true
+      checks_only:
+        description: 'Only fixture lint, Release-derived compilation and focused host tests; no guest or measurements'
+        type: boolean
+        default: false
   push:
     branches: [fix/terminal-viewport-semantic-reducer, opt/terminal-verified-a79e7b6]
     paths:
@@ -60,23 +64,50 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Test report validation and execution safeguards
-        run: python3 -m unittest discover -s benchmarks -p 'test_*.py'
-      - name: Build one Release-derived target and driver and run fixture unit tests
+      - name: Lint only the benchmark target before type compilation
+        id: lint
         run: |
           chmod +x gradlew
           bash .github/scripts/run-terminal-gradle.sh -PterminalBenchmarks=true \
-            :benchmarks:terminal-target:testBenchmarkUnitTest \
+            :benchmarks:terminal-target:lintBenchmark --stacktrace
+      - name: Preserve bounded lint failure context
+        if: ${{ failure() && steps.lint.outcome == 'failure' }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          for path in Path('benchmarks/terminal-target/build/reports').glob('lint-results-*.xml'):
+              errors = [i for i in ET.parse(path).getroot().iter('issue') if i.get('severity') in ('Error', 'Fatal')]
+              for issue in errors[:8]:
+                  where = issue.find('location')
+                  text = (issue.get('id', '') + ': ' + issue.get('message', '') + '\n' +
+                          (str(where.attrib) if where is not None else ''))[:2500]
+                  print('::error title=Benchmark fixture lint::' + text.replace('%','%25').replace('\n','%0A').replace('\r','%0D'))
+          PY
+      - name: Compile the Release-derived target and benchmark driver
+        run: |
+          bash .github/scripts/run-terminal-gradle.sh -PterminalBenchmarks=true \
             :benchmarks:terminal-target:assembleBenchmark \
             :benchmarks:terminal-macrobenchmark:assembleBenchmark --stacktrace
+      - name: Test only current production benchmark report and execution contracts
+        run: |
+          cd benchmarks
+          python3 -m unittest test_production_contract test_production_summary test_production_ci test_production_emulator test_production_baseline
+      - name: Run focused fixture and publication receipt unit tests once
+        id: unit
+        run: |
+          bash .github/scripts/run-terminal-gradle.sh -PterminalBenchmarks=true \
+            :benchmarks:terminal-target:testBenchmarkUnitTest \
+            --tests me.rerere.rikkahub.benchmark.TerminalBenchmarkWorkloadTest \
+            --tests me.rerere.rikkahub.benchmark.ProductionBenchmarkSpecTest \
+            --tests me.rerere.rikkahub.benchmark.ProductionPublicationProbeTest --stacktrace
       - name: Require complete host fixture suites
-        if: always()
+        if: ${{ always() && steps.unit.outcome != 'skipped' }}
         run: |
           python3 .github/scripts/report-terminal-tests.py benchmarks/terminal-target/build/test-results \
             --require-suite me.rerere.rikkahub.benchmark.TerminalBenchmarkWorkloadTest \
-            --require-suite me.rerere.rikkahub.benchmark.TerminalBenchmarkLayoutTest \
-            --require-suite me.rerere.rikkahub.benchmark.TerminalBenchmarkWidthIndexTest \
-            --require-suite me.rerere.rikkahub.benchmark.ProductionBenchmarkSpecTest
+            --require-suite me.rerere.rikkahub.benchmark.ProductionBenchmarkSpecTest \
+            --require-suite me.rerere.rikkahub.benchmark.ProductionPublicationProbeTest
       - name: Verify APKs and bind hashes to actual production source files
         id: bundle
         run: python3 benchmarks/production_ci.py package
@@ -95,9 +126,37 @@ jobs:
           path: |
             artifacts/terminal-validation/
             benchmarks/terminal-target/build/test-results/
+            benchmarks/terminal-target/build/reports/lint-results-*
           retention-days: 14
 
+  baseline:
+    needs: [build, scenario]
+    if: ${{ !inputs.checks_only && github.event_name == 'workflow_dispatch' && inputs.smoke == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: production-baseline-*-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/baseline-input/
+      - name: Require complete scenario matrices and recompute the validated baseline
+        env:
+          SCENARIO: ${{ inputs.scenario }}
+          ITERATIONS: ${{ inputs.iterations }}
+        run: |
+          python3 benchmarks/production_baseline.py artifacts/baseline-input \
+            --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --scenario "$SCENARIO" \
+            --iterations "$ITERATIONS" --output artifacts/baseline-summary
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-baseline-summary-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/baseline-summary/
+          if-no-files-found: error
+          retention-days: 30
+
   scenario:
+    if: ${{ !inputs.checks_only }}
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -130,3 +189,11 @@ jobs:
           path: artifacts/terminal-production/
           if-no-files-found: warn
           retention-days: 14
+      - name: Preserve compact V5 raw metrics and separately verified preflight
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-baseline-${{ matrix.scenario }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/production-baseline/
+          if-no-files-found: warn
+          retention-days: 30

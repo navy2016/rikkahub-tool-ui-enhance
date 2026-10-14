@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Package one SHA-bound Release-derived target/driver, then run one bounded production scenario."""
 import argparse
+import gzip
 import hashlib
 import json
 import os
@@ -12,7 +13,8 @@ import zipfile
 from collections import deque
 from pathlib import Path
 
-from production_summary import CLASS, MODES, SCENARIOS, SIZES, VERSION, load, notices, report, validate
+from production_summary import (CLASS, MODES, PUBLICATION, SCENARIOS, SIZES, VERSION, load, notices, report,
+                                validate, validate_publications)
 
 ROOT = Path(__file__).resolve().parent.parent
 BUNDLE = ROOT / "artifacts/production-build"
@@ -72,10 +74,14 @@ def source_files():
         "benchmarks/terminal-macrobenchmark/src/main/AndroidManifest.xml",
         "benchmarks/production-contract/src/main/kotlin/me/rerere/rikkahub/benchmark/ProductionBenchmarkSpec.kt",
         "benchmarks/production-contract/src/main/kotlin/me/rerere/rikkahub/benchmark/ProductionBenchmarkProgress.kt",
+        "benchmarks/production-contract/src/main/kotlin/me/rerere/rikkahub/benchmark/ProductionPublicationProbe.kt",
+        "app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt",
         "benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/ProductionTerminalBenchmarkActivity.kt",
         "benchmarks/terminal-target/src/main/java/me/rerere/rikkahub/benchmark/TerminalBenchmarkWorkload.kt",
         "benchmarks/terminal-macrobenchmark/src/main/java/me/rerere/rikkahub/benchmark/ProductionTerminalBenchmark.kt",
         "benchmarks/production_ci.py", "benchmarks/production_summary.py", "benchmarks/production_emulator.py",
+        "benchmarks/production_baseline.py", "benchmarks/summarize.py",
+        ".github/workflows/terminal-production-benchmark.yml", ".github/scripts/run-terminal-gradle.sh",
     ))
     if len(copied) < 20 or any(not path.is_file() for path in paths):
         raise ValueError("Missing shared production source or source-copy contract")
@@ -93,7 +99,10 @@ def env_identity():
 def package():
     sha, run_id = env_identity()
     BUNDLE.mkdir(parents=True, exist_ok=True)
-    manifest = {"sourceSha": sha, "buildRun": run_id, "suite": VERSION, "sources": source_files(), "apks": {}}
+    verify_generated_sources()
+    manifest = {"sourceSha": sha, "buildRun": run_id, "suite": VERSION, "publication": PUBLICATION,
+                "productionTree": subprocess.check_output(['git', 'rev-parse', 'HEAD:app/src/main'], text=True).strip(),
+                "sources": source_files(), "apks": {}}
     tools = sorted((Path(os.environ["ANDROID_HOME"]) / "build-tools").glob("*/aapt"),
                    key=lambda path: tuple(int(n) for n in re.findall(r"\d+", path.parent.name)))[-1].parent
     for role, module in (("target", "terminal-target"), ("driver", "terminal-macrobenchmark")):
@@ -107,9 +116,11 @@ def package():
                 raise ValueError(f"Corrupt {role} APK")
         info = subprocess.check_output([str(tools / "aapt"), "dump", "badging", str(apk)], text=True, timeout=30)
         app = re.search(r"package: name='([^']+)'", info)
-        if app is None or (role == "target" and (app[1] != "me.rerere.rikkahub.terminalbenchmark" or
-                                                  "application-debuggable" in info)):
+        if (app is None or "application-debuggable" in info or
+                (role == "target" and app[1] != "me.rerere.rikkahub.terminalbenchmark")):
             raise ValueError(f"Wrong/non-Release {role} APK")
+        if role == 'driver' and app[1] != 'me.rerere.rikkahub.terminalbenchmark.test':
+            raise ValueError('Wrong benchmark test-driver package')
         signature = subprocess.check_output([str(tools / "apksigner"), "verify", "--verbose", "--print-certs", str(apk)],
                                             text=True, timeout=30)
         (BUNDLE / f"{role}-signature.txt").write_text(signature)
@@ -126,7 +137,8 @@ def verify_bundle():
     sha, run_id = env_identity()
     manifest = json.loads((BUNDLE / "manifest.json").read_text())
     if (manifest.get("sourceSha") != sha or manifest.get("buildRun") != run_id or
-            manifest.get("suite") != VERSION or manifest.get("sources") != source_files()):
+            manifest.get("suite") != VERSION or manifest.get('publication') != PUBLICATION or
+            manifest.get("sources") != source_files()):
         raise ValueError("APK bundle does not match this run/SHA/production source tree")
     for role in ("target", "driver"):
         apk = manifest["apks"][role]
@@ -136,12 +148,61 @@ def verify_bundle():
     return manifest
 
 
+def verify_generated_sources():
+    target = ROOT / 'benchmarks/terminal-target'
+    paths = re.findall(r'"(me/rerere/rikkahub/[^"\n]+\.kt)"', (target / 'build.gradle.kts').read_text())
+    for path in paths:
+        if digest(ROOT / 'app/src/main/java' / path) != digest(target / 'build/generated/terminalSources' / path):
+            raise ValueError('Benchmark source copy differs from production: ' + path)
+    if (digest(ROOT / 'app/src/main/res/font/jetbrains_mono.ttf') !=
+            digest(target / 'build/generated/terminalResources/font/jetbrains_mono.ttf')):
+        raise ValueError('Benchmark font copy differs from production')
+
+
 def command(args, timeout=30):
     return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT, timeout=timeout)
 
 
 def adb(*args, timeout=30):
     return command(["adb", *args], timeout=timeout)
+
+
+def installed_apks(manifest):
+    installed = {}
+    for role in ('target', 'driver'):
+        apk = manifest['apks'][role]
+        paths = adb('shell', 'pm', 'path', apk['package']).strip().splitlines()
+        if len(paths) != 1 or not paths[0].startswith('package:/data/app/'):
+            raise ValueError('Expected one installed benchmark base APK: ' + role)
+        result = adb('shell', 'sha256sum', paths[0][len('package:'):]).split()
+        if not result or result[0] != apk['sha256']:
+            raise ValueError('Installed benchmark APK differs from the verified bundle: ' + role)
+        installed[role] = result[0]
+    return installed
+
+
+def device_identity():
+    return {name: adb('shell', *args).strip() for name, args in (
+        ('bootId', ('cat', '/proc/sys/kernel/random/boot_id')),
+        ('fingerprint', ('getprop', 'ro.build.fingerprint')), ('size', ('wm', 'size')),
+        ('density', ('wm', 'density')), ('heap', ('getprop', 'dalvik.vm.heapsize')),
+        ('ime', ('settings', 'get', 'secure', 'default_input_method')),
+    )}
+
+
+def require_preflight(manifest, scenario, preflight):
+    if (not isinstance(preflight, dict) or preflight.get('suite') != VERSION or
+            preflight.get('sourceSha') != manifest['sourceSha'] or
+            preflight.get('runId') != manifest['buildRun'] or preflight.get('scenario') != scenario or
+            preflight.get('smoke') != 'true' or type(preflight.get('iterations')) is not int or
+            preflight['iterations'] != 1 or preflight.get('verified') is not True or
+            type(preflight.get('cases')) is not int or preflight['cases'] != len(MODES) or
+            preflight.get('measuredLaunches') != len(MODES) or not isinstance(preflight.get('device'), dict) or
+            not isinstance(preflight.get('groupId'), str) or not preflight['groupId'].endswith('-' + scenario + '-smoke') or
+            preflight.get('targetApkSha256') != manifest['apks']['target']['sha256'] or
+            preflight.get('driverApkSha256') != manifest['apks']['driver']['sha256'] or
+            preflight.get('publication') != PUBLICATION):
+        raise ValueError('Full baseline requires this exact bundle/scenario successful smoke preflight')
 
 
 def safe_diagnostic(path, args, timeout=15):
@@ -188,12 +249,16 @@ def require_instrumentation_success(log, expected):
         raise ValueError(f"Instrumentation did not complete {expected} successful tests")
 
 
-def run_group(scenario, iterations, smoke):
+def run_group(scenario, iterations, smoke, preflight=None):
     manifest = verify_bundle()
     sha, run_id = env_identity()
     attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
     if not attempt.isdecimal() or not 1 <= iterations <= 50 or scenario not in SCENARIOS:
         raise ValueError("Invalid scenario/repetition/attempt")
+    if smoke and iterations != 1:
+        raise ValueError('Smoke must use exactly one iteration')
+    if not smoke:
+        require_preflight(manifest, scenario, preflight)
     kind = "smoke" if smoke else "full"
     group_id = f"{run_id}-{attempt}-{scenario}-{kind}"
     out = ROOT / "artifacts/terminal-production" / scenario / group_id
@@ -203,7 +268,9 @@ def run_group(scenario, iterations, smoke):
     target = manifest["apks"]["target"]["package"]
     device_output = f"/sdcard/Android/media/{driver}/production-{group_id}"
     payload = {"sourceSha": sha, "runId": run_id, "groupId": group_id, "suite": VERSION,
-               "scenario": scenario, "smoke": str(smoke).lower(), "targetApkSha256": manifest["apks"]["target"]["sha256"]}
+               "scenario": scenario, "smoke": str(smoke).lower(), "publication": PUBLICATION,
+               "targetApkSha256": manifest["apks"]["target"]["sha256"],
+               "driverApkSha256": manifest['apks']['driver']['sha256']}
     (out / "request.json").write_text(json.dumps(dict(payload, iterations=iterations), indent=2) + "\n")
     log = out / "instrumentation.log"
     error = None
@@ -213,11 +280,15 @@ def run_group(scenario, iterations, smoke):
         for name in ("window_animation_scale", "transition_animation_scale", "animator_duration_scale"):
             adb("shell", "settings", "put", "global", name, "1")
         adb("shell", "settings", "put", "secure", "show_ime_with_hard_keyboard", "1")
-        (out / "device.txt").write_text("\n".join(adb("shell", *args) for args in (
-            ("getprop", "ro.build.fingerprint"), ("wm", "size"), ("wm", "density"),
-            ("getprop", "dalvik.vm.heapsize"), ("settings", "get", "secure", "default_input_method"))))
+        device = device_identity()
+        (out / 'device.json').write_text(json.dumps(device, indent=2) + '\n')
+        (out / 'device.txt').write_text('\n'.join(f'{key}={value}' for key, value in device.items()) + '\n')
+        if not smoke and preflight.get('device') != device:
+            raise ValueError('Preflight and baseline must run on the same boot/device')
         for role in ("target", "driver"):
             install_apk(role, out)
+        installed = installed_apks(manifest)
+        (out / 'installed-apks.json').write_text(json.dumps(installed, indent=2) + '\n')
         args = ["adb", "shell", "am", "instrument", "-w", "-r", "-e", "class", CLASS,
                 "-e", "productionScenario", scenario, "-e", "productionSmoke", str(smoke).lower(),
                 "-e", "terminalIterations", str(iterations), "-e", "additionalTestOutputDir", device_output,
@@ -230,13 +301,16 @@ def run_group(scenario, iterations, smoke):
         if result.returncode != 0:
             raise ValueError(f"ADB instrumentation exited {result.returncode}")
         require_instrumentation_success(log, len(MODES) * (1 if smoke else len(SIZES)))
+        if installed_apks(manifest) != installed or device_identity() != device:
+            raise ValueError('Installed APKs or device identity changed during benchmark')
     except (OSError, ValueError, subprocess.SubprocessError) as caught:
         error = caught
     finally:
         safe_diagnostic(out / "pull.log", ["adb", "pull", device_output, str(out / "measurements")], timeout=90)
         # Preserve partial JSON/traces but never validate them as a completed scenario.
         safe_diagnostic(out / "logcat.txt", ["adb", "logcat", "-d", "-v", "threadtime", "-s",
-            "ProductionTerminalBenchmark:I", "AndroidRuntime:E", "TestRunner:E", "Benchmark:I",
+            "ProductionTerminalBenchmark:I", "ProductionTerminalBenchmarkDriver:I",
+            "AndroidRuntime:E", "TestRunner:E", "Benchmark:I",
             "art:I", "artd:I", "dex2oat:I", "PackageDexOptimizer:I", "installd:I", "PackageManager:I", "*:S"])
         safe_diagnostic(out / "meminfo-after.txt", ["adb", "shell", "dumpsys", "meminfo", target])
         if error is not None:
@@ -249,14 +323,42 @@ def run_group(scenario, iterations, smoke):
         raise error
     results, context = load(out / "measurements")
     validate(results, context, sha, run_id, group_id, scenario, iterations, smoke,
-             apk_sha=manifest["apks"]["target"]["sha256"])
+             apk_sha=manifest["apks"]["target"]["sha256"], driver_sha=manifest['apks']['driver']['sha256'])
+    with log.open(errors='replace') as stream:
+        publication_lines = [line.strip() for line in stream
+                             if 'PUBLICATION_WORK ' in line or 'MEASURED_LAUNCH ' in line]
+    publication = validate_publications(publication_lines, scenario, iterations, smoke)
+    (out / 'publication.json').write_text(json.dumps(publication, indent=2) + '\n')
     text = report(results, context, sha, scenario, smoke)
     (out / "summary.md").write_text(text)
-    (out / "validated.json").write_text(json.dumps(dict(payload, cases=len(results), iterations=iterations, verified=True), indent=2))
+    validated = dict(payload, cases=len(results), iterations=iterations, verified=True,
+                     measuredLaunches=len(publication['measured']), device=device,
+                     preflightGroup=preflight['groupId'] if preflight else None)
+    (out / "validated.json").write_text(json.dumps(validated, indent=2) + '\n')
+    raw_documents = {str(path.relative_to(out)): path.read_text()
+                     for path in (out / 'measurements').rglob('*-benchmarkData.json')}
+    documents = {name: hashlib.sha256(text.encode()).hexdigest() for name, text in raw_documents.items()}
+    evidence = dict(request=dict(payload, iterations=iterations), manifest=manifest, device=device,
+                    installedApkHashes=installed, validation=validated, preflight=preflight,
+                    publicationEvidence=publication, publicationRecords=publication_lines,
+                    document=dict(context=context, benchmarks=list(results.values())),
+                    resultFiles=documents, rawDocuments=raw_documents, summary=text)
+    compact = ROOT / 'artifacts/production-baseline' / scenario / group_id
+    compact.mkdir(parents=True, exist_ok=False)
+    data = json.dumps(evidence, separators=(',', ':'), ensure_ascii=False).encode()
+    (compact / 'evidence.json.gz').write_bytes(gzip.compress(data, mtime=0))
+    (compact / 'summary.md').write_text(text)
+    (compact / 'integrity.json').write_text(json.dumps(dict(sourceSha=sha, runId=run_id, groupId=group_id,
+        suite=VERSION, jsonSha256=hashlib.sha256(data).hexdigest(), gzipSha256=digest(compact / 'evidence.json.gz'),
+        rawResultSha256=documents, measuredLaunches=len(publication['measured'])), indent=2) + '\n')
     annotation("notice", f"Production viewport {scenario}", notices(results, sha, scenario, smoke))
+    annotation('notice', 'Production V5 publication verified', json.dumps(dict(groupId=group_id,
+        measuredLaunches=len(publication['measured']), excludedLaunches=len(publication['excludedTokens']),
+        jsonSha256=hashlib.sha256(data).hexdigest(), installedApkHashes=installed)))
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(summary, "a") as stream:
             stream.write(text)
+    return validated
 
 
 def main():
@@ -269,6 +371,7 @@ def main():
     run.add_argument("--scenario", choices=SCENARIOS, required=True)
     run.add_argument("--iterations", type=int, required=True)
     run.add_argument("--smoke", choices=("true", "false"), required=True)
+    run.add_argument('--preflight', type=Path, help='Verified smoke receipt from this same device/bundle')
     args = parser.parse_args()
     if args.action == "plan":
         scenarios = SCENARIOS if args.scenario == "all" else (args.scenario,)
@@ -277,7 +380,8 @@ def main():
     elif args.action == "package":
         package()
     else:
-        run_group(args.scenario, args.iterations, args.smoke == "true")
+        preflight = json.loads(args.preflight.read_text()) if args.preflight else None
+        run_group(args.scenario, args.iterations, args.smoke == "true", preflight=preflight)
 
 
 if __name__ == "__main__":

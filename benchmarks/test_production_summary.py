@@ -4,18 +4,21 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from production_summary import CLASS, MODES, SCENARIOS, SIZES, VERSION, load, notices, report, result_key, validate
+from production_summary import (CLASS, MODES, PUBLICATION, SCENARIOS, SIZES, VERSION, load, notices, report,
+                                result_key, validate, validate_publications)
 
 
 SHA = "a" * 40
 APK_SHA = "b" * 64
+DRIVER_SHA = "c" * 64
 RUN = "12345"
 GROUP = "12345-1-initialCompose-full"
 
 
 def context(scenario="initialCompose", smoke=False):
     return {"device": "same-emulator", "payload": {"sourceSha": SHA, "runId": RUN, "groupId": GROUP,
-            "suite": VERSION, "scenario": scenario, "smoke": str(smoke).lower(), "targetApkSha256": APK_SHA}}
+            "suite": VERSION, "scenario": scenario, "smoke": str(smoke).lower(), "targetApkSha256": APK_SHA,
+            "driverApkSha256": DRIVER_SHA, "publication": PUBLICATION}}
 
 
 def measurement(size, scenario, mode):
@@ -63,7 +66,7 @@ def matrix(scenario="initialCompose", smoke=False):
 
 class ProductionSummaryTest(unittest.TestCase):
     def valid(self, results, scenario="initialCompose", ctx=None, smoke=False):
-        validate(results, ctx or context(scenario, smoke), SHA, RUN, GROUP, scenario, 2, smoke, APK_SHA)
+        validate(results, ctx or context(scenario, smoke), SHA, RUN, GROUP, scenario, 2, smoke, APK_SHA, DRIVER_SHA)
 
     def test_complete_six_scenarios_have_distinct_contracts(self):
         for scenario in SCENARIOS:
@@ -108,11 +111,12 @@ class ProductionSummaryTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.valid(results, "imeRoundTrip")
 
-    def test_v3_default_geometry_cannot_be_reported_as_v4(self):
-        ctx = context()
-        ctx["payload"]["suite"] = "production-viewport-v3"
-        with self.assertRaisesRegex(ValueError, "provenance"):
-            self.valid(matrix(), ctx=ctx)
+    def test_v3_and_v4_geometry_cannot_be_relabelled_as_v5(self):
+        for suite in ('production-viewport-v3', 'production-viewport-v4'):
+            ctx = context()
+            ctx["payload"]["suite"] = suite
+            with self.assertRaisesRegex(ValueError, "provenance"):
+                self.valid(matrix(), ctx=ctx)
 
     def test_keyboard_stable_mode_cannot_use_eager_fallback_or_skip_live_width_updates(self):
         for metric, value in (("eagerGeometryCount", 1), ("widthCount", 1)):
@@ -200,10 +204,104 @@ class ProductionSummaryTest(unittest.TestCase):
             self.assertNotIn("×", text)
             self.assertIn("| 10000 | lazyHistory | 2 |", text)
             self.assertIn("RSS anon", text)
+            self.assertIn('Raw iterations', text)
+            self.assertIn('not independent launch/operation latency percentiles', text)
             notice = notices(results, SHA, scenario, False)
             self.assertEqual(9, sum(line[:1].isdigit() for line in notice.splitlines()))
             self.assertTrue(all(line.endswith(" | —") for line in notice.splitlines() if line[:1].isdigit()))
             self.assertLess(len(notice.replace("\n", "%0A").encode()), 3000)
+
+    def test_missing_memory_stays_absent_but_invalid_present_memory_fails(self):
+        self.valid(matrix())
+        for value in (True, -1, float('nan')):
+            results = matrix()
+            results[(1000, 'initialCompose', 'chunkedLayers')]['metrics']['memoryRssAnonMaxKb'] = {'runs': [value, 1]}
+            with self.assertRaises(ValueError):
+                self.valid(results)
+
+
+def publication_lines(scenario='initialCompose', iterations=2, smoke=False):
+    lines = []
+    for size in ((1000,) if smoke else SIZES):
+        for mode in MODES:
+            for iteration in range(iterations):
+                token = f'{size:08x}-{MODES.index(mode):04x}-4000-8000-{iteration:012x}'
+                virtual = mode != 'chunkedLayers'
+                chunks = (size + 127) // 128
+                work = dict(publications=1, panelCommits=2, pairingChecks=1, transcriptEntries=0 if virtual else 1,
+                            cachedEntries=0 if virtual else 1, viewBuilds=0 if virtual else 1,
+                            chunkWrappers=0 if virtual else chunks, rowSlices=0 if virtual else chunks + 1,
+                            liveViews=int(not virtual))
+                mounted = dict(suite=VERSION, publication=PUBLICATION, scenario=scenario, size=size, mode=mode,
+                               token=token, phase='mounted', viewportGeneration=1, virtual=virtual, work=work, detached=None)
+                lines.append('PUBLICATION_WORK ' + json.dumps(mounted))
+                if scenario != 'initialCompose':
+                    done = copy.deepcopy(mounted)
+                    done['phase'] = 'done'
+                    if scenario == 'detachRestore':
+                        done['viewportGeneration'] = 2
+                        done['detached'] = dict(work, liveViews=0)
+                    else:
+                        updates = {'activeRowUpdate': 30, 'appendAndTrim': 30, 'imeRoundTrip': 8}.get(scenario, 0)
+                        checks = {'activeRowUpdate': 30, 'appendAndTrim': 30, 'imeRoundTrip': 11, 'semanticJump': 2}[scenario]
+                        done['work'].update(publications=1 + updates, panelCommits=3 + updates, pairingChecks=1 + checks)
+                        if scenario == 'imeRoundTrip' and mode == 'lazyHistory':
+                            done['work'].update(transcriptEntries=9, cachedEntries=9, viewBuilds=1,
+                                                chunkWrappers=chunks, rowSlices=chunks + 1)
+                    lines.append('PUBLICATION_WORK ' + json.dumps(done))
+                lines.append('MEASURED_LAUNCH ' + json.dumps(dict(suite=VERSION, scenario=scenario, size=size,
+                    mode=mode, token=token, iteration=iteration)))
+    return lines
+
+
+class PublicationEvidenceTest(unittest.TestCase):
+    def test_complete_six_scenarios_bind_each_measured_launch_to_atomic_publication(self):
+        for scenario in SCENARIOS:
+            for smoke in (False, True):
+                result = validate_publications(publication_lines(scenario, 2, smoke), scenario, 2, smoke)
+                self.assertEqual(6 if smoke else 18, len(result['measured']))
+                self.assertEqual([], result['excludedTokens'])
+
+    def test_missing_duplicate_relabelled_and_unmeasured_records_cannot_prove_the_matrix(self):
+        rows = publication_lines()
+        for bad in ([], rows[:-1], rows + rows[:1], rows + rows[1:2],
+                    [row.replace(VERSION, 'production-viewport-v4') for row in rows],
+                    [row for row in rows if not row.startswith('MEASURED_LAUNCH ')]):
+            with self.assertRaises(ValueError):
+                validate_publications(bad, 'initialCompose', 2)
+
+    def test_unknown_extra_or_false_counters_are_rejected(self):
+        for field, value in (('publications', 0), ('panelCommits', True), ('pairingChecks', 0),
+                              ('cachedEntries', 0), ('liveViews', 0), ('rowSlices', 1), ('extra', 1)):
+            rows = publication_lines()
+            item = json.loads(rows[0].split(' ', 1)[1])
+            item['work'][field] = value
+            rows[0] = 'PUBLICATION_WORK ' + json.dumps(item)
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate_publications(rows, 'initialCompose', 2)
+
+    def test_active_updates_cannot_rebuild_views_and_detach_must_release_ownership(self):
+        for scenario in ('activeRowUpdate', 'detachRestore'):
+            rows = publication_lines(scenario)
+            item = json.loads(rows[1].split(' ', 1)[1])
+            if scenario == 'activeRowUpdate':
+                item['work']['viewBuilds'] += 1
+                item['work']['chunkWrappers'] += 1
+                item['work']['rowSlices'] += 2
+            else:
+                item['detached']['liveViews'] = 1
+            rows[1] = 'PUBLICATION_WORK ' + json.dumps(item)
+            with self.assertRaises(ValueError):
+                validate_publications(rows, scenario, 2)
+
+    def test_extra_unmeasured_target_launch_is_retained_as_excluded_not_counted(self):
+        rows = publication_lines()
+        extra = json.loads(rows[0].split(' ', 1)[1])
+        extra['token'] = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
+        rows.insert(0, 'PUBLICATION_WORK ' + json.dumps(extra))
+        evidence = validate_publications(rows, 'initialCompose', 2)
+        self.assertEqual(18, len(evidence['measured']))
+        self.assertEqual([extra['token']], evidence['excludedTokens'])
 
 
 if __name__ == "__main__":

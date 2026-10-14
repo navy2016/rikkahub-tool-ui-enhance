@@ -2,7 +2,7 @@ import re
 import unittest
 from pathlib import Path
 
-from production_summary import MODES, SCENARIOS, SIZES, VERSION
+from production_summary import MODES, PUBLICATION, SCENARIOS, SIZES, VERSION
 
 
 ROOT = Path(__file__).resolve().parent
@@ -56,7 +56,43 @@ class ProductionContractTest(unittest.TestCase):
             self.assertNotIn(call, source)
         self.assertIn('measurements.peekEager(bound.pass)', source)
         self.assertIn('rememberTerminalBoundViewport(', source)
-        self.assertIn('TerminalTranscriptViewport(frame, rows.toList()', source)
+        self.assertIn('TerminalTranscriptViewport(source.frame, source.rows', source)
+        self.assertIn('rowSource = source, compositionObserver = compositionObserver', source)
+
+    def test_v5_binds_one_published_snapshot_before_creating_any_child_lambda(self):
+        source = TARGET.read_text()
+        self.assertIn('private var published by mutableStateOf(', source)
+        self.assertNotIn('var frame by mutableStateOf(', source)
+        self.assertEqual(2, source.count('TerminalRenderSnapshot.capture('))
+        publication = source.split('fun publish() {', 1)[1].split('fun checkPublication()', 1)[0]
+        self.assertLess(publication.index('Snapshot.withMutableSnapshot'),
+                        publication.index('published = TerminalRenderSnapshot.capture(next, rows)'))
+        self.assertLess(publication.index('synchronizeTerminalRenderedRows('),
+                        publication.index('published = TerminalRenderSnapshot.capture(next, rows)'))
+        content = source.split('@Composable fun Content(ime: Boolean)', 1)[1].split('fun publish()', 1)[0]
+        self.assertLess(content.index('val source = published'), content.index('rememberTerminalBoundViewport('))
+        self.assertIn('frame, style, wants,', content)
+        self.assertIn('drawContent(); drawnSource = source', content)
+        self.assertIn('source === committedSource && source === drawnSource', source)
+        self.assertIn('source.rows === rows.toList()', source)
+        self.assertIn('publication.paired(cachedExpected = !bound.virtualHistoryEnabled)', source)
+        page = (ROOT.parent / 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt').read_text()
+        self.assertIn('val renderSnapshot = publishedRenderSnapshot', page)
+        self.assertIn('rowSource = renderSnapshot', page)
+
+    def test_runtime_probe_and_measured_launches_cannot_be_omitted(self):
+        source = TARGET.read_text()
+        self.assertIn('"PUBLICATION_WORK "', source)
+        self.assertIn('viewport.publication.liveViews == 0', source)
+        self.assertIn('detachedPublication = viewport.publication.snapshot()', source)
+        for method in ('transcriptComposed', 'viewsCreated', 'viewLifetime'):
+            self.assertIn('publication.' + method + '(', source)
+        driver = (ROOT / 'terminal-macrobenchmark/src/main/java/me/rerere/rikkahub/benchmark/ProductionTerminalBenchmark.kt').read_text()
+        self.assertIn('MEASURED_LAUNCH $measured', driver)
+        self.assertIn('progress.publication(phase)', driver)
+        self.assertIn('sendStatus(0, Bundle()', driver)
+        self.assertIn('putExtra(ProductionBenchmarkSpec.CONTRACT_KEY, ProductionBenchmarkSpec.VERSION)', driver)
+        self.assertIn('ProductionBenchmarkSpec.requireVersion(', source)
 
     def test_remount_callers_do_not_hold_the_detached_viewport(self):
         source = TARGET.read_text()
@@ -75,6 +111,8 @@ class ProductionContractTest(unittest.TestCase):
     def test_kotlin_and_report_contracts_stay_in_sync(self):
         source = (ROOT / 'production-contract/src/main/kotlin/me/rerere/rikkahub/benchmark/ProductionBenchmarkSpec.kt').read_text()
         self.assertIn(f'const val VERSION = "{VERSION}"', source)
+        self.assertEqual('production-viewport-v5', VERSION)
+        self.assertIn(f'const val PUBLICATION = "{PUBLICATION}"', source)
         for name, expected in (('scenarios', SCENARIOS), ('modes', MODES)):
             body = re.search(r'val ' + name + r' = listOf\((.*?)\)', source, re.S)[1]
             self.assertEqual(list(expected), re.findall(r'"([^"]+)"', body))
@@ -87,7 +125,7 @@ class ProductionContractTest(unittest.TestCase):
     def test_completion_uses_launch_scoped_receipts_after_actual_validation(self):
         source = TARGET.read_text()
         driver = (ROOT / 'terminal-macrobenchmark/src/main/java/me/rerere/rikkahub/benchmark/ProductionTerminalBenchmark.kt').read_text()
-        self.assertIn('withTimeout(120_000) { block() }\n                publishPhase(done)', source)
+        self.assertIn('withTimeout(120_000) { block() }\n                publishPhase(done, publicationEvidence(done))', source)
         self.assertIn('awaitSettled(viewport)', source)
         self.assertIn('val token = UUID.randomUUID().toString()', driver)
         self.assertIn('val receipt = ProductionBenchmarkProgress(token)', driver)

@@ -2,7 +2,10 @@ package me.rerere.rikkahub.benchmark
 
 /** Shared by the target and its driver; no Android or renderer implementation lives here. */
 internal object ProductionBenchmarkSpec {
-    const val VERSION = "production-viewport-v4"
+    const val VERSION = "production-viewport-v5"
+    const val CONTRACT_KEY = "production.contract.version"
+    const val PUBLICATION = "atomic-snapshot-chunk-provenance-v1"
+    const val PUBLICATION_KEY = "production.publication.evidence"
     const val PHASE_TOKEN = "production.phase.token"
     const val PHASE_VALUE = "production.phase.value"
     const val PACKAGE = "me.rerere.rikkahub.terminalbenchmark"
@@ -18,6 +21,10 @@ internal object ProductionBenchmarkSpec {
     val scenarios = listOf("initialCompose", "activeRowUpdate", "appendAndTrim",
         "semanticJump", "imeRoundTrip", "detachRestore")
     val modes = listOf("chunkedLayers", "lazyHistory", "lazyHistoryIme")
+
+    fun requireVersion(version: String?) {
+        require(version == VERSION) { "Production benchmark target/driver contract mismatch" }
+    }
 
     fun cases(group: String, smoke: Boolean = false): List<Array<Any>> {
         require(group in scenarios) { "Unknown production scenario: $group" }
