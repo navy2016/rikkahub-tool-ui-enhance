@@ -69,6 +69,17 @@ jobs:
           run-id: ${{ inputs.run_id }}
           pattern: production-viewport-${{ matrix.scenario }}-${{ inputs.source_sha }}-*
           path: artifacts/v5-original/
+      - name: Query the original failing cold traces without rebuilding or rerunning
+        if: ${{ inputs.run_id == '38500483010' && matrix.scenario == 'initialCompose' }}
+        run: |
+          mkdir -p artifacts/trace-tool
+          curl --fail --silent --show-error --location --connect-timeout 15 --max-time 90 \
+            https://commondatastorage.googleapis.com/perfetto-luci-artifacts/v51.2/linux-amd64/trace_processor_shell \
+            -o artifacts/trace-tool/trace_processor_shell
+          echo '9e70b7c057d906b25a44b42638f1ed87bc38ee11610e199375ec10b0fedcc7ff  artifacts/trace-tool/trace_processor_shell' | sha256sum -c -
+          chmod +x artifacts/trace-tool/trace_processor_shell
+          python3 .github/scripts/diagnose-terminal-v5-traces.py artifacts/v5-original \
+            --processor artifacts/trace-tool/trace_processor_shell --out artifacts/v5-trace-diagnostics
       - name: Prepare exact JSON and publication records without full log export
         run: |
           python3 .github/scripts/export-terminal-v5-evidence.py prepare --root artifacts/v5-original \
@@ -84,6 +95,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: v5-original-${{ inputs.run_id }}-${{ matrix.scenario }}-${{ github.run_id }}
-          path: artifacts/v5-export/
+          path: |
+            artifacts/v5-export/
+            artifacts/v5-trace-diagnostics/
           if-no-files-found: error
           retention-days: 30
