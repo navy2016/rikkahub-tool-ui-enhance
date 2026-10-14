@@ -1,0 +1,78 @@
+name: Terminal V5 Original Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Original V5 benchmark run; selected scenario jobs must have completed'
+        required: true
+        type: string
+      source_sha:
+        description: 'Exact original benchmark SHA'
+        required: true
+        type: string
+      scenario:
+        type: choice
+        options: [all, initialCompose, activeRowUpdate, appendAndTrim, semanticJump, imeRoundTrip, detachRestore]
+        default: all
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        scenario: ${{ fromJSON(inputs.scenario == 'all' && '["initialCompose","activeRowUpdate","appendAndTrim","semanticJump","imeRoundTrip","detachRestore"]' || format('["{0}"]', inputs.scenario)) }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: ${{ inputs.run_id }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      SCENARIO: ${{ matrix.scenario }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify original run and completed scenario identity
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          run_id, sha = os.environ['SOURCE_RUN'], os.environ['SOURCE_SHA']
+          assert re.fullmatch('[0-9]+', run_id) and re.fullmatch('[a-f0-9]{40}', sha)
+          prefix = 'repos/' + os.environ['GITHUB_REPOSITORY'] + '/actions/runs/' + run_id
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', path], timeout=30))
+          run = api(prefix)
+          assert run['head_sha'] == sha and run['head_branch'] == 'opt/terminal-verified-a79e7b6'
+          assert run['path'] == '.github/workflows/terminal-production-benchmark.yml'
+          jobs = api(prefix + '/jobs?per_page=100')['jobs']
+          selected = [j for j in jobs if j['name'] == 'scenario (' + os.environ['SCENARIO'] + ')']
+          assert len(selected) == 1 and selected[0]['status'] == 'completed'
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run_id }}
+          pattern: production-viewport-${{ matrix.scenario }}-${{ inputs.source_sha }}-*
+          path: artifacts/v5-original/
+      - name: Prepare exact JSON and publication records without full log export
+        run: |
+          python3 .github/scripts/export-terminal-v5-evidence.py prepare --root artifacts/v5-original \
+            --out artifacts/v5-export --sha "$SOURCE_SHA" --run-id "$SOURCE_RUN" --scenario "$SCENARIO"
+      - name: Export bounded evidence parts 1-8
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 0
+      - name: Export bounded evidence parts 9-16
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 1
+      - name: Export bounded evidence parts 17-24
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 2
+      - name: Export bounded evidence parts 25-32
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v5-original-${{ inputs.run_id }}-${{ matrix.scenario }}-${{ github.run_id }}
+          path: artifacts/v5-export/
+          if-no-files-found: error
+          retention-days: 30
