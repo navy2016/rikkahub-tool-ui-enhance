@@ -51,9 +51,34 @@ class V5EvidenceExportTest(unittest.TestCase):
             self.assertTrue(all(len(part) <= 2800 for part in parts['parts']))
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
-                for batch in range(4):
+                for batch in range(EXPORT.MAX_PARTS // EXPORT.PARTS_PER_BATCH):
                     EXPORT.emit(root / 'out', 'initialCompose', batch)
             self.assertEqual(len(parts['parts']), len(output.getvalue().splitlines()))
+
+    def test_larger_transport_is_exact_bounded_and_never_truncated(self):
+        for length in (1, 2800, 2801, 2800 * 32 + 1, 2800 * 96):
+            encoded = 'x' * length
+            parts = EXPORT.partition(encoded)
+            self.assertEqual(encoded, ''.join(parts))
+            self.assertTrue(all(len(part) <= 2800 for part in parts))
+        with self.assertRaisesRegex(ValueError, '96-part'):
+            EXPORT.partition('x' * (2800 * 96 + 1))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parts = EXPORT.partition('x' * (2800 * 95 + 1))
+            (root / 'parts.json').write_text(json.dumps(dict(sha256='a' * 64, parts=parts)))
+            lines = []
+            for batch in range(12):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    EXPORT.emit(root, 'activeRowUpdate', batch)
+                current = output.getvalue().splitlines()
+                self.assertEqual(8, len(current))
+                lines += current
+            self.assertEqual(96, len(lines))
+            self.assertIn('part 96/96', lines[-1])
+            with self.assertRaises(ValueError):
+                EXPORT.emit(root, 'activeRowUpdate', 12)
 
     def test_wrong_source_or_empty_input_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

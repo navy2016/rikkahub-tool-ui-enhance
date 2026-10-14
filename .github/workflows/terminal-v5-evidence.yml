@@ -92,6 +92,22 @@ jobs:
         run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 2
       - name: Export bounded evidence parts 25-32
         run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 3
+      - name: Export bounded evidence parts 33-40
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 4
+      - name: Export bounded evidence parts 41-48
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 5
+      - name: Export bounded evidence parts 49-56
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 6
+      - name: Export bounded evidence parts 57-64
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 7
+      - name: Export bounded evidence parts 65-72
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 8
+      - name: Export bounded evidence parts 73-80
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 9
+      - name: Export bounded evidence parts 81-88
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 10
+      - name: Export bounded evidence parts 89-96
+        run: python3 .github/scripts/export-terminal-v5-evidence.py emit --out artifacts/v5-export --scenario "$SCENARIO" --batch 11
       - uses: actions/upload-artifact@v4
         with:
           name: v5-original-${{ inputs.run_id }}-${{ matrix.scenario }}-${{ github.run_id }}

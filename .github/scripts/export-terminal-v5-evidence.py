@@ -8,6 +8,17 @@ import re
 import zlib
 from pathlib import Path
 
+PART_CHARS = 2800
+PARTS_PER_BATCH = 8
+MAX_PARTS = 96
+
+
+def partition(encoded):
+    parts = [encoded[index:index + PART_CHARS] for index in range(0, len(encoded), PART_CHARS)]
+    if len(parts) > MAX_PARTS:
+        raise ValueError('Evidence exceeds the explicit 96-part bound; refusing truncation')
+    return parts
+
 
 def prepare(root, output, sha, run_id, scenario):
     groups = []
@@ -40,9 +51,7 @@ def prepare(root, output, sha, run_id, scenario):
     data = json.dumps(dict(sourceSha=sha, runId=run_id, scenario=scenario, groups=groups),
                       separators=(',', ':'), ensure_ascii=False).encode()
     encoded = base64.b64encode(zlib.compress(data, 9)).decode()
-    parts = [encoded[index:index + 2800] for index in range(0, len(encoded), 2800)]
-    if len(parts) > 32:
-        raise ValueError('Evidence exceeds the explicit 32-part bound; refusing truncation')
+    parts = partition(encoded)
     output.mkdir(parents=True, exist_ok=False)
     (output / 'data.json').write_bytes(data)
     (output / 'parts.json').write_text(json.dumps(dict(sha256=hashlib.sha256(data).hexdigest(), parts=parts)))
@@ -50,7 +59,10 @@ def prepare(root, output, sha, run_id, scenario):
 
 def emit(output, scenario, batch):
     doc = json.loads((output / 'parts.json').read_text())
-    for index in range(batch * 8, min((batch + 1) * 8, len(doc['parts']))):
+    if batch not in range(MAX_PARTS // PARTS_PER_BATCH) or len(doc['parts']) > MAX_PARTS:
+        raise ValueError('Invalid evidence batch or part count')
+    start = batch * PARTS_PER_BATCH
+    for index in range(start, min(start + PARTS_PER_BATCH, len(doc['parts']))):
         title = f'V5 original {scenario} part {index + 1}/{len(doc["parts"])}'
         print(f'::notice title={title}::zlib-base64 sha256={doc["sha256"]}%0A{doc["parts"][index]}')
 
@@ -63,7 +75,7 @@ def main():
     parser.add_argument('--sha')
     parser.add_argument('--run-id')
     parser.add_argument('--scenario', required=True)
-    parser.add_argument('--batch', type=int, choices=range(4))
+    parser.add_argument('--batch', type=int, choices=range(MAX_PARTS // PARTS_PER_BATCH))
     args = parser.parse_args()
     if args.action == 'prepare':
         prepare(args.root, args.out, args.sha, args.run_id, args.scenario)
