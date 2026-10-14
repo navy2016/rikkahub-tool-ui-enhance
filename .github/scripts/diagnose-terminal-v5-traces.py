@@ -23,6 +23,19 @@ WHERE process.name = '{TARGET}' AND slice.dur >= 0 AND
       (slice.name GLOB 'Prod.*' OR slice.name GLOB 'Terminal.production*')
 GROUP BY slice.name;
 """
+HEALTH_QUERY = """
+SELECT 'stat' AS kind, name, idx AS identifier, value, severity AS detail
+FROM stats WHERE value != 0 AND
+    (severity != 'info' OR name GLOB '*overrun*' OR name GLOB '*drop*' OR name GLOB '*lost*' OR
+     name GLOB '*discard*' OR name GLOB '*flush*')
+UNION ALL
+SELECT 'boundary', slice.name, slice.ts, slice.dur, COALESCE(process.name, '')
+FROM slice LEFT JOIN thread_track ON slice.track_id = thread_track.id
+LEFT JOIN thread USING (utid) LEFT JOIN process_track ON slice.track_id = process_track.id
+LEFT JOIN process ON process.upid = COALESCE(thread.upid, process_track.upid)
+WHERE slice.name IN ('Prod.mountToSettledDraw', 'Prod.validation', 'measureBlock',
+                     'Perfetto - preparing to stop');
+"""
 
 
 def main():
@@ -37,6 +50,8 @@ def main():
     args.out.mkdir(parents=True, exist_ok=False)
     query = args.out / 'query.sql'
     query.write_text(QUERY)
+    health_query = args.out / 'health.sql'
+    health_query.write_text(HEALTH_QUERY)
     evidence = []
     for index, trace in enumerate(traces):
         result = subprocess.run([str(args.processor.resolve()), '-q', str(query.resolve()), str(trace.resolve())],
@@ -51,6 +66,17 @@ def main():
             raise ValueError('Trace diagnostic exceeds annotation bound')
         message = message.replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
         print(f'::notice title=V5 original trace {index}::{message}', flush=True)
+        health = subprocess.run(
+            [str(args.processor.resolve()), '-q', str(health_query.resolve()), str(trace.resolve())],
+            capture_output=True, text=True, timeout=60, check=False)
+        if health.returncode:
+            raise ValueError(f'Trace health query failed: {health.stderr[-1600:]}')
+        item['healthCsv'] = health.stdout
+        message = json.dumps(dict(trace=trace.name, sha256=digest, healthCsv=health.stdout), separators=(',', ':'))
+        if len(message.encode()) > 3800:
+            raise ValueError('Trace health exceeds annotation bound')
+        message = message.replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
+        print(f'::notice title=V5 trace health {index}::{message}', flush=True)
     (args.out / 'trace-diagnostics.json').write_text(json.dumps(evidence, indent=2) + '\n')
 
 
