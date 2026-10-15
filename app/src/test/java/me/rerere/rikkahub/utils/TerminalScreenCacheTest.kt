@@ -24,11 +24,18 @@ class TerminalScreenCacheTest {
     @Test fun hiddenCursorReservationAndVisibleCursorMovementInvalidateBothRows() {
         val terminal = TerminalEmulator(80, 24)
         terminal.renderFrame()
-        for (sequence in listOf("\u001b[?25l\u001b[2;40H", "\u001b[?25h\u001b[3;10H",
-                               "\u001b[4 q", "\u001b]12;#ffffff\u0007")) {
+        val changes = listOf(
+            "\u001b[?25l\u001b[2;40H" to 2,
+            "\u001b[?25h\u001b[3;10H" to 2,
+            "\u001b[4 q" to 1,
+            // The production OSC parser accepts rgb:r/g/b, not CSS hex color syntax.
+            "\u001b]12;rgb:ff/ff/ff\u0007" to 1,
+            "\u001b]12;#ffffff\u0007" to 0,
+        )
+        for ((sequence, expectedBuilds) in changes) {
             terminal.feed(sequence)
             val frame = terminal.renderFrame()
-            assertTrue(terminal.lastRenderScreenBuilds in 1..2)
+            assertEquals("Screen invalidation count", expectedBuilds, terminal.lastRenderScreenBuilds)
             assertEquals(frame, terminal.renderFrameUncached())
         }
     }
