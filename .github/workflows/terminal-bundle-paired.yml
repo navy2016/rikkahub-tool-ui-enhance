@@ -1,0 +1,54 @@
+name: Terminal Whole Batch Paired PTY Benchmark
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  paired:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build pinned test-only PRoot asset once for both targets
+        run: python3 .github/scripts/build-terminal-proot.py
+      - name: Build pre-batch and candidate targets with one frozen driver
+        run: |
+          chmod +x gradlew
+          python3 .github/scripts/run-terminal-bundle-paired.py build
+      - name: Validate whole-batch comparison protocol contracts
+        run: |
+          cd .github/scripts
+          python3 -m unittest test_terminal_bundle_paired test_terminal_pipeline
+      - name: Preflight and run four AB-BA pairs on one non-root Android guest
+        run: python3 .github/scripts/run-terminal-bundle-paired.py emulator
+      - name: Publish whole-batch comparison with all warmups excluded
+        run: python3 .github/scripts/run-terminal-bundle-paired.py report
+      - name: Preserve targets, common driver, receipts and bounded diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-bundle-paired-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-bundle-paired/
+            artifacts/bundle-paired-build/
+            artifacts/terminal-pipeline/
+            artifacts/terminal-validation/
+          if-no-files-found: error
+          retention-days: 30

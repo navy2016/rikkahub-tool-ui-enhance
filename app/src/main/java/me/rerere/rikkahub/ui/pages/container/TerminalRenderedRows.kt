@@ -409,6 +409,7 @@ internal interface TerminalTranscriptCompositionObserver {
     fun transcriptComposed(cached: Boolean) {}
     fun chunkViewsCreated(chunks: Int, slices: Int) {}
     fun cachedViewDelta(delta: Int) {}
+    fun sparseBlockCreated(rows: Int) {}
 }
 
 /** O(1) identity comparisons; never invoke List.equals/hashCode on 10k observable row objects. */
@@ -477,6 +478,35 @@ internal fun TerminalRenderedTranscript(
     }
     // Conditional remember drops its only entry on fallback/flat rendering and on disposal.
     // A new frame can retain exactly the same row view; no frame is part of the cache key/value.
+    if (rows is TerminalSparseRows) {
+        // Eager compatibility creates only its live row tree. Unchanged blocks survive output/FIFO.
+        require(rowSource?.frame === rows.frame && identity != null) { "Sparse history requires source provenance" }
+        if (observer != null) DisposableEffect(observer) {
+            observer.cachedViewDelta(1)
+            onDispose { observer.cachedViewDelta(-1) }
+        }
+        historyChunks.forEachIndexed { index, chunk ->
+            key(chunk.bucket) {
+                val block = rows.block(index)
+                require(block.firstSequence == requireNotNull(rows.frame.historyStartSequence) + chunk.start &&
+                    block.size == chunk.endExclusive - chunk.start) { "Sparse terminal block partition mismatch" }
+                val content = remember(block) {
+                    TerminalHistoryChunkContent(chunk.bucket, List(block.size) { offset ->
+                        TerminalRenderedRowState(block.lineId(offset), block.row(offset).text)
+                    }).also { observer?.sparseBlockCreated(block.size) }
+                }
+                TerminalHistoryChunkRows(content, style, isolateChunkDrawing, observer)
+            }
+        }
+        key("terminal-active-screen") {
+            if (observer != null) DisposableEffect(observer) {
+                observer.activeScreenDelta(1)
+                onDispose { observer.activeScreenDelta(-1) }
+            }
+            Column { TerminalRenderedRows(rows.screen, style) }
+        }
+        return
+    }
     val views = if (identity == null) null else remember(identity) {
         createTerminalChunkViews(requireNotNull(rowSource), historyChunks).also {
             observer?.chunkViewsCreated(it.history.size, it.history.size + 1)

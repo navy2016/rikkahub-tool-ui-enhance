@@ -35,6 +35,13 @@ AB／BA 288 样本已归档在 `benchmarks/results/3b5c3e0-paired-subscription.m
 
 ## Build, Test, and Development Commands
 
+当前用户已授权 B1—B6 一次总批次：集中完成生产代码、测试、文档及必要 CI 后统一验收，
+不再逐模块请示。基线 `fe43ec19e6e565acda8b8f3dbc6c530938609b32`；范围及验证约束见
+`benchmarks/TERMINAL_BUNDLE.md`。最多两轮验证，禁止本地 Android/Kotlin/native 编译和 Debug 构建。
+正式 Release 在全部云端门禁通过之后构建并独立校验；缺实机时必须标明实机待验。
+批次提交使用 `[skip ci]`，避免推送提前启动 Release 和重复验证；Actions 显式指定本分支和核对 SHA。
+本段仅记录授权和协议，不表示本批已通过测试。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

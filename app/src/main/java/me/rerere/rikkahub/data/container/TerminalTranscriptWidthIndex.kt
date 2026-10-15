@@ -11,11 +11,47 @@ import me.rerere.rikkahub.utils.ownedRows
  * Text layout, Paragraph, mutable cell or history-sized TextMeasurer cache is retained.
  */
 internal class TerminalTranscriptWidthIndex {
-    private data class Source(
+    /** Source/metric proof plus copied scalar candidates only; never a frame or annotated screen Text. */
+    class Checkpoint internal constructor(
+        internal val source: Source,
+        internal val proof: Any,
+        internal val candidates: List<Candidate>,
+    ) {
+        val retainedRows: Int get() = candidates.size
+    }
+
+    fun checkpoint(proof: Any, metricKey: Any? = metrics): Checkpoint? = source?.takeIf {
+        metrics == metricKey
+    }?.let { current ->
+        if (current.end <= current.first) null else Checkpoint(current, proof, widest.toList())
+    }
+
+    /** Only a complete checkpoint with an equal external font proof may initialize a new mounted index. */
+    fun restore(checkpoint: Checkpoint?, proof: Any, metricKey: Any): Boolean {
+        if (checkpoint == null || checkpoint.proof != proof) return false
+        clear()
+        source = checkpoint.source
+        metrics = metricKey
+        widest.addAll(checkpoint.candidates)
+        return true
+    }
+
+    /** Worker-owned copy; failed or cancelled width work must never mutate the displayed index. */
+    fun fork(): TerminalTranscriptWidthIndex = TerminalTranscriptWidthIndex().also {
+        it.source = source
+        it.metrics = metrics
+        it.widest.addAll(widest)
+        it.screenGeneration = screenGeneration
+        it.screenWidths = screenWidths
+        it.measuredHistoryRows = measuredHistoryRows
+        it.measuredScreenRows = measuredScreenRows
+        it.reusedScreenRows = reusedScreenRows
+    }
+    internal data class Source(
         val owner: Any, val generation: Long, val renderRevision: Long,
         val columns: Int, val first: Long, val end: Long,
     )
-    private data class Candidate(val sequence: Long, val width: Int)
+    internal data class Candidate(val sequence: Long, val width: Int)
     private data class ScreenWidth(val text: AnnotatedString, val width: Int)
     private val widest = ArrayDeque<Candidate>()
     private var source: Source? = null
@@ -37,6 +73,48 @@ internal class TerminalTranscriptWidthIndex {
     val retainedCandidates: Int get() = widest.size
     val retainedScreenRows: Int get() = screenWidths.size
     val hasRetainedState: Boolean get() = source != null || metrics != null || widest.isNotEmpty() || screenWidths.isNotEmpty()
+    private var measuredFrame = java.lang.ref.WeakReference<TerminalEmulator.RenderFrame>(null)
+    var epoch = 0L
+        private set
+
+    fun readyFor(frame: TerminalEmulator.RenderFrame, metricKey: Any): Boolean =
+        measuredFrame.get() === frame && metrics == metricKey
+
+    fun requiredHistoryMeasurements(frame: TerminalEmulator.RenderFrame, metricKey: Any): Int {
+        val next = sourceOf(frame)
+        val previous = source
+        return if (canReuse(previous, next, metricKey)) {
+            val start = (checkNotNull(previous).end - checkNotNull(next).first)
+                .coerceIn(0L, frame.historyCount.toLong()).toInt()
+            frame.historyCount - start
+        } else frame.historyCount
+    }
+
+    fun acceptComputed(
+        other: TerminalTranscriptWidthIndex,
+        expectedEpoch: Long = epoch,
+        completedFrame: TerminalEmulator.RenderFrame? = other.measuredFrame.get(),
+    ): Boolean {
+        if (expectedEpoch != epoch) return false
+        require(completedFrame != null && other.measuredFrame.get() === completedFrame && other.metrics != null) {
+            "Incomplete terminal width result"
+        }
+        epoch++
+        source = other.source
+        metrics = other.metrics
+        widest.clear()
+        widest.addAll(other.widest)
+        screenGeneration = other.screenGeneration
+        screenWidths = other.screenWidths
+        measuredHistoryRows = other.measuredHistoryRows
+        measuredScreenRows = other.measuredScreenRows
+        reusedScreenRows = other.reusedScreenRows
+        lastMeasuredHistoryRows = other.lastMeasuredHistoryRows
+        lastMeasuredScreenRows = other.lastMeasuredScreenRows
+        lastReusedScreenRows = other.lastReusedScreenRows
+        measuredFrame = java.lang.ref.WeakReference(completedFrame)
+        return true
+    }
 
     private fun clearScreen() {
         screenWidths = emptyMap()
@@ -45,6 +123,8 @@ internal class TerminalTranscriptWidthIndex {
 
     /** Release fonts/owner tokens as well as scalar candidates; work counters remain cumulative. */
     fun clear() {
+        epoch++
+        measuredFrame.clear()
         widest.clear()
         source = null
         metrics = null
@@ -75,6 +155,8 @@ internal class TerminalTranscriptWidthIndex {
      * scalar history candidates/validity metadata survive; no frame, rows, callback or layout does.
      */
     fun retainFor(frame: TerminalEmulator.RenderFrame, metricKey: Any) {
+        epoch++
+        measuredFrame.clear()
         clearScreen()
         val previous = source
         val next = sourceOf(frame)
@@ -89,6 +171,7 @@ internal class TerminalTranscriptWidthIndex {
 
     fun width(frame: TerminalEmulator.RenderFrame, metricKey: Any, measure: (AnnotatedString) -> Int): Int {
         require(frame.historyCount in 0..frame.rows.size)
+        epoch++
         lastMeasuredHistoryRows = 0
         lastMeasuredScreenRows = 0
         lastReusedScreenRows = 0
@@ -100,6 +183,7 @@ internal class TerminalTranscriptWidthIndex {
             screenCount in 1..TerminalEmulator.MAX_ROWS && frame.screenLineIds.size == screenCount
         val reusableScreen = if (cacheScreen && reuse && screenGeneration == frame.screenGeneration) screenWidths
             else emptyMap()
+        measuredFrame.clear()
         source = null // A failed measurement must revoke the partially advanced cache.
         metrics = null
         clearScreen() // Publish the new screen only after EVERY requested measurement succeeds.
@@ -121,8 +205,7 @@ internal class TerminalTranscriptWidthIndex {
         for (index in frame.historyCount until frame.rows.size) {
             val text = frame.rows[index].text
             val id = if (cacheScreen) frame.screenLineIds[index - frame.historyCount] else null
-            // The emulator rebuilds screen AnnotatedStrings each frame, so reference equality is
-            // insufficient. Full equality also rejects changed ANSI/cursor/URL/paragraph styling.
+            // Full equality handles the uncached oracle/synthetic path too, including all styling.
             val cached = id?.let { reusableScreen[it] }?.takeIf { it.text == text }
             val width = if (cached != null) {
                 lastReusedScreenRows++
@@ -142,6 +225,7 @@ internal class TerminalTranscriptWidthIndex {
         screenGeneration = frame.screenGeneration.takeIf { cacheScreen }
         metrics = metricKey
         source = next
+        measuredFrame = java.lang.ref.WeakReference(frame)
         return maximum
     }
 }

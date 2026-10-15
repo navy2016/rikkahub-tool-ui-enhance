@@ -60,10 +60,37 @@ class TerminalEmulator(
     )
 
     private data class Cell(
-        var text: String = " ",
-        var style: Style = Style(),
-        var width: Int = 1,
-        var continuation: Boolean = false
+        val text: String = " ",
+        val style: Style = Style(),
+        val width: Int = 1,
+        val continuation: Boolean = false
+    )
+
+    /** Immutable cells make every content write pass through this versioned owner. */
+    private class CellLine(private val cells: Array<Cell>) : AbstractList<Cell>(), RandomAccess {
+        override val size: Int get() = cells.size
+        override fun get(index: Int): Cell = cells[index]
+        var revision = 0L
+            private set
+        var cached: ScreenRendering? = null
+        operator fun set(index: Int, value: Cell) {
+            if (cells[index] == value) return
+            cells[index] = value
+            revision++
+            cached = null
+        }
+    }
+
+    private data class ScreenRendering(
+        val revision: Long,
+        val styleRevision: Long,
+        val cursorColumn: Int,
+        val cursorVisible: Boolean,
+        val cursorShape: CursorShape,
+        val cursorColor: Color,
+        val row: RenderedRow,
+        val nonBlank: Boolean,
+        val occupied: Boolean,
     )
 
     enum class CursorShape { DEFAULT, BLOCK, STEADY_BLOCK, UNDERLINE, STEADY_UNDERLINE, BAR, STEADY_BAR }
@@ -98,7 +125,7 @@ class TerminalEmulator(
     private class ScrollbackLine(
         val id: Long,
         val archiveSequence: Long,
-        val cells: Array<Cell>,
+        val cells: CellLine,
         val isNotBlank: Boolean,
     ) {
         var renderedAtStyleRevision: Long = Long.MIN_VALUE
@@ -257,17 +284,22 @@ class TerminalEmulator(
     private var altScreenGeneration = newScreenGeneration()
     private val scrollback = ArrayDeque<ScrollbackLine>()
     private var scrollbackRenderStyleRevision = 0L
+    private var screenRenderStyleRevision = 0L
     private val frameOwner = Any()
     private var cachedHistorySnapshot: TerminalHistorySnapshot? = null
     /** Non-observable work counter, shared by regression tests and the isolated benchmark. */
     internal var lastRenderHistoryVisits: Int = 0
+        private set
+    internal var lastRenderScreenBuilds = 0
+        private set
+    internal var lastRenderScreenReuses = 0
         private set
     private var stateRevision = 0L
     private val mainScreen = MutableList(rows) { blankLine() }
     private val altScreen = MutableList(rows) { blankLine() }
     private val mainScreenLineIds = MutableList(rows) { newLineId() }
     private val altScreenLineIds = MutableList(rows) { newLineId() }
-    private val screen: MutableList<Array<Cell>> get() = if (alternateScreen) altScreen else mainScreen
+    private val screen: MutableList<CellLine> get() = if (alternateScreen) altScreen else mainScreen
     private val activeScreenLineIds: MutableList<Long>
         get() = if (alternateScreen) altScreenLineIds else mainScreenLineIds
     private val activeScreenGeneration: Long
@@ -765,6 +797,25 @@ class TerminalEmulator(
         )
     }
 
+    private fun renderScreenLine(line: CellLine, row: Int, reuse: Boolean): ScreenRendering {
+        // Hidden cursors still reserve their column in appendStyledLine; keep this in the cache key.
+        val column = if (row == cursorRow) cursorCol else -1
+        val visible = column >= 0 && cursorVisible
+        val cached = line.cached
+        if (reuse && cached != null && cached.revision == line.revision &&
+            cached.styleRevision == screenRenderStyleRevision && cached.cursorColumn == column &&
+            cached.cursorVisible == visible && (!visible ||
+                (cached.cursorShape == cursorShape && cached.cursorColor == cursorColor))
+        ) {
+            lastRenderScreenReuses++
+            return cached
+        }
+        lastRenderScreenBuilds++
+        return ScreenRendering(line.revision, screenRenderStyleRevision, column, visible, cursorShape,
+            cursorColor, RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }),
+            line.isNotBlankLine(), line.isVisuallyOccupiedLine()).also { if (reuse) line.cached = it }
+    }
+
     private fun historySnapshot(): TerminalHistorySnapshot {
         val firstSequence = scrollback.firstOrNull()?.archiveSequence ?: nextHistorySequence
         return TerminalHistorySnapshot.build(
@@ -816,9 +867,18 @@ class TerminalEmulator(
 
     /** Publishes terminal rows and their metadata from one synchronized emulator state. */
     @Synchronized
-    fun renderFrame(includeScrollback: Boolean = true): RenderFrame {
+    fun renderFrame(includeScrollback: Boolean = true): RenderFrame = buildRenderFrame(includeScrollback, true)
+
+    /** Independent full screen materialization for cache differential tests, never used by the UI. */
+    @Synchronized
+    internal fun renderFrameUncached(includeScrollback: Boolean = true): RenderFrame =
+        buildRenderFrame(includeScrollback, false)
+
+    private fun buildRenderFrame(includeScrollback: Boolean, reuseScreen: Boolean): RenderFrame {
         val includeHistory = includeScrollback && !alternateScreen
         lastRenderHistoryVisits = 0
+        lastRenderScreenBuilds = 0
+        lastRenderScreenReuses = 0
         val history = if (includeHistory) historySnapshot() else TerminalHistorySnapshot.empty(
             frameOwner, historyGeneration, scrollbackRenderStyleRevision, nextHistorySequence,
         )
@@ -832,9 +892,10 @@ class TerminalEmulator(
         var nonBlankScreenRowCount = 0
         val screenLineIds = java.util.Collections.unmodifiableList(activeScreenLineIds.toList())
         screen.forEachIndexed { row, line ->
-            val isNotBlank = line.isNotBlankLine()
-            val isVisuallyOccupied = line.isVisuallyOccupiedLine()
-            screenRows.add(RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }))
+            val rendering = renderScreenLine(line, row, reuseScreen)
+            val isNotBlank = rendering.nonBlank
+            val isVisuallyOccupied = rendering.occupied
+            screenRows.add(rendering.row)
             if (isNotBlank) {
                 if (firstNonBlankRow == null) firstNonBlankRow = screenStartRow + row
                 lastNonBlankRow = screenStartRow + row
@@ -920,13 +981,13 @@ class TerminalEmulator(
             .onUnmappableCharacter(CodingErrorAction.REPLACE)
     }
 
-    private fun resizedLine(old: Array<Cell>, newColumns: Int, fillStyle: Style = currentStyle): Array<Cell> {
-        return Array(newColumns) { index ->
+    private fun resizedLine(old: CellLine, newColumns: Int, fillStyle: Style = currentStyle): CellLine {
+        return CellLine(Array(newColumns) { index ->
             if (index < old.size) old[index].copy() else Cell(style = fillStyle)
-        }
+        })
     }
 
-    private fun MutableList<Array<Cell>>.resizeScreen(
+    private fun MutableList<CellLine>.resizeScreen(
         lineIds: MutableList<Long>,
         newRows: Int,
         newColumns: Int,
@@ -940,7 +1001,7 @@ class TerminalEmulator(
         val sourceStart = if (preserveBottom) old.size - copyRows else 0
         if (preserveBottom) {
             repeat(newRows - copyRows) {
-                add(Array(newColumns) { Cell(style = defaultStyle) })
+                add(CellLine(Array(newColumns) { Cell(style = defaultStyle) }))
                 lineIds.add(newLineId())
             }
         }
@@ -950,13 +1011,13 @@ class TerminalEmulator(
         }
         if (!preserveBottom) {
             repeat(newRows - copyRows) {
-                add(Array(newColumns) { Cell(style = defaultStyle) })
+                add(CellLine(Array(newColumns) { Cell(style = defaultStyle) }))
                 lineIds.add(newLineId())
             }
         }
     }
 
-    private fun MutableList<Array<Cell>>.resetScreen(lineIds: MutableList<Long>) {
+    private fun MutableList<CellLine>.resetScreen(lineIds: MutableList<Long>) {
         clear()
         lineIds.clear()
         repeat(rows) {
@@ -977,7 +1038,7 @@ class TerminalEmulator(
 
     private fun AnnotatedString.Builder.appendRenderedRows(includeScrollback: Boolean, drawCursor: Boolean) {
         var appended = false
-        fun appendLine(line: Array<Cell>, row: Int?) {
+        fun appendLine(line: CellLine, row: Int?) {
             if (appended) append('\n') else appended = true
             appendStyledLine(line, row, drawCursor && row != null)
         }
@@ -987,7 +1048,7 @@ class TerminalEmulator(
 
     private fun StringBuilder.appendPlainRows(includeScrollback: Boolean) {
         var appended = false
-        fun appendLine(line: Array<Cell>) {
+        fun appendLine(line: CellLine) {
             if (appended) append('\n') else appended = true
             appendPlainLine(line)
         }
@@ -995,14 +1056,16 @@ class TerminalEmulator(
         screen.forEach { appendLine(it) }
     }
 
-    private fun StringBuilder.appendPlainLine(line: Array<Cell>) {
+    private fun StringBuilder.appendPlainLine(line: CellLine) {
         val last = line.lastContentColumn()
         for (index in 0..last) {
             if (!line[index].continuation) append(line[index].text)
         }
     }
 
-    private fun AnnotatedString.Builder.appendStyledLine(line: Array<Cell>, row: Int? = null, drawCursor: Boolean = false) {
+    private fun AnnotatedString.Builder.appendStyledLine(
+        line: CellLine, row: Int? = null, drawCursor: Boolean = false,
+    ) {
         val last = maxOf(line.lastContentColumn(), if (drawCursor && row == cursorRow) cursorCol else 0)
         var i = 0
         while (i <= last) {
@@ -1032,17 +1095,17 @@ class TerminalEmulator(
             style.underline || style.strike || style.overline
     }
 
-    private fun Array<Cell>.lastContentColumn(): Int = indexOfLast { it.isVisuallyOccupiedCell() }.coerceAtLeast(0)
+    private fun CellLine.lastContentColumn(): Int = indexOfLast { it.isVisuallyOccupiedCell() }.coerceAtLeast(0)
 
-    private fun Array<Cell>.isNotBlankLine(): Boolean = any { !it.continuation && it.text.isNotBlank() }
+    private fun CellLine.isNotBlankLine(): Boolean = any { !it.continuation && it.text.isNotBlank() }
 
-    private fun Array<Cell>.isVisuallyOccupiedLine(): Boolean = any { it.isVisuallyOccupiedCell() }
+    private fun CellLine.isVisuallyOccupiedLine(): Boolean = any { it.isVisuallyOccupiedCell() }
 
     private fun isCursorAt(row: Int?, column: Int, drawCursor: Boolean): Boolean {
         return drawCursor && cursorVisible && row == cursorRow && column == cursorCol && column in 0 until columns
     }
 
-    private fun renderedTextAt(line: Array<Cell>, row: Int?, column: Int, drawCursor: Boolean): String {
+    private fun renderedTextAt(line: CellLine, row: Int?, column: Int, drawCursor: Boolean): String {
         if (!isCursorAt(row, column, drawCursor)) return line[column].text
         return when (cursorShape) {
             CursorShape.UNDERLINE, CursorShape.STEADY_UNDERLINE,
@@ -1051,7 +1114,7 @@ class TerminalEmulator(
         }
     }
 
-    private fun renderedStyleAt(line: Array<Cell>, row: Int?, column: Int, drawCursor: Boolean): Style {
+    private fun renderedStyleAt(line: CellLine, row: Int?, column: Int, drawCursor: Boolean): Style {
         val cell = line[column]
         if (!isCursorAt(row, column, drawCursor)) return cell.style
         return when (cursorShape) {
@@ -1649,7 +1712,8 @@ class TerminalEmulator(
         var col = cursorCol - 1
         if (col in 0 until columns && screen[cursorRow][col].continuation) col--
         if (col in 0 until columns) {
-            screen[cursorRow][col].text += text
+            val cell = screen[cursorRow][col]
+            screen[cursorRow][col] = cell.copy(text = cell.text + text)
         }
     }
 
@@ -1726,7 +1790,7 @@ class TerminalEmulator(
         val removed = screen[scrollTop]
         val removedLineId = activeScreenLineIds[scrollTop]
         if (!alternateScreen && scrollTop == 0) {
-            val archivedCells = Array(columns) { i -> removed[i].copy() }
+            val archivedCells = CellLine(Array(columns) { i -> removed[i].copy() })
             scrollback.addLast(newScrollbackLine(removedLineId, archivedCells))
             while (scrollback.size > scrollbackLimit) {
                 scrollback.removeFirst()
@@ -1901,7 +1965,8 @@ class TerminalEmulator(
         for (row in top..bottom) {
             for (col in left..right) {
                 val cell = screen[row][col]
-                cell.style = if (reverse) reverseCharacterAttributes(cell.style, attributes) else changeCharacterAttributes(cell.style, attributes)
+                screen[row][col] = cell.copy(style = if (reverse) reverseCharacterAttributes(cell.style, attributes)
+                    else changeCharacterAttributes(cell.style, attributes))
             }
         }
     }
@@ -2391,7 +2456,7 @@ class TerminalEmulator(
 
     private fun newHistoryGeneration(): Long = nextHistoryGeneration++
 
-    private fun newScrollbackLine(id: Long, cells: Array<Cell>): ScrollbackLine = ScrollbackLine(
+    private fun newScrollbackLine(id: Long, cells: CellLine): ScrollbackLine = ScrollbackLine(
         id = id,
         archiveSequence = nextHistorySequence++,
         cells = cells,
@@ -2409,6 +2474,7 @@ class TerminalEmulator(
 
     private fun invalidateScrollbackRendering() {
         scrollbackRenderStyleRevision++
+        screenRenderStyleRevision++
         cachedHistorySnapshot = null
     }
 
@@ -2451,7 +2517,9 @@ class TerminalEmulator(
         )
     }
 
-    private fun blankLine(): Array<Cell> = Array(columns) { Cell(style = currentStyle.copy(hyperlink = currentHyperlink)) }
+    private fun blankLine(): CellLine = CellLine(Array(columns) {
+        Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+    })
 
     private fun cursorGlyph(): String = when (cursorShape) {
         CursorShape.UNDERLINE, CursorShape.STEADY_UNDERLINE -> "▁"

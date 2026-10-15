@@ -194,7 +194,7 @@ class TerminalTranscriptWidthIndexTest {
             val original = terminal.renderFrame()
             val width = index.width(original, 1, ::measure)
             repeat(4) {
-                val rebuilt = terminal.renderFrame()
+                val rebuilt = terminal.renderFrameUncached()
                 assertNotSame(original.rows.last().text, rebuilt.rows.last().text)
                 assertEquals(width, index.width(rebuilt, 1) { error("Equal annotated screen text was remeasured") })
                 assertEquals(0, index.lastMeasuredScreenRows)

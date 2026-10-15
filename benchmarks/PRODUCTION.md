@@ -1,7 +1,12 @@
 # Production viewport benchmark
 
 This is the current production-component benchmark, distinct from the archived renderer-only
-experiments in README.md. Contract: `production-viewport-v5`. No old measurements are relabelled.
+experiments in README.md. Current contract: `production-viewport-v6`. No old measurements are relabelled.
+
+V6 adds the authorized B1–B6 bundle's sparse row publication and session width checkpoint path.
+The target now exercises those same production entrypoints and checks bounded row-state retention,
+exact cold work, 12-row warm restore work, and real complete-width draw readiness. B0's V5 result and
+its hashes remain archived. See [TERMINAL_BUNDLE.md](TERMINAL_BUNDLE.md) for current acceptance scope.
 
 Active development branch: `opt/terminal-verified-a79e7b6`, forked from the locally verified baseline.
 Explicitly dispatch workflows and push to that branch; do not merge or overwrite later commits on

@@ -5,6 +5,8 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -19,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import me.rerere.rikkahub.service.ContainerProcessForegroundService
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.utils.TerminalEmulator
@@ -1086,7 +1089,6 @@ class BackgroundProcessManager @Inject constructor(
 
     private val appScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var monitoringJob: Job? = null
-    @Volatile private var foregroundProcessCount: Int = 0
 
     init {
         startProcessMonitoring()
@@ -1287,6 +1289,9 @@ class BackgroundProcessManager @Inject constructor(
         val outputFlow: MutableSharedFlow<ByteArray>,
         val outputBuffer: SessionOutputBuffer,
         val terminalEmulator: TerminalEmulator,
+        val notifications: TerminalOutputNotifications = TerminalOutputNotifications(),
+        val outputMutex: Mutex = Mutex(),
+        val widthCheckpoint: TerminalWidthCheckpointStore = TerminalWidthCheckpointStore(),
         var columns: Int = 80,
         var rows: Int = 24,
         var stdoutJob: Job? = null,
@@ -1547,6 +1552,7 @@ class BackgroundProcessManager @Inject constructor(
                     drainNativePtyTail(session)
                     session.exitCode = code
                     session.exitedAt = System.currentTimeMillis()
+                    session.widthCheckpoint.close()
                     if (session.finalStatus == null) {
                         session.finalStatus = if (code == 0) {
                             ProcessStatus.COMPLETED
@@ -1612,7 +1618,6 @@ class BackgroundProcessManager @Inject constructor(
 
     /** Re-attempt foreground protection after the app returns to foreground. */
     fun refreshForegroundProcessGuard() {
-        foregroundProcessCount = -1
         refreshProcessStates()
     }
 
@@ -1711,6 +1716,12 @@ class BackgroundProcessManager @Inject constructor(
     fun observeOutput(processId: String): Flow<ByteArray>? {
         return interactiveSessions[processId]?.outputFlow?.asSharedFlow()
     }
+
+    internal fun observeTerminalUpdates(processId: String): StateFlow<TerminalOutputNotifications.Update>? =
+        interactiveSessions[processId]?.notifications?.flow
+
+    internal fun terminalWidthCheckpoint(processId: String): TerminalWidthCheckpointStore? =
+        interactiveSessions[processId]?.widthCheckpoint
 
     /**
      * 读取交互式输出缓冲
@@ -1882,6 +1893,7 @@ class BackgroundProcessManager @Inject constructor(
         )
         record.columns = newColumns
         record.rows = newRows
+        record.notifications.published(0, record.terminalEmulator.revision(), System.nanoTime())
         record.lastActivityAt = System.currentTimeMillis()
         refreshProcessStates()
         Result.success(Unit)
@@ -1889,19 +1901,16 @@ class BackgroundProcessManager @Inject constructor(
 
     private suspend fun drainNativePtyTail(record: InteractiveSessionRecord, maxBytes: Int = 16 * 1024) {
         val nativeProcess = record.process as? NativePtyProcess ?: return
+        // Never race drainAvailable against a reader that has read, but not yet parsed, an earlier chunk.
+        val readersDone = withTimeoutOrNull(1_000) {
+            record.stdoutJob?.join()
+            record.stderrJob?.join()
+            true
+        } == true
+        if (!readersDone) return // The existing reader remains the byte owner until it finishes/cancels.
         val tail = nativeProcess.drainAvailable(maxBytes)
         if (tail.isNotEmpty()) {
-            TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_READ, bytes = tail.size)
-            record.outputBuffer.append(tail)
-            record.terminalEmulator.feed(tail)
-            if (TerminalPipelineTrace.isRecording(record.processId)) TerminalPipelineTrace.record(
-                record.processId, TerminalPipelineStage.EMULATOR_FED, bytes = tail.size,
-                frameRevision = record.terminalEmulator.revision())
-            handleTerminalProtocolEvents(record)
-            TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_EMIT_STARTED, bytes = tail.size)
-            record.outputFlow.emit(tail)
-            TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_EMITTED, bytes = tail.size)
-            record.lastActivityAt = System.currentTimeMillis()
+            acceptTerminalOutput(record, tail)
         }
     }
 
@@ -1942,6 +1951,7 @@ class BackgroundProcessManager @Inject constructor(
             record.waiterJob?.cancel()
             record.inputActorJob?.cancel()
             record.inputChannel.close()
+            record.widthCheckpoint.close()
 
             refreshProcessStates()
 
@@ -2223,6 +2233,7 @@ class BackgroundProcessManager @Inject constructor(
             interactive.waiterJob?.cancel()
             interactive.inputActorJob?.cancel()
             interactive.inputChannel.close()
+            interactive.widthCheckpoint.close()
             interactiveSessions.remove(processId)
             interactiveReadOffsets.remove(processId)
             terminalViewportStates.remove(processId)
@@ -2287,6 +2298,7 @@ class BackgroundProcessManager @Inject constructor(
                     record.waiterJob?.cancel()
                     record.inputActorJob?.cancel()
                     record.inputChannel.close()
+                    record.widthCheckpoint.close()
                 }
                 interactiveSessions.remove(processId)
                 interactiveReadOffsets.remove(processId)
@@ -2338,6 +2350,7 @@ class BackgroundProcessManager @Inject constructor(
                 interactiveSessions[processId]?.waiterJob?.cancel()
                 interactiveSessions[processId]?.inputActorJob?.cancel()
                 interactiveSessions[processId]?.inputChannel?.close()
+                interactiveSessions[processId]?.widthCheckpoint?.close()
                 interactiveSessions.remove(processId)
                 interactiveReadOffsets.remove(processId)
                 terminalViewportStates.remove(processId)
@@ -2396,6 +2409,7 @@ class BackgroundProcessManager @Inject constructor(
         }
 
         interactiveSessions.values.forEach { record ->
+            record.widthCheckpoint.close()
             record.finalStatus = ProcessStatus.STOPPED
             record.exitedAt = System.currentTimeMillis()
             record.exitCode = -1
@@ -2416,6 +2430,7 @@ class BackgroundProcessManager @Inject constructor(
      */
     fun clearAllProcesses() {
         interactiveSessions.values.forEach { record ->
+            record.widthCheckpoint.close()
             try {
                 if (record.process.isAlive) {
                     record.process.destroyForcibly()
@@ -2557,16 +2572,14 @@ class BackgroundProcessManager @Inject constructor(
         val activeCount = processes.values.count {
             it.status == ProcessStatus.RUNNING || it.status == ProcessStatus.STARTING
         } + interactiveSessions.values.count { it.process.isAlive }
-        if (activeCount == foregroundProcessCount) return
         runCatching {
             if (activeCount > 0) {
                 ContainerProcessForegroundService.update(context, activeCount)
             } else {
                 ContainerProcessForegroundService.stop(context)
             }
-            foregroundProcessCount = activeCount
         }.onFailure { error ->
-            // Keep the previous value so periodic process monitoring retries service start/stop.
+            // The service owns acknowledgement; every refresh can retry an unconfirmed start.
             Log.w(TAG, "Unable to update container-process foreground service", error)
         }
     }
@@ -2612,21 +2625,35 @@ class BackgroundProcessManager @Inject constructor(
                 if (read < 0) break
                 if (read == 0) continue
 
-                val data = chunk.copyOf(read)
-                TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_READ, bytes = read)
-                record.outputBuffer.append(data)
-                record.terminalEmulator.feed(data)
-                if (TerminalPipelineTrace.isRecording(record.processId)) TerminalPipelineTrace.record(
-                    record.processId, TerminalPipelineStage.EMULATOR_FED, bytes = read,
-                    frameRevision = record.terminalEmulator.revision())
-                handleTerminalProtocolEvents(record)
-                TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_EMIT_STARTED, bytes = read)
-                record.outputFlow.emit(data)
-                TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_EMITTED, bytes = read)
-                record.lastActivityAt = System.currentTimeMillis()
+                acceptTerminalOutput(record, chunk.copyOf(read))
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
         }
+    }
+
+    /** The parser and ordered response queue are never conflated. No UI collector is in this critical path. */
+    private suspend fun acceptTerminalOutput(record: InteractiveSessionRecord, data: ByteArray) {
+        withContext(NonCancellable) {
+            record.outputMutex.withLock {
+                // A read chunk must reach the model even if teardown has cancelled this reader.
+                TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_READ, bytes = data.size)
+                record.outputBuffer.append(data)
+                record.terminalEmulator.feed(data)
+                val revision = record.terminalEmulator.revision()
+                TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.EMULATOR_FED,
+                    bytes = data.size, frameRevision = revision)
+                handleTerminalProtocolEvents(record)
+                record.notifications.published(data.size, revision, System.nanoTime())
+                record.lastActivityAt = System.currentTimeMillis()
+            }
+        }
+        // Raw subscribers retain per-stream byte order/backpressure, but cannot make cancellation unbounded.
+        // The UI consumes the parsed-state notification, not this legacy byte stream.
+        TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_EMIT_STARTED, bytes = data.size)
+        record.outputFlow.emit(data)
+        TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_EMITTED, bytes = data.size)
     }
 
     /**

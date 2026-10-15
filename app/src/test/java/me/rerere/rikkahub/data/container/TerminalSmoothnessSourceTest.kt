@@ -146,10 +146,9 @@ class TerminalSmoothnessSourceTest {
 
     @Test
     fun renderedRowsFollowStableIdsWhenScrollbackIsTrimmed() {
-        assertTrue(processSessionSource.contains("createTerminalRenderedRows(initialTerminalRenderFrame)"))
-        assertTrue(processSessionSource.contains("synchronizeTerminalRenderedRows("))
-        assertTrue(processSessionSource.contains("createTerminalRenderedRowsSyncState(initialTerminalRenderFrame, terminalRenderedRows)"))
-        assertTrue(processSessionSource.contains("syncState = terminalRenderedRowsSyncState"))
+        assertTrue(processSessionSource.contains("TerminalRowStore(initialTerminalRenderFrame"))
+        assertTrue(processSessionSource.contains("terminalRowStore.publish(frame, sparse, usesTuiViewport"))
+        assertTrue(processSessionSource.contains("TerminalRenderSnapshot.capture(frame, terminalRowStore)"))
         assertTrue(processSessionSource.contains("TerminalTranscriptViewport("))
         assertTrue(transcriptSource.contains("TerminalConfiguredTranscript("))
         assertTrue(renderedRowsSource.contains("val lineId: Long"))
@@ -172,7 +171,8 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("holdCompleteFrameForGrid"))
         assertTrue(processSessionSource.contains("resizeAwaitingTuiRedraw.set(true)"))
         assertTrue(processSessionSource.contains("val frame = terminalEmulator.renderFrame()"))
-        assertTrue(processSessionSource.contains("if (!forcePendingGridBlanks && frame.revision == terminalFrameRevision) return"))
+        assertTrue(processSessionSource.contains(
+            "if (!forcePendingGridBlanks && !representationChanged && frame.revision == terminalFrameRevision) return"))
         assertTrue(renderedRowsSource.contains("val rendered = frame.rows"))
         assertTrue(processSessionSource.contains("val bounds = frame.contentBounds"))
         assertTrue(processSessionSource.contains("terminalModeSummary = frame.modeSummary"))
@@ -445,7 +445,7 @@ class TerminalSmoothnessSourceTest {
     @Test
     fun semanticViewportReducerOwnsTerminalScrollReconciliation() {
         assertTrue(processSessionSource.contains(
-            "publishedRenderSnapshot = TerminalRenderSnapshot.capture(frame, terminalRenderedRows)"
+            "publishedRenderSnapshot = TerminalRenderSnapshot.capture(frame, terminalRowStore)"
         ))
         assertTrue(controllerSource.contains("ViewportInput("))
         assertTrue(controllerSource.contains("reduceViewport("))

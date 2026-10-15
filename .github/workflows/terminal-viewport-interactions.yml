@@ -57,7 +57,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction"]') }}
+        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle"]') }}
     env:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
       TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
@@ -242,6 +242,13 @@ jobs:
               --require-case-group 'bindingProjection:3' \
               --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderSnapshotInstrumentedTest \
               --require-case-group 'renderSnapshot:6'
+            exit $?
+          fi
+          if [ "$TERMINAL_VIEWPORT_GROUP" = bundle ]; then
+            python3 .github/scripts/report-terminal-tests.py \
+              benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalBundleInstrumentedTest \
+              --require-case-group 'bundle:6'
             exit $?
           fi
           [ "$TERMINAL_VIEWPORT_GROUP" = geometry ]

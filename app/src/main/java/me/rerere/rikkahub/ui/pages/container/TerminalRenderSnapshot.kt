@@ -9,7 +9,8 @@ import me.rerere.rikkahub.utils.TerminalEmulator
  * in that transaction. The binding's scope reads the published value before making child lambdas.
  * Neither child recomposition nor input/layout updates recapture or compare the history structure.
  *
- * toList() is O(1); row objects keep their existing per-row observable text and stable line IDs.
+ * Dense toList() is O(1); sparse publications share owned immutable history and bounded screen states.
+ * Row objects keep their existing per-row observable text and stable line IDs.
  * This does not freeze/copy Text, retain a second history or own a coroutine. Every publication,
  * including same-frame forced blank commits, gets a fresh identity; this is not a revision cache.
  */
@@ -18,6 +19,9 @@ internal class TerminalRenderSnapshot private constructor(
     val rows: List<TerminalRenderedRowState>,
 ) {
     companion object {
+        fun capture(frame: TerminalEmulator.RenderFrame, store: TerminalRowStore): TerminalRenderSnapshot =
+            TerminalRenderSnapshot(frame, store.view(frame))
+
         fun capture(
             frame: TerminalEmulator.RenderFrame,
             rows: SnapshotStateList<TerminalRenderedRowState>,

@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import me.rerere.rikkahub.data.container.TerminalItemViewport
 import me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndex
+import me.rerere.rikkahub.data.container.TerminalWidthCheckpointStore
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
@@ -42,9 +43,23 @@ internal class TerminalViewportBinding(
     val lazy: LazyListState,
     val measurements: TerminalLazyItemMeasurements,
     private val input: () -> TerminalViewportBindingInput,
+    val widthCheckpoint: TerminalWidthCheckpointStore? = null,
 ) {
     // This binding outlives backend branches, but is scoped to one mounted session/controller.
     val widthIndex = TerminalTranscriptWidthIndex()
+    var checkpointLease: TerminalWidthCheckpointStore.Lease? = null
+        private set
+    fun attachWidthCheckpoint() { checkpointLease = widthCheckpoint?.open() }
+    fun saveWidthCheckpoint() {
+        val current = input().pass
+        val proof = (current.metricKey as? TerminalTextMetrics)?.checkpointProof()
+        val lease = checkpointLease
+        if (proof != null && lease != null) {
+            // A compatibility fallback may have pruned history without measuring its new suffix.
+            // Save only the still-valid measured range with its matching metric identity.
+            widthCheckpoint?.save(lease, widthIndex.checkpoint(proof, current.metricKey))
+        }
+    }
     val virtual: Boolean get() = input().virtual
     val pass: TerminalLazyLayoutPass get() = input().pass
     val measureEager: Boolean get() = input().measureEager
@@ -73,6 +88,20 @@ internal class TerminalViewportBinding(
     }
 
     fun eagerGeometry() = if (measureEager) measurements.readEager(pass) else null
+
+    /** Cold width work has no horizontal range yet. Wait for real live layout, never clamp to a placeholder. */
+    suspend fun awaitHorizontalLayout(horizontal: ScrollState) {
+        do {
+            withFrameNanos { }
+            val current = input()
+            val measured = if (current.virtual) {
+                widthIndex.readyFor(current.pass.frame, current.pass.metricKey) && observation() != null
+            } else if (current.measureEager) {
+                measurements.peekEager(current.pass) != null
+            } else eager.maxValue != Int.MAX_VALUE
+            if (measured && horizontal.maxValue != Int.MAX_VALUE && current.metrics().viewportHeightPx > 0) return
+        } while (true)
+    }
 
     /** Called before AND after consumed pointer deltas, for AUTO, and in the executor's finally. */
     fun currentScrollPx(): Int {
@@ -156,6 +185,7 @@ internal fun rememberTerminalBoundViewport(
     wantsVirtual: Boolean,
     metrics: () -> TerminalViewportMetrics,
     gestureConfig: TerminalViewportGestureConfig,
+    widthCheckpoint: TerminalWidthCheckpointStore? = null,
 ): TerminalBoundViewport {
     val pass = rememberTerminalLazyLayoutPass(frame, style)
     var armed by remember(sessionKey) {
@@ -178,11 +208,12 @@ internal fun rememberTerminalBoundViewport(
     val measuredEager = !virtual && !usesTuiViewport
     val latestInput by rememberUpdatedState(TerminalViewportBindingInput(pass, virtual, measuredEager, metrics))
     val latestWants by rememberUpdatedState(wantsVirtual)
-    val binding = remember(sessionKey, controller, eager, lazy, measurements) {
-        TerminalViewportBinding(controller, eager, lazy, measurements) { latestInput }
+    val binding = remember(sessionKey, controller, eager, lazy, measurements, widthCheckpoint) {
+        TerminalViewportBinding(controller, eager, lazy, measurements, { latestInput }, widthCheckpoint)
     }
     DisposableEffect(binding) {
-        onDispose { binding.widthIndex.clear() }
+        binding.attachWidthCheckpoint()
+        onDispose { binding.saveWidthCheckpoint(); binding.widthIndex.clear() }
     }
     SideEffect {
         binding.backendCommitted()

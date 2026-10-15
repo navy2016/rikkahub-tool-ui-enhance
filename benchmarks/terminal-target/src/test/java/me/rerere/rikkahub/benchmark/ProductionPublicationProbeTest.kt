@@ -27,9 +27,10 @@ class ProductionPublicationProbeTest {
         assertEquals("exact publication", progress.publication("mounted"))
     }
 
-    @Test fun absentOrOlderContractsCannotLaunchV5() {
-        ProductionBenchmarkSpec.requireVersion("production-viewport-v5")
-        for (version in listOf(null, "", "production-viewport-v3", "production-viewport-v4")) {
+    @Test fun absentOrOlderContractsCannotLaunchV6() {
+        ProductionBenchmarkSpec.requireVersion("production-viewport-v6")
+        val oldVersions = listOf(null, "", "production-viewport-v3", "production-viewport-v4", "production-viewport-v5")
+        for (version in oldVersions) {
             assertThrows(IllegalArgumentException::class.java) { ProductionBenchmarkSpec.requireVersion(version) }
         }
     }

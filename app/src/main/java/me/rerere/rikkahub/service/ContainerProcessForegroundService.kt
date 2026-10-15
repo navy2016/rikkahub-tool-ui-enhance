@@ -9,49 +9,82 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
+import me.rerere.rikkahub.data.container.TerminalForegroundLifecycle
 
 /** Keeps PRoot background processes and interactive terminal sessions alive while the app is backgrounded. */
 class ContainerProcessForegroundService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
+    private var instanceToken = 0L
 
     companion object {
         private const val ACTION_UPDATE = "me.rerere.rikkahub.action.CONTAINER_PROCESS_UPDATE"
         private const val EXTRA_PROCESS_COUNT = "process_count"
+        private const val EXTRA_REQUEST_ID = "request_id"
         private const val CHANNEL_ID = "container_processes"
         private const val NOTIFICATION_ID = 2004
         private const val WAKE_LOCK_TIMEOUT_MS = 6 * 60 * 60 * 1000L
+        private val lifecycle = TerminalForegroundLifecycle()
+        private val mainHandler = Handler(Looper.getMainLooper())
+
+        internal fun diagnostic(): TerminalForegroundLifecycle.Diagnostic {
+            check(Looper.myLooper() == Looper.getMainLooper())
+            return lifecycle.diagnostic()
+        }
 
         fun update(context: Context, processCount: Int) {
-            if (processCount <= 0) {
-                context.stopService(Intent(context, ContainerProcessForegroundService::class.java))
+            val app = context.applicationContext
+            if (Looper.myLooper() != Looper.getMainLooper()) {
+                mainHandler.post { update(app, processCount) }
                 return
             }
-            val intent = Intent(context, ContainerProcessForegroundService::class.java).apply {
+            val request = lifecycle.request(processCount.coerceAtLeast(0)) ?: return
+            val intent = Intent(app, ContainerProcessForegroundService::class.java).apply {
                 action = ACTION_UPDATE
                 putExtra(EXTRA_PROCESS_COUNT, processCount)
+                putExtra(EXTRA_REQUEST_ID, request.id)
             }
-            ContextCompat.startForegroundService(context, intent)
+            try {
+                ContextCompat.startForegroundService(app, intent)
+            } catch (error: RuntimeException) {
+                lifecycle.failed(request)
+                // A later manager refresh retries; requesting start is not confirmation of success.
+                Log.w("ContainerForeground", "Foreground request rejected", error)
+            }
         }
 
         fun stop(context: Context) {
-            context.stopService(Intent(context, ContainerProcessForegroundService::class.java))
+            update(context, 0)
         }
     }
 
     override fun onCreate() {
         super.onCreate()
+        instanceToken = lifecycle.created()
         createChannel()
+        // Promote before wake-lock work and before another main-thread message can delay onStartCommand.
+        promote(lifecycle.desiredCount.coerceAtLeast(1))
         acquireWakeLock()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val count = intent?.getIntExtra(EXTRA_PROCESS_COUNT, 1)?.coerceAtLeast(1) ?: 1
+        promote(lifecycle.desiredCount.coerceAtLeast(1))
+        val count = lifecycle.promoted(instanceToken, intent?.getLongExtra(EXTRA_REQUEST_ID, 0L) ?: 0L)
+        if (count == 0 && stopSelfResult(startId)) {
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        }
+        return START_NOT_STICKY
+    }
+
+    private fun promote(count: Int) {
         val notification = buildNotification(count)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             ServiceCompat.startForeground(
@@ -63,12 +96,12 @@ class ContainerProcessForegroundService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        lifecycle.destroyed(instanceToken)
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         super.onDestroy()

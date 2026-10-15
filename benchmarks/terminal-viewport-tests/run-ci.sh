@@ -97,7 +97,7 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
-case "$group" in all|geometry|interaction) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
+case "$group" in all|geometry|interaction|bundle) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
 
 if [ "$group" = all ] || [ "$group" = geometry ]; then
 run_arm chunk-views TerminalChunkViewsInstrumentedTest 360
@@ -127,5 +127,8 @@ run_arm panel-subscription TerminalPanelSubscriptionInstrumentedTest 120
 run_arm binding-projection TerminalBindingProjectionInstrumentedTest 180
 run_arm render-snapshot TerminalRenderSnapshotInstrumentedTest 240
 adb logcat -d -v threadtime TerminalRenderSnapshot:I '*:S' > artifacts/terminal-validation/render-snapshot-logcat.txt
+fi
+if [ "$group" = all ] || [ "$group" = bundle ]; then
+run_arm bundle TerminalBundleInstrumentedTest 600
 fi
 exit "$overall_status"

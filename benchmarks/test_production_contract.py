@@ -66,15 +66,16 @@ class ProductionContractTest(unittest.TestCase):
         self.assertEqual(2, source.count('TerminalRenderSnapshot.capture('))
         publication = source.split('fun publish() {', 1)[1].split('fun checkPublication()', 1)[0]
         self.assertLess(publication.index('Snapshot.withMutableSnapshot'),
-                        publication.index('published = TerminalRenderSnapshot.capture(next, rows)'))
-        self.assertLess(publication.index('synchronizeTerminalRenderedRows('),
-                        publication.index('published = TerminalRenderSnapshot.capture(next, rows)'))
+                        publication.index('published = TerminalRenderSnapshot.capture(next, rowStore)'))
+        self.assertLess(publication.index('rowStore.publish('),
+                        publication.index('published = TerminalRenderSnapshot.capture(next, rowStore)'))
         content = source.split('@Composable fun Content(ime: Boolean)', 1)[1].split('fun publish()', 1)[0]
         self.assertLess(content.index('val source = published'), content.index('rememberTerminalBoundViewport('))
         self.assertIn('frame, style, wants,', content)
-        self.assertIn('drawContent(); drawnSource = source', content)
+        self.assertIn('currentBound.binding.widthIndex.readyFor(', content)
+        self.assertIn('drawnSource = source', content)
         self.assertIn('source === committedSource && source === drawnSource', source)
-        self.assertIn('source.rows === rows.toList()', source)
+        self.assertIn('source.rows === rowStore.view(source.frame)', source)
         self.assertIn('publication.paired(cachedExpected = !bound.virtualHistoryEnabled)', source)
         page = (ROOT.parent / 'app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt').read_text()
         self.assertIn('val renderSnapshot = publishedRenderSnapshot', page)
@@ -111,7 +112,7 @@ class ProductionContractTest(unittest.TestCase):
     def test_kotlin_and_report_contracts_stay_in_sync(self):
         source = (ROOT / 'production-contract/src/main/kotlin/me/rerere/rikkahub/benchmark/ProductionBenchmarkSpec.kt').read_text()
         self.assertIn(f'const val VERSION = "{VERSION}"', source)
-        self.assertEqual('production-viewport-v5', VERSION)
+        self.assertEqual('production-viewport-v6', VERSION)
         self.assertIn(f'const val PUBLICATION = "{PUBLICATION}"', source)
         self.assertIn(f'const val CAPTURE = "{CAPTURE}"', source)
         for name, expected in (('scenarios', SCENARIOS), ('modes', MODES)):

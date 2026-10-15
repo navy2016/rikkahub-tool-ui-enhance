@@ -7,9 +7,11 @@ import me.rerere.rikkahub.data.container.TerminalPipelineStage
 import me.rerere.rikkahub.data.container.TerminalPipelineTrace
 
 /** No extra draw/semantics node in ordinary usage. Install capture before mounting the page. */
-internal fun Modifier.terminalPipelineDraw(processId: String, revision: Long, virtual: Boolean): Modifier =
+internal fun Modifier.terminalPipelineDraw(
+    processId: String, revision: Long, virtual: Boolean, ready: () -> Boolean = { true },
+): Modifier =
     if (!TerminalPipelineTrace.isRecording(processId)) this else testTag("terminal-trace-output").drawWithContent {
         drawContent()
-        TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_DRAWN,
+        if (ready()) TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_DRAWN,
             frameRevision = revision, virtual = virtual)
     }

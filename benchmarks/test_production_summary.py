@@ -114,8 +114,8 @@ class ProductionSummaryTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.valid(results, "imeRoundTrip")
 
-    def test_v3_and_v4_geometry_cannot_be_relabelled_as_v5(self):
-        for suite in ('production-viewport-v3', 'production-viewport-v4'):
+    def test_old_geometry_cannot_be_relabelled_as_v6(self):
+        for suite in ('production-viewport-v3', 'production-viewport-v4', 'production-viewport-v5'):
             ctx = context()
             ctx["payload"]["suite"] = suite
             with self.assertRaisesRegex(ValueError, "provenance"):
@@ -251,9 +251,11 @@ def publication_lines(scenario='initialCompose', iterations=2, smoke=False):
                 work = dict(publications=1, panelCommits=2, pairingChecks=1, transcriptEntries=0 if virtual else 1,
                             cachedEntries=0 if virtual else 1, viewBuilds=0 if virtual else 1,
                             chunkWrappers=0 if virtual else chunks, rowSlices=0 if virtual else chunks + 1,
-                            liveViews=int(not virtual))
+                            liveViews=int(not virtual), sparseBlockBuilds=0, sparseRowsCreated=0)
                 mounted = dict(suite=VERSION, publication=PUBLICATION, scenario=scenario, size=size, mode=mode,
-                               token=token, phase='mounted', viewportGeneration=1, virtual=virtual, work=work, detached=None)
+                               token=token, phase='mounted', viewportGeneration=1, virtual=virtual, work=work,
+                               detached=None, sparse=virtual, rowStates=24 if virtual else size + 24,
+                               historyWidthMeasured=size if virtual else 0, screenWidthMeasured=24 if virtual else 0)
                 lines.append('PUBLICATION_WORK ' + json.dumps(mounted))
                 if scenario != 'initialCompose':
                     done = copy.deepcopy(mounted)
@@ -261,6 +263,7 @@ def publication_lines(scenario='initialCompose', iterations=2, smoke=False):
                     if scenario == 'detachRestore':
                         done['viewportGeneration'] = 2
                         done['detached'] = dict(work, liveViews=0)
+                        done['historyWidthMeasured'] = 12 if virtual else 0
                     else:
                         updates = {'activeRowUpdate': 30, 'appendAndTrim': 30, 'imeRoundTrip': 8}.get(scenario, 0)
                         checks = {'activeRowUpdate': 30, 'appendAndTrim': 30, 'imeRoundTrip': 11, 'semanticJump': 2}[scenario]

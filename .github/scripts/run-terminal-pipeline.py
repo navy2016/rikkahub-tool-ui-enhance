@@ -11,6 +11,7 @@ import subprocess
 import sys
 import zipfile
 import zlib
+import importlib.util
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,6 +23,10 @@ MODES = ('chunkedLayers', 'lazyHistory', 'lazyHistoryIme')
 PHASES = ('mounted', 'imeVisible', 'imeHidden', 'remount')
 STAGES = ('INPUT_ENQUEUE_STARTED', 'INPUT_WRITE_STARTED', 'OUTPUT_READ', 'EMULATOR_FED',
           'UI_OUTPUT_RECEIVED', 'FRAME_PUBLISHED', 'FRAME_DRAWN')
+_bundle_spec = importlib.util.spec_from_file_location('terminal_bundle_reports',
+    Path(__file__).with_name('terminal-bundle-reports.py'))
+bundle_reports = importlib.util.module_from_spec(_bundle_spec)
+_bundle_spec.loader.exec_module(bundle_reports)
 
 
 def notice(level, title, message):
@@ -48,6 +53,13 @@ def sources():
         'app/src/main/java/me/rerere/rikkahub/data/container/NativePtyProcess.kt',
         'app/src/main/java/me/rerere/rikkahub/data/container/PRootManager.kt',
         'app/src/main/java/me/rerere/rikkahub/data/container/TerminalPipelineTrace.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalForegroundLifecycle.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalOutputNotifications.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalWidthCheckpointStore.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndex.kt',
+        'app/src/main/java/me/rerere/rikkahub/service/ContainerProcessForegroundService.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRowStore.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalPreparedWidth.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalPipelineInstrumentation.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderSnapshot.kt',
@@ -68,6 +80,8 @@ def sources():
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPipelineInstrumentedTest.kt',
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPtyTransportInstrumentedTest.kt',
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPipelineWorkload.kt',
+        'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalServiceLifecycleInstrumentedTest.kt',
+        '.github/scripts/terminal-bundle-reports.py',
         '.github/scripts/run-terminal-pipeline.py',
         '.github/scripts/build-terminal-proot.py',
         'benchmarks/proot-x86_64/fork-to-clone.patch',
@@ -238,11 +252,25 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
         ('fingerprint', ['getprop', 'ro.build.fingerprint']), ('size', ['wm', 'size']),
         ('density', ['wm', 'density']), ('ime', ['settings', 'get', 'secure', 'default_input_method']))}
     (OUT / 'device.json').write_text(json.dumps(device, indent=2) + '\n')
-    transport = (suite or os.environ.get('TERMINAL_PIPELINE_SUITE', 'pipeline')) == 'transport'
+    selected = suite or os.environ.get('TERMINAL_PIPELINE_SUITE', 'pipeline')
+    transport = selected == 'transport'
+    service = selected == 'service'
+    soak = selected == 'soak'
     methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
         'pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
         'pipelineStableVirtualPtyEchoKeyboardAndRemount')
     test_class = 'me.rerere.rikkahub.pipeline.TerminalPtyTransportInstrumentedTest' if transport else CLASS
+    extra_arguments = []
+    if service:
+        test_class = 'me.rerere.rikkahub.pipeline.TerminalServiceLifecycleInstrumentedTest'
+        methods = ('bundleForegroundRapidStopDuringStartupAndRestart', 'bundleExitedPtyHasExactOrderedTailAndReleasesCheckpoint')
+    if soak:
+        mode = os.environ.get('TERMINAL_SOAK_MODE', '')
+        seconds = int(os.environ.get('TERMINAL_SOAK_SECONDS', '1800'))
+        if mode not in MODES or not 60 <= seconds <= 1800:
+            raise ValueError('Invalid pressure workload selection')
+        methods = ('bundleSustainedPtyOutputInputAndRemount',)
+        extra_arguments = ['-e', 'terminalSoakSeconds', str(seconds), '-e', 'terminalSoakMode', mode]
     logs, failed = [], []
     try:
         for method in methods:
@@ -253,8 +281,8 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             log = OUT / (method + '.log')
             with log.open('w') as stream:
                 result = subprocess.run(['adb', 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class', test_class + '#' + method,
-                                         TEST_PACKAGE + '/androidx.test.runner.AndroidJUnitRunner'],
-                                        stdout=stream, stderr=subprocess.STDOUT, timeout=300)
+                                         *extra_arguments, TEST_PACKAGE + '/androidx.test.runner.AndroidJUnitRunner'],
+                                        stdout=stream, stderr=subprocess.STDOUT, timeout=seconds + 300 if soak else 300)
             text = log.read_text()
             logs.append(text)
             try:
@@ -273,6 +301,14 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             if 'mCurrentFocus=' in line or 'mFocusedApp=' in line) + '\n')
     if failed:
         raise ValueError('; '.join(failed))
+    if service or soak:
+        results = bundle_reports.service('\n'.join(logs)) if service else bundle_reports.soak('\n'.join(logs), mode, seconds)
+        report = dict(manifest=manifest, device=device, installedApkHashes=installed_hashes, results=results)
+        (OUT / ('service-results.json' if service else 'soak-results.json')).write_text(json.dumps(report, indent=2) + '\n')
+        if emit_evidence:
+            brief = results if service else {key: value for key, value in results.items() if key != 'samples'}
+            notice('notice', 'Terminal bundle service verified' if service else 'Terminal bundle soak verified', json.dumps(brief))
+        return report
     if transport:
         probes = [json.loads(line.split('TRANSPORT_PROBE ', 1)[1]) for line in logcat.splitlines() if 'TRANSPORT_PROBE ' in line]
         expected_probes = {'androidPty', 'prootPipe', 'prootPty', 'cookedLogin', 'directWorkload', 'managerPrintf', 'managerWorkload'}
@@ -324,8 +360,11 @@ def emulator(operation=None):
 
     sha, run_id = identity()
     manifest = json.loads((OUT / 'manifest.json').read_text())
-    if manifest['sourceSha'] != sha or manifest['runId'] != run_id or manifest['sources'] != sources():
+    workspace_sources = manifest.get('environmentSources', manifest['sources'])
+    if manifest['sourceSha'] != sha or manifest['runId'] != run_id or workspace_sources != sources():
         raise ValueError('Pipeline emulator source mismatch')
+    if 'environmentSources' in manifest and operation is None:
+        raise ValueError('Comparison bootstrap cannot be used as a normal measurement bundle')
     state = ROOT / 'artifacts/pipeline-emulator-state'
     state.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
@@ -371,6 +410,11 @@ def emulator(operation=None):
                 preflight.mkdir(exist_ok=True)
                 for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
                     shutil.copyfile(OUT / name, preflight / name)
+                run('service')
+                services = OUT / 'service-preflight'
+                services.mkdir(exist_ok=True)
+                for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
+                    shutil.copyfile(OUT / name, services / name)
                 run('pipeline')
             else:
                 run()

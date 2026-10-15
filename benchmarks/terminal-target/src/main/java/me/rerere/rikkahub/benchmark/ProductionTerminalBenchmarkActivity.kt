@@ -77,9 +77,11 @@ import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportLineLookup
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalViewportState
+import me.rerere.rikkahub.data.container.TerminalWidthCheckpointStore
 import me.rerere.rikkahub.ui.pages.container.TerminalBoundViewport
 import me.rerere.rikkahub.ui.pages.container.TerminalLazyItemMeasurements
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderSnapshot
+import me.rerere.rikkahub.ui.pages.container.TerminalRowStore
 import me.rerere.rikkahub.ui.pages.container.TerminalTranscriptCompositionObserver
 import me.rerere.rikkahub.ui.pages.container.TerminalTranscriptViewport
 import me.rerere.rikkahub.ui.pages.container.TerminalViewportGestureConfig
@@ -117,6 +119,12 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
     private var input by mutableStateOf("")
     private var viewportGeneration = 0
     private var detachedPublication: ProductionPublicationProbe.Work? = null
+    private val widthCheckpoint = TerminalWidthCheckpointStore()
+
+    override fun onDestroy() {
+        widthCheckpoint.close()
+        super.onDestroy()
+    }
 
     @OptIn(ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -202,11 +210,15 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             .put("transcriptEntries", transcriptEntries).put("cachedEntries", cachedEntries)
             .put("viewBuilds", viewBuilds).put("chunkWrappers", chunkWrappers).put("rowSlices", rowSlices)
             .put("liveViews", liveViews)
+            .put("sparseBlockBuilds", sparseBlockBuilds).put("sparseRowsCreated", sparseRowsCreated)
         return JSONObject()
             .put("suite", ProductionBenchmarkSpec.VERSION).put("publication", ProductionBenchmarkSpec.PUBLICATION)
             .put("scenario", scenario).put("size", size).put("mode", mode.id).put("token", phaseToken)
             .put("phase", phase).put("viewportGeneration", viewport.generation)
             .put("virtual", viewport.bound.virtualHistoryEnabled).put("work", viewport.publication.snapshot().json())
+            .put("sparse", viewport.rowStore.isSparse).put("rowStates", viewport.rowStore.retainedRowStates)
+            .put("historyWidthMeasured", viewport.bound.binding.widthIndex.measuredHistoryRows)
+            .put("screenWidthMeasured", viewport.bound.binding.widthIndex.measuredScreenRows)
             .put("detached", detachedPublication?.json() ?: JSONObject.NULL).toString().also {
                 Log.i("ProductionTerminalBenchmark", "PUBLICATION_WORK " + it)
             }
@@ -270,12 +282,15 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
                     check(viewport.frame.historyCount == size)
                     if (scenario == "activeRowUpdate") {
                         check(terminal.lastRenderHistoryVisits == 0)
-                        check(viewport.sync.lastUsedMetadataFastPath)
+                        if (!viewport.rowStore.isSparse) check(viewport.sync.lastUsedMetadataFastPath)
                         check(viewport.sync.lastVisitedTextRows == TerminalBenchmarkWorkload.SCREEN_ROWS)
+                        check(terminal.lastRenderScreenBuilds in 0..1)
                     } else {
                         check(terminal.lastRenderHistoryVisits == 1)
-                        check(viewport.sync.lastUsedFifoFastPath)
-                        check(viewport.sync.lastVisitedTextRows == TerminalBenchmarkWorkload.SCREEN_ROWS + 1)
+                        if (!viewport.rowStore.isSparse) check(viewport.sync.lastUsedFifoFastPath)
+                        check(viewport.sync.lastVisitedTextRows == TerminalBenchmarkWorkload.SCREEN_ROWS +
+                            (if (viewport.rowStore.isSparse) 0 else 1))
+                        check(terminal.lastRenderScreenBuilds in 1..2)
                     }
                     awaitSettled(viewport)
                     validate(viewport)
@@ -440,6 +455,8 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             awaitSettled(restored)
             restored.checkSavedAnchor(saved)
             check(restored.horizontal.value == saved.horizontalOffsetPx)
+            if (mode.isVirtualHistory) check(restored.bound.binding.widthIndex.measuredHistoryRows ==
+                ProductionBenchmarkSpec.BACKGROUND_LINES.toLong()) { "Warm restore rescanned surviving history" }
             validate(restored)
         }
     }
@@ -463,6 +480,8 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
     private fun validate(viewport: Viewport) = productionTrace("Prod.validation") {
         check(viewport.ready())
         viewport.checkPublication()
+        check(viewport.rowStore.retainedRowStates ==
+            if (mode.isVirtualHistory) TerminalBenchmarkWorkload.SCREEN_ROWS else viewport.frame.rows.size)
         check(viewport.bound.binding.maximumWriters <= 1) { "Multiple production scroll writers" }
         check(viewport.frame === viewport.bound.pass.frame && viewport.drawnFrame === viewport.frame)
         val expected = mode.isVirtualHistory && !viewport.policy.imeFallback &&
@@ -507,10 +526,11 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
     private inner class Viewport(initial: TerminalEmulator.RenderFrame, restored: TerminalViewportState? = null) {
         val generation = ++viewportGeneration
         val publication = ProductionPublicationProbe()
-        val rows = createTerminalRenderedRows(initial)
-        val sync = createTerminalRenderedRowsSyncState(initial, rows)
+        val rowStore = TerminalRowStore(initial, sparse = mode.isVirtualHistory)
+        val sync get() = rowStore.sync
         private var published by mutableStateOf(
-            TerminalRenderSnapshot.capture(initial, rows).also { publication.published() }, referentialEqualityPolicy(),
+            TerminalRenderSnapshot.capture(initial, rowStore).also { publication.published() },
+            referentialEqualityPolicy(),
         )
         val frame: TerminalEmulator.RenderFrame get() = published.frame
         val controller = TerminalViewportController(restored)
@@ -534,6 +554,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             override fun transcriptComposed(cached: Boolean) = publication.transcriptComposed(cached)
             override fun chunkViewsCreated(chunks: Int, slices: Int) = publication.viewsCreated(chunks, slices)
             override fun cachedViewDelta(delta: Int) = publication.viewLifetime(delta)
+            override fun sparseBlockCreated(rows: Int) = publication.sparseBlockCreated(rows)
         }
 
         @Composable fun Content(ime: Boolean) {
@@ -556,7 +577,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
                 frame, style, wants,
                 metrics = { TerminalViewportMetrics(eager.maxValue, viewportHeight, cellHeight, tailPadding,
                     imeVisible = ime, avoidIme = ime) },
-                gestureConfig = TerminalViewportGestureConfig(true, false, 2))
+                gestureConfig = TerminalViewportGestureConfig(true, false, 2), widthCheckpoint = widthCheckpoint)
             SideEffect {
                 bound = currentBound
                 committedSource = source
@@ -574,7 +595,11 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
                         layout(child.width, child.height) { child.place(0, 0) }
                     }
                 }.drawWithContent {
-                    productionTrace("Prod.draw") { drawContent(); drawnSource = source }
+                    productionTrace("Prod.draw") {
+                        drawContent()
+                        if (!currentBound.virtualHistoryEnabled || currentBound.binding.widthIndex.readyFor(
+                            source.frame, currentBound.pass.metricKey)) drawnSource = source
+                    }
                 }) {
                 TerminalTranscriptViewport(source.frame, source.rows, style, chunks, mode, currentBound, horizontal,
                     panEnabled = true, selectionMode = false, modifier = Modifier.fillMaxSize(),
@@ -586,8 +611,8 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
             val next = productionTrace("Prod.renderFrame") { terminal.renderFrame() }
             productionTrace("Prod.rowSync") {
                 Snapshot.withMutableSnapshot {
-                    synchronizeTerminalRenderedRows(rows, next, false, nowMs = SystemClock.uptimeMillis(), syncState = sync)
-                    published = TerminalRenderSnapshot.capture(next, rows)
+                    rowStore.publish(next, mode.isVirtualHistory, false, false, SystemClock.uptimeMillis())
+                    published = TerminalRenderSnapshot.capture(next, rowStore)
                 }
                 publication.published()
             }
@@ -596,7 +621,7 @@ class ProductionTerminalBenchmarkActivity : ComponentActivity() {
         fun checkPublication() {
             val source = published
             check(source === committedSource && source === drawnSource && source.frame === bound.pass.frame &&
-                source.rows === rows.toList()) { "V5 publication/frame/row view pair mismatch" }
+                source.rows === rowStore.view(source.frame)) { "V6 publication/frame/row view pair mismatch" }
             publication.paired(cachedExpected = !bound.virtualHistoryEnabled)
         }
 

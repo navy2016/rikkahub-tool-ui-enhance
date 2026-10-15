@@ -933,7 +933,8 @@ class TerminalEmulatorTest {
 
         assertTrue(historyCount > 0)
         assertSame(firstFrame.rows.first(), secondFrame.rows.first())
-        assertNotSame(firstFrame.rows[historyCount], secondFrame.rows[historyCount])
+        assertSame(firstFrame.rows[historyCount], secondFrame.rows[historyCount])
+        assertEquals(0, terminal.lastRenderScreenBuilds)
         assertEquals(firstFrame.historyLineIds, secondFrame.historyLineIds)
         assertEquals(firstFrame.historyGeneration, secondFrame.historyGeneration)
         assertEquals(firstFrame.screenLineIds, secondFrame.screenLineIds)
@@ -941,6 +942,10 @@ class TerminalEmulatorTest {
         assertEquals(terminal.render().text, secondFrame.rows.joinToString("\n") { it.text.text })
         assertEquals(terminal.contentBounds(), secondFrame.contentBounds)
         assertEquals(terminal.modeSummary(), secondFrame.modeSummary)
+        terminal.feed("\u001B[H\u001B[2Kchanged")
+        val changed = terminal.renderFrame()
+        assertNotSame(secondFrame.rows[historyCount], changed.rows[historyCount])
+        assertEquals(terminal.render().text, changed.rows.joinToString("\n") { it.text.text })
     }
 
     @Test

@@ -2,9 +2,9 @@ package me.rerere.rikkahub.benchmark
 
 /** Shared by the target and its driver; no Android or renderer implementation lives here. */
 internal object ProductionBenchmarkSpec {
-    const val VERSION = "production-viewport-v5"
+    const val VERSION = "production-viewport-v6"
     const val CONTRACT_KEY = "production.contract.version"
-    const val PUBLICATION = "atomic-snapshot-chunk-provenance-v1"
+    const val PUBLICATION = "atomic-sparse-history-checkpoint-v2"
     const val CAPTURE = "tail-drain-500ms-v1"
     const val CAPTURE_DRAIN_MS = 500L
     const val PUBLICATION_KEY = "production.publication.evidence"

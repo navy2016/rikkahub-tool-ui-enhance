@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Revalidate hash-bound V5 evidence; count a complete matrix without pooling independent runners."""
+"""Revalidate hash-bound V6 evidence; count a complete matrix without pooling independent runners."""
 import argparse
 import csv
 import gzip
@@ -187,7 +187,7 @@ def main():
         writer = csv.DictWriter(stream, fieldnames=list(samples[0]))
         writer.writeheader()
         writer.writerows(samples)
-    text = (f'# V5 {"complete" if result["complete"] else "scenario"} component baseline\n\n'
+    text = (f'# V6 {"complete" if result["complete"] else "scenario"} component baseline\n\n'
             f'SHA `{args.sha}`, run `{args.run_id}`: {result["cases"]} cases / '
             f'{result["measurements"]} measurements; {result["preflightMeasurements"]} smoke measurements excluded.\n\n'
             'Same APK pair, separate scenario invocations. Do not pool devices or compare with archived V4 timings.\n'
@@ -197,7 +197,7 @@ def main():
     if step_summary := os.environ.get('GITHUB_STEP_SUMMARY'):
         with open(step_summary, 'a') as stream:
             stream.write(text)
-    print('::notice title=V5 baseline verified::' + json.dumps(receipt), flush=True)
+    print('::notice title=V6 baseline verified::' + json.dumps(receipt), flush=True)
 
 
 if __name__ == '__main__':
@@ -205,5 +205,5 @@ if __name__ == '__main__':
         main()
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         text = str(error)[:2200].replace('%', '%25').replace('\n', '%0A').replace('\r', '%0D')
-        print('::error title=V5 baseline rejected::' + text, flush=True)
+        print('::error title=V6 baseline rejected::' + text, flush=True)
         sys.exit(1)

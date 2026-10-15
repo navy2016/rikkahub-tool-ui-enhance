@@ -14,6 +14,8 @@ class TerminalUiSourceTest {
 
     @Test
     fun frameRowsBindingAndDrawTraceUseOneAtomicPublicationWithoutRecapturingInComposition() {
+        assertTrue(processSessionSource.indexOf("val terminalRenderMode =") <
+            processSessionSource.indexOf("val terminalRowStore ="))
         val capture = processSessionSource.indexOf("val renderSnapshot = publishedRenderSnapshot")
         val binding = processSessionSource.indexOf("val boundViewport = rememberTerminalBoundViewport(")
         val output = processSessionSource.substringAfter("                    TerminalTranscriptViewport(")
@@ -31,13 +33,15 @@ class TerminalUiSourceTest {
         assertEquals(2, processSessionSource.split("TerminalRenderSnapshot.capture(").size - 1)
         val publication = processSessionSource.substringAfter("Snapshot.withMutableSnapshot {")
             .substringBefore("TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_PUBLISHED")
-        val sync = publication.indexOf("synchronizeTerminalRenderedRows(")
+        val sync = publication.indexOf("terminalRowStore.publish(")
         val publish = publication.indexOf(
-            "publishedRenderSnapshot = TerminalRenderSnapshot.capture(frame, terminalRenderedRows)"
+            "publishedRenderSnapshot = TerminalRenderSnapshot.capture(frame, terminalRowStore)"
         )
         assertTrue(sync >= 0 && publish > sync)
         assertTrue(processSessionSource.contains("TerminalRenderSnapshot.capture(initialTerminalRenderFrame,"))
         assertFalse(processSessionSource.contains("var terminalViewportFrame"))
+        assertTrue(processSessionSource.contains("viewportBinding.awaitHorizontalLayout(horizontalScroll)"))
+        assertTrue(processSessionSource.contains("bytes > 0 || !resizeAwaitingTuiRedraw.get()"))
     }
 
     @Test

@@ -353,7 +353,7 @@ def run_group(scenario, iterations, smoke, preflight=None):
         suite=VERSION, jsonSha256=hashlib.sha256(data).hexdigest(), gzipSha256=digest(compact / 'evidence.json.gz'),
         rawResultSha256=documents, measuredLaunches=len(publication['measured'])), indent=2) + '\n')
     annotation("notice", f"Production viewport {scenario}", notices(results, sha, scenario, smoke))
-    annotation('notice', 'Production V5 publication verified', json.dumps(dict(groupId=group_id,
+    annotation('notice', 'Production V6 publication verified', json.dumps(dict(groupId=group_id,
         measuredLaunches=len(publication['measured']), excludedLaunches=len(publication['excludedTokens']),
         jsonSha256=hashlib.sha256(data).hexdigest(), installedApkHashes=installed)))
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):

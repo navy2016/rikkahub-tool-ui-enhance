@@ -3,6 +3,9 @@ package me.rerere.rikkahub.pipeline
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Debug
+import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -19,6 +22,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.espresso.Espresso
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.Lifecycle
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -51,7 +55,8 @@ import java.util.UUID
 /** Real production page, session manager, packaged PRoot and native PTY. No mocked echo/feed/scroll. */
 class TerminalPipelineInstrumentedTest : KoinComponent {
     @get:Rule val compose = createAndroidComposeRule<TerminalPipelineTestActivity>()
-    @get:Rule val timeout = Timeout.seconds(240)
+    @get:Rule val timeout = Timeout.seconds(
+        if (InstrumentationRegistry.getArguments().getString("terminalSoakSeconds") != null) 2100 else 240)
     private val manager: BackgroundProcessManager by inject()
     private val proot: PRootManager by inject()
     private val settings: SettingsStore by inject()
@@ -62,14 +67,142 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
     @Test fun pipelineVirtualPtyEchoKeyboardAndRemount() = exercise(TerminalRenderMode.VIRTUAL_HISTORY)
     @Test fun pipelineStableVirtualPtyEchoKeyboardAndRemount() = exercise(TerminalRenderMode.VIRTUAL_HISTORY_IME)
 
-    private fun exercise(mode: TerminalRenderMode) {
+    @Test fun bundleSustainedPtyOutputInputAndRemount() {
+        val args = InstrumentationRegistry.getArguments()
+        val seconds = requireNotNull(args.getString("terminalSoakSeconds")).toInt()
+        require(seconds in 60..1800)
+        val mode = TerminalRenderMode.fromId(requireNotNull(args.getString("terminalSoakMode")))
+        exercise(mode, seconds)
+    }
+
+    private fun soakCommand(): String {
+        val script = """
+            stty -echo -onlcr
+            printf '\033[?25lREADY\r\n'
+            i=0
+            while IFS= read -r line; do
+              case "${'$'}line" in
+                SEED)
+                  n=0; while [ "${'$'}n" -lt 10150 ]; do
+                    printf 'history-%05d 中文\r\n' "${'$'}n"; n=${'$'}((n+1))
+                  done
+                  printf 'SEED_DONE\r\n';;
+                BURST:*)
+                  n=0; while [ "${'$'}n" -lt 32 ]; do
+                    printf 'load-%08d \033[32m中文\033[0m\r\n' "${'$'}i"
+                    i=${'$'}((i+1)); n=${'$'}((n+1))
+                  done
+                  printf 'ECHO:%s\r\n' "${'$'}line";;
+                *) printf 'ECHO:%s\r\n' "${'$'}line";;
+              esac
+            done
+        """.trimIndent()
+        return "sh -c '" + script.replace("'", "'\"'\"'") + "'"
+    }
+
+    /** Monotonic real time, not Compose's accelerated clock. Each cycle waits for actual visible child output. */
+    private fun sustained(mode: TerminalRenderMode, launch: String, processId: String,
+        capture: TerminalPipelineTrace.Capture, seconds: Int, mount: (Boolean) -> Unit) {
+        val start = SystemClock.elapsedRealtimeNanos()
+        val deadline = start + seconds * 1_000_000_000L
+        var cycle = 0
+        var remounts = 0
+        var bucket = 0
+        var lastReport = start
+        var maxCycleNs = 0L
+        var cycleSumNs = 0L
+        var bucketCycles = 0
+        var readBytes = 0L
+        var fedBytes = 0L
+        var published = 0L
+        var drawn = 0L
+        val gcStart = Debug.getRuntimeStat("art.gc.gc-count").toLongOrNull()
+        fun report(final: Boolean) {
+            val now = SystemClock.elapsedRealtimeNanos()
+            val memory = Debug.MemoryInfo()
+            Debug.getMemoryInfo(memory)
+            val runtime = Runtime.getRuntime()
+            val sample = JSONObject().put("suite", "terminal-bundle-soak-v1").put("launch", launch)
+                .put("mode", mode.id).put("bucket", bucket++).put("final", final)
+                .put("requestedSeconds", seconds).put("elapsedMs", (now - start) / 1_000_000.0)
+                .put("cycles", cycle).put("bucketCycles", bucketCycles).put("remounts", remounts)
+                .put("cycleMeanMs", if (bucketCycles == 0) 0.0 else cycleSumNs / bucketCycles / 1_000_000.0)
+                .put("cycleMaxMs", maxCycleNs / 1_000_000.0).put("readBytes", readBytes).put("fedBytes", fedBytes)
+                .put("published", published).put("drawn", drawn).put("traceDropped", 0)
+                .put("historyRows", requireNotNull(manager.getInteractiveTerminalEmulator(processId))
+                    .renderFrame().historyCount)
+                .put("pssKb", memory.totalPss).put("javaUsedBytes", runtime.totalMemory() - runtime.freeMemory())
+                .put("nativeAllocatedBytes", Debug.getNativeHeapAllocatedSize())
+                .put("gcCount", Debug.getRuntimeStat("art.gc.gc-count").toLongOrNull() ?: JSONObject.NULL)
+                .put("gcStart", gcStart ?: JSONObject.NULL)
+            InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
+                putString("stream", "\nSOAK_SAMPLE $sample\n")
+            })
+            lastReport = now
+            maxCycleNs = 0
+            cycleSumNs = 0
+            bucketCycles = 0
+        }
+        while (SystemClock.elapsedRealtimeNanos() < deadline) {
+            compose.waitForIdle()
+            capture.beginWindow()
+            val began = SystemClock.elapsedRealtimeNanos()
+            val marker = "BURST:$cycle"
+            compose.onNode(hasSetTextAction()).performSemanticsAction(SemanticsActions.SetText) {
+                check(it(AnnotatedString(marker)))
+            }
+            compose.onNode(hasSetTextAction()).performSemanticsAction(SemanticsActions.OnImeAction) { check(it()) }
+            waitVisible("ECHO:$marker")
+            compose.waitForIdle()
+            val events = capture.snapshot()
+            assertEquals(0L, capture.dropped)
+            val reads = events.filter { it.stage == TerminalPipelineStage.OUTPUT_READ }.sumOf { it.bytes.toLong() }
+            val feeds = events.filter { it.stage == TerminalPipelineStage.EMULATOR_FED }.sumOf { it.bytes.toLong() }
+            assertEquals(reads, feeds)
+            val expectedBytes = buildString {
+                repeat(32) { offset ->
+                    append("load-%08d \u001b[32m中文\u001b[0m\r\n".format(java.util.Locale.ROOT, cycle * 32 + offset))
+                }
+                append("ECHO:$marker\r\n")
+            }.toByteArray().size.toLong()
+            assertEquals("A marker alone cannot prove a complete 32-line burst", expectedBytes, feeds)
+            assertEquals(1, events.count { it.stage == TerminalPipelineStage.UI_INPUT })
+            val revision = events.last { it.stage == TerminalPipelineStage.EMULATOR_FED }.frameRevision
+            assertTrue(events.any { it.stage == TerminalPipelineStage.FRAME_DRAWN && it.frameRevision >= revision })
+            val notification = requireNotNull(manager.observeTerminalUpdates(processId)).value
+            assertTrue(notification.revision >= revision)
+            readBytes += reads
+            fedBytes += feeds
+            published += events.count { it.stage == TerminalPipelineStage.FRAME_PUBLISHED }
+            drawn += events.count { it.stage == TerminalPipelineStage.FRAME_DRAWN }
+            val elapsed = SystemClock.elapsedRealtimeNanos() - began
+            maxCycleNs = maxOf(maxCycleNs, elapsed)
+            cycleSumNs += elapsed
+            bucketCycles++
+            cycle++
+            if (SystemClock.elapsedRealtimeNanos() - lastReport >= 60_000_000_000L) {
+                report(false)
+                if (bucket % 5 == 0) {
+                    compose.runOnIdle { mount(false) }
+                    compose.waitForIdle()
+                    compose.runOnIdle { mount(true) }
+                    waitVisible("ECHO:$marker")
+                    remounts++
+                }
+            }
+        }
+        assertTrue(cycle > 0 && readBytes == fedBytes)
+        report(true)
+    }
+
+    private fun exercise(mode: TerminalRenderMode, soakSeconds: Int = 0) {
         check(compose.activity.packageName == "me.rerere.rikkahub.dev.next.terminaltest")
         if (Build.VERSION.SDK_INT >= 33) assertEquals("Runner must grant only the test app's notifications before launch",
             PackageManager.PERMISSION_GRANTED, compose.activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
         val launch = UUID.randomUUID().toString()
         val sandbox = "pipeline-$launch"
         // Cooked input keeps exact line semantics; echo is from the child only, no line-discipline echo.
-        val command = TerminalPipelineWorkload.command
+        val command = if (soakSeconds > 0) soakCommand() else TerminalPipelineWorkload.command
         val saved = runBlocking { settings.settingsFlow.first { !it.init } }
         val key = MessageDigest.getInstance("SHA-256").digest(command.toByteArray())
             .joinToString("") { "%02x".format(it) }
@@ -82,7 +215,8 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
                     .put("key", key).put("command", command).put("updatedAt", 1L)
                     .put("rawInputMode", false).put("terminalPanMode", true).put("showFullInputBar", true)
                     .put("showStatusBar", false).put("showExtraKeys", false).put("autoScroll", true)
-                    .put("forcedTerminalColumns", 80).put("maxScrollbackLines", 1000)).toString()) }
+                    .put("forcedTerminalColumns", 80).put("maxScrollbackLines", if (soakSeconds > 0) 10000 else 1000))
+                    .toString()) }
                 settings.setTerminalRenderer(command, mode)
                 proot.start().getOrThrow()
             }
@@ -143,6 +277,7 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
             waitVisible("ECHO:", exact = false)
             sampleGroup(mode, "remount", launch, trace, expectVirtual = mode.isVirtualHistory)
             assertEquals("trace ring overflow invalidates sample provenance", 0L, trace.dropped)
+            if (soakSeconds > 0) sustained(mode, launch, id, trace, soakSeconds) { visible -> mounted = visible }
         } finally {
             try {
                 compose.runOnUiThread { mounted = false }

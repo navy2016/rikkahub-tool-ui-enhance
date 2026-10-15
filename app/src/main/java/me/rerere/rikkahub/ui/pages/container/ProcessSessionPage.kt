@@ -158,7 +158,6 @@ import java.security.MessageDigest
 
 private val TerminalConfigJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 private val TERMINAL_FORCED_COLUMN_PRESETS = listOf(80, 100, 120, 160, 200)
-private const val TERMINAL_RENDER_FRAME_MS = 33L
 private const val TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS = 100L
 private const val TERMINAL_PTY_RESIZE_DEBOUNCE_MS = 160L
 private const val TERMINAL_IME_RESIZE_DEBOUNCE_MS = 120L
@@ -787,6 +786,9 @@ private fun TerminalInteractivePanel(
     val savedPreference = remember(processId, settings.terminalCommandPreferences) {
         terminalCommandPreference(settings.terminalCommandPreferences, process.command)
     }
+    val terminalRenderMode = remember(settings.terminalRenderPreferences, process.command) {
+        terminalRendererForCommand(settings.terminalRenderPreferences, process.command)
+    }
     var showContainerManager by remember { mutableStateOf(false) }
     val sizeHint = remember(processId, process.command) { bgManager.getTerminalSizeHint(process.command) }
     val sessionTerminalEmulator = remember(processId) { bgManager.getInteractiveTerminalEmulator(processId) }
@@ -832,11 +834,12 @@ private fun TerminalInteractivePanel(
     }
     var input by remember { mutableStateOf("") }
     val initialTerminalRenderFrame = remember(processId) { terminalEmulator.renderFrame() }
-    val terminalRenderedRows = remember(processId) {
-        createTerminalRenderedRows(initialTerminalRenderFrame)
-    }
-    val terminalRenderedRowsSyncState = remember(processId) {
-        createTerminalRenderedRowsSyncState(initialTerminalRenderFrame, terminalRenderedRows)
+    val terminalRowStore = remember(processId) {
+        TerminalRowStore(initialTerminalRenderFrame, sparse = terminalRenderMode.isVirtualHistory &&
+            !initialTerminalRenderFrame.isAlternateScreen &&
+            !isTuiCommand(process.command, settings.terminalCustomTuiCommands) &&
+            !process.ptyMode.equals("raw", ignoreCase = true) &&
+            !isConfiguredTerminalCommand(process.command, settings.terminalFullGridCommands))
     }
     var terminalContentBounds by remember(processId) {
         mutableStateOf(initialTerminalRenderFrame.contentBounds)
@@ -866,7 +869,7 @@ private fun TerminalInteractivePanel(
         // Publish frame and row-list structure together. Reads during input/layout recomposition
         // reuse this object without recapturing the row view or comparing a 10k-row frame.
         mutableStateOf(
-            TerminalRenderSnapshot.capture(initialTerminalRenderFrame, terminalRenderedRows),
+            TerminalRenderSnapshot.capture(initialTerminalRenderFrame, terminalRowStore),
             referentialEqualityPolicy(),
         )
     }
@@ -899,9 +902,6 @@ private fun TerminalInteractivePanel(
         mutableStateOf(savedPreference?.customImeHeightDp?.coerceIn(TERMINAL_IME_HEIGHT_MIN_DP, TERMINAL_IME_HEIGHT_MAX_DP))
     }
     var terminalSettingsDialog by remember { mutableStateOf<String?>(null) }
-    val terminalRenderMode = remember(settings.terminalRenderPreferences, process.command) {
-        terminalRendererForCommand(settings.terminalRenderPreferences, process.command)
-    }
     // Another panel for this command can change the preference. Defer tree changes until SEL
     // exits too, so an external setting update cannot discard the current selection.
     var appliedTerminalRenderMode by remember(processId) { mutableStateOf(terminalRenderMode) }
@@ -957,7 +957,6 @@ private fun TerminalInteractivePanel(
     val resizeAwaitingTuiRedraw = remember(processId) { AtomicBoolean(false) }
     val resizeRedrawStartedAt = remember(processId) { AtomicLong(0L) }
     val lastTerminalOutputAt = remember(processId) { AtomicLong(0L) }
-    val lastRenderAt = remember(processId) { AtomicLong(0L) }
     val lastObservedImeVisible = remember(processId) { AtomicBoolean(false) }
     val lastImeTransitionAt = remember(processId) { AtomicLong(0L) }
     val lastAppliedTerminalColumns = remember(processId) { AtomicInteger(initialTerminalColumns) }
@@ -1068,6 +1067,7 @@ private fun TerminalInteractivePanel(
         wantsVirtual = wantsVirtualHistory,
         metrics = { viewportMetrics() },
         gestureConfig = TerminalViewportGestureConfig(terminalPanMode, selectionMode, fastFlingRequiredCount),
+        widthCheckpoint = remember(processId) { bgManager.terminalWidthCheckpoint(processId) },
     )
     val viewportBinding = boundViewport.binding
     val virtualHistoryEnabled = boundViewport.virtualHistoryEnabled
@@ -1111,22 +1111,19 @@ private fun TerminalInteractivePanel(
     }
 
     fun renderTerminalFrame(forcePendingGridBlanks: Boolean = false) {
-        if (!forcePendingGridBlanks && terminalEmulator.revision() == terminalFrameRevision) return
+        val wantedSparse = appliedTerminalRenderMode.isVirtualHistory && !currentUsesTuiViewport
+        val representationChanged = wantedSparse != terminalRowStore.isSparse
+        if (!forcePendingGridBlanks && !representationChanged &&
+            terminalEmulator.revision() == terminalFrameRevision) return
         val frame = terminalEmulator.renderFrame()
-        if (!forcePendingGridBlanks && frame.revision == terminalFrameRevision) return
+        if (!forcePendingGridBlanks && !representationChanged && frame.revision == terminalFrameRevision) return
         val bounds = frame.contentBounds
         val now = System.currentTimeMillis()
         val usesTuiViewport = commandIsTui || frame.isAlternateScreen || currentPreserveFullTerminalGrid
+        val sparse = appliedTerminalRenderMode.isVirtualHistory && !usesTuiViewport
         var hasDeferredGridBlank = false
         Snapshot.withMutableSnapshot {
-            hasDeferredGridBlank = synchronizeTerminalRenderedRows(
-                terminalRenderedRows,
-                frame,
-                usesTuiViewport = usesTuiViewport,
-                forcePendingGridBlanks = forcePendingGridBlanks,
-                nowMs = now,
-                syncState = terminalRenderedRowsSyncState,
-            )
+            hasDeferredGridBlank = terminalRowStore.publish(frame, sparse, usesTuiViewport, forcePendingGridBlanks, now)
             terminalContentBounds = bounds
             terminalScreenStartRow = frame.screenStartRow
             terminalHistoryStartSequence = frame.historyStartSequence
@@ -1139,12 +1136,11 @@ private fun TerminalInteractivePanel(
             terminalFrameRevision = frame.revision
             // Do not suppress same-revision or same-frame forced blank commits: row Text may
             // have changed after its grace period even when the emulator frame is unchanged.
-            publishedRenderSnapshot = TerminalRenderSnapshot.capture(frame, terminalRenderedRows)
+            publishedRenderSnapshot = TerminalRenderSnapshot.capture(frame, terminalRowStore)
             terminalModeSummary = frame.modeSummary
         }
         TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_PUBLISHED, frameRevision = frame.revision)
         resizeAwaitingTuiRedraw.set(false)
-        lastRenderAt.set(now)
         if (hasDeferredGridBlank) {
             gridBlankCommitJob.getAndSet(null)?.cancel()
             gridBlankCommitJob.set(scope.launch {
@@ -1160,10 +1156,7 @@ private fun TerminalInteractivePanel(
         if (renderJob.get()?.isActive == true) return
         renderJob.set(scope.launch {
             while (renderPending.getAndSet(false)) {
-                val elapsed = System.currentTimeMillis() - lastRenderAt.get()
-                if (elapsed in 0 until TERMINAL_RENDER_FRAME_MS) {
-                    delay(TERMINAL_RENDER_FRAME_MS - elapsed)
-                }
+                withFrameNanos { } // One publication per display frame; no fixed 33ms polling cadence.
                 var syncWaited = 0L
                 while (terminalEmulator.isSynchronizedOutput() && syncWaited < TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS) {
                     delay(16L)
@@ -1171,18 +1164,21 @@ private fun TerminalInteractivePanel(
                 }
                 if (resizeAwaitingTuiRedraw.get()) {
                     while (
-                        System.currentTimeMillis() - lastTerminalOutputAt.get() < TERMINAL_RESIZE_REDRAW_SETTLE_MS &&
-                        System.currentTimeMillis() - resizeRedrawStartedAt.get() < TERMINAL_RESIZE_RENDER_FALLBACK_MS
+                        (System.nanoTime() - lastTerminalOutputAt.get()) / 1_000_000 <
+                            TERMINAL_RESIZE_REDRAW_SETTLE_MS &&
+                        (System.nanoTime() - resizeRedrawStartedAt.get()) / 1_000_000 <
+                            TERMINAL_RESIZE_RENDER_FALLBACK_MS
                     ) {
                         delay(16L)
                     }
                 }
+                renderPending.set(false) // Capture includes all notifications received while awaiting this frame.
                 renderTerminalFrame()
             }
         })
     }
 
-    LaunchedEffect(processId) {
+    LaunchedEffect(processId, appliedTerminalRenderMode, commandIsTui, shouldPreserveFullTerminalGrid) {
         renderTerminalFrame()
     }
 
@@ -1417,7 +1413,7 @@ private fun TerminalInteractivePanel(
     LaunchedEffect(fullscreen) {
         if (!fullscreen) return@LaunchedEffect
         val offset = placementHorizontalOffset.getAndSet(null) ?: return@LaunchedEffect
-        withFrameNanos { }
+        viewportBinding.awaitHorizontalLayout(horizontalScroll)
         horizontalScroll.scrollTo(offset.coerceIn(0, horizontalScroll.maxValue))
     }
 
@@ -1490,7 +1486,7 @@ private fun TerminalInteractivePanel(
         }
         if (holdCompleteFrameForGrid) {
             resizeAwaitingTuiRedraw.set(true)
-            resizeRedrawStartedAt.set(System.currentTimeMillis())
+            resizeRedrawStartedAt.set(System.nanoTime())
         }
         if (sessionTerminalEmulator == null) {
             terminalEmulator.resize(
@@ -1534,9 +1530,8 @@ private fun TerminalInteractivePanel(
     }
 
     LaunchedEffect(processId, restoredViewportState) {
-        snapshotFlow { outputViewportHeightPx }.first { it > 0 }
-        withFrameNanos { }
         restoredViewportState?.let {
+            viewportBinding.awaitHorizontalLayout(horizontalScroll)
             horizontalScroll.scrollTo(it.horizontalOffsetPx.coerceIn(0, horizontalScroll.maxValue))
         }
     }
@@ -1566,20 +1561,33 @@ private fun TerminalInteractivePanel(
     }
 
     LaunchedEffect(processId) {
-        bgManager.observeOutput(processId)?.collect { bytes ->
-            TerminalPipelineTrace.record(processId, TerminalPipelineStage.UI_OUTPUT_RECEIVED, bytes = bytes.size)
-            if (sessionTerminalEmulator == null) {
-                terminalEmulator.feed(bytes)
-                terminalEmulator.drainResponses().forEach { response ->
-                    bgManager.sendInput(processId, response, appendNewline = false)
-                }
-            }
+        suspend fun received(bytes: Int, timeNanos: Long) {
+            TerminalPipelineTrace.record(processId, TerminalPipelineStage.UI_OUTPUT_RECEIVED, bytes = bytes)
             terminalEmulator.drainClipboardRequests().forEach { clipboardText ->
                 context.writeClipboardText(clipboardText)
                 terminalStatus = "OSC52 已复制到剪贴板"
             }
-            lastTerminalOutputAt.set(System.currentTimeMillis())
-            scheduleTerminalRender()
+            if (bytes > 0) lastTerminalOutputAt.set(timeNanos)
+            // A geometry-only notification must not expose the intermediate TUI resize frame.
+            // Real redraw output or the existing bounded resize fallback owns its publication.
+            if (bytes > 0 || !resizeAwaitingTuiRedraw.get()) scheduleTerminalRender()
+        }
+        if (sessionTerminalEmulator != null) {
+            var previousBytes = 0L
+            bgManager.observeTerminalUpdates(processId)?.collect { update ->
+                val bytes = (update.totalBytes - previousBytes).coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
+                previousBytes = update.totalBytes
+                if (update.sequence > 0) received(bytes, update.timeNanos)
+            }
+        } else {
+            // The exceptional local-emulator path still requires every raw byte.
+            bgManager.observeOutput(processId)?.collect { bytes ->
+                terminalEmulator.feed(bytes)
+                terminalEmulator.drainResponses().forEach { response ->
+                    bgManager.sendInput(processId, response, appendNewline = false)
+                }
+                received(bytes.size, System.nanoTime())
+            }
         }
     }
 
@@ -1860,7 +1868,11 @@ private fun TerminalInteractivePanel(
                         panEnabled = terminalPanMode,
                         selectionMode = selectionMode,
                         modifier = Modifier.weight(1f).fillMaxWidth()
-                            .terminalPipelineDraw(processId, renderSnapshot.frame.revision, virtualHistoryEnabled),
+                            .terminalPipelineDraw(processId, renderSnapshot.frame.revision, virtualHistoryEnabled) {
+                                !virtualHistoryEnabled || (viewportBinding.widthIndex.readyFor(
+                                    renderSnapshot.frame, boundViewport.pass.metricKey) &&
+                                    viewportBinding.observation() != null)
+                            },
                     )
                 }
             }

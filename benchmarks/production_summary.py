@@ -9,8 +9,8 @@ from pathlib import Path
 
 from summarize import format_number, median, overrun_percent, per_operation, percentile
 
-VERSION = "production-viewport-v5"
-PUBLICATION = "atomic-snapshot-chunk-provenance-v1"
+VERSION = "production-viewport-v6"
+PUBLICATION = "atomic-sparse-history-checkpoint-v2"
 CAPTURE = "tail-drain-500ms-v1"
 SIZES = (1000, 5000, 10000)
 MODES = ("chunkedLayers", "lazyHistory", "lazyHistoryIme")
@@ -154,7 +154,7 @@ def validate(results, context, sha, run_id, group_id, scenario, iterations, smok
 
 
 WORK_FIELDS = ('publications', 'panelCommits', 'pairingChecks', 'transcriptEntries', 'cachedEntries',
-               'viewBuilds', 'chunkWrappers', 'rowSlices', 'liveViews')
+               'viewBuilds', 'chunkWrappers', 'rowSlices', 'liveViews', 'sparseBlockBuilds', 'sparseRowsCreated')
 
 
 def validate_publications(lines, scenario, iterations, smoke=False):
@@ -184,7 +184,8 @@ def validate_publications(lines, scenario, iterations, smoke=False):
             measured[token] = row
         else:
             if set(row) != {'suite', 'publication', 'scenario', 'size', 'mode', 'token', 'phase',
-                            'viewportGeneration', 'virtual', 'work', 'detached'} or row['publication'] != PUBLICATION:
+                            'viewportGeneration', 'virtual', 'work', 'detached', 'sparse', 'rowStates',
+                            'historyWidthMeasured', 'screenWidthMeasured'} or row['publication'] != PUBLICATION:
                 raise ValueError('Invalid publication receipt fields')
             if row['phase'] not in ('mounted', 'done') or (token, row['phase']) in target:
                 raise ValueError('Duplicate or invalid publication phase')
@@ -203,7 +204,8 @@ def validate_publications(lines, scenario, iterations, smoke=False):
         if (value['liveViews'] not in (0, 1) or value['panelCommits'] < value['publications'] or
                 value['transcriptEntries'] != value['cachedEntries'] or
                 value['rowSlices'] != value['chunkWrappers'] + value['viewBuilds'] or
-                value['viewBuilds'] > value['chunkWrappers']):
+                value['viewBuilds'] > value['chunkWrappers'] or
+                not value['sparseBlockBuilds'] <= value['sparseRowsCreated'] <= value['sparseBlockBuilds'] * 128):
             raise ValueError('Inconsistent publication/cache work')
         return value
 
@@ -214,6 +216,14 @@ def validate_publications(lines, scenario, iterations, smoke=False):
         virtual = driver['mode'] != 'chunkedLayers'
         if type(row['virtual']) is not bool or row['virtual'] != virtual:
             raise ValueError('Publication renderer mismatch')
+        if (type(row['sparse']) is not bool or row['sparse'] != virtual or
+                type(row['rowStates']) is not int or row['rowStates'] != (24 if virtual else row['size'] + 24)):
+            raise ValueError('Publication retained a full row-state tree in a sparse mode')
+        for counter in ('historyWidthMeasured', 'screenWidthMeasured'):
+            if type(row[counter]) is not int or row[counter] < 0:
+                raise ValueError('Invalid publication width-work counter')
+        if not virtual and (row['historyWidthMeasured'] or row['screenWidthMeasured']):
+            raise ValueError('Default eager performed virtual width work')
         if type(row['viewportGeneration']) is not int:
             raise ValueError('Invalid viewport generation')
         current = work(row['work'])
@@ -230,6 +240,8 @@ def validate_publications(lines, scenario, iterations, smoke=False):
         if (mounted['viewportGeneration'] != 1 or mounted['detached'] is not None or
                 before['publications'] != 1 or before['pairingChecks'] != 1):
             raise ValueError('Invalid initial publication receipt')
+        if driver['mode'] != 'chunkedLayers' and mounted['historyWidthMeasured'] != driver['size']:
+            raise ValueError('Cold history was not measured exactly once')
         if scenario == 'initialCompose':
             if (token, 'done') in target:
                 raise ValueError('Cold mount includes an unexpected operation')
@@ -242,6 +254,8 @@ def validate_publications(lines, scenario, iterations, smoke=False):
                 if (done['viewportGeneration'] != 2 or after['publications'] != 1 or after['pairingChecks'] != 1 or
                         detached['publications'] != 1 or detached['pairingChecks'] != 1 or detached['liveViews'] != 0):
                     raise ValueError('Detached publication not released before replacement')
+                if driver['mode'] != 'chunkedLayers' and done['historyWidthMeasured'] != 12:
+                    raise ValueError('Warm restore rescanned surviving history')
             else:
                 updates = {'activeRowUpdate': 30, 'appendAndTrim': 30, 'imeRoundTrip': 8}.get(scenario, 0)
                 checks = {'activeRowUpdate': 30, 'appendAndTrim': 30, 'imeRoundTrip': 11, 'semanticJump': 2}[scenario]
@@ -270,7 +284,7 @@ def report(results, context, sha, scenario, smoke):
              "Other scenarios may use different runners; do not aggregate their samples or calculate cross-group ratios.",
              "This is an unminified Release-derived component harness, not ProcessSessionPage, PTY/input echo or app startup.",
              "Updates include production reconciliation and two stable draw confirmations. Validation/wait overhead is included.",
-             "V5 publishes one immutable frame/row snapshot and exercises chunk provenance; V4/V3 are not relabelled.",
+             "V6 uses sparse history, cancellable cold width and session checkpoints; V5/V4/V3 are not relabelled.",
              f"Capture: {CAPTURE}. A separate 500ms drain follows the operation and is inside the trace only.",
              "Mount/operation timers exclude drain; frame and RSS samples include it. Do not compare capture variants.",
              "Root measure includes lazy subcomposition. Phase durations overlap; do not subtract them from frame percentiles.",

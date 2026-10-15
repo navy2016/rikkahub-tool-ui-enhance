@@ -74,6 +74,8 @@ import me.rerere.rikkahub.ui.pages.container.TerminalViewportGestureConfig
 import me.rerere.rikkahub.ui.pages.container.TerminalBoundViewport
 import me.rerere.rikkahub.ui.pages.container.TerminalTranscriptViewport
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderSnapshot
+import me.rerere.rikkahub.ui.pages.container.TerminalRowStore
+import me.rerere.rikkahub.data.container.TerminalWidthCheckpointStore
 import me.rerere.rikkahub.ui.pages.container.TerminalVirtualHistoryPolicy
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderModeDialog
 import me.rerere.rikkahub.ui.pages.container.rememberTerminalBoundViewport
@@ -557,6 +559,8 @@ class TerminalItemViewportInstrumentedTest {
         terminalOverride: TerminalEmulator? = null,
         restored: TerminalViewportState? = null,
         private val foreground: Color = Color.Unspecified,
+        private val sparse: Boolean = false,
+        val widthCheckpoint: TerminalWidthCheckpointStore? = null,
     ) {
         val terminal = terminalOverride ?: TerminalEmulator(initialColumns = 80, initialRows = 24,
             maxScrollbackLines = historyRows).apply {
@@ -575,10 +579,10 @@ class TerminalItemViewportInstrumentedTest {
             })
         }
         private val initialFrame = render()
-        val rows = createTerminalRenderedRows(initialFrame)
-        private val sync = createTerminalRenderedRowsSyncState(initialFrame, rows)
+        val rowStore = TerminalRowStore(initialFrame, sparse)
+        val rows get() = rowStore.view(frame)
         private var published by mutableStateOf(
-            TerminalRenderSnapshot.capture(initialFrame, rows), referentialEqualityPolicy(),
+            TerminalRenderSnapshot.capture(initialFrame, rowStore), referentialEqualityPolicy(),
         )
         val frame: TerminalEmulator.RenderFrame get() = published.frame
         val saved = restored ?: TerminalViewportState(autoScroll = false, anchorLineId = frame.historyLineIds[frame.historyCount / 2],
@@ -649,9 +653,8 @@ class TerminalItemViewportInstrumentedTest {
         fun publish() {
             val next = render()
             Snapshot.withMutableSnapshot {
-                synchronizeTerminalRenderedRows(rows, next, false, forcePendingGridBlanks = true,
-                    nowMs = 1_000L, syncState = sync)
-                published = TerminalRenderSnapshot.capture(next, rows)
+                rowStore.publish(next, sparse, tui, true, 1_000L)
+                published = TerminalRenderSnapshot.capture(next, rowStore)
             }
         }
 
@@ -690,7 +693,7 @@ class TerminalItemViewportInstrumentedTest {
                 this, controller, eager, lazy, measurements, frame, style, wants,
                 metrics = { TerminalViewportMetrics(eager.maxValue, viewportHeight, cellHeight, tailPadding,
                     usesTuiViewport = tui || frame.isAlternateScreen, imeVisible = ime, avoidIme = ime && avoidIme) },
-                gestureConfig = config)
+                gestureConfig = config, widthCheckpoint = widthCheckpoint)
             bound = currentBound
             SideEffect {
                 bound.binding.onEffectStarted = { effect ->

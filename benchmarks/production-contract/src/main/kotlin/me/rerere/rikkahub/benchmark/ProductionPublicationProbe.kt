@@ -12,6 +12,8 @@ internal class ProductionPublicationProbe {
         val chunkWrappers: Int,
         val rowSlices: Int,
         val liveViews: Int,
+        val sparseBlockBuilds: Int = 0,
+        val sparseRowsCreated: Int = 0,
     )
 
     private var publications = 0
@@ -22,6 +24,8 @@ internal class ProductionPublicationProbe {
     private var viewBuilds = 0
     private var chunkWrappers = 0
     private var rowSlices = 0
+    private var sparseBlockBuilds = 0
+    private var sparseRowsCreated = 0
     var liveViews = 0
         private set
 
@@ -30,12 +34,18 @@ internal class ProductionPublicationProbe {
 
     fun transcriptComposed(cached: Boolean) {
         transcriptEntries++
-        check(cached) { "V5 transcript bypassed published chunk provenance" }
+        check(cached) { "V6 transcript bypassed published chunk provenance" }
         cachedEntries++
     }
 
+    fun sparseBlockCreated(rows: Int) {
+        require(rows in 1..128)
+        sparseBlockBuilds++
+        sparseRowsCreated = Math.addExact(sparseRowsCreated, rows)
+    }
+
     fun viewsCreated(chunks: Int, slices: Int) {
-        check(chunks > 0 && slices == chunks + 1) { "V5 transcript allocated uncached row slices" }
+        check(chunks > 0 && slices == chunks + 1) { "V6 transcript allocated uncached row slices" }
         viewBuilds++
         chunkWrappers = Math.addExact(chunkWrappers, chunks)
         rowSlices = Math.addExact(rowSlices, slices)
@@ -44,18 +54,18 @@ internal class ProductionPublicationProbe {
     fun viewLifetime(delta: Int) {
         check(delta == -1 || delta == 1)
         val next = liveViews + delta
-        check(next in 0..1) { "V5 chunk cache has overlapping or missing owners" }
+        check(next in 0..1) { "V6 chunk cache has overlapping or missing owners" }
         liveViews = next
     }
 
     /** Caller has checked exact source/frame/immutable row view identity before recording this. */
     fun paired(cachedExpected: Boolean) {
-        check(publications > 0 && panelCommits > 0) { "V5 publication has not committed" }
-        check(liveViews == if (cachedExpected) 1 else 0) { "V5 cache lifetime does not match renderer" }
-        check(!cachedExpected || cachedEntries > 0) { "V5 eager publication was never consumed" }
+        check(publications > 0 && panelCommits > 0) { "V6 publication has not committed" }
+        check(liveViews == if (cachedExpected) 1 else 0) { "V6 cache lifetime does not match renderer" }
+        check(!cachedExpected || cachedEntries > 0) { "V6 eager publication was never consumed" }
         pairingChecks++
     }
 
     fun snapshot(): Work = Work(publications, panelCommits, pairingChecks, transcriptEntries,
-        cachedEntries, viewBuilds, chunkWrappers, rowSlices, liveViews)
+        cachedEntries, viewBuilds, chunkWrappers, rowSlices, liveViews, sparseBlockBuilds, sparseRowsCreated)
 }

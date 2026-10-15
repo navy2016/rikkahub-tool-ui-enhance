@@ -61,7 +61,7 @@ on:
       suite:
         description: 'Focused suites run once: renderSnapshot publication/rows; textMetrics width/height cache invalidation'
         type: choice
-        options: [all, renderSnapshot, textMetrics, chunkViews]
+        options: [all, renderSnapshot, textMetrics, chunkViews, staticChecks]
         default: all
 
 jobs:
@@ -130,55 +130,45 @@ jobs:
           }
           EOFGS
 
-      - name: Run PTY mode inference tests
-        if: ${{ env.TERMINAL_UNIT_SUITE == 'all' }}
-        run: bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest --stacktrace
+      - name: Compile Release production and terminal host-test types without running tests
+        if: ${{ env.TERMINAL_UNIT_SUITE == 'staticChecks' }}
+        run: |
+          bash .github/scripts/run-terminal-gradle.sh :app:compileReleaseKotlin :app:compileReleaseUnitTestKotlin --stacktrace
 
-      - name: Run Bun and terminal UI source tests
-        if: ${{ env.TERMINAL_UNIT_SUITE == 'all' }}
-        run: bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest --tests me.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest --stacktrace
-
-      - name: Run focused unit tests
+      - name: Run complete terminal unit suites once
         if: ${{ env.TERMINAL_UNIT_SUITE == 'all' }}
         run: |
-          for attempt in 1 2 3; do
-            echo "Gradle test attempt ${attempt}/3"
-            if bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest \
-              --tests me.rerere.rikkahub.utils.TerminalEmulatorTest \
-              --tests me.rerere.rikkahub.data.container.ControlInputTest \
-              --tests me.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest \
-              --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest \
-              --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest \
-              --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest \
-              --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest \
-              --tests me.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest \
-              --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest \
-              --tests me.rerere.rikkahub.data.container.TerminalRenderedRowsTest \
-              --tests me.rerere.rikkahub.data.container.TerminalViewportReducerTest \
-              --tests me.rerere.rikkahub.data.container.TerminalViewportControllerTest \
-              --tests me.rerere.rikkahub.data.container.TerminalFastFlingTest \
-              --tests me.rerere.rikkahub.data.container.TerminalViewportItemGeometryTest \
-              --tests me.rerere.rikkahub.data.container.TerminalLazyViewportAdapterTest \
-              --tests me.rerere.rikkahub.data.container.TerminalLazyViewportMeasurementTest \
-              --tests me.rerere.rikkahub.data.container.TerminalRenderPreferencesTest \
-              --tests me.rerere.rikkahub.data.container.TerminalItemViewportTest \
-              --tests me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndexTest \
-              --tests me.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest \
-              --tests me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest \
-              --tests me.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest \
-              --tests me.rerere.rikkahub.data.container.TerminalHistorySnapshotTest \
-              --tests me.rerere.rikkahub.data.container.TerminalPipelineTraceTest \
-              --tests me.rerere.rikkahub.data.container.TerminalViewportFollowStateTest \
-              --tests me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest \
-              --tests me.rerere.rikkahub.data.container.TerminalChunkViewsTest \
-              --stacktrace; then
-              exit 0
-            fi
-            if [ "$attempt" = "3" ]; then
-              exit 1
-            fi
-            sleep $((attempt * 20))
-          done
+          bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest \
+            --tests me.rerere.rikkahub.data.container.PtyModeInferenceTest \
+            --tests me.rerere.rikkahub.data.container.BunCompatibilitySourceTest \
+            --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest \
+            --tests me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest \
+            --tests me.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest \
+            --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest \
+            --tests me.rerere.rikkahub.utils.TerminalEmulatorTest \
+            --tests me.rerere.rikkahub.data.container.ControlInputTest \
+            --tests me.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest \
+            --tests me.rerere.rikkahub.data.container.TerminalRenderedRowsTest \
+            --tests me.rerere.rikkahub.data.container.TerminalViewportReducerTest \
+            --tests me.rerere.rikkahub.data.container.TerminalViewportControllerTest \
+            --tests me.rerere.rikkahub.data.container.TerminalFastFlingTest \
+            --tests me.rerere.rikkahub.data.container.TerminalViewportItemGeometryTest \
+            --tests me.rerere.rikkahub.data.container.TerminalLazyViewportAdapterTest \
+            --tests me.rerere.rikkahub.data.container.TerminalLazyViewportMeasurementTest \
+            --tests me.rerere.rikkahub.data.container.TerminalRenderPreferencesTest \
+            --tests me.rerere.rikkahub.data.container.TerminalItemViewportTest \
+            --tests me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndexTest \
+            --tests me.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest \
+            --tests me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest \
+            --tests me.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest \
+            --tests me.rerere.rikkahub.data.container.TerminalHistorySnapshotTest \
+            --tests me.rerere.rikkahub.data.container.TerminalPipelineTraceTest \
+            --tests me.rerere.rikkahub.data.container.TerminalViewportFollowStateTest \
+            --tests me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest \
+            --tests me.rerere.rikkahub.data.container.TerminalChunkViewsTest \
+            --tests me.rerere.rikkahub.utils.TerminalScreenCacheTest \
+            --tests me.rerere.rikkahub.data.container.TerminalBundleContractsTest \
+            --stacktrace
 
       - name: Run publication and consumer contracts once after Release compilation
         if: ${{ env.TERMINAL_UNIT_SUITE == 'renderSnapshot' }}
@@ -207,7 +197,7 @@ jobs:
             --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest --stacktrace
 
       - name: Publish focused regression results
-        if: always()
+        if: ${{ always() && env.TERMINAL_UNIT_SUITE != 'staticChecks' }}
         run: |
           if [ "$TERMINAL_UNIT_SUITE" = chunkViews ]; then
             python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
@@ -251,7 +241,9 @@ jobs:
             --require-suite me.rerere.rikkahub.data.container.TerminalPipelineTraceTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalViewportFollowStateTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest \
-            --require-suite me.rerere.rikkahub.data.container.TerminalChunkViewsTest
+            --require-suite me.rerere.rikkahub.data.container.TerminalChunkViewsTest \
+            --require-suite me.rerere.rikkahub.data.container.TerminalBundleContractsTest \
+            --require-suite me.rerere.rikkahub.utils.TerminalScreenCacheTest
 
       - name: Upload test reports
         if: always()

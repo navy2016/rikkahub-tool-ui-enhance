@@ -6,12 +6,23 @@ on:
       suite:
         description: 'Full page samples, transport preflight, or same-device AB/BA experiment'
         type: choice
-        options: [pipeline, transport, all, paired]
+        options: [pipeline, transport, all, paired, bundlePaired, service, soak]
         default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'
         type: string
         default: ''
+      soak_mode:
+        type: choice
+        options: [chunkedLayers, lazyHistory, lazyHistoryIme]
+        default: chunkedLayers
+      soak_seconds:
+        type: string
+        default: '1800'
+      checks_only:
+        description: 'Compile the Release-derived real-page/test pair without running a guest or test'
+        type: boolean
+        default: false
       evidence_sha:
         description: 'Exact source SHA of evidence_run_id'
         type: string
@@ -46,6 +57,9 @@ jobs:
   paired:
     if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'paired' }}
     uses: ./.github/workflows/terminal-pipeline-paired.yml
+  bundle-paired:
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'bundlePaired' }}
+    uses: ./.github/workflows/terminal-bundle-paired.yml
   evidence:
     if: ${{ inputs.evidence_run_id != '' }}
     runs-on: ubuntu-latest
@@ -85,7 +99,7 @@ jobs:
               print('::notice title=' + title + '::' + value.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
           def page_log(name):
               files = [path for path in Path('original-pipeline').rglob(name)
-                  if 'transport-preflight' not in path.parts]
+                  if 'transport-preflight' not in path.parts and 'service-preflight' not in path.parts]
               assert len(files) == 1, name
               return files[0]
           for name in ('instrumentation.log', 'pipeline-logcat.txt'):
@@ -122,11 +136,13 @@ jobs:
           note('Original pipeline failure callers', callers)
           PY
   pipeline:
-    if: ${{ inputs.evidence_run_id == '' && inputs.suite != 'paired' }}
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite != 'paired' && inputs.suite != 'bundlePaired' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 70
     env:
       TERMINAL_PIPELINE_SUITE: ${{ inputs.suite || 'pipeline' }}
+      TERMINAL_SOAK_MODE: ${{ inputs.soak_mode || 'chunkedLayers' }}
+      TERMINAL_SOAK_SECONDS: ${{ inputs.soak_seconds || '1800' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -143,16 +159,17 @@ jobs:
         run: python3 .github/scripts/build-terminal-proot.py
       - name: Validate diagnostics and build Release-derived full-page test pair
         run: |
-          if [ "$TERMINAL_PIPELINE_SUITE" = pipeline ]; then
-            (cd .github/scripts && python3 -m unittest test_terminal_pipeline test_terminal_pipeline_paired)
-          else
-            python3 -m unittest discover -s .github/scripts -p 'test_*.py'
-          fi
           chmod +x gradlew
           bash .github/scripts/run-terminal-gradle.sh -PterminalPipelineTests=true -PincludeX86_64AbiForTests=true \
             :app:assembleTerminaltest :app:assembleTerminaltestAndroidTest --stacktrace
           python3 .github/scripts/run-terminal-pipeline.py prepare
+      - name: Validate only relevant real-page and bundle report contracts after type compilation
+        if: ${{ !inputs.checks_only }}
+        run: |
+          cd .github/scripts
+          python3 -m unittest test_terminal_pipeline test_terminal_pipeline_paired test_terminal_bundle_reports test_terminal_bundle_paired
       - name: Run actual page and native PTY with real keyboard on non-root KVM guest
+        if: ${{ !inputs.checks_only }}
         run: python3 .github/scripts/run-terminal-pipeline.py emulator
       - name: Preserve exact source identities, samples and focused diagnostics
         if: always()
