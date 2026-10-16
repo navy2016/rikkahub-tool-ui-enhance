@@ -33,6 +33,7 @@ import me.rerere.rikkahub.data.container.PtyMode
 import me.rerere.rikkahub.data.container.TerminalPipelineEvent
 import me.rerere.rikkahub.data.container.TerminalPipelineStage
 import me.rerere.rikkahub.data.container.TerminalPipelineTrace
+import me.rerere.rikkahub.data.container.TerminalPipelineViewportSample
 import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -73,6 +74,66 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
         require(seconds in 60..1800)
         val mode = TerminalRenderMode.fromId(requireNotNull(args.getString("terminalSoakMode")))
         exercise(mode, seconds)
+    }
+
+    /** Diagnostic, NOT a passed pressure test: records the original instantaneous assertion then convergence. */
+    @Test fun diagnoseStableMountHandoff() = exercise(TerminalRenderMode.VIRTUAL_HISTORY_IME,
+        soakSeconds = 60, observeMountOnly = true)
+
+    private fun TerminalPipelineViewportSample.toDiagnosticJson(): JSONObject {
+        val p = viewport
+        return JSONObject().put("draw", draw).put("timeNanos", timeNanos).put("revision", p.revision)
+            .put("preferred", p.preferred.id).put("applied", p.applied.id).put("historyRows", p.historyRows)
+            .put("hasChunks", p.hasChunks).put("pan", p.pan).put("selection", p.selection).put("tui", p.tui)
+            .put("alternate", p.alternate).put("ime", p.ime).put("avoidIme", p.avoidIme)
+            .put("imeFallback", p.imeFallback).put("wantsVirtual", p.wantsVirtual).put("virtual", p.virtual)
+            .put("bindingVirtual", p.bindingVirtual).put("sameFrame", p.sameFrame)
+            .put("initialized", p.initialized).put("following", p.following)
+            .put("gestureId", p.gestureId ?: JSONObject.NULL).put("effectId", p.effectId ?: JSONObject.NULL)
+            .put("writers", p.writers).put("scrolling", p.scrolling).put("geometryReady", p.geometryReady)
+            .put("widthReady", p.widthReady).put("tailSatisfied", p.tailSatisfied)
+    }
+
+    private fun diagnoseMount(capture: TerminalPipelineTrace.Capture, mode: TerminalRenderMode, launch: String) {
+        val before = capture.viewport()
+        var oldRulePassed = true
+        try {
+            sampleGroup(mode, "mounted", launch, capture, expectVirtual = true)
+        } catch (error: AssertionError) {
+            oldRulePassed = false
+            InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
+                putString("stream", "\nMOUNT_OLD_RULE_FAILURE ${error.javaClass.simpleName}\n")
+            })
+        }
+        val afterOldRule = capture.viewport()
+        val began = SystemClock.elapsedRealtimeNanos()
+        var converged = false
+        try {
+            compose.waitUntil(15_000) {
+                val p = capture.viewport()?.viewport ?: return@waitUntil false
+                p.preferred == mode && p.applied == mode && p.wantsVirtual && p.virtual && p.bindingVirtual &&
+                    p.sameFrame && p.geometryReady && p.widthReady && p.initialized && p.following &&
+                    p.gestureId == null && p.effectId == null && p.writers == 0 && !p.scrolling && p.tailSatisfied
+            }
+            converged = true
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
+            // Timeout is an explicit diagnostic outcome, never disguised as pressure acceptance.
+        }
+        val value = JSONObject().put("suite", "terminal-stable-mount-diagnostic-v1").put("launch", launch)
+            .put("oldRulePassed", oldRulePassed).put("converged", converged)
+            .put("convergenceWaitMs", (SystemClock.elapsedRealtimeNanos() - began) / 1_000_000.0)
+            .put("before", before?.toDiagnosticJson() ?: JSONObject.NULL)
+            .put("afterOldRule", afterOldRule?.toDiagnosticJson() ?: JSONObject.NULL)
+            .put("last", capture.viewport()?.toDiagnosticJson() ?: JSONObject.NULL)
+        InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
+            putString("stream", "\nMOUNT_DIAGNOSTIC $value\n")
+        })
+        capture.viewportTransitions().takeLast(16).forEachIndexed { index, sample ->
+            InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
+                putString("stream", "\nMOUNT_TRANSITION " + sample.toDiagnosticJson()
+                    .put("index", index).put("launch", launch) + "\n")
+            })
+        }
     }
 
     private fun soakCommand(): String {
@@ -195,7 +256,7 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
         report(true)
     }
 
-    private fun exercise(mode: TerminalRenderMode, soakSeconds: Int = 0) {
+    private fun exercise(mode: TerminalRenderMode, soakSeconds: Int = 0, observeMountOnly: Boolean = false) {
         check(compose.activity.packageName == "me.rerere.rikkahub.dev.next.terminaltest")
         if (Build.VERSION.SDK_INT >= 33) assertEquals("Runner must grant only the test app's notifications before launch",
             PackageManager.PERMISSION_GRANTED, compose.activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
@@ -254,6 +315,10 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
             compose.waitForIdle()
             val fullHeight = outputHeight()
             val physicalRows = requireNotNull(manager.getInteractiveTerminalEmulator(id)).rows
+            if (observeMountOnly) {
+                diagnoseMount(trace, mode, launch)
+                return
+            }
             sampleGroup(mode, "mounted", launch, trace, expectVirtual = mode.isVirtualHistory)
 
             compose.onNode(hasSetTextAction()).performClick()

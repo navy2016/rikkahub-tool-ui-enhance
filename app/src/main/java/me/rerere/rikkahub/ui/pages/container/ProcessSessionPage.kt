@@ -1868,7 +1868,45 @@ private fun TerminalInteractivePanel(
                         panEnabled = terminalPanMode,
                         selectionMode = selectionMode,
                         modifier = Modifier.weight(1f).fillMaxWidth()
-                            .terminalPipelineDraw(processId, renderSnapshot.frame.revision, virtualHistoryEnabled) {
+                            .terminalPipelineDraw(processId, renderSnapshot.frame.revision, virtualHistoryEnabled,
+                                viewport = {
+                                    val pass = boundViewport.pass
+                                    val state = viewportController.state.value
+                                    val items = if (virtualHistoryEnabled) viewportBinding.observation() else null
+                                    val eagerGeometry = lazyHistoryMeasurements.peekEager(pass)
+                                    val last = renderSnapshot.frame.contentBounds.lastNonBlankRow
+                                    val tail = if (virtualHistoryEnabled) {
+                                        items?.isSatisfied(
+                                            me.rerere.rikkahub.data.container.TerminalItemScrollTarget.Follow) == true
+                                    } else if (eagerGeometry != null) {
+                                        val bottom = if (last != null) eagerGeometry.bottom(last) else 0
+                                        outputScroll.value == (bottom + currentTerminalTailPaddingPx -
+                                            outputViewportHeightPx).coerceIn(0, outputScroll.maxValue)
+                                    } else false
+                                    me.rerere.rikkahub.data.container.TerminalPipelineViewport(
+                                        revision = renderSnapshot.frame.revision,
+                                        preferred = terminalRenderMode, applied = appliedTerminalRenderMode,
+                                        historyRows = renderSnapshot.frame.historyCount,
+                                        hasChunks = terminalHistoryChunkPlan.isNotEmpty(), pan = terminalPanMode,
+                                        selection = selectionMode, tui = currentUsesTuiViewport,
+                                        alternate = renderSnapshot.frame.isAlternateScreen,
+                                        ime = currentImeVisible, avoidIme = currentShouldAvoidIme,
+                                        imeFallback = virtualHistoryPolicy.imeFallback,
+                                        wantsVirtual = wantsVirtualHistory, virtual = virtualHistoryEnabled,
+                                        bindingVirtual = viewportBinding.virtual,
+                                        sameFrame = viewportBinding.pass.frame === renderSnapshot.frame,
+                                        initialized = state.initialized, following = state.autoScroll,
+                                        gestureId = state.gesture?.id, effectId = state.scrollEffect?.id,
+                                        writers = viewportBinding.activeWriters,
+                                        scrolling = if (virtualHistoryEnabled) lazyHistoryState.isScrollInProgress
+                                            else outputScroll.isScrollInProgress,
+                                        geometryReady = if (virtualHistoryEnabled) items != null
+                                            else eagerGeometry != null,
+                                        widthReady = viewportBinding.widthIndex.readyFor(
+                                            renderSnapshot.frame, pass.metricKey),
+                                        tailSatisfied = tail,
+                                    )
+                                }) {
                                 !virtualHistoryEnabled || (viewportBinding.widthIndex.readyFor(
                                     renderSnapshot.frame, boundViewport.pass.metricKey) &&
                                     viewportBinding.observation() != null)

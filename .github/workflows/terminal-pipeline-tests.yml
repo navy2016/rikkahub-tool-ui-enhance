@@ -6,7 +6,7 @@ on:
       suite:
         description: 'Full page samples, transport preflight, or same-device AB/BA experiment'
         type: choice
-        options: [pipeline, transport, all, paired, bundlePaired, service, soak]
+        options: [pipeline, transport, all, paired, bundlePaired, service, soak, mountDiagnostic]
         default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'

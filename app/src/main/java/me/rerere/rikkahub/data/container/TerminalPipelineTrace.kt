@@ -16,6 +16,39 @@ internal data class TerminalPipelineEvent(
     val virtual: Boolean? = null,
 )
 
+/** Opt-in diagnostics only. No frame, Text, Context, layout, callback or command is retained. */
+internal data class TerminalPipelineViewport(
+    val revision: Long,
+    val preferred: TerminalRenderMode,
+    val applied: TerminalRenderMode,
+    val historyRows: Int,
+    val hasChunks: Boolean,
+    val pan: Boolean,
+    val selection: Boolean,
+    val tui: Boolean,
+    val alternate: Boolean,
+    val ime: Boolean,
+    val avoidIme: Boolean,
+    val imeFallback: Boolean,
+    val wantsVirtual: Boolean,
+    val virtual: Boolean,
+    val bindingVirtual: Boolean,
+    val sameFrame: Boolean,
+    val initialized: Boolean,
+    val following: Boolean,
+    val gestureId: Long?,
+    val effectId: Long?,
+    val writers: Int,
+    val scrolling: Boolean,
+    val geometryReady: Boolean,
+    val widthReady: Boolean,
+    val tailSatisfied: Boolean,
+)
+
+internal data class TerminalPipelineViewportSample(
+    val draw: Long, val timeNanos: Long, val viewport: TerminalPipelineViewport,
+)
+
 /**
  * One explicitly installed, bounded diagnostic capture; no persistent switch, logger or callbacks.
  * Disabled calls read one volatile reference and allocate nothing. The app never starts a capture;
@@ -40,6 +73,11 @@ internal object TerminalPipelineTrace {
         if (capture.processId == processId) capture.record(stage, bytes, frameRevision, virtual)
     }
 
+    fun recordViewport(processId: String, viewport: TerminalPipelineViewport) {
+        val capture = active ?: return
+        if (capture.processId == processId) capture.recordViewport(viewport)
+    }
+
     @Synchronized
     private fun stop(capture: Capture) {
         if (active === capture) active = null
@@ -54,6 +92,9 @@ internal object TerminalPipelineTrace {
         private val events = ArrayDeque<TerminalPipelineEvent>()
         private var sequence = 0L
         private var closed = false
+        private var drawSequence = 0L
+        private var latestViewport: TerminalPipelineViewportSample? = null
+        private val viewportTransitions = ArrayDeque<TerminalPipelineViewportSample>()
         @Volatile var dropped = 0L
             private set
 
@@ -66,6 +107,17 @@ internal object TerminalPipelineTrace {
         }
 
         @Synchronized fun snapshot(): List<TerminalPipelineEvent> = events.toList()
+        @Synchronized internal fun recordViewport(viewport: TerminalPipelineViewport) {
+            if (closed) return
+            val sample = TerminalPipelineViewportSample(++drawSequence, clock(), viewport)
+            if (latestViewport?.viewport != viewport) {
+                if (viewportTransitions.size == 64) viewportTransitions.removeFirst()
+                viewportTransitions.addLast(sample)
+            }
+            latestViewport = sample
+        }
+        @Synchronized fun viewport(): TerminalPipelineViewportSample? = latestViewport
+        @Synchronized fun viewportTransitions(): List<TerminalPipelineViewportSample> = viewportTransitions.toList()
         /** Explicit test sample window, preserving monotonic sequence numbers across windows. */
         @Synchronized fun beginWindow(): Long {
             check(!closed)

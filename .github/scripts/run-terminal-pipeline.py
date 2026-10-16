@@ -256,11 +256,14 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     transport = selected == 'transport'
     service = selected == 'service'
     soak = selected == 'soak'
+    mount_diagnostic = selected == 'mountDiagnostic'
     methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
         'pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
         'pipelineStableVirtualPtyEchoKeyboardAndRemount')
     test_class = 'me.rerere.rikkahub.pipeline.TerminalPtyTransportInstrumentedTest' if transport else CLASS
     extra_arguments = []
+    if mount_diagnostic:
+        methods = ('diagnoseStableMountHandoff',)
     if service:
         test_class = 'me.rerere.rikkahub.pipeline.TerminalServiceLifecycleInstrumentedTest'
         methods = ('bundleForegroundRapidStopDuringStartupAndRestart', 'bundleExitedPtyHasExactOrderedTailAndReleasesCheckpoint')
@@ -301,6 +304,19 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             if 'mCurrentFocus=' in line or 'mFocusedApp=' in line) + '\n')
     if failed:
         raise ValueError('; '.join(failed))
+    if mount_diagnostic:
+        raw = '\n'.join(logs)
+        values = bundle_reports.records(raw, 'MOUNT_DIAGNOSTIC ')
+        if len(values) != 1 or values[0].get('suite') != 'terminal-stable-mount-diagnostic-v1':
+            raise ValueError('Missing stable-mount diagnostic, not an acceptance result')
+        transitions = bundle_reports.records(raw, 'MOUNT_TRANSITION ')
+        report = dict(manifest=manifest, device=device, installedApkHashes=installed_hashes,
+                      diagnostic=values[0], transitions=transitions, acceptance=False)
+        (OUT / 'mount-diagnostic.json').write_text(json.dumps(report, indent=2) + '\n')
+        notice('notice', 'Stable mount diagnostic (not acceptance)', json.dumps(values[0]))
+        for start in range(0, len(transitions), 2):
+            notice('notice', f'Stable mount transitions {start // 2 + 1}', json.dumps(transitions[start:start + 2]))
+        return report
     if service or soak:
         results = bundle_reports.service('\n'.join(logs)) if service else bundle_reports.soak('\n'.join(logs), mode, seconds)
         report = dict(manifest=manifest, device=device, installedApkHashes=installed_hashes, results=results)
@@ -432,7 +448,7 @@ def failure_excerpt(path):
             line = raw.rstrip()[:550]
             tail.append(line)
             if any(word in line for word in ('TerminalPipelineActivity', 'PIPELINE_READY', 'PIPELINE_DIAGNOSTIC', 'PIPELINE_GEOMETRY',
-                                             'TRANSPORT_PROBE', 'NativePtyProcess')):
+                                             'TRANSPORT_PROBE', 'NativePtyProcess', 'MOUNT_DIAGNOSTIC')):
                 lifecycle.append(line)
             if remaining == 0 and blocks < 2 and any(marker in line for marker in
                 ('Error in ', 'stack=', 'java.lang.', 'FATAL EXCEPTION')):

@@ -8,6 +8,51 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TerminalPipelineTraceTest {
+    private fun viewport(revision: Long = 1) = TerminalPipelineViewport(
+        revision = revision, preferred = TerminalRenderMode.VIRTUAL_HISTORY_IME,
+        applied = TerminalRenderMode.VIRTUAL_HISTORY_IME, historyRows = 10_000,
+        hasChunks = true, pan = true, selection = false, tui = false, alternate = false,
+        ime = false, avoidIme = false, imeFallback = false, wantsVirtual = true,
+        virtual = true, bindingVirtual = true, sameFrame = true, initialized = true, following = true,
+        gestureId = null, effectId = null, writers = 0, scrolling = false,
+        geometryReady = true, widthReady = true, tailSatisfied = true,
+    )
+
+    @Test fun viewportDiagnosticsAreBoundedScalarsAndDoNotConsumeTheEventRing() {
+        var time = 0L
+        TerminalPipelineTrace.start("one", 16, clock = { ++time }).use { capture ->
+            repeat(100) { TerminalPipelineTrace.recordViewport("one", viewport(it.toLong())) }
+            assertEquals(64, capture.viewportTransitions().size)
+            assertEquals(99L, capture.viewport()!!.viewport.revision)
+            assertEquals(100L, capture.viewport()!!.draw)
+            assertEquals(0L, capture.dropped)
+            assertTrue(capture.snapshot().isEmpty())
+            val before = capture.viewportTransitions()
+            repeat(10) { TerminalPipelineTrace.recordViewport("one", viewport(99)) }
+            assertEquals(before, capture.viewportTransitions())
+            assertEquals(110L, capture.viewport()!!.draw)
+            capture.beginWindow()
+            assertEquals(110L, capture.viewport()!!.draw)
+        }
+    }
+
+    @Test fun viewportDiagnosticsCannotCrossSessionsOrReviveAClosedCapture() {
+        val old = TerminalPipelineTrace.start("one")
+        TerminalPipelineTrace.recordViewport("other", viewport())
+        assertEquals(null, old.viewport())
+        old.close()
+        TerminalPipelineTrace.start("one").use { current ->
+            old.recordViewport(viewport())
+            assertEquals(null, old.viewport())
+            assertEquals(null, current.viewport())
+            TerminalPipelineTrace.recordViewport("one", viewport())
+            assertEquals(1L, current.viewport()!!.draw)
+            old.close()
+            TerminalPipelineTrace.recordViewport("one", viewport(2))
+            assertEquals(2L, current.viewport()!!.draw)
+        }
+    }
+
     @Test fun disabledAndDifferentSessionsDoNotReadClockOrAllocateEvents() {
         TerminalPipelineTrace.record("disabled", TerminalPipelineStage.UI_INPUT)
         assertFalse(TerminalPipelineTrace.isRecording("disabled"))
