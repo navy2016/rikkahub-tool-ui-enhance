@@ -14,6 +14,7 @@ internal fun Modifier.terminalPipelineDraw(
     ready: () -> Boolean = { true },
 ): Modifier =
     if (!TerminalPipelineTrace.isRecording(processId)) this else testTag("terminal-trace-output").drawWithContent {
+        TerminalPipelineTrace.viewportDrawRequest(processId)
         drawContent()
         viewport?.let { TerminalPipelineTrace.recordViewport(processId, it()) }
         if (ready()) TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_DRAWN,

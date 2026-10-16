@@ -61,7 +61,7 @@ on:
       suite:
         description: 'Focused suites run once: renderSnapshot publication/rows; textMetrics width/height cache invalidation'
         type: choice
-        options: [all, renderSnapshot, textMetrics, chunkViews, staticChecks]
+        options: [all, renderSnapshot, textMetrics, chunkViews, stableMount, staticChecks]
         default: all
 
 jobs:
@@ -170,6 +170,15 @@ jobs:
             --tests me.rerere.rikkahub.data.container.TerminalBundleContractsTest \
             --stacktrace
 
+      - name: Run stable-mount convergence and production wiring contracts once
+        if: ${{ env.TERMINAL_UNIT_SUITE == 'stableMount' }}
+        run: |
+          bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest \
+            --tests me.rerere.rikkahub.data.container.TerminalPipelineTraceTest \
+            --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest \
+            --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest \
+            --tests me.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest --stacktrace
+
       - name: Run publication and consumer contracts once after Release compilation
         if: ${{ env.TERMINAL_UNIT_SUITE == 'renderSnapshot' }}
         run: |
@@ -199,6 +208,14 @@ jobs:
       - name: Publish focused regression results
         if: ${{ always() && env.TERMINAL_UNIT_SUITE != 'staticChecks' }}
         run: |
+          if [ "$TERMINAL_UNIT_SUITE" = stableMount ]; then
+            python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalPipelineTraceTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalUiSourceTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest
+            exit $?
+          fi
           if [ "$TERMINAL_UNIT_SUITE" = chunkViews ]; then
             python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
               --require-suite me.rerere.rikkahub.data.container.TerminalChunkViewsTest \

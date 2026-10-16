@@ -70,3 +70,33 @@ Cloud emulator evidence is not phone input latency/FPS, physical keyboard behavi
 or 30-minute on-device thermal/GC acceptance. No physical device is currently provided. Delivery must
 say **cloud verified, physical-device acceptance pending** until an authorized device is supplied.
 The existing default cold eager O(history) composition cost is not eliminated by this bundle.
+
+## Authorized stable-mount follow-up
+
+The user authorized one additional targeted diagnosis/fix/retest round after the `2723a4c` report.
+Original stable-virtual pressure run `38838668624` failed its `mounted` backend assertion before
+the sustained loop. Diagnostic-only `bc713e7` run `38845564879` did not reproduce that assertion:
+it observed correct preferences/policy, virtual selection before exact width/geometry completion,
+and eventual complete virtual layout. This is not proof of the original run's exact root cause.
+
+The old driver waited for visible text and Compose idle but not the asynchronous backend handoff.
+The targeted correction waits for the independently expected mode/IME, current frame identity and
+revision, actual geometry/width, exact tail, no gesture/effect/writer and two new terminal draws of
+the same completed state. A 15-second limit is a failure bound, not a fixed startup delay. Test-only
+draw requests invalidate only the existing opt-in draw probe; they never scroll or change mode.
+The original per-echo byte/revision/backend assertions remain; pressure cycles also assert backend.
+This new `terminal-settled-viewport-v1` receipt contract does not relabel old pipeline/soak evidence.
+
+A controlled pending-fling test holds the unchanged eager-to-virtual gate while the real eager tail
+is visible; acceptance must reject it and accept only after the gesture ends and handoff completes
+without any new output. JVM and report tests reject stale/repeated draws, missing geometry, wrong
+preference/IME/backend, live effects, and missing or reused receipts. `stableMount` selects only the
+related JVM contracts and seven sparse/width/handoff instrumented tests. Full inventory is now 158.
+Real-page regression and one stable-virtual 1800s pressure run follow the static gates. Production
+rendering, viewport control, protocol parsing, input and mouse behavior are not changed by this fix.
+
+The user's subsequent TUI-history request was inspected but is not a small related fix: current
+alternate screen excludes normal history, alternate scrolling does not archive lines, and CSI 3J
+clears scrollback. Recovering arbitrary full-screen redraws requires a separate bounded history
+design, including mouse coordinate and alternate-screen/clear restoration tests. This follow-up
+does not silently change those protocol semantics or claim pi/Claude Code/OpenCode transcript retention.

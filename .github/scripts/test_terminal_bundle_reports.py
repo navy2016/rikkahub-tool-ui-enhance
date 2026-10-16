@@ -23,7 +23,86 @@ def text(rows):
     return '\n'.join('SOAK_SAMPLE ' + json.dumps(row) for row in rows)
 
 
+def settled(mode='lazyHistoryIme', pressure=False, remounts=0):
+    phases = ['mounted', 'imeVisible', 'imeHidden', 'remount']
+    if pressure:
+        phases += ['pressureStart'] + ['pressureRemount'] * remounts
+    result = []
+    for index, phase in enumerate(phases):
+        virtual = mode != 'chunkedLayers' and (mode == 'lazyHistoryIme' or phase not in ('imeVisible', 'imeHidden'))
+        ime = phase == 'imeVisible'
+        viewport = dict(draw=index * 10 + 3, timeNanos=index * 1000 + 500, revision=10 + index,
+            preferred=mode, applied=mode, historyRows=10000, hasChunks=True, pan=True, selection=False,
+            tui=False, alternate=False, ime=ime, avoidIme=ime, imeFallback=mode == 'lazyHistory' and not virtual,
+            wantsVirtual=virtual, virtual=virtual, bindingVirtual=virtual, sameFrame=True, initialized=True,
+            following=True, gestureId=None, effectId=None, writers=0, scrolling=False, geometryReady=True,
+            widthReady=virtual, tailSatisfied=True)
+        result.append(dict(suite=report.SETTLE_CONTRACT, mode=mode, phase=phase,
+            launch='11111111-2222-4333-8444-555555555555', expectedVirtual=virtual, expectedIme=ime,
+            settleMs=40.0, afterDraw=index * 10 + 1, firstStableDraw=index * 10 + 2, confirmations=2,
+            minRevision=10 + index, viewport=viewport))
+    return result
+
+
+def settle_text(rows):
+    return '\n'.join('SETTLE_RECEIPT ' + json.dumps(row) for row in rows)
+
+
 class BundleReportsTest(unittest.TestCase):
+    def test_complete_convergence_contract_keeps_each_modes_independent_expectation(self):
+        for mode in ('chunkedLayers', 'lazyHistory', 'lazyHistoryIme'):
+            self.assertEqual(4, len(report.settlements(settle_text(settled(mode)), mode)))
+        raw = samples()
+        raw = [dict(row, mode='lazyHistoryIme') for row in raw]
+        receipts = settled(pressure=True, remounts=raw[-1]['remounts'])
+        result = report.soak(text(raw) + '\n' + settle_text(receipts), 'lazyHistoryIme', 1800, require_settled=True)
+        self.assertEqual(report.SETTLE_CONTRACT, result['settlementContract'])
+        self.assertEqual(receipts, result['settlements'])
+        with self.assertRaises(ValueError):
+            report.soak(text(raw), 'lazyHistoryIme', 1800, require_settled=True)
+
+    def test_missing_permanent_fallback_or_repeated_draw_receipts_fail(self):
+        for change in ('missing', 'duplicate', 'fallback', 'sameDraw', 'stale', 'wrongFrame', 'effect', 'oneDraw'):
+            receipts = settled()
+            if change == 'missing': receipts.pop()
+            elif change == 'duplicate': receipts.append(receipts[0])
+            elif change == 'fallback': receipts[0]['viewport']['virtual'] = False
+            elif change == 'sameDraw': receipts[0]['viewport']['draw'] = receipts[0]['firstStableDraw']
+            elif change == 'stale': receipts[0]['viewport']['revision'] = 1
+            elif change == 'wrongFrame': receipts[0]['viewport']['sameFrame'] = False
+            elif change == 'effect': receipts[0]['viewport']['effectId'] = 9
+            else: receipts[0]['confirmations'] = 1
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                report.settlements(settle_text(receipts), 'lazyHistoryIme')
+
+    def test_all_pending_gates_and_mistyped_scalar_receipts_are_rejected(self):
+        for field, value in (('widthReady', False), ('geometryReady', False), ('tailSatisfied', False),
+                             ('wantsVirtual', False), ('pan', False), ('selection', True), ('tui', True),
+                             ('alternate', True), ('ime', True), ('imeFallback', True), ('writers', True),
+                             ('scrolling', True), ('historyRows', 0), ('bindingVirtual', False)):
+            receipts = settled()
+            receipts[0]['viewport'][field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                report.settlements(settle_text(receipts), 'lazyHistoryIme')
+        receipts = settled()
+        receipts[1]['viewport']['avoidIme'] = False
+        with self.assertRaises(ValueError):
+            report.settlements(settle_text(receipts), 'lazyHistoryIme')
+
+    def test_cross_phase_reused_draw_or_missing_null_field_cannot_pass(self):
+        for change in ('draw', 'time', 'source', 'gesture', 'effect'):
+            receipts = settled()
+            second = receipts[1]
+            if change == 'draw': second['afterDraw'] = 0
+            elif change == 'time': second['viewport']['timeNanos'] = 1
+            elif change == 'source':
+                second['viewport']['revision'] = 9
+                second['minRevision'] = 9
+            elif change == 'gesture': del second['viewport']['gestureId']
+            else: del second['viewport']['effectId']
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                report.settlements(settle_text(receipts), 'lazyHistoryIme')
+
     def test_complete_pressure_keeps_all_samples_and_increases(self):
         rows = samples()
         rows[-1]['pssKb'] += 100

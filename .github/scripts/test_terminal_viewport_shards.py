@@ -35,7 +35,7 @@ class ViewportShardTest(unittest.TestCase):
         # Full-suite branches only; focused entries may repeat names or choose individual methods.
         full = workflow.split('if [ "$TERMINAL_VIEWPORT_GROUP" = interaction ]; then', 1)[1]
         tokens = set(re.findall(r"--require-case-group '([^']+)'", full))
-        self.assertEqual(157, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
+        self.assertEqual(158, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
         # Most groups use a shared method prefix; render controls retain two distinct names.
         methods = [name for path in TESTS.glob('*InstrumentedTest.kt')
                    for name in re.findall(r'@Test\s+fun\s+(\w+)\(', path.read_text())]

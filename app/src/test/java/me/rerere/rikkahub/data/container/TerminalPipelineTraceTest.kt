@@ -36,6 +36,93 @@ class TerminalPipelineTraceTest {
         }
     }
 
+    @Test fun absentOrReversedDrawDiscardsPreviouslyAcceptedHalfOfAConfirmation() {
+        val probe = TerminalPipelineSettleProbe()
+        val mode = TerminalRenderMode.VIRTUAL_HISTORY_IME
+        fun sample(draw: Long) = TerminalPipelineViewportSample(draw, draw, viewport())
+        assertFalse(probe.observe(sample(2), mode, true, false, 1))
+        assertFalse(probe.observe(null, mode, true, false, 1))
+        assertEquals(0, probe.confirmations)
+        assertFalse(probe.observe(sample(3), mode, true, false, 1))
+        assertFalse(probe.observe(sample(2), mode, true, false, 1))
+        assertEquals(0, probe.confirmations)
+        assertFalse(probe.observe(sample(4), mode, true, false, 1))
+        assertTrue(probe.observe(sample(5), mode, true, false, 1))
+    }
+
+    @Test fun settleRequiresTwoNewActualDrawsNotTwoReadsOfOneSnapshot() {
+        val value = viewport()
+        val mode = TerminalRenderMode.VIRTUAL_HISTORY_IME
+        val probe = TerminalPipelineSettleProbe(afterDraw = 10)
+        fun sample(draw: Long) = TerminalPipelineViewportSample(draw, draw * 100, value)
+        assertFalse(probe.observe(sample(10), mode, true, false, 1))
+        assertFalse(probe.observe(sample(11), mode, true, false, 1))
+        repeat(10) { assertFalse(probe.observe(sample(11), mode, true, false, 1)) }
+        assertEquals(1, probe.confirmations)
+        assertTrue(probe.observe(sample(12), mode, true, false, 1))
+        assertEquals(11L, probe.firstStableDraw)
+        assertEquals(2, probe.confirmations)
+    }
+
+    @Test fun visibleEagerHandoffAndUnmeasuredVirtualNeverSatisfyTheExpectedVirtualMode() {
+        val mode = TerminalRenderMode.VIRTUAL_HISTORY_IME
+        val ready = viewport()
+        val waiting = listOf(
+            ready.copy(virtual = false, bindingVirtual = false, widthReady = false),
+            ready.copy(widthReady = false, geometryReady = false, tailSatisfied = false),
+            ready.copy(effectId = 7, writers = 1, scrolling = true),
+        )
+        for (value in waiting) {
+            val probe = TerminalPipelineSettleProbe()
+            repeat(8) { index ->
+                assertFalse(probe.observe(TerminalPipelineViewportSample(index.toLong() + 1, index.toLong(), value),
+                    mode, true, false, 1))
+            }
+            assertFalse(probe.observe(TerminalPipelineViewportSample(9, 9, ready), mode, true, false, 1))
+            assertTrue(probe.observe(TerminalPipelineViewportSample(10, 10, ready), mode, true, false, 1))
+        }
+    }
+
+    @Test fun everyCompatibilityReadinessAndSourceGateCanRejectASample() {
+        val ready = viewport()
+        val wrong = listOf(
+            ready.copy(preferred = TerminalRenderMode.DEFAULT), ready.copy(applied = TerminalRenderMode.DEFAULT),
+            ready.copy(historyRows = 0), ready.copy(hasChunks = false), ready.copy(pan = false),
+            ready.copy(selection = true), ready.copy(tui = true), ready.copy(alternate = true),
+            ready.copy(ime = true), ready.copy(imeFallback = true), ready.copy(wantsVirtual = false),
+            ready.copy(virtual = false), ready.copy(bindingVirtual = false), ready.copy(sameFrame = false),
+            ready.copy(initialized = false), ready.copy(following = false), ready.copy(gestureId = 1),
+            ready.copy(effectId = 1), ready.copy(writers = 1), ready.copy(scrolling = true),
+            ready.copy(geometryReady = false), ready.copy(widthReady = false), ready.copy(tailSatisfied = false),
+            ready.copy(revision = 0),
+        )
+        for (value in wrong) assertFalse(value.satisfies(TerminalRenderMode.VIRTUAL_HISTORY_IME, true, false, 1))
+        assertTrue(ready.copy(ime = true, avoidIme = true)
+            .satisfies(TerminalRenderMode.VIRTUAL_HISTORY_IME, true, true, 1))
+        val fallback = ready.copy(preferred = TerminalRenderMode.VIRTUAL_HISTORY,
+            applied = TerminalRenderMode.VIRTUAL_HISTORY, imeFallback = true,
+            wantsVirtual = false, virtual = false, bindingVirtual = false, widthReady = false)
+        assertTrue(fallback.satisfies(TerminalRenderMode.VIRTUAL_HISTORY, false, false, 1))
+        assertFalse(fallback.satisfies(TerminalRenderMode.VIRTUAL_HISTORY, true, false, 1))
+    }
+
+    @Test fun changedFrameOrInterveningInvalidLayoutRestartsConsecutiveDrawConfirmation() {
+        val mode = TerminalRenderMode.VIRTUAL_HISTORY_IME
+        val probe = TerminalPipelineSettleProbe()
+        val ready = viewport()
+        assertFalse(probe.observe(TerminalPipelineViewportSample(1, 1, ready), mode, true, false, 1))
+        assertFalse(probe.observe(TerminalPipelineViewportSample(2, 2, ready.copy(revision = 2)),
+            mode, true, false, 2))
+        assertFalse(probe.observe(TerminalPipelineViewportSample(3, 3, ready.copy(geometryReady = false)),
+            mode, true, false, 2))
+        assertEquals(0, probe.confirmations)
+        assertFalse(probe.observe(TerminalPipelineViewportSample(4, 4, ready.copy(revision = 2)),
+            mode, true, false, 2))
+        assertTrue(probe.observe(TerminalPipelineViewportSample(5, 5, ready.copy(revision = 2)),
+            mode, true, false, 2))
+        assertEquals(4L, probe.firstStableDraw)
+    }
+
     @Test fun viewportDiagnosticsCannotCrossSessionsOrReviveAClosedCapture() {
         val old = TerminalPipelineTrace.start("one")
         TerminalPipelineTrace.recordViewport("other", viewport())

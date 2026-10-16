@@ -318,12 +318,21 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             notice('notice', f'Stable mount transitions {start // 2 + 1}', json.dumps(transitions[start:start + 2]))
         return report
     if service or soak:
-        results = bundle_reports.service('\n'.join(logs)) if service else bundle_reports.soak('\n'.join(logs), mode, seconds)
+        results = bundle_reports.service('\n'.join(logs)) if service else bundle_reports.soak(
+            '\n'.join(logs), mode, seconds, require_settled=True)
         report = dict(manifest=manifest, device=device, installedApkHashes=installed_hashes, results=results)
         (OUT / ('service-results.json' if service else 'soak-results.json')).write_text(json.dumps(report, indent=2) + '\n')
         if emit_evidence:
-            brief = results if service else {key: value for key, value in results.items() if key != 'samples'}
+            brief = results if service else {key: value for key, value in results.items()
+                                            if key not in ('samples', 'settlements')}
             notice('notice', 'Terminal bundle service verified' if service else 'Terminal bundle soak verified', json.dumps(brief))
+            if soak:
+                for index, receipt in enumerate(results['settlements'][:8]):
+                    notice('notice', f'Viewport convergence receipt {index + 1}', json.dumps(receipt))
+                notice('notice', 'Viewport convergence inventory', json.dumps(dict(
+                    contract=bundle_reports.SETTLE_CONTRACT, count=len(results['settlements']),
+                    phases=[r['phase'] for r in results['settlements']],
+                    sha256=hashlib.sha256(json.dumps(results['settlements'], sort_keys=True).encode()).hexdigest())))
         return report
     if transport:
         probes = [json.loads(line.split('TRANSPORT_PROBE ', 1)[1]) for line in logcat.splitlines() if 'TRANSPORT_PROBE ' in line]
@@ -343,7 +352,14 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     rows = validate_samples(logcat.splitlines())
     if any('panelCompositions' not in row for row in rows):
         raise ValueError('Current pipeline target must report panel composition work')
+    # Whole-batch comparison deliberately installs a frozen pre-batch driver; never relabel its old evidence.
+    current_receipts = None
+    if 'commonTestSources' not in manifest:
+        current_receipts = [receipt for mode in MODES
+                            for receipt in bundle_reports.settlements('\n'.join(logs), mode)]
     report = dict(manifest=manifest, device=device, installedApkHashes=installed_hashes, samples=rows,
+                  settlementContract=bundle_reports.SETTLE_CONTRACT if current_receipts is not None else None,
+                  settlements=current_receipts,
                   note='Full production page + native PTY in an emulator; synthetic input, traced first draw, '
                        'and separately timed test visibility confirmation. Neither GPU presentation nor phone FPS.')
     data = json.dumps(report, separators=(',', ':')).encode()
@@ -448,7 +464,7 @@ def failure_excerpt(path):
             line = raw.rstrip()[:550]
             tail.append(line)
             if any(word in line for word in ('TerminalPipelineActivity', 'PIPELINE_READY', 'PIPELINE_DIAGNOSTIC', 'PIPELINE_GEOMETRY',
-                                             'TRANSPORT_PROBE', 'NativePtyProcess', 'MOUNT_DIAGNOSTIC')):
+                                             'TRANSPORT_PROBE', 'NativePtyProcess', 'MOUNT_DIAGNOSTIC', 'SETTLE_FAILURE')):
                 lifecycle.append(line)
             if remaining == 0 and blocks < 2 and any(marker in line for marker in
                 ('Error in ', 'stack=', 'java.lang.', 'FATAL EXCEPTION')):

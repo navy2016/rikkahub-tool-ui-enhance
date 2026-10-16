@@ -26,6 +26,7 @@ ARMS = ('legacy', 'candidate')
 MAIN = 'app/src/main/java/me/rerere/rikkahub/'
 ALLOWED = {MAIN + name for name in (
     'data/container/BackgroundProcessManager.kt', 'data/container/TerminalForegroundLifecycle.kt',
+    'data/container/TerminalPipelineTrace.kt',
     'data/container/TerminalOutputNotifications.kt', 'data/container/TerminalWidthCheckpointStore.kt',
     'data/container/TerminalTranscriptWidthIndex.kt', 'service/ContainerProcessForegroundService.kt',
     'utils/TerminalEmulator.kt', 'ui/pages/container/ProcessSessionPage.kt',

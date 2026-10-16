@@ -34,6 +34,7 @@ import me.rerere.rikkahub.data.container.TerminalPipelineEvent
 import me.rerere.rikkahub.data.container.TerminalPipelineStage
 import me.rerere.rikkahub.data.container.TerminalPipelineTrace
 import me.rerere.rikkahub.data.container.TerminalPipelineViewportSample
+import me.rerere.rikkahub.data.container.TerminalPipelineSettleProbe
 import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -63,6 +64,7 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
     private val settings: SettingsStore by inject()
     private var diagnosticProcessId: String? = null
     private var diagnosticCapture: TerminalPipelineTrace.Capture? = null
+    private var requireSettledSamples = true
 
     @Test fun pipelineDefaultPtyEchoKeyboardAndRemount() = exercise(TerminalRenderMode.DEFAULT)
     @Test fun pipelineVirtualPtyEchoKeyboardAndRemount() = exercise(TerminalRenderMode.VIRTUAL_HISTORY)
@@ -74,6 +76,48 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
         require(seconds in 60..1800)
         val mode = TerminalRenderMode.fromId(requireNotNull(args.getString("terminalSoakMode")))
         exercise(mode, seconds)
+    }
+
+    /** Wake the existing frame/layout observers; never mutate scroll, controller, geometry or mode. */
+    private fun awaitSettledViewport(
+        capture: TerminalPipelineTrace.Capture, mode: TerminalRenderMode, expectedVirtual: Boolean,
+        expectedIme: Boolean, phase: String, launch: String,
+    ) {
+        val id = requireNotNull(diagnosticProcessId)
+        val started = System.nanoTime()
+        val afterDraw = capture.viewport()?.draw ?: 0L
+        val probe = TerminalPipelineSettleProbe(afterDraw)
+        var accepted: TerminalPipelineViewportSample? = null
+        var acceptedRevision = -1L
+        try {
+            compose.waitUntil(15_000) {
+                val sample = capture.viewport()
+                val minRevision = requireNotNull(manager.getInteractiveTerminalEmulator(id)).revision()
+                val ready = probe.observe(sample, mode, expectedVirtual, expectedIme, minRevision)
+                if (ready) {
+                    accepted = sample
+                    acceptedRevision = minRevision
+                } else compose.runOnUiThread { capture.requestViewportDraw() }
+                ready
+            }
+        } catch (error: Throwable) {
+            val last = capture.viewport()?.toDiagnosticJson() ?: JSONObject.NULL
+            InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
+                putString("stream", "\nSETTLE_FAILURE " + JSONObject().put("phase", phase)
+                    .put("launch", launch).put("mode", mode.id).put("expectedVirtual", expectedVirtual)
+                    .put("expectedIme", expectedIme).put("last", last) + "\n")
+            })
+            throw error
+        }
+        val receipt = JSONObject().put("suite", "terminal-settled-viewport-v1").put("phase", phase)
+            .put("launch", launch).put("mode", mode.id).put("expectedVirtual", expectedVirtual)
+            .put("expectedIme", expectedIme).put("settleMs", (System.nanoTime() - started) / 1_000_000.0)
+            .put("afterDraw", afterDraw).put("firstStableDraw", probe.firstStableDraw)
+            .put("confirmations", probe.confirmations).put("minRevision", acceptedRevision)
+            .put("viewport", requireNotNull(accepted).toDiagnosticJson())
+        InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
+            putString("stream", "\nSETTLE_RECEIPT $receipt\n")
+        })
     }
 
     /** Diagnostic, NOT a passed pressure test: records the original instantaneous assertion then convergence. */
@@ -164,6 +208,7 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
     /** Monotonic real time, not Compose's accelerated clock. Each cycle waits for actual visible child output. */
     private fun sustained(mode: TerminalRenderMode, launch: String, processId: String,
         capture: TerminalPipelineTrace.Capture, seconds: Int, mount: (Boolean) -> Unit) {
+        awaitSettledViewport(capture, mode, mode.isVirtualHistory, false, "pressureStart", launch)
         val start = SystemClock.elapsedRealtimeNanos()
         val deadline = start + seconds * 1_000_000_000L
         var cycle = 0
@@ -230,6 +275,10 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
             assertEquals(1, events.count { it.stage == TerminalPipelineStage.UI_INPUT })
             val revision = events.last { it.stage == TerminalPipelineStage.EMULATOR_FED }.frameRevision
             assertTrue(events.any { it.stage == TerminalPipelineStage.FRAME_DRAWN && it.frameRevision >= revision })
+            val finalDraw = events.last {
+                it.stage == TerminalPipelineStage.FRAME_DRAWN && it.frameRevision >= revision
+            }
+            assertEquals("Pressure must run the requested backend", mode.isVirtualHistory, finalDraw.virtual)
             val notification = requireNotNull(manager.observeTerminalUpdates(processId)).value
             assertTrue(notification.revision >= revision)
             readBytes += reads
@@ -248,6 +297,7 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
                     compose.waitForIdle()
                     compose.runOnIdle { mount(true) }
                     waitVisible("ECHO:$marker")
+                    awaitSettledViewport(capture, mode, mode.isVirtualHistory, false, "pressureRemount", launch)
                     remounts++
                 }
             }
@@ -257,6 +307,7 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
     }
 
     private fun exercise(mode: TerminalRenderMode, soakSeconds: Int = 0, observeMountOnly: Boolean = false) {
+        requireSettledSamples = !observeMountOnly
         check(compose.activity.packageName == "me.rerere.rikkahub.dev.next.terminaltest")
         if (Build.VERSION.SDK_INT >= 33) assertEquals("Runner must grant only the test app's notifications before launch",
             PackageManager.PERMISSION_GRANTED, compose.activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS))
@@ -363,6 +414,9 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
 
     private fun sampleGroup(mode: TerminalRenderMode, phase: String, launch: String,
         capture: TerminalPipelineTrace.Capture, expectVirtual: Boolean) {
+        if (requireSettledSamples) {
+            awaitSettledViewport(capture, mode, expectVirtual, phase == "imeVisible", phase, launch)
+        }
         repeat(3) { index ->
             val marker = "$phase-$index"
             val expectedBytes = "ECHO:$marker\r\n".toByteArray().size

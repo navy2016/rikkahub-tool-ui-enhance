@@ -1,5 +1,9 @@
 package me.rerere.rikkahub.data.container
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+
 /** Fixed vocabulary only: never accept terminal text, command strings, paths or arbitrary labels. */
 internal enum class TerminalPipelineStage {
     UI_INPUT, INPUT_ENQUEUE_STARTED, INPUT_ENQUEUED, INPUT_WRITE_STARTED, INPUT_WRITTEN,
@@ -43,7 +47,66 @@ internal data class TerminalPipelineViewport(
     val geometryReady: Boolean,
     val widthReady: Boolean,
     val tailSatisfied: Boolean,
-)
+) {
+    /** Read-only acceptance predicate. Never derives mode expectations from the observed backend. */
+    fun satisfies(
+        mode: TerminalRenderMode, expectedVirtual: Boolean, expectedIme: Boolean, minRevision: Long,
+    ): Boolean {
+        return minRevision >= 0 && revision >= minRevision && preferred == mode && applied == mode &&
+            hasChunks && historyRows > 0 &&
+            pan && !selection && !tui && !alternate && ime == expectedIme &&
+            wantsVirtual == expectedVirtual && virtual == expectedVirtual && bindingVirtual == expectedVirtual &&
+            (!expectedVirtual || (!imeFallback && (!ime || avoidIme) && widthReady)) &&
+            sameFrame && initialized && following && gestureId == null && effectId == null &&
+            writers == 0 && !scrolling && geometryReady && tailSatisfied
+    }
+}
+
+/** Two actual terminal draws with the same completed source. A repeated poll is never a draw. */
+internal class TerminalPipelineSettleProbe(afterDraw: Long = 0L) {
+    private var lastDraw = afterDraw
+    private var previous: TerminalPipelineViewport? = null
+    var confirmations = 0
+        private set
+    var firstStableDraw = 0L
+        private set
+
+    private fun reset() {
+        previous = null
+        confirmations = 0
+        firstStableDraw = 0
+    }
+
+    fun observe(
+        sample: TerminalPipelineViewportSample?,
+        mode: TerminalRenderMode,
+        expectedVirtual: Boolean,
+        expectedIme: Boolean,
+        minRevision: Long,
+    ): Boolean {
+        if (sample == null) {
+            reset()
+            return false
+        }
+        if (sample.draw < lastDraw) {
+            reset()
+            return false
+        }
+        if (sample.draw == lastDraw) return false
+        lastDraw = sample.draw
+        val value = sample.viewport
+        if (!value.satisfies(mode, expectedVirtual, expectedIme, minRevision)) {
+            reset()
+            return false
+        }
+        if (previous == value) confirmations++ else {
+            confirmations = 1
+            firstStableDraw = sample.draw
+        }
+        previous = value
+        return confirmations >= 2
+    }
+}
 
 internal data class TerminalPipelineViewportSample(
     val draw: Long, val timeNanos: Long, val viewport: TerminalPipelineViewport,
@@ -66,6 +129,9 @@ internal object TerminalPipelineTrace {
     }
 
     fun isRecording(processId: String): Boolean = active?.processId == processId
+
+    /** Read only inside the opt-in draw modifier; a test pulse invalidates that draw node, not UI state. */
+    fun viewportDrawRequest(processId: String): Int = active?.takeIf { it.processId == processId }?.drawRequest ?: 0
 
     fun record(processId: String, stage: TerminalPipelineStage, bytes: Int = 0,
         frameRevision: Long = -1, virtual: Boolean? = null) {
@@ -95,6 +161,8 @@ internal object TerminalPipelineTrace {
         private var drawSequence = 0L
         private var latestViewport: TerminalPipelineViewportSample? = null
         private val viewportTransitions = ArrayDeque<TerminalPipelineViewportSample>()
+        internal var drawRequest by mutableIntStateOf(0)
+            private set
         @Volatile var dropped = 0L
             private set
 
@@ -118,6 +186,10 @@ internal object TerminalPipelineTrace {
         }
         @Synchronized fun viewport(): TerminalPipelineViewportSample? = latestViewport
         @Synchronized fun viewportTransitions(): List<TerminalPipelineViewportSample> = viewportTransitions.toList()
+        /** Test UI-thread request. It only schedules another actual draw of the existing terminal. */
+        @Synchronized fun requestViewportDraw() {
+            if (!closed) drawRequest++
+        }
         /** Explicit test sample window, preserving monotonic sequence numbers across windows. */
         @Synchronized fun beginWindow(): Long {
             check(!closed)
