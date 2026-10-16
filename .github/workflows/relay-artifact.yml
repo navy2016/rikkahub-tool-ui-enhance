@@ -1,0 +1,110 @@
+name: Relay Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Completed source run in this repository and optimization branch'
+        type: string
+        required: true
+      artifact_id:
+        description: 'Exact artifact ID owned by that run; never infer the first/latest artifact'
+        type: string
+        required: true
+      source_sha:
+        description: 'Exact source SHA of the completed run'
+        type: string
+        required: true
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  relay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Bind existing artifact to source, verify archive and publish an isolated transfer asset
+        uses: actions/github-script@v7
+        env:
+          SOURCE_RUN: ${{ inputs.run_id }}
+          SOURCE_ARTIFACT: ${{ inputs.artifact_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          GH_TOKEN: ${{ github.token }}
+        with:
+          script: |
+            const crypto = require('crypto');
+            const runId = process.env.SOURCE_RUN;
+            const artifactId = process.env.SOURCE_ARTIFACT;
+            const sha = process.env.SOURCE_SHA;
+            if (!/^\d+$/.test(runId) || !/^\d+$/.test(artifactId) || !/^[a-f0-9]{40}$/.test(sha)) {
+              throw new Error('Explicit numeric run/artifact and exact SHA are required');
+            }
+            if (context.ref !== 'refs/heads/opt/terminal-verified-a79e7b6') {
+              throw new Error('Relay is restricted to the authorized optimization branch');
+            }
+            const repo = {owner: context.repo.owner, repo: context.repo.repo};
+            const {data: run} = await github.rest.actions.getWorkflowRun({...repo, run_id: Number(runId)});
+            const allowed = ['release.yml', 'verify-release-apk.yml', 'terminal-pipeline-tests.yml',
+              'terminal-emulator-tests.yml', 'terminal-viewport-interactions.yml', 'terminal-production-benchmark.yml'];
+            if (run.status !== 'completed' || run.head_sha !== sha ||
+                run.head_branch !== 'opt/terminal-verified-a79e7b6' ||
+                !allowed.some(path => run.path === '.github/workflows/' + path)) {
+              throw new Error('Source run identity or workflow does not match');
+            }
+            if (run.path === '.github/workflows/release.yml' && run.conclusion !== 'success') {
+              throw new Error('Never relay an unsuccessful production build as an APK');
+            }
+            const {data: artifact} = await github.rest.actions.getArtifact({...repo, artifact_id: Number(artifactId)});
+            if (String(artifact.workflow_run?.id) !== runId || artifact.expired ||
+                artifact.workflow_run?.head_sha !== sha || artifact.size_in_bytes <= 0 ||
+                artifact.size_in_bytes > 400 * 1024 * 1024 || !/^sha256:[a-f0-9]{64}$/.test(artifact.digest || '')) {
+              throw new Error('Artifact ownership, size, expiry or digest is invalid');
+            }
+            const request = await fetch(`${process.env.GITHUB_API_URL}/repos/${repo.owner}/${repo.repo}/actions/artifacts/${artifactId}/zip`, {
+              headers: {Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json'},
+              redirect: 'manual', signal: AbortSignal.timeout(30000)
+            });
+            if (request.status !== 302) throw new Error(`Artifact redirect status ${request.status}`);
+            // Signed storage URL and credentials must never be printed or copied into the release.
+            const response = await fetch(request.headers.get('location'), {signal: AbortSignal.timeout(180000)});
+            if (!response.ok) throw new Error(`Artifact storage status ${response.status}`);
+            const archive = Buffer.from(await response.arrayBuffer());
+            const digest = 'sha256:' + crypto.createHash('sha256').update(archive).digest('hex');
+            if (archive.length !== artifact.size_in_bytes || digest !== artifact.digest) {
+              throw new Error('Downloaded artifact archive size/digest mismatch');
+            }
+            const tag = `terminal-relay-${runId}-${artifactId}`;
+            const filename = `artifact-${artifactId}.zip`;
+            const receipt = {repository: `${repo.owner}/${repo.repo}`, sourceRun: runId, sourceSha: sha,
+              artifactId, artifactName: artifact.name, bytes: archive.length, digest,
+              sourceConclusion: run.conclusion, sourceUrl: run.html_url};
+            const body = 'Exact artifact transfer only; not an application release or acceptance claim.\n\n' +
+              '```json\n' + JSON.stringify(receipt, null, 2) + '\n```';
+            let release;
+            try {
+              release = (await github.rest.repos.getReleaseByTag({...repo, tag})).data;
+              if (release.body !== body || !release.prerelease || release.draft) {
+                throw new Error('Existing relay tag does not match this artifact; refusing overwrite');
+              }
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              release = (await github.rest.repos.createRelease({...repo, tag_name: tag, target_commitish: sha,
+                name: `Terminal artifact transfer ${runId}/${artifactId}`, body, prerelease: true,
+                draft: false, make_latest: 'false', generate_release_notes: false})).data;
+            }
+            let asset = release.assets.find(item => item.name === filename);
+            if (asset && (asset.size !== archive.length || asset.digest !== digest)) {
+              throw new Error('Existing asset differs; refusing overwrite');
+            }
+            if (!asset) {
+              asset = (await github.rest.repos.uploadReleaseAsset({...repo, release_id: release.id,
+                name: filename, data: archive,
+                headers: {'content-type': 'application/zip', 'content-length': archive.length}})).data;
+            }
+            if (asset.size !== archive.length || asset.digest !== digest) {
+              throw new Error('Uploaded relay asset digest differs');
+            }
+            core.notice(JSON.stringify({...receipt, relayTag: tag, assetId: asset.id,
+              url: asset.browser_download_url}), {title: 'Terminal artifact relay verified'});
