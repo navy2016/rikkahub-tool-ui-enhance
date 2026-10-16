@@ -73,8 +73,9 @@ jobs:
             const {data: job} = await github.rest.actions.getJobForWorkflowRun({...repo, job_id: Number(id)});
             const {data: run} = await github.rest.actions.getWorkflowRun({...repo, run_id: job.run_id});
             if (!['.github/workflows/terminal-scrollback-benchmark.yml',
-                  '.github/workflows/terminal-production-benchmark.yml'].includes(run.path) || job.status !== 'completed') {
-              throw new Error('Only completed benchmark jobs in this repository may be diagnosed');
+                  '.github/workflows/terminal-production-benchmark.yml',
+                  '.github/workflows/terminal-viewport-interactions.yml'].includes(run.path) || job.status !== 'completed') {
+              throw new Error('Only completed terminal benchmark/viewport jobs in this repository may be diagnosed');
             }
             const url = `${process.env.GITHUB_API_URL}/repos/${repo.owner}/${repo.repo}/actions/jobs/${id}/logs`;
             const redirect = await fetch(url, {
@@ -109,7 +110,7 @@ jobs:
               let lines = new TextDecoder().decode(buffer).split('\n')
                 .filter(line => !/sig=|jwt=|token=/i.test(line));
               if (section === 'startup') {
-                lines = lines.filter(line => /accel|kvm|CPU|memory|emulator .*avd|permission/i.test(line));
+                lines = lines.filter(line => /accel|kvm|CPU|memory|emulator .*avd|permission|ndk|install|download|error|exception|zip|space/i.test(line));
               } else lines = lines.slice(-60);
               const text = lines.join('\n');
               core.info(`run=${run.id} sha=${run.head_sha} job=${id} section=${section} range=${part.headers.get('content-range')}`);

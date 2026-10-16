@@ -93,6 +93,9 @@ jobs:
           elif [ "$TERMINAL_VIEWPORT_SUITE" = chunkViews ]; then
             cd .github/scripts
             python3 -m unittest test_terminal_viewport_shards test_terminal_chunk_views
+          elif [ "$TERMINAL_VIEWPORT_SUITE" = stableMount ]; then
+            cd .github/scripts
+            python3 -m unittest test_terminal_viewport_shards test_terminal_bundle_reports test_terminal_pipeline
           else
             python3 -m unittest discover -s .github/scripts -p 'test_*.py'
           fi
