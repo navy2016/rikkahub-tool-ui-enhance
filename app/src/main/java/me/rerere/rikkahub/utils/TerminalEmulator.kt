@@ -39,6 +39,7 @@ class TerminalEmulator(
         private const val MAX_CSI_LENGTH = 256
         private const val MAX_STRING_SEQUENCE = 4096
         private const val ZERO_WIDTH_JOINER = 0x200D
+        private val ASCII_TEXT = Array(128) { it.toChar().toString() }
     }
 
     private data class Hyperlink(val uri: String, val id: String? = null)
@@ -262,6 +263,10 @@ class TerminalEmulator(
     private val tabStops = sortedSetOf<Int>()
     private val clipboardRequests = mutableListOf<String>()
     private var currentHyperlink: Hyperlink? = null
+    private var writeStyleBase: Style? = null
+    private var writeStyleLink: Hyperlink? = null
+    private var cachedWriteStyle: Style? = null
+    private var cachedBlank: Cell? = null
     private val paletteOverrides = mutableMapOf<Int, Color>()
     private var defaultForeground = Color(0xFF00E676)
     private var defaultBackground = Color(0xFF101010)
@@ -276,6 +281,8 @@ class TerminalEmulator(
         .onMalformedInput(CodingErrorAction.REPLACE)
         .onUnmappableCharacter(CodingErrorAction.REPLACE)
     private var pendingUtf8 = ByteArray(0)
+    // A session-local bounded scratch, never retained with history or exposed through snapshots.
+    private val decodedCharacters = CharBuffer.allocate(4096)
 
     // Archived rows are immutable until a column resize replaces them. Keeping their render
     // cache with the row makes reuse explicit and prevents mutable live-screen rows from being
@@ -543,12 +550,15 @@ class TerminalEmulator(
     fun feed(bytes: ByteArray) {
         val source = if (pendingUtf8.isEmpty()) bytes else pendingUtf8 + bytes
         val input = ByteBuffer.wrap(source)
-        val output = CharBuffer.allocate((source.size * 2).coerceAtLeast(16))
+        val output = decodedCharacters
+        output.clear()
+        var decoded = false
         while (true) {
             val result = utf8Decoder.decode(input, output, false)
             output.flip()
             if (output.hasRemaining()) {
-                feed(output.toString())
+                feedCharacters(output)
+                decoded = true
             }
             output.clear()
             if (result.isOverflow) continue
@@ -563,22 +573,36 @@ class TerminalEmulator(
             pendingUtf8 = ByteArray(0)
             break
         }
+        // The former source-sized decoder called feed(String) once per nonempty decoded chunk.
+        // Scratch overflow must not publish extra revisions or split supplementary characters.
+        if (decoded) stateRevision++
     }
 
     @Synchronized
     fun feed(text: String) {
+        feedCharacters(text)
+        if (text.isNotEmpty()) stateRevision++
+    }
+
+    private fun feedCharacters(text: CharSequence) {
         var index = 0
         while (index < text.length) {
-            val codePoint = Character.codePointAt(text, index)
-            val chars = String(Character.toChars(codePoint))
-            if (parserState == ParserState.NORMAL && Character.charCount(codePoint) > 1) {
-                putCodePoint(chars, codePoint)
+            val ch = text[index]
+            if (Character.isHighSurrogate(ch) && index + 1 < text.length && Character.isLowSurrogate(text[index + 1])) {
+                val low = text[index + 1]
+                if (parserState == ParserState.NORMAL) {
+                    val codePoint = Character.toCodePoint(ch, low)
+                    putCodePoint(String(charArrayOf(ch, low)), codePoint)
+                } else {
+                    feedChar(ch)
+                    feedChar(low)
+                }
+                index += 2
             } else {
-                chars.forEach { feedChar(it) }
+                feedChar(ch)
+                index++
             }
-            index += Character.charCount(codePoint)
         }
-        if (text.isNotEmpty()) stateRevision++
     }
 
     @Synchronized
@@ -1066,8 +1090,9 @@ class TerminalEmulator(
     }
 
     private fun resizedLine(old: CellLine, newColumns: Int, fillStyle: Style = currentStyle): CellLine {
+        val blank = Cell(style = fillStyle)
         return CellLine(Array(newColumns) { index ->
-            if (index < old.size) old[index].copy() else Cell(style = fillStyle)
+            if (index < old.size) old[index] else blank
         })
     }
 
@@ -1787,7 +1812,7 @@ class TerminalEmulator(
     }
 
     private fun putChar(ch: Char) {
-        putCodePoint(ch.toString(), ch.code)
+        putCodePoint(if (ch.code < ASCII_TEXT.size) ASCII_TEXT[ch.code] else ch.toString(), ch.code)
     }
 
     private fun putCodePoint(text: String, codePoint: Int) {
@@ -1807,15 +1832,15 @@ class TerminalEmulator(
         lastGraphicText = text
         lastGraphicCodePoint = codePoint
         if (width == 2 && cursorCol == columns - 1) {
-            screen[cursorRow][cursorCol] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+            screen[cursorRow][cursorCol] = blankCell()
             cursorCol = 0
             lineFeed()
         }
         if (insertMode) insertChars(width)
         clearCellForWrite(cursorRow, cursorCol)
-        screen[cursorRow][cursorCol] = Cell(text, currentStyle.copy(hyperlink = currentHyperlink), width, continuation = false)
+        screen[cursorRow][cursorCol] = Cell(text, styleForWrite(), width, continuation = false)
         if (width == 2 && cursorCol + 1 < columns) {
-            screen[cursorRow][cursorCol + 1] = Cell("", currentStyle.copy(hyperlink = currentHyperlink), 0, continuation = true)
+            screen[cursorRow][cursorCol + 1] = Cell("", styleForWrite(), 0, continuation = true)
         }
         if (cursorCol + width >= columns) {
             cursorCol = columns - 1
@@ -1844,10 +1869,10 @@ class TerminalEmulator(
 
     private fun clearCellForWrite(row: Int, col: Int) {
         if (screen[row][col].continuation && col > 0) {
-            screen[row][col - 1] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+            screen[row][col - 1] = blankCell()
         }
         if (col + 1 < columns && screen[row][col + 1].continuation) {
-            screen[row][col + 1] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+            screen[row][col + 1] = blankCell()
         }
     }
 
@@ -1915,7 +1940,7 @@ class TerminalEmulator(
         val removed = screen[scrollTop]
         val removedLineId = activeScreenLineIds[scrollTop]
         if (!alternateScreen && scrollTop == 0) {
-            val archivedCells = CellLine(Array(columns) { i -> removed[i].copy() })
+            val archivedCells = CellLine(Array(columns) { i -> removed[i] })
             scrollback.addLast(newScrollbackLine(removedLineId, archivedCells))
             while (scrollback.size > scrollbackLimit) {
                 scrollback.removeFirst()
@@ -1976,7 +2001,7 @@ class TerminalEmulator(
         if (row !in 0 until rows || endCol < startCol) return
         for (c in startCol.coerceAtLeast(0)..endCol.coerceAtMost(columns - 1)) {
             if (!selective || !screen[row][c].style.protected) {
-                screen[row][c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+                screen[row][c] = blankCell()
             }
         }
     }
@@ -2061,9 +2086,9 @@ class TerminalEmulator(
         for (row in top..bottom) {
             var col = left
             while (col <= right) {
-                screen[row][col] = Cell(fillText, currentStyle.copy(hyperlink = currentHyperlink), width, continuation = false)
+                screen[row][col] = Cell(fillText, styleForWrite(), width, continuation = false)
                 if (width == 2 && col + 1 <= right) {
-                    screen[row][col + 1] = Cell("", currentStyle.copy(hyperlink = currentHyperlink), 0, continuation = true)
+                    screen[row][col + 1] = Cell("", styleForWrite(), 0, continuation = true)
                     col += 2
                 } else {
                     col++
@@ -2180,7 +2205,7 @@ class TerminalEmulator(
         for (row in scrollTop..scrollBottom) {
             val line = screen[row]
             for (col in 0 until columns - n) line[col] = line[col + n].copy()
-            for (col in columns - n until columns) line[col] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+            for (col in columns - n until columns) line[col] = blankCell()
         }
     }
 
@@ -2190,7 +2215,7 @@ class TerminalEmulator(
         for (row in scrollTop..scrollBottom) {
             val line = screen[row]
             for (col in columns - 1 downTo n) line[col] = line[col - n].copy()
-            for (col in 0 until n) line[col] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+            for (col in 0 until n) line[col] = blankCell()
         }
     }
 
@@ -2201,7 +2226,7 @@ class TerminalEmulator(
         val n = count.coerceIn(1, available)
         val line = screen[cursorRow]
         for (c in columns - 1 downTo cursorCol + n) line[c] = line[c - n].copy()
-        for (c in cursorCol until min(columns, cursorCol + n)) line[c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+        for (c in cursorCol until min(columns, cursorCol + n)) line[c] = blankCell()
     }
 
     private fun deleteChars(count: Int) {
@@ -2211,7 +2236,7 @@ class TerminalEmulator(
         val n = count.coerceIn(1, available)
         val line = screen[cursorRow]
         for (c in cursorCol until columns - n) line[c] = line[c + n].copy()
-        for (c in max(cursorCol, columns - n) until columns) line[c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+        for (c in max(cursorCol, columns - n) until columns) line[c] = blankCell()
     }
 
     private fun eraseChars(count: Int) {
@@ -2219,7 +2244,7 @@ class TerminalEmulator(
         val available = columns - cursorCol
         if (available <= 0) return
         val n = count.coerceIn(1, available)
-        for (c in cursorCol until cursorCol + n) screen[cursorRow][c] = Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
+        for (c in cursorCol until cursorCol + n) screen[cursorRow][c] = blankCell()
     }
 
     private fun setScrollRegion(topOneBased: Int, bottomOneBased: Int) {
@@ -2658,9 +2683,26 @@ class TerminalEmulator(
         )
     }
 
-    private fun blankLine(): CellLine = CellLine(Array(columns) {
-        Cell(style = currentStyle.copy(hyperlink = currentHyperlink))
-    })
+    private fun styleForWrite(): Style {
+        val base = currentStyle
+        val link = currentHyperlink
+        if (writeStyleBase === base && writeStyleLink === link) return checkNotNull(cachedWriteStyle)
+        val value = if (base.hyperlink == link) base else base.copy(hyperlink = link)
+        writeStyleBase = base
+        writeStyleLink = link
+        cachedWriteStyle = value
+        return value
+    }
+
+    private fun blankCell(): Cell {
+        val style = styleForWrite()
+        return cachedBlank?.takeIf { it.style === style } ?: Cell(style = style).also { cachedBlank = it }
+    }
+
+    private fun blankLine(): CellLine {
+        val blank = blankCell()
+        return CellLine(Array(columns) { blank })
+    }
 
     private fun cursorGlyph(): String = when (cursorShape) {
         CursorShape.UNDERLINE, CursorShape.STEADY_UNDERLINE -> "▁"

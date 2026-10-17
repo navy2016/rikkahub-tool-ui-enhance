@@ -31,6 +31,10 @@ _byte_spec = importlib.util.spec_from_file_location('terminal_byte_buffer_report
     Path(__file__).with_name('terminal-byte-buffer-reports.py'))
 byte_reports = importlib.util.module_from_spec(_byte_spec)
 _byte_spec.loader.exec_module(byte_reports)
+_tui_spec = importlib.util.spec_from_file_location('terminal_tui_reports',
+    Path(__file__).with_name('terminal-tui-bundle-reports.py'))
+tui_reports = importlib.util.module_from_spec(_tui_spec)
+_tui_spec.loader.exec_module(tui_reports)
 
 
 def notice(level, title, message):
@@ -80,6 +84,15 @@ def sources():
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemExecutor.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportScrollEffects.kt',
         'app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt',
+        'app/src/main/java/me/rerere/rikkahub/utils/TerminalScreenSnapshot.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalResizeCoordinator.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalUiInput.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalDisplayPolicy.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalRenderMode.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalPointerMap.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalCursorOverlayText.kt',
+        'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalTuiBundleInstrumentedTest.kt',
+        '.github/scripts/terminal-tui-bundle-reports.py',
         'app/src/main/cpp/rikkahub_pty.cpp', 'app/build.gradle.kts',
         'app/src/terminaltest/AndroidManifest.xml',
         'app/src/terminaltest/java/me/rerere/rikkahub/pipeline/TerminalPipelineTestActivity.kt',
@@ -189,6 +202,12 @@ def validate_samples(lines):
                 raise ValueError(f'Invalid pipeline order: {a}/{b}')
         if row['inputToDrawMs'] != row['FRAME_DRAWN']:
             raise ValueError('Draw latency differs from traced event')
+        if 'phaseTimings' in row or 'phaseTimingContract' in row:
+            timing = row.get('phaseTimings')
+            if (row.get('phaseTimingContract') != 'terminal-echo-phases-v1' or type(timing) is not dict or
+                    set(timing) != {'readToParseLockMs', 'parseThroughLastChunkMs', 'captureMs', 'rowSyncMs'} or
+                    any(type(v) not in (int, float) or not math.isfinite(v) or v < 0 for v in timing.values())):
+                raise ValueError('Invalid echo phase spans')
         rows.append(row)
         seen.add(key)
     if seen != {(mode, phase, i) for mode in MODES for phase in PHASES for i in range(3)}:
@@ -266,11 +285,15 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     byte_buffer = selected == 'byteBuffer'
     soak = selected == 'soak'
     mount_diagnostic = selected == 'mountDiagnostic'
+    tui = selected == 'tuiOnly'
     methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
         'pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
         'pipelineStableVirtualPtyEchoKeyboardAndRemount')
     test_class = 'me.rerere.rikkahub.pipeline.TerminalPtyTransportInstrumentedTest' if transport else CLASS
     extra_arguments = []
+    if tui:
+        test_class = 'me.rerere.rikkahub.pipeline.TerminalTuiBundleInstrumentedTest'
+        methods = tui_reports.PTY_METHODS
     if mount_diagnostic:
         methods = ('diagnoseStableMountHandoff',)
     if service:
@@ -316,6 +339,16 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             if 'mCurrentFocus=' in line or 'mFocusedApp=' in line) + '\n')
     if failed:
         raise ValueError('; '.join(failed))
+    if tui:
+        cases = tui_reports.validate_pty('\n'.join(logs))
+        report = dict(suite='terminal-tui-bundle-pty-v1', sourceSha=manifest['sourceSha'], runId=manifest['runId'],
+            manifest=manifest, device=device, installedApkHashes=installed_hashes, cases=cases,
+            note='Actual Release-derived page/native PTY; synthetic peers, not real Pi/Claude accounts or phone FPS.')
+        if emit_evidence:
+            tui_reports.publish('Terminal TUI PTY', report, OUT / 'tui-results.json')
+        else:
+            (OUT / 'tui-results.json').write_text(json.dumps(report, indent=2) + '\n')
+        return report
     if mount_diagnostic:
         raw = '\n'.join(logs)
         values = bundle_reports.records(raw, 'MOUNT_DIAGNOSTIC ')
@@ -371,6 +404,8 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     rows = validate_samples(logcat.splitlines())
     if any('panelCompositions' not in row for row in rows):
         raise ValueError('Current pipeline target must report panel composition work')
+    if 'commonTestSources' not in manifest and any('phaseTimings' not in row for row in rows):
+        raise ValueError('Current pipeline target lacks echo phase spans')
     # Whole-batch comparison deliberately installs a frozen pre-batch driver; never relabel its old evidence.
     current_receipts = None
     if 'commonTestSources' not in manifest:
@@ -452,7 +487,7 @@ def emulator(operation=None):
             output(['adb', 'shell', 'input', 'keyevent', '82'])
             if operation is not None:
                 operation()
-            elif os.environ.get('TERMINAL_PIPELINE_SUITE') == 'all':
+            elif os.environ.get('TERMINAL_PIPELINE_SUITE') in ('all', 'tuiBundle'):
                 run('transport')
                 # Keep the successful preflight's logs; the page run has independent lifecycle,
                 # fresh captures and completion receipts but uses the very same APK and guest.
@@ -471,6 +506,12 @@ def emulator(operation=None):
                 byte_buffer.mkdir(exist_ok=True)
                 for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
                     shutil.copyfile(OUT / name, byte_buffer / name)
+                if os.environ.get('TERMINAL_PIPELINE_SUITE') == 'tuiBundle':
+                    run('tuiOnly')
+                    tui_preflight = OUT / 'tui-preflight'
+                    tui_preflight.mkdir(exist_ok=True)
+                    for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
+                        shutil.copyfile(OUT / name, tui_preflight / name)
                 run('pipeline')
             else:
                 run()

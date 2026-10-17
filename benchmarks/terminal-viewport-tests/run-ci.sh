@@ -97,7 +97,7 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
-case "$group" in all|geometry|interaction|bundle) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
+case "$group" in all|geometry|interaction|bundle|tuiDisplay) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
 
 if [ "$group" = all ] || [ "$group" = geometry ]; then
 run_arm chunk-views TerminalChunkViewsInstrumentedTest 360
@@ -130,5 +130,9 @@ adb logcat -d -v threadtime TerminalRenderSnapshot:I '*:S' > artifacts/terminal-
 fi
 if [ "$group" = all ] || [ "$group" = bundle ]; then
 run_arm bundle TerminalBundleInstrumentedTest 600
+fi
+if [ "$group" = all ] || [ "$group" = tuiDisplay ]; then
+run_arm tui-display TerminalTuiDisplayInstrumentedTest 480
+adb logcat -d -v threadtime TerminalTuiDisplay:I '*:S' > artifacts/terminal-validation/tui-display-logcat.txt
 fi
 exit "$overall_status"

@@ -25,6 +25,11 @@ No complete Kitty keyboard protocol, alternate-screen transcript recording, font
 history truncation, generic shell-command reinterpretation, or raw-byte conflation. User controls keep
 their actions/labels; protocol corrections intentionally fix malformed bytes rather than preserve bugs.
 
+Semantic-correct reference commit: `917995852c9e5eb195cb44262f41a1238f422bca`. The parser reference
+copies its exact emulator/frame/screen source, with package suffix only; hashes and the source diff
+outside approved allocation regions are checked. The following allocation commit can be reverted
+without undoing protocol/input/geometry/display corrections. This is not a passed-gates statement.
+
 ## Acceptance
 
 - Independent spec vectors (including current erroneous legacy expectations), chunk-boundary/random

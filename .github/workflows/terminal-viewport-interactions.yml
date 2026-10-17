@@ -6,7 +6,7 @@ on:
       suite:
         description: 'all, fresh default, publication regressions, or lint/Release type checking without tests'
         type: choice
-        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, staticChecks]
+        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, tuiDisplay, staticChecks]
         default: all
       production_sha:
         description: 'Optional exact archived production SHA for defaultBottom only; tests remain from this ref'
@@ -57,12 +57,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle"]') }}
+        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'tuiDisplay' && '["tuiDisplay"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle","tuiDisplay"]') }}
     env:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
       TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Bind optional old production source to current fresh-default regression tests
         if: ${{ inputs.production_sha != '' }}
         env:
@@ -254,6 +256,13 @@ jobs:
               --require-case-group 'bundle:7'
             exit $?
           fi
+          if [ "$TERMINAL_VIEWPORT_GROUP" = tuiDisplay ]; then
+            python3 .github/scripts/report-terminal-tests.py \
+              benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalTuiDisplayInstrumentedTest \
+              --require-case-group 'tuiDisplay:4'
+            exit $?
+          fi
           [ "$TERMINAL_VIEWPORT_GROUP" = geometry ]
           python3 .github/scripts/report-terminal-tests.py \
             benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
@@ -300,6 +309,9 @@ jobs:
       - name: Require exact chunk-view construction counts and lifecycle correctness
         if: ${{ always() && (matrix.group == 'geometry' || matrix.group == 'chunksRender') }}
         run: python3 .github/scripts/report-terminal-chunk-views.py
+      - name: Require all TUI cursor pointer and regular-history evidence
+        if: ${{ always() && matrix.group == 'tuiDisplay' }}
+        run: python3 -B .github/scripts/terminal-tui-bundle-reports.py display
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4
@@ -309,4 +321,5 @@ jobs:
             benchmarks/terminal-viewport-tests/build/outputs/**
             benchmarks/terminal-viewport-tests/build/reports/**
             artifacts/terminal-validation/**
+            artifacts/terminal-tui/**
           retention-days: 14
