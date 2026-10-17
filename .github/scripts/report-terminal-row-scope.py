@@ -75,17 +75,32 @@ def source_proof():
                 baselineSources={MAIN + name: hashlib.sha256(value.encode()).hexdigest() for name, value in old.items()})
 
 
+SCOPE_NAMES = {
+    'TerminalRowText': ('me.rerere.rikkahub.ui.pages.container.TerminalRowText', False, 'compileReleaseKotlin'),
+    'TerminalRenderedRow': ('me.rerere.rikkahub.ui.pages.container.TerminalRenderedRow', True, 'compileReleaseKotlin'),
+    'Row': ('me.rerere.rikkahub.ui.pages.container.TerminalLazyItemMeasurements.Row', True, 'compileReleaseKotlin'),
+    'LegacyMeasuredTerminalRow': ('me.rerere.rikkahub.viewporttest.LegacyMeasuredTerminalRow',
+                                  True, 'compileReleaseAndroidTestKotlin'),
+    'LegacyTerminalRenderedRow': ('me.rerere.rikkahub.viewporttest.LegacyTerminalRenderedRow',
+                                  True, 'compileReleaseAndroidTestKotlin'),
+}
+
+
 def compiler_scopes(folder):
-    expected = {'TerminalRowText': False, 'TerminalRenderedRow': True, 'Row': True,
-                'LegacyMeasuredTerminalRow': True, 'LegacyTerminalRenderedRow': True}
-    found = {key: [] for key in expected}
+    by_qualified = {value[0]: key for key, value in SCOPE_NAMES.items()}
+    found = {key: [] for key in SCOPE_NAMES}
     for path in folder.rglob('*composables.txt'):
         for line in path.read_text().splitlines():
-            match = re.search(r'^(.*?)\bfun (TerminalRowText|TerminalRenderedRow|Row|LegacyMeasuredTerminalRow|LegacyTerminalRenderedRow)\(', line)
-            if match:
-                found[match[2]].append(dict(report=str(path.relative_to(folder)), header=line,
-                                           restartable='restartable' in match[1].split()))
-    for name, restartable in expected.items():
+            match = re.search(r'^(.*?)\bfun ([\w.]+)\(', line)
+            if match and match[2] in by_qualified:
+                name = by_qualified[match[2]]
+                relative = path.relative_to(folder)
+                require(len(relative.parts) == 2 and relative.parts[0] == SCOPE_NAMES[name][2],
+                        'Report came from the wrong compilation: ' + name)
+                found[name].append(dict(report=str(relative), header=line,
+                                        restartable='restartable' in match[1].split(),
+                                        reportSha256=common.digest(path)))
+    for name, (_, restartable, _) in SCOPE_NAMES.items():
         require(len(found[name]) == 1 and found[name][0]['restartable'] is restartable,
                 'Missing or incorrect compiled restart scope: ' + name)
     return {name: rows[0] for name, rows in found.items()}

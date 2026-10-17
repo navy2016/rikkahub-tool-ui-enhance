@@ -91,21 +91,38 @@ class RowScopeReportTest(unittest.TestCase):
                 report.validate_devices(values)
 
     def test_compiler_reports_require_five_exact_scope_decisions(self):
-        headers = ['fun TerminalRowText(', 'restartable skippable fun TerminalRenderedRow(',
-                   'restartable fun Row(', 'restartable skippable fun LegacyMeasuredTerminalRow(',
-                   'restartable skippable fun LegacyTerminalRenderedRow(']
+        headers = [(task, ('restartable skippable ' if restartable else '') +
+                    'scheme("[androidx.compose.ui.UiComposable]") fun ' + qualified + '(')
+                   for qualified, restartable, task in report.SCOPE_NAMES.values()]
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            path = root / 'fixture-composables.txt'
-            path.write_text('\n'.join(headers))
+            def write(values):
+                for task in {value[2] for value in report.SCOPE_NAMES.values()}:
+                    path = root / task / 'fixture-composables.txt'
+                    path.parent.mkdir(exist_ok=True)
+                    path.write_text('\n'.join(text for selected, text in values if selected == task))
+            write(headers)
             result = report.compiler_scopes(root)
             self.assertFalse(result['TerminalRowText']['restartable'])
             self.assertTrue(result['Row']['restartable'])
-            for bad in (headers[:-1], headers + headers[:1], ['restartable ' + headers[0]] + headers[1:],
-                        headers[:2] + ['fun Row('] + headers[3:]):
-                path.write_text('\n'.join(bad))
+            self.assertTrue(all(re.fullmatch('[a-f0-9]{64}', row['reportSha256']) for row in result.values()))
+            bad_headers = [headers[:-1], headers + headers[:1],
+                [(headers[0][0], 'restartable ' + headers[0][1])] + headers[1:],
+                headers[:2] + [(headers[2][0], headers[2][1].replace('restartable ', ''))] + headers[3:],
+                [(headers[3][0], headers[0][1])] + headers[1:],
+                [(task, re.sub(r'fun [\w.]+\.', 'fun ', text)) for task, text in headers],
+                [(task, text.replace('me.rerere.rikkahub.ui.pages.container.', 'unrelated.')) for task, text in headers]]
+            for bad in bad_headers:
+                write(bad)
                 with self.assertRaises(ValueError):
                     report.compiler_scopes(root)
+
+    def test_compilation_reports_are_separate_task_outputs_not_one_overwritten_extension_path(self):
+        text = (report.ROOT / 'benchmarks/terminal-viewport-tests/build.gradle.kts').read_text()
+        self.assertIn('tasks.withType<KotlinCompile>().configureEach', text)
+        self.assertIn('layout.buildDirectory.dir("compose-reports/$name")', text)
+        self.assertIn('outputs.dir(reports).withPropertyName("terminalComposeReports")', text)
+        self.assertNotIn('reportsDestination.set(', text)
 
     def test_frozen_bodies_and_current_measurement_node_match_baseline(self):
         proof = report.source_proof()

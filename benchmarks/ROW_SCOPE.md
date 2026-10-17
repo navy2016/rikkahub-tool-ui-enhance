@@ -74,3 +74,18 @@ maximum (first plus one consolidated affected correction), never rerun to select
 Observe Actions in a foreground resumable900-second window, no background watcher. Observation
 timeout is unfinished work, not a test verdict. Old V6/bundle timing and pressures remain archived,
 not relabelled or used as uncontrolled before/after ratios for this change.
+
+## First static-check failure (kept as failure)
+
+At c4e3ad5, JVM run39008777701 passed98/98 and static run39008772606 passed lint and both Release
+compilations. Its final report guard failed for `TerminalRowText`. The original artifact12092147600
+contains ONLY the androidTest functions' report and uses fully qualified names. Kotlin2.3.10's
+ComposeCompilerSubplugin sends one reportsDestination for all compilations; same-module report
+filenames let the later test compilation overwrite production evidence. The first parser also
+expected short names. Relay39009346532 preserved the original ZIP digest; local bounded-range
+extraction read only report text/CSV/log, not APKs. No device tests ran and no failed run is relabelled.
+
+The consolidated correction sets reportsDestination separately for EACH KotlinCompile task, declares
+that directory as a task output, and requires every exact qualified function in its correct task's
+report. Duplicate/missing/wrong-module/restartable mismatches still fail; report hashes are included.
+No app source, measurement workload, assertion or dependency changes accompany this correction.

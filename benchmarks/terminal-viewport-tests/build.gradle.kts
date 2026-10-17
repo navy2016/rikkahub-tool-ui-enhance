@@ -2,6 +2,7 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.FileSystemOperations
 import org.gradle.api.provider.ListProperty
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import javax.inject.Inject
 
 plugins {
@@ -127,9 +128,14 @@ androidComponents {
 }
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 
-// Fixture-only evidence that the measured forwarding helper does not create a restart scope.
-composeCompiler {
-    reportsDestination.set(layout.buildDirectory.dir("compose-reports"))
+// Kotlin 2.3.10's reportsDestination is shared by all compilations (unlike metricsDestination).
+// Keep each task's report as a declared output so androidTest cannot overwrite production proof.
+tasks.withType<KotlinCompile>().configureEach {
+    val reports = layout.buildDirectory.dir("compose-reports/$name")
+    compilerOptions.freeCompilerArgs.addAll(reports.map {
+        listOf("-P", "plugin:androidx.compose.compiler.plugins.kotlin:reportsDestination=${it.asFile.absolutePath}")
+    })
+    outputs.dir(reports).withPropertyName("terminalComposeReports")
 }
 
 dependencies {
