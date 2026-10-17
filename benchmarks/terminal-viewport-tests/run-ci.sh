@@ -46,6 +46,33 @@ run_arm() {
   fi
 }
 
+if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = rowScope ]; then
+  case "${TERMINAL_VIEWPORT_GROUP:-}" in
+    rowScopes)
+      run_arm row-scopes TerminalRowScopeInstrumentedTest 720
+      adb logcat -d -v threadtime TerminalRowScope:I '*:S' > artifacts/terminal-validation/row-scope-logcat.txt
+      ;;
+    rowText)
+      run_arm row-measurement TerminalRowMeasurementInstrumentedTest 180
+      run_arm row-compatibility TerminalTextCompatibilityInstrumentedTest 180
+      run_arm row-metrics TerminalTextMetricsInstrumentedTest 240
+      run_arm row-chunks TerminalChunkViewsInstrumentedTest 360
+      run_arm row-mode TerminalRenderModeInstrumentedTest 180
+      ;;
+    rowViewport)
+      run_arm row-bottom TerminalDefaultBottomInstrumentedTest 240
+      run_arm row-ime TerminalImeVirtualHistoryInstrumentedTest 240
+      run_arm row-fifo TerminalViewportStabilityInstrumentedTest#stabilityDefaultTenThousandFifoUpdatesReadOnlyBoundaryHeightsAndKeepLockedAnchor 180
+      run_arm row-restore TerminalViewportStabilityInstrumentedTest#stabilityDetachAndRecreateRestoresMeasuredAnchorAfterBackgroundTrim 120
+      run_arm row-prefix TerminalViewportStabilityInstrumentedTest#stabilityTenThousandRowFallbackSharesHistoryAndReleasesPrefixOnReturn 180
+      run_arm row-modes TerminalViewportStabilityInstrumentedTest#stabilityOutputDuringRepeatedModeAndImeFallbackChangesSettlesAtLatestTail 180
+      run_arm row-active TerminalItemViewportInstrumentedTest#itemNativeEagerFallbackDoesNotRecomposeArchivedHistoryOnActiveUpdates 120
+      ;;
+    *) echo 'rowScope requires its explicit scope/text/viewport shard' >&2; exit 2 ;;
+  esac
+  exit "$overall_status"
+fi
+
 if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = chunkViews ]; then
   case "${TERMINAL_VIEWPORT_GROUP:-}" in
     chunksRender)
@@ -97,7 +124,12 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
-case "$group" in all|geometry|interaction|bundle) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
+case "$group" in all|geometry|interaction|bundle|rowScopes) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
+
+if [ "$group" = all ] || [ "$group" = rowScopes ]; then
+run_arm row-scopes TerminalRowScopeInstrumentedTest 720
+adb logcat -d -v threadtime TerminalRowScope:I '*:S' > artifacts/terminal-validation/row-scope-logcat.txt
+fi
 
 if [ "$group" = all ] || [ "$group" = geometry ]; then
 run_arm chunk-views TerminalChunkViewsInstrumentedTest 360

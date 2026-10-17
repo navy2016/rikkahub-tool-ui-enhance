@@ -55,6 +55,12 @@ AB／BA 288 样本已归档在 `benchmarks/results/3b5c3e0-paired-subscription.m
 云端先运行 Release JVM 差分／并发／分配量对照，再用 Release-derived PTY/页面验证，门禁通过后
 正式 Release 构建及独立校验。仍禁止本地 Android/Kotlin/native 编译，用户不需要 APK 附件。
 
+字节缓冲轮已完成：`b7a93c9`，39 JVM、15 传输／2 服务／137 次读取／36 页面回显通过；
+Release `39005664006`、独立校验 `39006232031` 成功。用户继续优化后的本轮基线为
+`b7a93c9b5734ce1386d919d3be6085ef725124bb`：测量行只读取一次文本，使用无独立 restart scope 的
+纯绘制转发函数，未测量 TUI 行仍保留自己的 scope。仅两个生产行绘制文件变化；测量节点／
+几何缓存／滚动控制器不变。范围和验证见 `benchmarks/ROW_SCOPE.md`；旧轮验收不得重标本轮成功。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

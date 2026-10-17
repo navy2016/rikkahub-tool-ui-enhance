@@ -72,6 +72,7 @@ def sources():
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptViewport.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderControls.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderedRows.kt',
+        'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportFollowState.kt',
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptWidth.kt',

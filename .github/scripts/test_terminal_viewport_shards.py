@@ -13,7 +13,9 @@ class ViewportShardTest(unittest.TestCase):
         geometry = source.split('if [ "$group" = all ] || [ "$group" = geometry ]; then\n', 1)[1].split('\nfi', 1)[0]
         interaction = source.split('if [ "$group" = all ] || [ "$group" = interaction ]; then\n', 1)[1].split('\nfi', 1)[0]
         bundle = source.split('if [ "$group" = all ] || [ "$group" = bundle ]; then\n', 1)[1].split('\nfi', 1)[0]
-        assignments = re.findall(r'^run_arm (\S+)(?: (\w+))?', geometry + '\n' + interaction + '\n' + bundle, re.M)
+        row_scopes = source.split('if [ "$group" = all ] || [ "$group" = rowScopes ]; then\n', 1)[1].split('\nfi', 1)[0]
+        assignments = re.findall(r'^run_arm (\S+)(?: (\w+))?',
+                                 geometry + '\n' + interaction + '\n' + bundle + '\n' + row_scopes, re.M)
         classes = [name or 'TerminalViewportGestureInstrumentedTest' for _, name in assignments]
         expected = {p.stem for p in TESTS.glob('*InstrumentedTest.kt')}
         self.assertEqual(expected, set(classes))
@@ -28,14 +30,14 @@ class ViewportShardTest(unittest.TestCase):
     def test_counts_matrix_and_report_routing_stay_complete(self):
         workflow = (ROOT / '.github/workflows/terminal-viewport-interactions.yml').read_text()
         self.assertIn('fail-fast: false', workflow)
-        self.assertIn('["geometry","interaction","bundle"]', workflow)
+        self.assertIn('["geometry","interaction","bundle","rowScopes"]', workflow)
         self.assertIn('TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}', workflow)
         self.assertIn('${{ matrix.group }}-${{ github.run_attempt }}', workflow)
         self.assertIn('run-terminal-with-timeout.py 900', workflow)
         # Full-suite branches only; focused entries may repeat names or choose individual methods.
         full = workflow.split('if [ "$TERMINAL_VIEWPORT_GROUP" = interaction ]; then', 1)[1]
         tokens = set(re.findall(r"--require-case-group '([^']+)'", full))
-        self.assertEqual(158, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
+        self.assertEqual(164, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
         # Most groups use a shared method prefix; render controls retain two distinct names.
         methods = [name for path in TESTS.glob('*InstrumentedTest.kt')
                    for name in re.findall(r'@Test\s+fun\s+(\w+)\(', path.read_text())]
@@ -67,6 +69,37 @@ class ViewportShardTest(unittest.TestCase):
         unit = (ROOT / '.github/workflows/terminal-emulator-tests.yml').read_text()
         focused = unit.split('- name: Run publication and consumer contracts once', 1)[1].split('- name:', 1)[0]
         self.assertEqual(4, len(re.findall(r'--tests ', focused)))
+        self.assertNotIn('attempt', focused)
+
+    def test_row_scope_has_three_disjoint_shards_and_exact_required_inventory(self):
+        script = (ROOT / 'benchmarks/terminal-viewport-tests/run-ci.sh').read_text()
+        entry = script.split('" = rowScope ]; then\n', 1)[1].split('\nfi', 1)[0]
+        assigned = re.findall(r'^      run_arm (\S+) (\S+) (\d+)', entry, re.M)
+        self.assertEqual(13, len(assigned))
+        self.assertEqual(13, len({arm for arm, _, _ in assigned}))
+        self.assertTrue(all(0 < int(seconds) <= 720 for _, _, seconds in assigned))
+        self.assertIn('row-scope-logcat.txt', entry)
+        case = (TESTS / 'TerminalRowScopeInstrumentedTest.kt').read_text()
+        self.assertIn('apkHash(instrumentation.targetContext)', case)
+        self.assertIn('apkHash(instrumentation.context)', case)
+        workflow = (ROOT / '.github/workflows/terminal-viewport-interactions.yml').read_text()
+        self.assertIn('["rowScopes","rowText","rowViewport"]', workflow)
+        reporting = workflow.split('- name: Require every case assigned to this shard', 1)[1]
+        block = reporting.split('if [ "$TERMINAL_VIEWPORT_SUITE" = rowScope ]; then', 1)[1]
+        block = block.split('if [ "$TERMINAL_VIEWPORT_SUITE" = chunkViews ]; then', 1)[0]
+        counts = re.findall(r"--require-case-group '([^']+)'", block)
+        self.assertEqual(50, sum(int(token.rsplit(':', 1)[1]) for token in counts))
+        required = set(re.findall(r'--require-suite me\.rerere\.rikkahub\.viewporttest\.(\w+)', block))
+        self.assertEqual({name.split('#')[0] for _, name, _ in assigned}, required)
+        for _, klass, _ in assigned:
+            name, _, method = klass.partition('#')
+            body = (TESTS / (name + '.kt')).read_text()
+            if method:
+                self.assertIn('fun ' + method + '(', body)
+        unit = (ROOT / '.github/workflows/terminal-emulator-tests.yml').read_text()
+        focused = unit.split('- name: Run row-scope wiring, publication and natural-height contracts once', 1)[1]
+        focused = focused.split('- name:', 1)[0]
+        self.assertEqual(7, focused.count('--tests '))
         self.assertNotIn('attempt', focused)
         self.assertNotIn('for ', focused)
 

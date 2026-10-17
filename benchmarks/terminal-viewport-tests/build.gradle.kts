@@ -127,6 +127,11 @@ androidComponents {
 }
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 
+// Fixture-only evidence that the measured forwarding helper does not create a restart scope.
+composeCompiler {
+    reportsDestination.set(layout.buildDirectory.dir("compose-reports"))
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)

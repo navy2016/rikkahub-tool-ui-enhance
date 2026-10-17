@@ -95,7 +95,7 @@ class TerminalPipelineValidationTest(unittest.TestCase):
         for suffix in ('ProcessSessionPage.kt', 'BackgroundProcessManager.kt', 'rikkahub_pty.cpp',
                        'TerminalPipelineTrace.kt', 'TerminalPipelineInstrumentedTest.kt',
                        'TerminalRenderedRows.kt', 'TerminalRenderControls.kt', 'TerminalByteRingBuffer.kt',
-                       'TerminalByteBufferInstrumentedTest.kt'):
+                       'TerminalByteBufferInstrumentedTest.kt', 'TerminalLazyItemMeasurements.kt'):
             self.assertTrue(any(name.endswith(suffix) for name in names), suffix)
 
     def test_failure_excerpt_preserves_initial_error_and_lifecycle_with_bounded_output(self):
