@@ -5,7 +5,6 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -348,22 +347,10 @@ internal fun TerminalRenderedRow(
     style: TextStyle,
     modifier: Modifier = Modifier,
 ) {
-    // Unmeasured/TUI rows still own their state subscription. Do not make this wrapper
-    // non-restartable: a text write must not invalidate the enclosing row loop/chunk.
-    TerminalRowText(state.text, style, modifier)
-}
-
-/** Caller owns the row subscription; pure text forwarding needs no second restart scope. */
-@Composable
-@NonRestartableComposable
-internal fun TerminalRowText(
-    text: AnnotatedString,
-    style: TextStyle,
-    modifier: Modifier = Modifier,
-) {
     // Emulator URLs are already styled spans + StringAnnotation, not Compose LinkAnnotation.
     // The hot path uses the same underlying text renderer without Material's per-row link-style
     // wrapper/empty layout callback. Do not replace Material's unspecified-color or link behavior.
+    val text = state.text
     if (terminalUsesBasicText(text, style)) {
         BasicText(text = text, modifier = modifier, style = style, softWrap = false, maxLines = 1)
     } else {

@@ -56,10 +56,13 @@ AB／BA 288 样本已归档在 `benchmarks/results/3b5c3e0-paired-subscription.m
 正式 Release 构建及独立校验。仍禁止本地 Android/Kotlin/native 编译，用户不需要 APK 附件。
 
 字节缓冲轮已完成：`b7a93c9`，39 JVM、15 传输／2 服务／137 次读取／36 页面回显通过；
-Release `39005664006`、独立校验 `39006232031` 成功。用户继续优化后的本轮基线为
-`b7a93c9b5734ce1386d919d3be6085ef725124bb`：测量行只读取一次文本，使用无独立 restart scope 的
-纯绘制转发函数，未测量 TUI 行仍保留自己的 scope。仅两个生产行绘制文件变化；测量节点／
-几何缓存／滚动控制器不变。范围和验证见 `benchmarks/ROW_SCOPE.md`；旧轮验收不得重标本轮成功。
+Release `39005664006`、独立校验 `39006232031` 成功。随后单测量行作用域实验
+`c4e3ad5`／`98f27e2` 完成 98 JVM、50 视口、36 页面回显／12 收敛回执，功能门禁通过；
+同机 10k 冷行树挂载旧／新中位数 1056.853／1075.879ms，四对样本候选均更慢，因此未采用。
+生产代码、应用测试及视口夹具已完整恢复 `b7a93c9b5734ce1386d919d3be6085ef725124bb`，
+没有新 Release。实验源码／断言保存在原提交和证据归档，原静态检查失败不得重标成功。
+结案见 `benchmarks/results/98f27e2-row-scope-rejected.md`；`benchmarks/ROW_SCOPE.md` 仅为历史协议。
+不重测筛选更快样本，不将作用域数减少解释为手机提速。后续应重新定位冷组合／布局热点。
 
 使用 Android Studio 或命令行 Gradle：
 

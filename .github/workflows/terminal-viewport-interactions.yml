@@ -6,7 +6,7 @@ on:
       suite:
         description: 'all, fresh default, publication regressions, or lint/Release type checking without tests'
         type: choice
-        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, rowScope, staticChecks]
+        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, staticChecks]
         default: all
       production_sha:
         description: 'Optional exact archived production SHA for defaultBottom only; tests remain from this ref'
@@ -57,14 +57,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'rowScope' && '["rowScopes","rowText","rowViewport"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle","rowScopes"]') }}
+        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle"]') }}
     env:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
       TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Bind optional old production source to current fresh-default regression tests
         if: ${{ inputs.production_sha != '' }}
         env:
@@ -86,10 +84,7 @@ jobs:
       - name: Test JUnit validation reporting
         if: ${{ matrix.group != 'staticChecks' }}
         run: |
-          if [ "$TERMINAL_VIEWPORT_SUITE" = rowScope ]; then
-            cd .github/scripts
-            python3 -m unittest test_terminal_viewport_shards test_terminal_row_scope
-          elif [ "$TERMINAL_VIEWPORT_SUITE" = renderSnapshot ]; then
+          if [ "$TERMINAL_VIEWPORT_SUITE" = renderSnapshot ]; then
             cd .github/scripts
             python3 -m unittest test_terminal_viewport_shards test_terminal_render_snapshot test_terminal_panel_subscription
           elif [ "$TERMINAL_VIEWPORT_SUITE" = textMetrics ]; then
@@ -135,9 +130,6 @@ jobs:
           bash .github/scripts/run-terminal-gradle.sh -PterminalViewportTests=true \
             :benchmarks:terminal-viewport-tests:assembleRelease \
             :benchmarks:terminal-viewport-tests:assembleReleaseAndroidTest --stacktrace
-      - name: Require original measurement node and the compiled row restart scopes
-        if: ${{ matrix.group == 'staticChecks' || matrix.group == 'rowScopes' }}
-        run: python3 .github/scripts/report-terminal-row-scope.py --compiler-only
       - name: Enable KVM
         if: ${{ matrix.group != 'staticChecks' }}
         run: |
@@ -164,44 +156,6 @@ jobs:
       - name: Require every case assigned to this shard
         if: ${{ always() && matrix.group != 'staticChecks' }}
         run: |
-          if [ "$TERMINAL_VIEWPORT_SUITE" = rowScope ]; then
-            if [ "$TERMINAL_VIEWPORT_GROUP" = rowScopes ]; then
-              python3 .github/scripts/report-terminal-tests.py \
-                benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
-                --require-suite me.rerere.rikkahub.viewporttest.TerminalRowScopeInstrumentedTest \
-                --require-case-group 'rowScope:6'
-            elif [ "$TERMINAL_VIEWPORT_GROUP" = rowText ]; then
-              python3 .github/scripts/report-terminal-tests.py \
-                benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
-                --require-suite me.rerere.rikkahub.viewporttest.TerminalRowMeasurementInstrumentedTest \
-                --require-case-group 'measurementNode:8' \
-                --require-suite me.rerere.rikkahub.viewporttest.TerminalTextCompatibilityInstrumentedTest \
-                --require-case-group 'terminalText:3' \
-                --require-suite me.rerere.rikkahub.viewporttest.TerminalTextMetricsInstrumentedTest \
-                --require-case-group 'textMetrics:6' \
-                --require-suite me.rerere.rikkahub.viewporttest.TerminalChunkViewsInstrumentedTest \
-                --require-case-group 'chunkViews:7' \
-                --require-suite me.rerere.rikkahub.viewporttest.TerminalRenderModeInstrumentedTest \
-                --require-case-group 'rendererSwitchKeepsNaturalGeometrySelectionAndBothScrollOffsets:1' \
-                --require-case-group 'renderButtonCancelApplyResetAndLongPressAreExplicit:1'
-            else
-              [ "$TERMINAL_VIEWPORT_GROUP" = rowViewport ]
-              python3 .github/scripts/report-terminal-tests.py \
-                benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
-                --require-suite me.rerere.rikkahub.viewporttest.TerminalDefaultBottomInstrumentedTest \
-                --require-case-group 'defaultBottom:7' \
-                --require-suite me.rerere.rikkahub.viewporttest.TerminalImeVirtualHistoryInstrumentedTest \
-                --require-case-group 'imeStable:6' \
-                --require-suite me.rerere.rikkahub.viewporttest.TerminalViewportStabilityInstrumentedTest \
-                --require-case-group 'stabilityDefaultTenThousandFifoUpdatesReadOnlyBoundaryHeightsAndKeepLockedAnchor:1' \
-                --require-case-group 'stabilityDetachAndRecreateRestoresMeasuredAnchorAfterBackgroundTrim:1' \
-                --require-case-group 'stabilityTenThousandRowFallbackSharesHistoryAndReleasesPrefixOnReturn:1' \
-                --require-case-group 'stabilityOutputDuringRepeatedModeAndImeFallbackChangesSettlesAtLatestTail:1' \
-                --require-suite me.rerere.rikkahub.viewporttest.TerminalItemViewportInstrumentedTest \
-                --require-case-group 'itemNativeEagerFallbackDoesNotRecomposeArchivedHistoryOnActiveUpdates:1'
-            fi
-            exit $?
-          fi
           if [ "$TERMINAL_VIEWPORT_SUITE" = chunkViews ]; then
             if [ "$TERMINAL_VIEWPORT_GROUP" = chunksRender ]; then
               python3 .github/scripts/report-terminal-tests.py \
@@ -300,13 +254,6 @@ jobs:
               --require-case-group 'bundle:7'
             exit $?
           fi
-          if [ "$TERMINAL_VIEWPORT_GROUP" = rowScopes ]; then
-            python3 .github/scripts/report-terminal-tests.py \
-              benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
-              --require-suite me.rerere.rikkahub.viewporttest.TerminalRowScopeInstrumentedTest \
-              --require-case-group 'rowScope:6'
-            exit $?
-          fi
           [ "$TERMINAL_VIEWPORT_GROUP" = geometry ]
           python3 .github/scripts/report-terminal-tests.py \
             benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
@@ -353,9 +300,6 @@ jobs:
       - name: Require exact chunk-view construction counts and lifecycle correctness
         if: ${{ always() && (matrix.group == 'geometry' || matrix.group == 'chunksRender') }}
         run: python3 .github/scripts/report-terminal-chunk-views.py
-      - name: Require every paired row mount and compiled scope with unchanged geometry
-        if: ${{ always() && matrix.group == 'rowScopes' }}
-        run: python3 .github/scripts/report-terminal-row-scope.py
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4
@@ -364,6 +308,5 @@ jobs:
           path: |
             benchmarks/terminal-viewport-tests/build/outputs/**
             benchmarks/terminal-viewport-tests/build/reports/**
-            benchmarks/terminal-viewport-tests/build/compose-reports/**
             artifacts/terminal-validation/**
           retention-days: 14

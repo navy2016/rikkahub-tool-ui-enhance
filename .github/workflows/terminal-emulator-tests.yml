@@ -61,7 +61,7 @@ on:
       suite:
         description: 'Focused suites run once: renderSnapshot publication/rows; textMetrics width/height cache invalidation'
         type: choice
-        options: [all, renderSnapshot, textMetrics, chunkViews, stableMount, byteBuffer, rowScope, staticChecks]
+        options: [all, renderSnapshot, textMetrics, chunkViews, stableMount, byteBuffer, staticChecks]
         default: all
 
 jobs:
@@ -172,20 +172,7 @@ jobs:
             --tests me.rerere.rikkahub.data.container.TerminalByteRingBufferTest \
             --tests me.rerere.rikkahub.data.container.TerminalByteBufferWiringTest \
             --tests me.rerere.rikkahub.data.container.TerminalByteBufferBenchmarkTest \
-            --tests me.rerere.rikkahub.data.container.TerminalRowScopeSourceTest \
             --stacktrace
-
-      - name: Run row-scope wiring, publication and natural-height contracts once
-        if: ${{ env.TERMINAL_UNIT_SUITE == 'rowScope' }}
-        run: |
-          bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest \
-            --tests me.rerere.rikkahub.data.container.TerminalRowScopeSourceTest \
-            --tests me.rerere.rikkahub.data.container.TerminalRenderedRowsTest \
-            --tests me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest \
-            --tests me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest \
-            --tests me.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest \
-            --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest \
-            --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest --stacktrace
 
       - name: Run byte-tail differential, concurrency, wiring and AB/BA allocation checks once
         if: ${{ env.TERMINAL_UNIT_SUITE == 'byteBuffer' }}
@@ -235,18 +222,6 @@ jobs:
       - name: Publish focused regression results
         if: ${{ always() && env.TERMINAL_UNIT_SUITE != 'staticChecks' }}
         run: |
-          if [ "$TERMINAL_UNIT_SUITE" = rowScope ]; then
-            python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
-              --require-suite me.rerere.rikkahub.data.container.TerminalRowScopeSourceTest \
-              --require-case-group rowScope:3 \
-              --require-suite me.rerere.rikkahub.data.container.TerminalRenderedRowsTest \
-              --require-suite me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest \
-              --require-suite me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest \
-              --require-suite me.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest \
-              --require-suite me.rerere.rikkahub.data.container.TerminalUiSourceTest \
-              --require-suite me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest
-            exit $?
-          fi
           if [ "$TERMINAL_UNIT_SUITE" = byteBuffer ]; then
             python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
               --require-suite me.rerere.rikkahub.data.container.TerminalByteRingBufferTest \
@@ -312,8 +287,7 @@ jobs:
             --require-suite me.rerere.rikkahub.utils.TerminalScreenCacheTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalByteRingBufferTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalByteBufferWiringTest \
-            --require-suite me.rerere.rikkahub.data.container.TerminalByteBufferBenchmarkTest \
-            --require-suite me.rerere.rikkahub.data.container.TerminalRowScopeSourceTest
+            --require-suite me.rerere.rikkahub.data.container.TerminalByteBufferBenchmarkTest
 
       - name: Independently validate and publish original byte-buffer measurements
         if: ${{ success() && (env.TERMINAL_UNIT_SUITE == 'all' || env.TERMINAL_UNIT_SUITE == 'byteBuffer') }}

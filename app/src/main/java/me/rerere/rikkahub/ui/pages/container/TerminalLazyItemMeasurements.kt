@@ -118,14 +118,8 @@ internal class TerminalLazyItemMeasurements {
     fun Row(metricKey: Any, row: TerminalRenderedRowState, style: TextStyle) {
         val text = row.text
         onRowComposed?.let { observer -> SideEffect { observer(row.lineId) } }
-        // One row-level subscription supplies BOTH the measurement proof and the Text node.
-        // Forwarding immutable Text avoids subscribing a second restart scope to row.text.
-        TerminalRowText(text, style, rowModifier(metricKey, row.lineId, text))
+        TerminalRenderedRow(row, style, RowMeasurementElement(this, metricKey, row.lineId, text))
     }
-
-    /** Same node factory for production and the frozen dual-scope measurement fixture. */
-    internal fun rowModifier(metricKey: Any, lineId: Long, text: AnnotatedString): Modifier =
-        RowMeasurementElement(this, metricKey, lineId, text)
 
     private fun record(owner: Any, metricKey: Any, lineId: Long, text: AnnotatedString, pixels: Int) {
         measuredRowCount++

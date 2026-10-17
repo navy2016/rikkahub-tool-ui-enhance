@@ -1,5 +1,13 @@
 # Single measured-row restart scope
 
+**Archived experiment — not adopted.** The candidate at `98f27e2` passed correctness gates but
+did not improve the paired cold-row-tree measurements. Production and the active viewport/JVM
+test wiring have been restored to `b7a93c9`; no new Release was built. Candidate sources, assertions
+and results remain in the original commits and the evidence archive. See the
+[decision and complete results](results/98f27e2-row-scope-rejected.md).
+Everything below describes the historical experiment, not the current production implementation
+or currently enabled CI suite. In particular, the conditional Release step was not taken.
+
 Baseline: `b7a93c9b5734ce1386d919d3be6085ef725124bb`; branch `opt/terminal-verified-a79e7b6`.
 The user asked to continue terminal optimization. This narrowly targets the repeated measured-row
 composition work within default eager cold mounts, not the complete O(history) row-tree cost.
