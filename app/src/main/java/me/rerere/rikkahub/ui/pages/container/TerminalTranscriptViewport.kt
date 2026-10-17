@@ -8,7 +8,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.data.container.TerminalRenderMode
@@ -29,6 +34,8 @@ internal fun TerminalTranscriptViewport(
     modifier: Modifier = Modifier,
     rowSource: TerminalRenderSnapshot? = null,
     compositionObserver: TerminalTranscriptCompositionObserver? = null,
+    pointerMap: TerminalPointerMap? = null,
+    cellWidthPx: Int = 1,
 ) {
     if (rowSource != null) require(rowSource.frame === frame && rowSource.rows === rows) {
         "Terminal viewport row source mismatch"
@@ -39,12 +46,26 @@ internal fun TerminalTranscriptViewport(
             bound.gestures.flingBehavior, bound.binding.widthIndex, modifier,
             checkpoint = bound.binding.widthCheckpoint)
     } else {
-        Column(modifier.horizontalScroll(horizontalScroll, enabled = panEnabled || selectionMode)
+        val mouse = pointerMap?.takeIf { !panEnabled && !selectionMode }
+        val pointerScope = mouse?.let {
+            val pass = remember(TerminalFrameReference(frame), cellWidthPx, bound.pass.metricKey) {
+                TerminalPointerMap.Pass(frame, rows, cellWidthPx, bound.pass.metricKey)
+            }
+            SideEffect { it.bind(pass) }
+            DisposableEffect(it) { onDispose { it.clear() } }
+            TerminalPointerScope(it, pass)
+        }
+        val viewportModifier = if (mouse == null) modifier else modifier.onGloballyPositioned { mouse.viewportCoordinates = it }
+        val overlays = rowSource?.cursors.orEmpty()
+        Column(viewportModifier.horizontalScroll(horizontalScroll, enabled = panEnabled || selectionMode)
             .verticalScroll(bound.binding.eager, enabled = panEnabled || selectionMode,
                 flingBehavior = bound.gestures.flingBehavior)) {
             val content: @Composable () -> Unit = {
-                TerminalConfiguredTranscript(rows, style, historyChunks, mode,
-                    measurement = bound.eagerMeasurement, rowSource = rowSource, observer = compositionObserver)
+                CompositionLocalProvider(LocalTerminalPointerScope provides pointerScope,
+                    LocalTerminalCursorOverlays provides overlays) {
+                    TerminalConfiguredTranscript(rows, style, historyChunks, mode,
+                        measurement = bound.eagerMeasurement, rowSource = rowSource, observer = compositionObserver)
+                }
             }
             if (selectionMode) SelectionContainer { Column { content() } } else content()
             Spacer(Modifier.height(8.dp))

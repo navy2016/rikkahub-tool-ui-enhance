@@ -34,6 +34,7 @@ internal class TerminalRowStore(initial: TerminalEmulator.RenderFrame, sparse: B
         val sync: TerminalRenderedRowsSyncState,
         val sparse: Boolean,
         val view: List<TerminalRenderedRowState>,
+        val cursors: Map<Long, TerminalCursorState> = emptyMap(),
     )
 
     private fun physical(frame: TerminalEmulator.RenderFrame): TerminalEmulator.RenderFrame = frame.copy(
@@ -48,7 +49,7 @@ internal class TerminalRowStore(initial: TerminalEmulator.RenderFrame, sparse: B
         val rows = createTerminalRenderedRows(content)
         val sync = createTerminalRenderedRowsSyncState(content, rows)
         val view = if (useSparse) TerminalSparseRows(frame, rows.toList()) else rows.toList()
-        return State(frame, rows, sync, useSparse, view)
+        return State(frame, rows, sync, useSparse, view, cursorStates(frame, view, emptyMap()))
     }
 
     private var state by mutableStateOf(initialState(initial, sparse), referentialEqualityPolicy())
@@ -59,6 +60,28 @@ internal class TerminalRowStore(initial: TerminalEmulator.RenderFrame, sparse: B
     fun view(frame: TerminalEmulator.RenderFrame): List<TerminalRenderedRowState> {
         require(state.frame === frame) { "Terminal row store publication mismatch" }
         return state.view
+    }
+
+    fun cursors(frame: TerminalEmulator.RenderFrame): Map<Long, TerminalCursorState> {
+        require(state.frame === frame) { "Terminal cursor publication mismatch" }
+        return state.cursors
+    }
+
+    private fun cursorStates(frame: TerminalEmulator.RenderFrame, rows: List<TerminalRenderedRowState>,
+        before: Map<Long, TerminalCursorState>): Map<Long, TerminalCursorState> {
+        if (!frame.cursorOverlayMode) return emptyMap()
+        val next = LinkedHashMap<Long, TerminalCursorState>(frame.screenLineIds.size)
+        frame.screenLineIds.forEachIndexed { index, id ->
+            val rowIndex = frame.historyCount + index
+            val rendered = frame.rows[rowIndex]
+            // A deferred transient clear keeps old Text; do not paint new cursor offsets over it.
+            val cursor = rendered.cursorOverlay.takeIf { rows[rowIndex].text == rendered.text }
+            val holder = before[id] ?: TerminalCursorState(cursor)
+            holder.value = cursor
+            next[id] = holder
+        }
+        return if (before.keys == next.keys && next.all { (id, holder) -> before[id] === holder }) before
+            else java.util.Collections.unmodifiableMap(next)
     }
 
     fun publish(
@@ -83,8 +106,9 @@ internal class TerminalRowStore(initial: TerminalEmulator.RenderFrame, sparse: B
         val deferred = synchronizeTerminalRenderedRows(selected.mutableRows, content, tui,
             forcePendingGridBlanks = force, nowMs = nowMs, syncState = selected.sync)
         val view = selected.mutableRows.toList()
-        state = State(frame, selected.mutableRows, selected.sync, useSparse,
-            if (useSparse) TerminalSparseRows(frame, view) else view)
+        val publishedView = if (useSparse) TerminalSparseRows(frame, view) else view
+        state = State(frame, selected.mutableRows, selected.sync, useSparse, publishedView,
+            cursorStates(frame, publishedView, before.cursors))
         return deferred
     }
 }

@@ -64,6 +64,12 @@ Release `39005664006`、独立校验 `39006232031` 成功。随后单测量行�
 结案见 `benchmarks/results/98f27e2-row-scope-rejected.md`；`benchmarks/ROW_SCOPE.md` 仅为历史协议。
 不重测筛选更快样本，不将作用域数减少解释为手机提速。后续应重新定位冷组合／布局热点。
 
+用户已授权四项作为一次总批次推进，基线 `7f60e641f3840c1a3e025202496a381954266c8e`。
+范围是协议／IME／鼠标、resize／快照／输入顺序、解析降分配、RAW 与布局解耦及可选光标绘制；
+协议见 `benchmarks/TERMINAL_TUI_BUNDLE.md`。集中实现后统一云端验收，最多首次及一次汇总修正，
+不逐模块请示。保留原默认和状态栏／KEYS 操作；新增显示路径仅从现有 RENDER 显式选择。
+不包括完整 Kitty 协议或全屏历史录像。此段记录授权，不代表已通过测试或允许混算旧证据。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

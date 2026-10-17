@@ -87,6 +87,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -106,7 +107,6 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
@@ -131,6 +131,13 @@ import me.rerere.rikkahub.data.container.effectiveTerminalRenderMode
 import me.rerere.rikkahub.data.container.terminalRendererForCommand
 import me.rerere.rikkahub.data.container.terminalEffectiveScreenBottomRow
 import me.rerere.rikkahub.data.container.ControlInput
+import me.rerere.rikkahub.data.container.TerminalUiInput
+import me.rerere.rikkahub.data.container.TerminalUiInputQueue
+import me.rerere.rikkahub.data.container.TerminalSizeReceipt
+import me.rerere.rikkahub.data.container.terminalTextEdit
+import me.rerere.rikkahub.data.container.terminalRegularHistoryAllowed
+import me.rerere.rikkahub.data.container.terminalCursorOverlayAllowed
+import me.rerere.rikkahub.data.container.awaitTerminalSynchronizedOutput
 import me.rerere.rikkahub.data.container.ProcessStatus
 import me.rerere.rikkahub.data.container.PRootManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -148,7 +155,6 @@ import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.compose.koinInject
 import android.view.MotionEvent
 import kotlin.math.roundToInt
-import java.text.BreakIterator
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -811,6 +817,7 @@ private fun TerminalInteractivePanel(
             maxScrollbackLines = initialMaxScrollbackLines,
         )
     }
+    val terminalOutputUpdates = remember(processId) { bgManager.observeTerminalUpdates(processId) }
     val terminalBackground = Color(0xFF101010)
     val terminalForeground = Color(0xFF00E676)
     val terminalMuted = Color(0xFFB0BEC5)
@@ -861,6 +868,9 @@ private fun TerminalInteractivePanel(
     }
     var terminalFrameIsAlternateScreen by remember(processId) {
         mutableStateOf(initialTerminalRenderFrame.isAlternateScreen)
+    }
+    var terminalFrameHasMouseTracking by remember(processId) {
+        mutableStateOf(initialTerminalRenderFrame.mouseTracking)
     }
     var terminalFrameRevision by remember(processId) {
         mutableLongStateOf(initialTerminalRenderFrame.revision)
@@ -948,9 +958,9 @@ private fun TerminalInteractivePanel(
         decodeTerminalConfig(settings.terminalExtraKeyItems, defaultTerminalExtraKeyItems())
     }
     var editingTerminalItems by remember { mutableStateOf<String?>(null) }
-    val rawInputChannel = remember(processId) { Channel<String>(Channel.UNLIMITED) }
-    val rawMouseChannel = remember(processId) { Channel<ByteArray>(Channel.UNLIMITED) }
+    val terminalInputQueue = remember(processId) { TerminalUiInputQueue() }
     val renderPending = remember(processId) { AtomicBoolean(false) }
+    val forceBlankPending = remember(processId) { AtomicBoolean(false) }
     val renderJob = remember(processId) { AtomicReference<Job?>(null) }
     val resizeRenderFallbackJob = remember(processId) { AtomicReference<Job?>(null) }
     val gridBlankCommitJob = remember(processId) { AtomicReference<Job?>(null) }
@@ -966,10 +976,12 @@ private fun TerminalInteractivePanel(
     var outputViewportHeightPx by remember(processId) { mutableIntStateOf(0) }
     val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
     val activeTerminalMousePosition = remember(processId) { AtomicReference<MouseEvent?>(null) }
+    val terminalPointerMap = remember(processId) { TerminalPointerMap() }
+    val activeTerminalMouseHit = remember(processId) { AtomicReference<TerminalPointerMap.Hit?>(null) }
     val currentImeVisible by rememberUpdatedState(imeVisible)
     val currentActualImeHeightPx by rememberUpdatedState(actualImeHeightPx)
     val currentFullscreen by rememberUpdatedState(fullscreen)
-    val commandIsTui = remember(processId, process.command, settings.terminalCustomTuiCommands) {
+    val commandNeedsTuiCompatibility = remember(processId, process.command, settings.terminalCustomTuiCommands) {
         isTuiCommand(process.command, settings.terminalCustomTuiCommands) ||
             process.ptyMode.equals("raw", ignoreCase = true)
     }
@@ -977,6 +989,11 @@ private fun TerminalInteractivePanel(
         process.command,
         settings.terminalFullGridCommands,
     )
+    val regularHistory = terminalRegularHistoryAllowed(appliedTerminalRenderMode, process.command,
+        terminalFrameIsAlternateScreen, shouldPreserveFullTerminalGrid, terminalPanMode, selectionMode,
+        terminalFrameHasMouseTracking)
+    val commandIsTui = commandNeedsTuiCompatibility && !regularHistory
+    val wantsCursorOverlay = terminalCursorOverlayAllowed(appliedTerminalRenderMode, terminalPanMode, selectionMode)
     // Only the rendered terminal tail belongs to the scroll content. Input and extra-key bars
     // are siblings of the output Box and have already been removed from its weighted height.
     val terminalTailPaddingPx = with(density) { 8.dp.roundToPx() }
@@ -1110,18 +1127,27 @@ private fun TerminalInteractivePanel(
         }
     }
 
-    fun renderTerminalFrame(forcePendingGridBlanks: Boolean = false) {
+    fun renderTerminalFrame(forcePendingGridBlanks: Boolean = false, allowSynchronizedOutput: Boolean = false): Boolean {
         val wantedSparse = appliedTerminalRenderMode.isVirtualHistory && !currentUsesTuiViewport
-        val representationChanged = wantedSparse != terminalRowStore.isSparse
+        val representationChanged = wantedSparse != terminalRowStore.isSparse ||
+            wantsCursorOverlay != publishedRenderSnapshot.frame.cursorOverlayMode
         if (!forcePendingGridBlanks && !representationChanged &&
-            terminalEmulator.revision() == terminalFrameRevision) return
-        val frame = terminalEmulator.renderFrame()
-        if (!forcePendingGridBlanks && !representationChanged && frame.revision == terminalFrameRevision) return
+            terminalEmulator.revision() == terminalFrameRevision) return true
+        TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_CAPTURE_STARTED)
+        val frame = synchronized(terminalEmulator) {
+            if (!allowSynchronizedOutput && terminalEmulator.isSynchronizedOutput()) return false
+            if (wantsCursorOverlay) terminalEmulator.renderFrameForCursorOverlay() else terminalEmulator.renderFrame()
+        }
+        TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_CAPTURED, frameRevision = frame.revision)
+        if (!forcePendingGridBlanks && !representationChanged && frame.revision == terminalFrameRevision) return true
         val bounds = frame.contentBounds
         val now = System.currentTimeMillis()
-        val usesTuiViewport = commandIsTui || frame.isAlternateScreen || currentPreserveFullTerminalGrid
+        val regular = terminalRegularHistoryAllowed(appliedTerminalRenderMode, process.command,
+            frame.isAlternateScreen, currentPreserveFullTerminalGrid, terminalPanMode, selectionMode, frame.mouseTracking)
+        val usesTuiViewport = (commandNeedsTuiCompatibility && !regular) || frame.isAlternateScreen || currentPreserveFullTerminalGrid
         val sparse = appliedTerminalRenderMode.isVirtualHistory && !usesTuiViewport
         var hasDeferredGridBlank = false
+        TerminalPipelineTrace.record(processId, TerminalPipelineStage.ROW_SYNC_STARTED, frameRevision = frame.revision)
         Snapshot.withMutableSnapshot {
             hasDeferredGridBlank = terminalRowStore.publish(frame, sparse, usesTuiViewport, forcePendingGridBlanks, now)
             terminalContentBounds = bounds
@@ -1133,22 +1159,22 @@ private fun TerminalInteractivePanel(
                 frame.cursorVisible,
             )
             terminalFrameIsAlternateScreen = frame.isAlternateScreen
+            terminalFrameHasMouseTracking = frame.mouseTracking
             terminalFrameRevision = frame.revision
             // Do not suppress same-revision or same-frame forced blank commits: row Text may
             // have changed after its grace period even when the emulator frame is unchanged.
             publishedRenderSnapshot = TerminalRenderSnapshot.capture(frame, terminalRowStore)
             terminalModeSummary = frame.modeSummary
         }
+        TerminalPipelineTrace.record(processId, TerminalPipelineStage.ROW_SYNC_FINISHED, frameRevision = frame.revision)
         TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_PUBLISHED, frameRevision = frame.revision)
         resizeAwaitingTuiRedraw.set(false)
-        if (hasDeferredGridBlank) {
-            gridBlankCommitJob.getAndSet(null)?.cancel()
-            gridBlankCommitJob.set(scope.launch {
-                delay(TERMINAL_GRID_CLEAR_GRACE_MS)
-                renderTerminalFrame(forcePendingGridBlanks = true)
-            })
-        }
+        forceBlankPending.set(hasDeferredGridBlank)
+        return true
     }
+
+    val latestPublishTerminalFrame by rememberUpdatedState<(Boolean, Boolean) -> Boolean>(
+        { force, allow -> renderTerminalFrame(force, allow) })
 
     fun scheduleTerminalRender() {
         gridBlankCommitJob.getAndSet(null)?.cancel()
@@ -1157,10 +1183,16 @@ private fun TerminalInteractivePanel(
         renderJob.set(scope.launch {
             while (renderPending.getAndSet(false)) {
                 withFrameNanos { } // One publication per display frame; no fixed 33ms polling cadence.
-                var syncWaited = 0L
-                while (terminalEmulator.isSynchronizedOutput() && syncWaited < TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS) {
-                    delay(16L)
-                    syncWaited += 16L
+                val syncCompleted = if (terminalOutputUpdates != null) {
+                    awaitTerminalSynchronizedOutput(terminalOutputUpdates, TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS)
+                } else {
+                    // Exceptional local emulator has no session notification owner; retain its guard.
+                    var syncWaited = 0L
+                    while (terminalEmulator.isSynchronizedOutput() && syncWaited < TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS) {
+                        delay(16L)
+                        syncWaited += 16L
+                    }
+                    !terminalEmulator.isSynchronizedOutput()
                 }
                 if (resizeAwaitingTuiRedraw.get()) {
                     while (
@@ -1173,13 +1205,21 @@ private fun TerminalInteractivePanel(
                     }
                 }
                 renderPending.set(false) // Capture includes all notifications received while awaiting this frame.
-                renderTerminalFrame()
+                val forced = forceBlankPending.getAndSet(false)
+                if (!latestPublishTerminalFrame(forced, !syncCompleted)) {
+                    if (forced) forceBlankPending.set(true)
+                    renderPending.set(true)
+                }
+                if (forceBlankPending.get()) {
+                    delay(TERMINAL_GRID_CLEAR_GRACE_MS)
+                    renderPending.set(true)
+                }
             }
         })
     }
 
-    LaunchedEffect(processId, appliedTerminalRenderMode, commandIsTui, shouldPreserveFullTerminalGrid) {
-        renderTerminalFrame()
+    LaunchedEffect(processId, appliedTerminalRenderMode, commandIsTui, shouldPreserveFullTerminalGrid, wantsCursorOverlay) {
+        scheduleTerminalRender()
     }
 
     val commandHistory = remember(processId) {
@@ -1218,12 +1258,10 @@ private fun TerminalInteractivePanel(
             bgManager.rememberTerminalCommand(processId, trimmed)
         }
         historyIndex = -1
-        scope.launch {
-            val payload = terminalEmulator.wrapPaste(trimmed)
-            val result = bgManager.sendInput(processId, payload, appendNewline = true)
-            terminalStatus = result.exceptionOrNull()?.message ?: "已发送"
+        val payload = terminalEmulator.wrapPaste(trimmed)
+        if (terminalInputQueue.offer(TerminalUiInput.Text(payload, appendNewline = true))) {
             input = ""
-        }
+        } else terminalStatus = "发送失败"
     }
 
     fun submitCommand() {
@@ -1233,13 +1271,13 @@ private fun TerminalInteractivePanel(
     fun sendRaw(sequence: String) {
         if (sequence.isEmpty()) return
         TerminalPipelineTrace.record(processId, TerminalPipelineStage.UI_INPUT)
-        if (!rawInputChannel.trySend(sequence).isSuccess) terminalStatus = "发送失败"
+        if (!terminalInputQueue.offer(TerminalUiInput.Text(sequence))) terminalStatus = "发送失败"
     }
 
     fun sendRawMouseBytes(bytes: ByteArray) {
         if (bytes.isEmpty()) return
         TerminalPipelineTrace.record(processId, TerminalPipelineStage.UI_INPUT)
-        if (!rawMouseChannel.trySend(bytes).isSuccess) terminalStatus = "发送失败"
+        if (!terminalInputQueue.offer(TerminalUiInput.Bytes(bytes))) terminalStatus = "发送失败"
     }
 
     fun clearModifierLatches() {
@@ -1351,35 +1389,14 @@ private fun TerminalInteractivePanel(
         }
         val previous = input
         input = value
-        val previousClusters = graphemeClusters(previous)
-        val valueClusters = graphemeClusters(value)
-        // Longest common grapheme prefix — not byte/surrogate-pair count.
-        var common = 0
-        while (common < previousClusters.size && common < valueClusters.size &&
-            previousClusters[common] == valueClusters[common]
-        ) {
-            common++
-        }
-        val removedCount = previousClusters.size - common
-        val addedClusters = valueClusters.drop(common)
-        // One Backspace per removed grapheme (emoji/ZWJ/supplementary chars count once).
-        if (removedCount > 0) {
-            repeat(removedCount) { sendPlainBackspace() }
-        }
-        if (addedClusters.isNotEmpty()) {
-            // Ordinary IME commit is plain text, not an explicit clipboard paste. Send it as
-            // raw UTF-8 without enabling bracketed paste unintentionally.
-            if (addedClusters.size == 1) {
-                val cluster = addedClusters.single()
-                // A single grapheme may be a supplementary-plane codepoint; send it as raw UTF-8
-                // rather than assume UTF-16 length semantics. sequenceForCodePoint handles CLI
-                // (e.g. Enter/Tab) mapping using the grapheme's first codepoint.
-                sendRaw(terminalEmulator.sequenceForCodePoint(cluster.codePointAt(0), alt = altLatch, ctrl = ctrlLatch).ifEmpty { cluster })
-            } else {
-                sendRaw(addedClusters.joinToString(""))
-            }
-            clearModifierLatches()
-        }
+        val edit = terminalTextEdit(previous, value)
+        // One queue item covers this entire committed edit; mouse/control events cannot split
+        // its deletions from the inserted UTF-8. Preedit text still never reaches this callback.
+        val added = if (edit.insertedGraphemes == 1) {
+            terminalEmulator.sequenceForTextCommit(edit.inserted, alt = altLatch, ctrl = ctrlLatch)
+        } else edit.inserted
+        sendRaw(terminalEmulator.sequenceFor(Key.BACKSPACE).repeat(edit.removedGraphemes) + added)
+        if (edit.inserted.isNotEmpty()) clearModifierLatches()
     }
 
     fun clearLocalTerminal() {
@@ -1387,20 +1404,18 @@ private fun TerminalInteractivePanel(
         // which would wipe alternate-screen, mouse, bracketed-paste, application-key, saved-cursor,
         // title, palette, and focus-reporting protocol state.
         terminalEmulator.clearScrollbackOnly()
-        renderTerminalFrame()
+        scheduleTerminalRender()
     }
 
-    LaunchedEffect(processId, rawInputChannel) {
-        for (sequence in rawInputChannel) {
-            val result = bgManager.sendInput(processId, sequence, appendNewline = false)
-            result.exceptionOrNull()?.let { terminalStatus = it.message ?: "发送失败" }
-        }
-    }
-
-    LaunchedEffect(processId, rawMouseChannel) {
-        for (bytes in rawMouseChannel) {
-            val result = bgManager.sendBytes(processId, bytes)
-            result.exceptionOrNull()?.let { terminalStatus = it.message ?: "发送失败" }
+    LaunchedEffect(processId, terminalInputQueue) {
+        terminalInputQueue.consume { queued ->
+            val result = when (queued) {
+                is TerminalUiInput.Text -> bgManager.sendInput(processId, queued.value, queued.appendNewline)
+                is TerminalUiInput.Bytes -> bgManager.sendBytes(processId, queued.value)
+                is TerminalUiInput.Control -> bgManager.sendControlInput(processId, queued.value)
+            }
+            if (result.isFailure) terminalStatus = result.exceptionOrNull()?.message ?: "发送失败"
+            else if (queued is TerminalUiInput.Text && queued.appendNewline) terminalStatus = "已发送"
         }
     }
 
@@ -1458,7 +1473,12 @@ private fun TerminalInteractivePanel(
 
     LaunchedEffect(maxScrollbackLines) {
         terminalEmulator.setMaxScrollbackLines(maxScrollbackLines)
-        renderTerminalFrame()
+        scheduleTerminalRender()
+    }
+
+    LaunchedEffect(processId, terminalCellWidthPx, terminalCellHeightPx) {
+        terminalEmulator.setCellPixelSize(terminalCellWidthPx, terminalCellHeightPx)
+        scheduleTerminalRender()
     }
 
     LaunchedEffect(forcedTerminalColumns, measuredTerminalColumns) {
@@ -1471,9 +1491,17 @@ private fun TerminalInteractivePanel(
     }
 
     LaunchedEffect(processId, terminalColumns, terminalRows) {
+        // A cancelled older coroutine may already have committed at the kernel. Read the
+        // session's acknowledgement rather than relying on that coroutine returning to this UI.
+        bgManager.interactiveSessionSize(processId)?.let { applied ->
+            lastAppliedTerminalColumns.set(applied.columns)
+            lastAppliedTerminalRows.set(applied.rows)
+        }
         val columnsChanged = terminalColumns != lastAppliedTerminalColumns.get()
         val rowsChanged = terminalRows != lastAppliedTerminalRows.get()
-        if (!columnsChanged && !rowsChanged) return@LaunchedEffect
+        if (!columnsChanged && !rowsChanged && !bgManager.hasPendingTerminalResize(processId)) return@LaunchedEffect
+        val requestedColumns = terminalColumns
+        val requestedRows = terminalRows
 
         val holdCompleteFrameForGrid = currentUsesTuiViewport && (columnsChanged || rowsChanged)
         if (holdCompleteFrameForGrid) {
@@ -1488,44 +1516,41 @@ private fun TerminalInteractivePanel(
             resizeAwaitingTuiRedraw.set(true)
             resizeRedrawStartedAt.set(System.nanoTime())
         }
-        if (sessionTerminalEmulator == null) {
-            terminalEmulator.resize(
-                columns = terminalColumns,
-                rows = terminalRows,
-                preserveBottomRows = currentUsesTuiViewport,
-            )
-        }
-        lastAppliedTerminalColumns.set(terminalColumns)
-        lastAppliedTerminalRows.set(terminalRows)
-        val imeStableForSizeHint = !currentImeVisible &&
-            System.currentTimeMillis() - lastImeTransitionAt.get() >= TERMINAL_IME_RESIZE_DEBOUNCE_MS
-        if (imeStableForSizeHint) bgManager.saveTerminalSizeHint(process.command, terminalColumns, terminalRows)
-
         if (holdCompleteFrameForGrid) {
             resizeRenderFallbackJob.set(scope.launch {
                 delay(TERMINAL_RESIZE_RENDER_FALLBACK_MS)
                 if (resizeAwaitingTuiRedraw.getAndSet(false)) {
-                    renderTerminalFrame()
+                    scheduleTerminalRender()
                 }
             })
-            bgManager.resizeInteractiveSession(
-                processId = processId,
-                columns = terminalColumns,
-                rows = terminalRows,
-                preserveBottomRows = currentUsesTuiViewport,
-            )
-            // A shared session emulator is resized by the manager together with the PTY.
-            // Local fallback instances were resized above because no manager state exists.
         } else {
-            renderTerminalFrame()
+            scheduleTerminalRender()
             delay(TERMINAL_PTY_RESIZE_DEBOUNCE_MS)
-            bgManager.resizeInteractiveSession(
+        }
+        val result = if (sessionTerminalEmulator == null) {
+            terminalEmulator.resize(requestedColumns, requestedRows, preserveBottomRows = currentUsesTuiViewport)
+            Result.success(TerminalSizeReceipt(0, requestedColumns, requestedRows))
+        } else {
+            bgManager.resizeInteractiveSessionAcknowledged(
                 processId = processId,
-                columns = terminalColumns,
-                rows = terminalRows,
+                columns = requestedColumns,
+                rows = requestedRows,
                 preserveBottomRows = currentUsesTuiViewport,
             )
-            if (sessionTerminalEmulator != null) renderTerminalFrame()
+        }
+        result.onSuccess { applied ->
+            val latest = bgManager.interactiveSessionSize(processId)
+            if (latest != null && latest.request != applied.request) return@onSuccess
+            lastAppliedTerminalColumns.set(applied.columns)
+            lastAppliedTerminalRows.set(applied.rows)
+            val imeStableForSizeHint = !currentImeVisible &&
+                System.currentTimeMillis() - lastImeTransitionAt.get() >= TERMINAL_IME_RESIZE_DEBOUNCE_MS
+            if (imeStableForSizeHint) bgManager.saveTerminalSizeHint(process.command, applied.columns, applied.rows)
+            if (!holdCompleteFrameForGrid) scheduleTerminalRender()
+        }.onFailure {
+            resizeRenderFallbackJob.getAndSet(null)?.cancel()
+            resizeAwaitingTuiRedraw.set(false)
+            terminalStatus = "尺寸调整失败：${it.message}"
         }
     }
 
@@ -1554,8 +1579,9 @@ private fun TerminalInteractivePanel(
             resizeRenderFallbackJob.getAndSet(null)?.cancel()
             gridBlankCommitJob.getAndSet(null)?.cancel()
             placementHorizontalOffset.set(null)
-            rawInputChannel.close()
-            rawMouseChannel.close()
+            terminalInputQueue.close()
+            terminalPointerMap.clear()
+            terminalPointerMap.inputCoordinates = null
             latestSaveTerminalViewport()
         }
     }
@@ -1645,6 +1671,8 @@ private fun TerminalInteractivePanel(
                         appliedTerminalRenderMode,
                         terminalHistoryChunkPlan.isNotEmpty(),
                         virtualHistoryAllowed = virtualHistoryEnabled,
+                        cursorOverlayAllowed = wantsCursorOverlay,
+                        regularHistoryAllowed = regularHistory,
                     ),
                     onRenderModeClick = {
                         terminalRenderError = null
@@ -1702,6 +1730,7 @@ private fun TerminalInteractivePanel(
                         .background(terminalBackground, RoundedCornerShape(if (fullscreen) 0.dp else 8.dp))
                     .padding(horizontal = if (fullscreen) 4.dp else 6.dp, vertical = if (fullscreen) 3.dp else 5.dp)
                     .padding(bottom = imeOutputExtraPadding)
+                    .onGloballyPositioned { terminalPointerMap.inputCoordinates = it }
                     .onFocusChanged { focusState ->
                         terminalEmulator.sequenceForFocus(focusState.isFocused)?.let { sequence -> sendRaw(sequence) }
                     }
@@ -1717,16 +1746,7 @@ private fun TerminalInteractivePanel(
                         }
                     }
                     .then(if (selectionMode || terminalPanMode) Modifier else Modifier.pointerInteropFilter { event ->
-                        val absoluteX = event.x + horizontalScroll.value
-                        val screenOriginPx = if (terminalEmulator.isAlternateScreen) {
-                            0
-                        } else {
-                            currentScreenStartRow * terminalCellHeightPx
-                        }
-                        val absoluteY = event.y - terminalVisualTopPaddingPx +
-                            outputScroll.value - screenOriginPx
-                        val rawCol = absoluteX.toInt() / terminalCellWidthPx
-                        val rawRow = absoluteY.toInt() / terminalCellHeightPx
+                        val hit = terminalPointerMap.hit(event.x, event.y)
                         val activeButton = activeTerminalMouseButton.get()
                         val eventType = when (event.actionMasked) {
                             MotionEvent.ACTION_DOWN -> MouseEventType.PRESS
@@ -1741,57 +1761,71 @@ private fun TerminalInteractivePanel(
                         // Reject events outside the visible physical grid instead of coercing them
                         // into the first/last cell (status bar, scrollback history, or padding must
                         // never be emitted as a TUI cell press).
-                        val inGrid = rawCol in 0 until terminalColumns && rawRow in 0 until terminalRows
-                        if (!inGrid) {
+                        if (hit == null) {
                             // End any active mouse capture with a release at the last valid cell.
                             if (eventType == MouseEventType.RELEASE && activeButton != null) {
                                 val last = activeTerminalMousePosition.get()
-                                if (last != null) {
+                                val lastHit = activeTerminalMouseHit.get()
+                                if (last != null && lastHit != null) {
                                     val releaseSequence = terminalEmulator.sequenceForMouse(
-                                        last.copy(type = MouseEventType.RELEASE, button = activeButton ?: MouseButton.LEFT)
+                                        last.copy(type = MouseEventType.RELEASE, button = activeButton,
+                                            shift = event.metaState and android.view.KeyEvent.META_SHIFT_ON != 0,
+                                            alt = event.metaState and android.view.KeyEvent.META_ALT_ON != 0,
+                                            ctrl = event.metaState and android.view.KeyEvent.META_CTRL_ON != 0),
+                                        lastHit.generation, lastHit.columns, lastHit.rows,
                                     )
                                     if (releaseSequence != null) sendRawMouseBytes(releaseSequence)
                                 }
                                 activeTerminalMouseButton.set(null)
                                 activeTerminalMousePosition.set(null)
+                                activeTerminalMouseHit.set(null)
                                 return@pointerInteropFilter true
                             }
                             return@pointerInteropFilter eventType != MouseEventType.PRESS
                         }
-                        val col = rawCol
-                        val row = rawRow
-                        // Real pixel position within the terminal screen for SGR-Pixels.
-                        val pixelX = absoluteX.toInt()
-                        val pixelY = absoluteY.toInt()
                         val pressedButton = when {
                             event.buttonState and MotionEvent.BUTTON_SECONDARY != 0 || event.actionButton == MotionEvent.BUTTON_SECONDARY -> MouseButton.RIGHT
                             event.buttonState and MotionEvent.BUTTON_TERTIARY != 0 || event.actionButton == MotionEvent.BUTTON_TERTIARY -> MouseButton.MIDDLE
                             else -> MouseButton.LEFT
                         }
+                        val wheelX = event.getAxisValue(MotionEvent.AXIS_HSCROLL)
+                        val wheelY = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
+                        if (eventType == MouseEventType.WHEEL && wheelX == 0f && wheelY == 0f) return@pointerInteropFilter false
                         val button = when {
-                            eventType == MouseEventType.WHEEL && event.getAxisValue(MotionEvent.AXIS_VSCROLL) < 0f -> MouseButton.WHEEL_DOWN
+                            eventType == MouseEventType.MOVE -> MouseButton.RELEASE
+                            eventType == MouseEventType.WHEEL && kotlin.math.abs(wheelX) > kotlin.math.abs(wheelY) ->
+                                if (wheelX > 0f) MouseButton.WHEEL_RIGHT else MouseButton.WHEEL_LEFT
+                            eventType == MouseEventType.WHEEL && wheelY < 0f -> MouseButton.WHEEL_DOWN
                             eventType == MouseEventType.WHEEL -> MouseButton.WHEEL_UP
                             eventType == MouseEventType.DRAG || eventType == MouseEventType.RELEASE -> activeButton ?: pressedButton
                             else -> pressedButton
                         }
                         val hadActivePress = activeButton != null
                         val mouseEvent = MouseEvent(
-                            row = row,
-                            column = col,
+                            row = hit.row,
+                            column = hit.column,
                             button = button,
                             type = eventType,
-                            pixelX = pixelX,
-                            pixelY = pixelY,
+                            pixelX = hit.pixelX,
+                            pixelY = hit.pixelY,
+                            shift = event.metaState and android.view.KeyEvent.META_SHIFT_ON != 0,
+                            alt = event.metaState and android.view.KeyEvent.META_ALT_ON != 0,
+                            ctrl = event.metaState and android.view.KeyEvent.META_CTRL_ON != 0,
                         )
-                        val sequence = terminalEmulator.sequenceForMouse(mouseEvent)
+                        val sequence = terminalEmulator.sequenceForMouse(mouseEvent, hit.generation, hit.columns, hit.rows)
                         if (eventType == MouseEventType.PRESS && sequence != null) {
                             activeTerminalMouseButton.set(button)
                             activeTerminalMousePosition.set(mouseEvent)
+                            activeTerminalMouseHit.set(hit)
                         }
-                        if (eventType == MouseEventType.DRAG && sequence != null) activeTerminalMousePosition.set(mouseEvent)
+                        if (eventType == MouseEventType.DRAG && sequence != null) {
+                            activeTerminalMousePosition.set(mouseEvent)
+                            activeTerminalMouseHit.set(hit)
+                        }
                         if (eventType == MouseEventType.RELEASE) {
                             activeTerminalMouseButton.set(null)
                             activeTerminalMousePosition.set(null)
+                            activeTerminalMouseHit.set(null)
                         }
                         if (sequence != null) sendRawMouseBytes(sequence)
                         sequence != null || hadActivePress
@@ -1867,6 +1901,8 @@ private fun TerminalInteractivePanel(
                         horizontalScroll = horizontalScroll,
                         panEnabled = terminalPanMode,
                         selectionMode = selectionMode,
+                        pointerMap = terminalPointerMap,
+                        cellWidthPx = terminalCellWidthPx,
                         modifier = Modifier.weight(1f).fillMaxWidth()
                             .terminalPipelineDraw(processId, renderSnapshot.frame.revision, virtualHistoryEnabled,
                                 viewport = {
@@ -1942,7 +1978,7 @@ private fun TerminalInteractivePanel(
                     },
                     onControl = { control ->
                         val actual = if (shiftLatch && control == ControlInput.TAB) ControlInput.BACK_TAB else control
-                        scope.launch { bgManager.sendControlInput(processId, actual) }
+                        if (!terminalInputQueue.offer(TerminalUiInput.Control(actual))) terminalStatus = "发送失败"
                         clearModifierLatches()
                     },
                     onKey = { key -> sendKey(key) },
@@ -2006,6 +2042,8 @@ private fun TerminalInteractivePanel(
             virtualHistoryAllowed = virtualHistoryEnabled,
             virtualHistoryImeFallback = virtualHistoryPolicy.imeFallback,
             selectionActive = selectionMode,
+            cursorOverlayAllowed = wantsCursorOverlay,
+            regularHistoryAllowed = regularHistory,
             saving = savingTerminalRenderMode,
             error = terminalRenderError,
             onDismiss = { terminalSettingsDialog = null },
@@ -2930,21 +2968,4 @@ private fun formatDuration(durationMs: Long): String {
         minutes > 0 -> "${minutes}m ${seconds}s"
         else -> "${seconds}s"
     }
-}
-
-/** Splits a string into Unicode grapheme clusters (handles emoji, ZWJ, combining marks,
- *  and supplementary-plane pairs) so IME deletion sends exactly one Backspace per glyph. */
-private fun graphemeClusters(text: String): List<String> {
-    if (text.isEmpty()) return emptyList()
-    val iterator = BreakIterator.getCharacterInstance()
-    iterator.setText(text)
-    val result = ArrayList<String>()
-    var start = iterator.first()
-    var end = iterator.next()
-    while (end != BreakIterator.DONE) {
-        result.add(text.substring(start, end))
-        start = end
-        end = iterator.next()
-    }
-    return result
 }

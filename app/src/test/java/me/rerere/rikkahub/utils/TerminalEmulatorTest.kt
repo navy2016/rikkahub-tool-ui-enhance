@@ -239,7 +239,7 @@ class TerminalEmulatorTest {
         terminal.feed("[?9h")
         assertEquals("MOUSE-X10", terminal.mouseModeSummary())
         assertEquals(
-            "M\"!!",
+            "\u001B[M\"!!",
             terminal.sequenceForMouse(
                 TerminalEmulator.MouseEvent(
                     row = 0,

@@ -17,10 +17,11 @@ import me.rerere.rikkahub.utils.TerminalEmulator
 internal class TerminalRenderSnapshot private constructor(
     val frame: TerminalEmulator.RenderFrame,
     val rows: List<TerminalRenderedRowState>,
+    val cursors: Map<Long, TerminalCursorState> = emptyMap(),
 ) {
     companion object {
         fun capture(frame: TerminalEmulator.RenderFrame, store: TerminalRowStore): TerminalRenderSnapshot =
-            TerminalRenderSnapshot(frame, store.view(frame))
+            TerminalRenderSnapshot(frame, store.view(frame), store.cursors(frame))
 
         fun capture(
             frame: TerminalEmulator.RenderFrame,

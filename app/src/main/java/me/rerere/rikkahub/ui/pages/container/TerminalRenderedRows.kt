@@ -351,10 +351,17 @@ internal fun TerminalRenderedRow(
     // The hot path uses the same underlying text renderer without Material's per-row link-style
     // wrapper/empty layout callback. Do not replace Material's unspecified-color or link behavior.
     val text = state.text
+    val pointerScope = LocalTerminalPointerScope.current
+    val measuredModifier = if (pointerScope == null) modifier else modifier.then(terminalPointerRowModifier(state, text, pointerScope))
+    val cursor = LocalTerminalCursorOverlays.current[state.lineId]
+    if (cursor != null && terminalUsesBasicText(text, style)) {
+        TerminalCursorOverlayText(text, style, cursor, measuredModifier)
+        return
+    }
     if (terminalUsesBasicText(text, style)) {
-        BasicText(text = text, modifier = modifier, style = style, softWrap = false, maxLines = 1)
+        BasicText(text = text, modifier = measuredModifier, style = style, softWrap = false, maxLines = 1)
     } else {
-        Text(text = text, modifier = modifier, style = style, softWrap = false, maxLines = 1)
+        Text(text = text, modifier = measuredModifier, style = style, softWrap = false, maxLines = 1)
     }
 }
 

@@ -461,6 +461,19 @@ class TerminalPipelineInstrumentedTest : KoinComponent {
                 }
                 report.put(stage.name, (event.timeNanos - ui.timeNanos) / 1_000_000.0)
             }
+            // Keep v1 timestamps intact. These new spans measure only the deterministic echo's
+            // actual read/parse and the selected publication, never arbitrary input/output causality.
+            val read = rows.first { it.stage == TerminalPipelineStage.NATIVE_READ_COMPLETED }
+            val locked = rows.first { it.stage == TerminalPipelineStage.PARSE_LOCK_ACQUIRED }
+            val captured = rows.first { it.stage == TerminalPipelineStage.FRAME_CAPTURED && it.frameRevision == published.frameRevision }
+            val captureStart = rows.last { it.stage == TerminalPipelineStage.FRAME_CAPTURE_STARTED && it.sequence < captured.sequence }
+            val syncStart = rows.first { it.stage == TerminalPipelineStage.ROW_SYNC_STARTED && it.frameRevision == published.frameRevision }
+            val syncEnd = rows.first { it.stage == TerminalPipelineStage.ROW_SYNC_FINISHED && it.frameRevision == published.frameRevision }
+            val phase = JSONObject().put("readToParseLockMs", (locked.timeNanos - read.timeNanos) / 1_000_000.0)
+                .put("parseThroughLastChunkMs", (fed.timeNanos - locked.timeNanos) / 1_000_000.0)
+                .put("captureMs", (captured.timeNanos - captureStart.timeNanos) / 1_000_000.0)
+                .put("rowSyncMs", (syncEnd.timeNanos - syncStart.timeNanos) / 1_000_000.0)
+            report.put("phaseTimingContract", "terminal-echo-phases-v1").put("phaseTimings", phase)
             Log.i("TerminalPipelineTest", "PIPELINE_SAMPLE $report")
         }
     }

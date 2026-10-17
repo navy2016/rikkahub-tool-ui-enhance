@@ -38,6 +38,10 @@ val syncTerminalSources by tasks.registering(SyncTerminalFiles::class) {
     includedPaths.set(listOf(
         "me/rerere/rikkahub/utils/TerminalEmulator.kt",
         "me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt",
+        "me/rerere/rikkahub/utils/TerminalScreenSnapshot.kt",
+        "me/rerere/rikkahub/data/container/TerminalDisplayPolicy.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalPointerMap.kt",
+        "me/rerere/rikkahub/ui/pages/container/TerminalCursorOverlayText.kt",
         "me/rerere/rikkahub/data/container/TerminalViewportReducer.kt",
         "me/rerere/rikkahub/data/container/TerminalViewportController.kt",
         "me/rerere/rikkahub/data/container/TerminalViewportGeometry.kt",

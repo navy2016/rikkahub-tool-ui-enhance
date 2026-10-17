@@ -91,6 +91,8 @@ class TerminalEmulator(
         val row: RenderedRow,
         val nonBlank: Boolean,
         val occupied: Boolean,
+        val overlay: Boolean = false,
+        val textLastColumn: Int = -1,
     )
 
     enum class CursorShape { DEFAULT, BLOCK, STEADY_BLOCK, UNDERLINE, STEADY_UNDERLINE, BAR, STEADY_BAR }
@@ -120,7 +122,9 @@ class TerminalEmulator(
         KP_0, KP_1, KP_2, KP_3, KP_4, KP_5, KP_6, KP_7, KP_8, KP_9,
         KP_DECIMAL, KP_ADD, KP_SUBTRACT, KP_MULTIPLY, KP_DIVIDE, KP_ENTER
     }
-    data class RenderedRow(val text: AnnotatedString)
+    data class CursorOverlay(val start: Int, val end: Int, val part: Int, val cells: Int,
+        val shape: CursorShape, val color: Color)
+    data class RenderedRow(val text: AnnotatedString, val cursorOverlay: CursorOverlay? = null)
 
     private class ScrollbackLine(
         val id: Long,
@@ -168,6 +172,8 @@ class TerminalEmulator(
         val isAlternateScreen: Boolean,
         val modeSummary: String,
         val revision: Long,
+        val cursorOverlayMode: Boolean = false,
+        val mouseTracking: Boolean = false,
     )
 
     data class ContentBounds(
@@ -337,8 +343,7 @@ class TerminalEmulator(
         defaultForeground = Color(0xFF00E676)
         defaultBackground = Color(0xFF101010)
         cursorColor = Color(0xFF00E676)
-        cellPixelWidth = 7
-        cellPixelHeight = 14
+        // RIS resets terminal state, not the host's actual font/pixel geometry.
         resetDecoder()
         pendingUtf8 = ByteArray(0)
         cursorVisible = true
@@ -620,6 +625,18 @@ class TerminalEmulator(
         fun tildeModified(code: Int, normal: String): String = if (shift || alt || ctrl) "\u001B[${code};${modifier()}~" else normal
         fun ss3Modified(final: Char, normal: String): String = if (shift || alt || ctrl) "\u001B[1;${modifier()}$final" else normal
 
+        // XTMODKEYS level 2 disambiguates modified text-producing functional keys too. Legacy
+        // Ctrl+Backspace/Alt+Enter semantics below remain untouched until the application opts in.
+        if (modifyOtherKeys == 2 && (shift || alt || ctrl)) {
+            val code = when (key) {
+                Key.TAB -> 9
+                Key.ENTER -> 13
+                Key.BACKSPACE -> 127
+                else -> null
+            }
+            if (code != null) return modifiedCharacter(code, modifier())
+        }
+
         return when (key) {
             Key.UP -> csiModified('A', if (applicationCursorKeys) "\u001BOA" else "\u001B[A")
             Key.DOWN -> csiModified('B', if (applicationCursorKeys) "\u001BOB" else "\u001B[B")
@@ -675,11 +692,7 @@ class TerminalEmulator(
         val modified = shift || alt || ctrl
         if (modifyOtherKeys > 0 && modified) {
             val modifier = keyModifier(shift, alt, ctrl)
-            return if (formatOtherKeys == 2) {
-                "\u001B[${codePoint};${modifier}u"
-            } else {
-                "\u001B[27;${modifier};${codePoint}~"
-            }
+            return modifiedCharacter(codePoint, modifier)
         }
         return when {
             ctrl && codePoint in 'a'.code..'z'.code -> ((codePoint - 'a'.code + 1).toChar()).toString()
@@ -713,6 +726,20 @@ class TerminalEmulator(
         return 1 + (if (shift) 1 else 0) + (if (alt) 2 else 0) + (if (ctrl) 4 else 0)
     }
 
+    private fun modifiedCharacter(codePoint: Int, modifier: Int): String = if (formatOtherKeys == 2) {
+        "\u001B[${codePoint};${modifier}u"
+    } else {
+        "\u001B[27;${modifier};${codePoint}~"
+    }
+
+    /** Text commits are not physical key events. Never discard a grapheme's trailing codepoints. */
+    @Synchronized
+    fun sequenceForTextCommit(text: String, alt: Boolean = false, ctrl: Boolean = false): String {
+        if (text.isEmpty() || (!alt && !ctrl)) return text
+        val first = text.codePointAt(0)
+        return sequenceForCodePoint(first, alt = alt, ctrl = ctrl) + text.substring(Character.charCount(first))
+    }
+
     @Synchronized
     fun wrapPaste(text: String): String {
         return if (bracketedPaste) bracketedPasteSequence(text) else text
@@ -744,18 +771,24 @@ class TerminalEmulator(
     }
 
     @Synchronized
-    fun sequenceForMouse(event: MouseEvent): ByteArray? {
+    fun sequenceForMouse(event: MouseEvent, expectedScreenGeneration: Long? = null,
+        expectedColumns: Int? = null, expectedRows: Int? = null): ByteArray? {
         // Out-of-bounds cells are rejected rather than coerced into the grid so clicks on
         // status bars, scrollback history, or padding never produce a fake grid cell.
         if (event.column < 0 || event.column >= columns || event.row < 0 || event.row >= rows) return null
+        if (expectedScreenGeneration != null && expectedScreenGeneration != activeScreenGeneration) return null
+        if ((expectedColumns != null && expectedColumns != columns) || (expectedRows != null && expectedRows != rows)) return null
+        if ((event.pixelX ?: 0) < 0 || (event.pixelY ?: 0) < 0) return null
         if (mouseTrackingMode == MouseTrackingMode.OFF) return alternateScrollSequenceKeyCodes(event)
         if (event.type == MouseEventType.MOVE && mouseTrackingMode != MouseTrackingMode.ANY_EVENT) return null
         if (event.type == MouseEventType.DRAG && mouseTrackingMode !in setOf(MouseTrackingMode.BUTTON_EVENT, MouseTrackingMode.ANY_EVENT)) return null
-        if (event.type == MouseEventType.RELEASE && mouseTrackingMode == MouseTrackingMode.X10) return null
+        if (mouseTrackingMode == MouseTrackingMode.X10 && (event.type != MouseEventType.PRESS ||
+                event.button !in setOf(MouseButton.LEFT, MouseButton.MIDDLE, MouseButton.RIGHT))) return null
         val col = event.column + 1
         val row = event.row + 1
-        val pixelCol = ((event.pixelX ?: (event.column * cellPixelWidth + 1)).coerceAtLeast(1))
-        val pixelRow = ((event.pixelY ?: (event.row * cellPixelHeight + 1)).coerceAtLeast(1))
+        // MotionEvent and MouseEvent carry zero-based pixels; SGR-Pixels is one-based on the wire.
+        val pixelCol = (event.pixelX ?: (event.column * cellPixelWidth)).coerceAtMost(Int.MAX_VALUE - 1) + 1
+        val pixelRow = (event.pixelY ?: (event.row * cellPixelHeight)).coerceAtMost(Int.MAX_VALUE - 1) + 1
         var code = when (event.button) {
             MouseButton.LEFT -> 0
             MouseButton.MIDDLE -> 1
@@ -773,15 +806,20 @@ class TerminalEmulator(
                 else -> code
             }
         }
-        if (event.type == MouseEventType.DRAG) code += 32
-        if (event.shift) code += 4
-        if (event.alt) code += 8
-        if (event.ctrl) code += 16
+        if (event.type == MouseEventType.MOVE) code = 3 // no button, never a synthetic left press
+        if (event.type == MouseEventType.DRAG || event.type == MouseEventType.MOVE) code += 32
+        if (mouseTrackingMode != MouseTrackingMode.X10) {
+            if (event.shift) code += 4
+            if (event.alt) code += 8
+            if (event.ctrl) code += 16
+        }
         return when (mouseProtocol) {
             MouseProtocol.SGR -> "\u001B[<${code};${col};${row}${if (event.type == MouseEventType.RELEASE) 'm' else 'M'}".toByteArray(Charsets.US_ASCII)
             MouseProtocol.SGR_PIXELS -> "\u001B[<${code};${pixelCol};${pixelRow}${if (event.type == MouseEventType.RELEASE) 'm' else 'M'}".toByteArray(Charsets.US_ASCII)
             MouseProtocol.URXVT -> "\u001B[${code + 32};${col};${row}M".toByteArray(Charsets.US_ASCII)
-            else -> legacyMouseBytes(code, col, row)
+            MouseProtocol.UTF8 -> ("\u001B[M" + (32 + code).toChar() + (32 + col).toChar() +
+                (32 + row).toChar()).toByteArray(Charsets.UTF_8)
+            MouseProtocol.DEFAULT -> if (col <= 223 && row <= 223) legacyMouseBytes(code, col, row) else null
         }
     }
 
@@ -790,19 +828,21 @@ class TerminalEmulator(
         // byte values. Emit exactly these bytes instead of a String so values above ASCII cannot
         // be re-encoded as UTF-8 and corrupt the terminal sequence.
         return byteArrayOf(
-            0x1B, 'M'.code.toByte(),
+            0x1B, '['.code.toByte(), 'M'.code.toByte(),
             (32 + code).toByte(),
             (32 + col).toByte(),
             (32 + row).toByte()
         )
     }
 
-    private fun renderScreenLine(line: CellLine, row: Int, reuse: Boolean): ScreenRendering {
+    private fun renderScreenLine(line: CellLine, row: Int, reuse: Boolean, overlayMode: Boolean = false): ScreenRendering {
         // Hidden cursors still reserve their column in appendStyledLine; keep this in the cache key.
         val column = if (row == cursorRow) cursorCol else -1
         val visible = column >= 0 && cursorVisible
+        val overlay = overlayMode && cursorShape in setOf(CursorShape.BAR, CursorShape.STEADY_BAR,
+            CursorShape.UNDERLINE, CursorShape.STEADY_UNDERLINE)
         val cached = line.cached
-        if (reuse && cached != null && cached.revision == line.revision &&
+        if (reuse && cached != null && cached.overlay == overlay && cached.revision == line.revision &&
             cached.styleRevision == screenRenderStyleRevision && cached.cursorColumn == column &&
             cached.cursorVisible == visible && (!visible ||
                 (cached.cursorShape == cursorShape && cached.cursorColor == cursorColor))
@@ -811,9 +851,22 @@ class TerminalEmulator(
             return cached
         }
         lastRenderScreenBuilds++
+        val last = maxOf(line.lastContentColumn(), column)
+        val text = if (overlay && reuse && cached?.overlay == true && cached.revision == line.revision &&
+            cached.styleRevision == screenRenderStyleRevision && cached.textLastColumn == last) cached.row.text
+        else buildAnnotatedString { appendStyledLine(line, row, drawCursor = !overlay, reserveCursor = true) }
+        val cursor = if (overlay && visible) {
+            var base = column
+            while (base > 0 && line[base].continuation) base--
+            var offset = 0
+            for (index in 0 until base) if (!line[index].continuation) offset += line[index].text.length
+            val end = offset + line[base].text.length
+            if (offset < end && end <= text.length) CursorOverlay(offset, end, column - base,
+                line[base].width.coerceAtLeast(1), cursorShape, cursorColor) else null
+        } else null
         return ScreenRendering(line.revision, screenRenderStyleRevision, column, visible, cursorShape,
-            cursorColor, RenderedRow(buildAnnotatedString { appendStyledLine(line, row, drawCursor = true) }),
-            line.isNotBlankLine(), line.isVisuallyOccupiedLine()).also { if (reuse) line.cached = it }
+            cursorColor, RenderedRow(text, cursor), line.isNotBlankLine(), line.isVisuallyOccupiedLine(),
+            overlay, last).also { if (reuse) line.cached = it }
     }
 
     private fun historySnapshot(): TerminalHistorySnapshot {
@@ -869,12 +922,17 @@ class TerminalEmulator(
     @Synchronized
     fun renderFrame(includeScrollback: Boolean = true): RenderFrame = buildRenderFrame(includeScrollback, true)
 
+    /** Opt-in display only; terminal cells, COPY, protocol replies and default rendering are unchanged. */
+    @Synchronized
+    fun renderFrameForCursorOverlay(includeScrollback: Boolean = true): RenderFrame =
+        buildRenderFrame(includeScrollback, true, overlayMode = true)
+
     /** Independent full screen materialization for cache differential tests, never used by the UI. */
     @Synchronized
     internal fun renderFrameUncached(includeScrollback: Boolean = true): RenderFrame =
         buildRenderFrame(includeScrollback, false)
 
-    private fun buildRenderFrame(includeScrollback: Boolean, reuseScreen: Boolean): RenderFrame {
+    private fun buildRenderFrame(includeScrollback: Boolean, reuseScreen: Boolean, overlayMode: Boolean = false): RenderFrame {
         val includeHistory = includeScrollback && !alternateScreen
         lastRenderHistoryVisits = 0
         lastRenderScreenBuilds = 0
@@ -892,7 +950,7 @@ class TerminalEmulator(
         var nonBlankScreenRowCount = 0
         val screenLineIds = java.util.Collections.unmodifiableList(activeScreenLineIds.toList())
         screen.forEachIndexed { row, line ->
-            val rendering = renderScreenLine(line, row, reuseScreen)
+            val rendering = renderScreenLine(line, row, reuseScreen, overlayMode)
             val isNotBlank = rendering.nonBlank
             val isVisuallyOccupied = rendering.occupied
             screenRows.add(rendering.row)
@@ -932,6 +990,8 @@ class TerminalEmulator(
             isAlternateScreen = alternateScreen,
             modeSummary = buildModeSummary(),
             revision = stateRevision,
+            cursorOverlayMode = overlayMode,
+            mouseTracking = mouseTracking,
         )
     }
 
@@ -973,6 +1033,30 @@ class TerminalEmulator(
     @Synchronized
     fun plainText(includeScrollback: Boolean = true): String = buildString {
         appendPlainRows(includeScrollback)
+    }
+
+    @Synchronized
+    internal fun captureScreenSnapshot(consumeEvents: Boolean = false): TerminalScreenSnapshot {
+        val lines = screen.map { line ->
+            val cells = ArrayList<TerminalScreenTextRow.Cell>(columns)
+            val text = buildString {
+                line.forEachIndexed { column, cell ->
+                    if (!cell.continuation) {
+                        val start = length
+                        append(cell.text)
+                        cells.add(TerminalScreenTextRow.Cell(column, cell.width.coerceAtLeast(1), start, length))
+                    }
+                }
+            }.trimEnd()
+            TerminalScreenTextRow(text, cells)
+        }
+        return TerminalScreenSnapshot(java.util.Collections.unmodifiableList(lines), columns, rows,
+            cursorRow + 1, cursorCol + 1, cursorVisible, cursorShape, title, workingDirectoryUri,
+            buildModeSummary(), stateRevision,
+            java.util.Collections.unmodifiableList(pendingResponses.toList()),
+            java.util.Collections.unmodifiableList(clipboardRequests.toList())).also {
+            if (consumeEvents) { pendingResponses.clear(); clipboardRequests.clear() }
+        }
     }
 
     private fun resetDecoder() {
@@ -1064,9 +1148,9 @@ class TerminalEmulator(
     }
 
     private fun AnnotatedString.Builder.appendStyledLine(
-        line: CellLine, row: Int? = null, drawCursor: Boolean = false,
+        line: CellLine, row: Int? = null, drawCursor: Boolean = false, reserveCursor: Boolean = drawCursor,
     ) {
-        val last = maxOf(line.lastContentColumn(), if (drawCursor && row == cursorRow) cursorCol else 0)
+        val last = maxOf(line.lastContentColumn(), if (reserveCursor && row == cursorRow) cursorCol else 0)
         var i = 0
         while (i <= last) {
             val style = renderedStyleAt(line, row, i, drawCursor)
@@ -1600,21 +1684,62 @@ class TerminalEmulator(
         cursorCol = col.coerceIn(0, columns - 1)
     }
 
+    private fun acceptsCsi(seq: CsiSequence): Boolean = when (seq.privateMarker) {
+        null -> when (seq.intermediates) {
+            "" -> true
+            " " -> seq.final in "A@q"
+            "\"" -> seq.final == 'q'
+            "!" -> seq.final == 'p'
+            "$" -> seq.final in "prxz{tv"
+            "*" -> seq.final == 'y'
+            else -> false
+        }
+        '?' -> (seq.intermediates.isEmpty() && seq.final in "JKhlcnm") ||
+            (seq.intermediates == "$" && seq.final == 'p')
+        '>' -> seq.intermediates.isEmpty() && seq.final in "mncq"
+        else -> false
+    }
+
+    private fun keyboardModifierControl(seq: CsiSequence) {
+        // Only the implemented resource is advertised. Never manufacture support for Kitty,
+        // alternate-key/release events, or xterm resources whose encoders are not implemented.
+        if (seq.privateMarker == '>') {
+            if (seq.params.isEmpty()) modifyOtherKeys = 0
+            else if (seq.paramZero(0) == 4) {
+                val level = seq.params.getOrNull(1)?.toIntOrNull() ?: 0
+                if (level in 0..2) modifyOtherKeys = level
+            }
+        } else if (seq.privateMarker == '?' && seq.paramZero(0) == 4) {
+            pendingResponses.add("\u001B[>4;${modifyOtherKeys}m")
+        }
+    }
+
     private fun executeCsi(raw: String, command: Char) {
         val seq = parseCsi(raw, command)
-        if (seq.privateMarker == '<' && (command == 'M' || command == 'm')) return // xterm mouse report
+        // A final byte alone is NOT a command identity. In particular Kitty ?/>/<u must not
+        // restore a cursor, and xterm >4;2m must not become SGR underline/faint. Unsupported
+        // extensions are ignored; DA remains the sentinel for programs' legacy keyboard fallback.
+        if (!acceptsCsi(seq)) return
+        if (command == 'm' && seq.privateMarker != null) {
+            keyboardModifierControl(seq)
+            return
+        }
+        if (command == 'n' && seq.privateMarker == '>') {
+            if (seq.paramZero(0) == 4) modifyOtherKeys = 0
+            return
+        }
 
         when (command) {
             'A' -> if (seq.intermediates == " ") scrollRight(seq.paramInt(0, 1)) else moveCursor(row = (cursorRow - seq.paramInt(0, 1)).coerceAtLeast(scrollTop))
-            'B' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1)).coerceAtMost(scrollBottom))
-            'C' -> moveCursor(col = (cursorCol + seq.paramInt(0, 1)).coerceAtMost(columns - 1))
+            'B' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1).coerceAtMost(rows)).coerceAtMost(scrollBottom))
+            'C' -> moveCursor(col = (cursorCol + seq.paramInt(0, 1).coerceAtMost(columns)).coerceAtMost(columns - 1))
             'D' -> moveCursor(col = (cursorCol - seq.paramInt(0, 1)).coerceAtLeast(0))
-            'E' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1)).coerceAtMost(scrollBottom), col = 0)
+            'E' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1).coerceAtMost(rows)).coerceAtMost(scrollBottom), col = 0)
             'F' -> moveCursor(row = (cursorRow - seq.paramInt(0, 1)).coerceAtLeast(scrollTop), col = 0)
             'G', '`' -> moveCursor(col = seq.paramInt(0, 1) - 1)
             'I' -> moveCursor(col = nextTabStop(seq.paramInt(0, 1)))
-            'a' -> moveCursor(col = (cursorCol + seq.paramInt(0, 1)).coerceAtMost(columns - 1))
-            'e' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1)).coerceAtMost(scrollBottom))
+            'a' -> moveCursor(col = (cursorCol + seq.paramInt(0, 1).coerceAtMost(columns)).coerceAtMost(columns - 1))
+            'e' -> moveCursor(row = (cursorRow + seq.paramInt(0, 1).coerceAtMost(rows)).coerceAtMost(scrollBottom))
             'H', 'f' -> {
                 val targetRow = seq.paramInt(0, 1) - 1
                 val row = if (originMode) (scrollTop + targetRow).coerceIn(scrollTop, scrollBottom) else targetRow.coerceIn(0, rows - 1)
@@ -1625,13 +1750,13 @@ class TerminalEmulator(
             'm' -> applySgr(seq.params.ifEmpty { listOf("0") })
             's' -> saveCursor()
             'u' -> restoreCursor()
-            'L' -> repeat(seq.paramInt(0, 1)) { insertLine() }
-            'M' -> repeat(seq.paramInt(0, 1)) { deleteLine() }
+            'L' -> repeatLineOperation(seq.paramInt(0, 1), false) { insertLine() }
+            'M' -> repeatLineOperation(seq.paramInt(0, 1), false) { deleteLine() }
             'P' -> deleteChars(seq.paramInt(0, 1))
             '@' -> if (seq.intermediates == " ") scrollLeft(seq.paramInt(0, 1)) else insertChars(seq.paramInt(0, 1))
             'X' -> eraseChars(seq.paramInt(0, 1))
-            'S' -> repeat(seq.paramInt(0, 1)) { scrollUp() }
-            'T' -> repeat(seq.paramInt(0, 1)) { scrollDown() }
+            'S' -> repeatLineOperation(seq.paramInt(0, 1), !alternateScreen && scrollTop == 0) { scrollUp() }
+            'T' -> repeatLineOperation(seq.paramInt(0, 1), false) { scrollDown() }
             'Z' -> moveCursor(col = previousTabStop(seq.paramInt(0, 1)))
             'b' -> repeatLastGraphic(seq.paramInt(0, 1))
             'c' -> handleDeviceAttributes(seq)
@@ -1827,8 +1952,6 @@ class TerminalEmulator(
             2 -> {
                 for (r in 0 until rows) eraseLineRange(r, 0, columns - 1, selective)
                 if (!selective) invalidateActiveScreenLineIds()
-                cursorRow = 0
-                cursorCol = 0
             }
             3 -> if (!selective) {
                 if (scrollback.isNotEmpty()) {
@@ -2011,6 +2134,24 @@ class TerminalEmulator(
         return updated
     }
 
+    /** Skip only a fully evicted middle of identical blank-row operations. Advance the same
+     * identity/archival ordinals; the retained suffix is still executed verbatim. This bounds
+     * huge CSI counts without truncating scrollback, reusing IDs or blocking on billions of loops. */
+    private inline fun repeatLineOperation(count: Int, archives: Boolean, operation: () -> Unit) {
+        val suffix = rows + if (archives) scrollbackLimit else 0
+        if (count <= rows + suffix) {
+            repeat(count) { operation() }
+            return
+        }
+        val idBefore = nextLineId
+        repeat(rows) { operation() }
+        if (nextLineId == idBefore) return // insert/delete outside scroll region is a no-op
+        val skipped = count.toLong() - rows - suffix
+        nextLineId = Math.addExact(nextLineId, skipped)
+        if (archives) nextHistorySequence = Math.addExact(nextHistorySequence, skipped)
+        repeat(suffix) { operation() }
+    }
+
     private fun insertLine() {
         pendingWrap = false
         if (cursorRow !in scrollTop..scrollBottom) return
@@ -2102,7 +2243,7 @@ class TerminalEmulator(
 
     private fun nextTabStop(count: Int = 1): Int {
         var col = cursorCol
-        repeat(count.coerceAtLeast(1)) {
+        repeat(count.coerceIn(1, columns)) {
             col = tabStops.firstOrNull { it > col } ?: (columns - 1)
         }
         return col.coerceIn(0, columns - 1)
@@ -2110,7 +2251,7 @@ class TerminalEmulator(
 
     private fun previousTabStop(count: Int = 1): Int {
         var col = cursorCol
-        repeat(count.coerceAtLeast(1)) {
+        repeat(count.coerceIn(1, columns)) {
             col = tabStops.lastOrNull { it < col } ?: 0
         }
         return col.coerceIn(0, columns - 1)

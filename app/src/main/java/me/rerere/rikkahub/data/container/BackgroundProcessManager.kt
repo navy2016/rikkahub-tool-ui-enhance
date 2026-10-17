@@ -25,6 +25,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import me.rerere.rikkahub.service.ContainerProcessForegroundService
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.utils.TerminalEmulator
+import me.rerere.rikkahub.utils.TerminalScreenSnapshot
 import org.koin.core.context.GlobalContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -134,10 +135,7 @@ internal fun renderInteractiveTerminalSnapshot(
     val safeRows = rows.coerceIn(6, 80)
     val terminal = TerminalEmulator(initialColumns = safeColumns, initialRows = safeRows)
     terminal.feed(bytes)
-    val screenLines = terminal.plainText(includeScrollback = false)
-        .lines()
-        .map { it.trimEnd() }
-    return buildSnapshotFromLines(screenLines, safeRows, safeColumns, terminal)
+    return buildSnapshotFromLines(terminal.captureScreenSnapshot(consumeEvents = true))
 }
 
 /**
@@ -146,21 +144,13 @@ internal fun renderInteractiveTerminalSnapshot(
  * are not consumed by a read-only snapshot.
  */
 internal fun renderLiveTerminalSnapshot(terminal: TerminalEmulator): InteractiveTerminalSnapshot {
-    val columns = terminal.columns
-    val rows = terminal.rows
-    val screenLines = terminal.plainText(includeScrollback = false)
-        .lines()
-        .map { it.trimEnd() }
-    return buildSnapshotFromLines(screenLines, rows, columns, terminal, live = true)
+    return buildSnapshotFromLines(terminal.captureScreenSnapshot())
 }
 
-private fun buildSnapshotFromLines(
-    screenLines: List<String>,
-    safeRows: Int,
-    safeColumns: Int,
-    terminal: TerminalEmulator,
-    live: Boolean = false
-): InteractiveTerminalSnapshot {
+private fun buildSnapshotFromLines(snapshot: TerminalScreenSnapshot): InteractiveTerminalSnapshot {
+    val screenLines = snapshot.lines.map { it.text }
+    val safeRows = snapshot.rows
+    val safeColumns = snapshot.columns
     val screen = screenLines.joinToString("\n")
     val edgeBandSize = safeRows.coerceAtMost(3)
     val topLinesStartRow = 1
@@ -197,8 +187,9 @@ private fun buildSnapshotFromLines(
     val visibleContent = visibleContentLines.joinToString("\n")
     val firstNonEmptyLine = firstNonEmptyRow?.let { row -> screenLines.getOrNull(row - 1) }
     val lastNonEmptyLine = lastNonEmptyRow?.let { row -> screenLines.getOrNull(row - 1) }
-    val cursorRow = terminal.cursorRow()
-    val cursorColumn = terminal.cursorColumn()
+    val cursorRow = snapshot.cursorRow
+    val cursorColumn = snapshot.cursorColumn
+    val cursorCells = snapshot.lines[cursorRow - 1]
     val rowsAboveCursor = cursorRow - 1
     val rowsBelowCursor = safeRows - cursorRow
     val cursorDistanceFromContentTop = firstNonEmptyRow?.let { cursorRow - it }
@@ -216,8 +207,10 @@ private fun buildSnapshotFromLines(
     val cursorLineTrailingBlankCount = cursorLine.indexOfLast { !it.isWhitespace() }.let { index ->
         if (index == -1) cursorLineLength else cursorLineLength - index - 1
     }
-    val cursorLineFirstNonBlankColumn = cursorLine.indexOfFirst { !it.isWhitespace() }.takeIf { it >= 0 }?.let { it + 1 }
-    val cursorLineLastNonBlankColumn = cursorLine.indexOfLast { !it.isWhitespace() }.takeIf { it >= 0 }?.let { it + 1 }
+    val firstTextOffset = cursorLine.indexOfFirst { !it.isWhitespace() }.takeIf { it >= 0 }
+    val lastTextOffset = cursorLine.indexOfLast { !it.isWhitespace() }.takeIf { it >= 0 }
+    val cursorLineFirstNonBlankColumn = firstTextOffset?.let { cursorCells.column(it) + 1 }
+    val cursorLineLastNonBlankColumn = lastTextOffset?.let { cursorCells.width }
     val cursorDistanceFromLineTextStart = cursorLineFirstNonBlankColumn?.let { cursorColumn - it }
     val cursorDistanceFromLineTextEnd = cursorLineLastNonBlankColumn?.let { cursorColumn - (it + 1) }
     val cursorLineCursorRegion = when {
@@ -234,26 +227,26 @@ private fun buildSnapshotFromLines(
     val cursorInsideLineText = cursorLineCursorRegion == "INSIDE_TEXT"
     val cursorAtLineTextEnd = cursorLineCursorRegion == "TEXT_END"
     val cursorAfterLineText = cursorLineCursorRegion == "AFTER_TEXT"
-    val cursorSplitColumn = (cursorColumn - 1).coerceIn(0, cursorLineLength)
-    val cursorLineCharBeforeCursor = cursorLine.getOrNull(cursorSplitColumn - 1)?.toString()
-    val cursorLineCharAtCursor = cursorLine.getOrNull(cursorSplitColumn)?.toString()
-    val cursorLineCharAfterCursor = cursorLine.getOrNull(cursorSplitColumn + 1)?.toString()
-    val cursorLineTextContent = if (cursorLineFirstNonBlankColumn != null && cursorLineLastNonBlankColumn != null) {
-        cursorLine.substring(cursorLineFirstNonBlankColumn - 1, cursorLineLastNonBlankColumn)
+    val cursorSplitColumn = cursorCells.offset(cursorColumn - 1)
+    val cursorLineCharBeforeCursor = cursorCells.beforeCursor(cursorColumn - 1)
+    val cursorLineCharAtCursor = cursorCells.atCursor(cursorColumn - 1)
+    val cursorLineCharAfterCursor = cursorCells.afterCursor(cursorColumn - 1)
+    val cursorLineTextContent = if (firstTextOffset != null && lastTextOffset != null) {
+        cursorLine.substring(firstTextOffset, lastTextOffset + 1)
     } else {
         null
     }
     val cursorLineTextLength = cursorLineTextContent?.length
-    val cursorLineTextLeadingPadding = cursorLineFirstNonBlankColumn?.let { firstColumn ->
-        cursorLine.substring(0, firstColumn - 1)
+    val cursorLineTextLeadingPadding = firstTextOffset?.let { firstOffset ->
+        cursorLine.substring(0, firstOffset)
     }
-    val cursorLineTextTrailingPadding = cursorLineLastNonBlankColumn?.let { lastColumn ->
-        cursorLine.substring(lastColumn)
+    val cursorLineTextTrailingPadding = lastTextOffset?.let { lastOffset ->
+        cursorLine.substring(lastOffset + 1)
     }
     val cursorLineTextLeadingPaddingLength = cursorLineTextLeadingPadding?.length
     val cursorLineTextTrailingPaddingLength = cursorLineTextTrailingPadding?.length
     val cursorLineTextCursorOffset = cursorLineTextContent?.let { text ->
-        (cursorSplitColumn - (cursorLineFirstNonBlankColumn!! - 1)).coerceIn(0, text.length)
+        (cursorSplitColumn - requireNotNull(firstTextOffset)).coerceIn(0, text.length)
     }
     val cursorLineTextCursorOffsetFromEnd = if (cursorLineTextLength != null && cursorLineTextCursorOffset != null) {
         cursorLineTextLength - cursorLineTextCursorOffset
@@ -262,8 +255,11 @@ private fun buildSnapshotFromLines(
     }
     val cursorLineTextBeforeCursorInText = cursorLineTextContent?.take(cursorLineTextCursorOffset ?: 0)
     val cursorLineTextAtCursor = cursorLineTextContent?.let { text ->
-        cursorLineTextCursorOffset?.let { offset -> text.getOrNull(offset)?.toString() }
+        cursorLineTextCursorOffset?.takeIf { it < text.length }?.let { offset ->
+            cursorCells.atOffset(requireNotNull(firstTextOffset) + offset)
+        }
     }
+
     val cursorLineTextAfterCursorInText = cursorLineTextContent?.drop(cursorLineTextCursorOffset ?: 0)
     val cursorLineTextCursorSegment = if (
         cursorLineTextContent != null && cursorLineTextLeadingPaddingLength != null && cursorLineTextLength != null
@@ -294,7 +290,7 @@ private fun buildSnapshotFromLines(
     } else {
         null
     }
-    val cursorDistanceFromLineEnd = cursorColumn - (cursorLineLength + 1)
+    val cursorDistanceFromLineEnd = cursorColumn - (cursorCells.width + 1)
     val cursorInVisibleContent = firstNonEmptyRow != null && lastNonEmptyRow != null && cursorRow in firstNonEmptyRow..lastNonEmptyRow
     val cursorVisibleContentRow = if (cursorInVisibleContent && firstNonEmptyRow != null) {
         cursorRow - firstNonEmptyRow + 1
@@ -304,12 +300,8 @@ private fun buildSnapshotFromLines(
     val cursorVisibleContentLine = cursorVisibleContentRow?.let { row ->
         visibleContentLines.getOrNull(row - 1)
     }
-    // Use non-consuming peek for live snapshots to avoid consuming the session's pending queues.
-    val (responses, clipboardRequests) = if (live) {
-        terminal.pendingResponsesView() to terminal.pendingClipboardRequestsView()
-    } else {
-        terminal.drainResponses() to terminal.drainClipboardRequests()
-    }
+    val responses = snapshot.responses
+    val clipboardRequests = snapshot.clipboardRequests
     return InteractiveTerminalSnapshot(
         screen = screen,
         screenLines = screenLines,
@@ -335,8 +327,8 @@ private fun buildSnapshotFromLines(
         lastNonEmptyLine = lastNonEmptyLine,
         contentHeight = contentHeight,
         isEmpty = nonEmptyRows.isEmpty(),
-        modes = terminal.modeSummary(),
-        title = terminal.title,
+        modes = snapshot.modes,
+        title = snapshot.title,
         columns = safeColumns,
         rows = safeRows,
         cursorRow = cursorRow,
@@ -389,9 +381,9 @@ private fun buildSnapshotFromLines(
         cursorInVisibleContent = cursorInVisibleContent,
         cursorVisibleContentRow = cursorVisibleContentRow,
         cursorVisibleContentLine = cursorVisibleContentLine,
-        cursorShape = terminal.cursorShape().name,
-        cursorVisible = terminal.isCursorVisible(),
-        workingDirectoryUri = terminal.workingDirectoryUri,
+        cursorShape = snapshot.cursorShape.name,
+        cursorVisible = snapshot.cursorVisible,
+        workingDirectoryUri = snapshot.workingDirectoryUri,
         responses = responses,
         clipboardRequests = clipboardRequests
     )
@@ -1240,6 +1232,7 @@ class BackgroundProcessManager @Inject constructor(
         val widthCheckpoint: TerminalWidthCheckpointStore = TerminalWidthCheckpointStore(),
         var columns: Int = 80,
         var rows: Int = 24,
+        val geometry: TerminalResizeCoordinator = TerminalResizeCoordinator(columns, rows, outputMutex),
         var stdoutJob: Job? = null,
         var stderrJob: Job? = null,
         var waiterJob: Job? = null,
@@ -1615,7 +1608,7 @@ class BackgroundProcessManager @Inject constructor(
             )
         if (bytes.isEmpty()) return@withContext Result.success(Unit)
         TerminalPipelineTrace.record(processId, TerminalPipelineStage.INPUT_ENQUEUE_STARTED, bytes = bytes.size)
-        if (!record.inputChannel.trySend(SessionWrite.Bytes(bytes)).isSuccess) {
+        if (!record.inputChannel.trySend(SessionWrite.Bytes(bytes.copyOf())).isSuccess) {
             return@withContext Result.failure(
                 IllegalStateException("Interactive session is closing: $processId")
             )
@@ -1808,46 +1801,50 @@ class BackgroundProcessManager @Inject constructor(
         columns: Int,
         rows: Int,
         preserveBottomRows: Boolean = false,
-    ): Result<Unit> = withContext(Dispatchers.IO) {
+    ): Result<Unit> = resizeInteractiveSessionAcknowledged(processId, columns, rows, preserveBottomRows).map { Unit }
+
+    internal suspend fun resizeInteractiveSessionAcknowledged(
+        processId: String, columns: Int, rows: Int, preserveBottomRows: Boolean = false,
+    ): Result<TerminalSizeReceipt> {
         val record = interactiveSessions[processId]
-            ?: return@withContext Result.failure(
+            ?: return Result.failure(
                 IllegalStateException("Interactive session not found: $processId")
             )
-        val newColumns = columns.coerceIn(20, 240)
-        val newRows = rows.coerceIn(6, 80)
-        if (record.columns == newColumns && record.rows == newRows) {
-            return@withContext Result.success(Unit)
+        val request = record.geometry.request(columns, rows)
+        return withContext(Dispatchers.IO) {
+            val newColumns = request.columns
+            val newRows = request.rows
+            // outputMutex excludes parsing throughout backend/model commit. Native ioctl failure
+            // changes neither model nor receipt; script remains an explicitly best-effort backend.
+            val result = record.geometry.apply(request, backend = {
+                when {
+                    record.nativePtyEnabled && record.process is NativePtyProcess ->
+                        record.process.resize(newColumns, newRows)
+                    record.ttyEnabled -> {
+                        prootManager.signalProcessTree(record.process, "WINCH")
+                        true
+                    }
+                    else -> true
+                }
+            }, commit = {
+                record.terminalEmulator.resize(newColumns, newRows, preserveBottomRows = preserveBottomRows)
+                record.columns = newColumns
+                record.rows = newRows
+            }, acknowledged = {
+                record.notifications.published(0, record.terminalEmulator.revision(), System.nanoTime(),
+                    record.terminalEmulator.isSynchronizedOutput())
+                record.lastActivityAt = System.currentTimeMillis()
+            })
+            if (result.isSuccess) refreshProcessStates()
+            result
         }
-        // Resize is transactional: the backend must be (a) applied at the kernel, or (b) an
-        // explicitly best-effort script/pipe path. Only then may the emulator and record
-        // dimensions be updated. A failing native ioctl leaves all state unchanged.
-        val backendOk = when {
-            record.nativePtyEnabled && record.process is NativePtyProcess ->
-                record.process.resize(newColumns, newRows)
-            record.ttyEnabled -> {
-                // script(1) backend has no reliable winsize ioctl; send SIGWINCH as best effort.
-                prootManager.signalProcessTree(record.process, "WINCH")
-                true
-            }
-            else -> true // pipe: logical-only resize, no kernel state to commit.
-        }
-        if (!backendOk) {
-            return@withContext Result.failure(
-                IllegalStateException("Failed to apply PTY resize to $processId")
-            )
-        }
-        record.terminalEmulator.resize(
-            columns = newColumns,
-            rows = newRows,
-            preserveBottomRows = preserveBottomRows,
-        )
-        record.columns = newColumns
-        record.rows = newRows
-        record.notifications.published(0, record.terminalEmulator.revision(), System.nanoTime())
-        record.lastActivityAt = System.currentTimeMillis()
-        refreshProcessStates()
-        Result.success(Unit)
     }
+
+    internal fun interactiveSessionSize(processId: String): TerminalSizeReceipt? =
+        interactiveSessions[processId]?.geometry?.applied
+
+    internal fun hasPendingTerminalResize(processId: String): Boolean =
+        interactiveSessions[processId]?.geometry?.pending == true
 
     private suspend fun drainNativePtyTail(record: InteractiveSessionRecord, maxBytes: Int = 16 * 1024) {
         val nativeProcess = record.process as? NativePtyProcess ?: return
@@ -2575,6 +2572,7 @@ class BackgroundProcessManager @Inject constructor(
                 if (read < 0) break
                 if (read == 0) continue
 
+                TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.NATIVE_READ_COMPLETED, bytes = read)
                 acceptTerminalOutput(record, chunk.copyOf(read))
             }
         } catch (cancelled: CancellationException) {
@@ -2585,8 +2583,10 @@ class BackgroundProcessManager @Inject constructor(
 
     /** The parser and ordered response queue are never conflated. No UI collector is in this critical path. */
     private suspend fun acceptTerminalOutput(record: InteractiveSessionRecord, data: ByteArray) {
+        TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.PARSE_LOCK_WAIT, bytes = data.size)
         withContext(NonCancellable) {
             record.outputMutex.withLock {
+                TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.PARSE_LOCK_ACQUIRED, bytes = data.size)
                 // A read chunk must reach the model even if teardown has cancelled this reader.
                 TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.OUTPUT_READ, bytes = data.size)
                 record.outputBuffer.append(data)
@@ -2595,7 +2595,8 @@ class BackgroundProcessManager @Inject constructor(
                 TerminalPipelineTrace.record(record.processId, TerminalPipelineStage.EMULATOR_FED,
                     bytes = data.size, frameRevision = revision)
                 handleTerminalProtocolEvents(record)
-                record.notifications.published(data.size, revision, System.nanoTime())
+                record.notifications.published(data.size, revision, System.nanoTime(),
+                    record.terminalEmulator.isSynchronizedOutput())
                 record.lastActivityAt = System.currentTimeMillis()
             }
         }

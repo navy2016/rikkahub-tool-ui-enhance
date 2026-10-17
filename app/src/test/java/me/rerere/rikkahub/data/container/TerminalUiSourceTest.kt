@@ -138,8 +138,9 @@ class TerminalUiSourceTest {
         assertTrue(acknowledged < bindingSource.indexOf("binding.eagerGeometry()"))
         assertFalse(lazyMeasurementsSource.contains("runCatching"))
         assertTrue(renderedRowsSource.contains("if (terminalUsesBasicText(text, style))"))
-        assertTrue(renderedRowsSource.contains("BasicText(text = text, modifier = modifier"))
-        assertTrue(renderedRowsSource.contains("Text(text = text, modifier = modifier"))
+        assertTrue(renderedRowsSource.contains("BasicText(text = text, modifier = measuredModifier"))
+        assertTrue(renderedRowsSource.contains("Text(text = text, modifier = measuredModifier"))
+        assertTrue(renderedRowsSource.contains("if (pointerScope == null) modifier else modifier.then("))
         assertEquals(TerminalRenderMode.CHUNKED_LAYERS, TerminalRenderMode.DEFAULT)
     }
 
