@@ -46,6 +46,15 @@ AB／BA 288 样本已归档在 `benchmarks/results/3b5c3e0-paired-subscription.m
 （原 run `38838668624`）并重验。允许先做显式非验收诊断，再定向修复／回归及该模式 1800s 压力。
 保留原失败，不以固定等待／删除模式断言取代真正收敛，不扩展优化范围；通过后可继续原 Release 交付。
 
+上述总批次及追加验收已完成：Release `6e81739` / run `38914679438`，独立校验 `38916749973`。
+用户随后实测 Pi 问题由新版 Pi fullscreen 配置引起，`--tui-mode regular --resume` 已恢复完整历史滚动；
+不据此修改终端协议／鼠标／历史渲染，也不把排查中的候选提交记作已证明的回归原因。
+用户现已要求回归主线继续优化。本轮基线 `6e81739d8790c524ae25b010dcd6e21ee0ee0a4d`，
+仅优化 256KiB 原始会话输出缓冲为有界环形存储，范围／证据协议见 `benchmarks/TERMINAL_BYTE_BUFFER.md`。
+容量、读取偏移和逐请求 UTF-8 截断语义不变，parsed scrollback、渲染／滚动／状态栏／KEYS 不变。
+云端先运行 Release JVM 差分／并发／分配量对照，再用 Release-derived PTY/页面验证，门禁通过后
+正式 Release 构建及独立校验。仍禁止本地 Android/Kotlin/native 编译，用户不需要 APK 附件。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

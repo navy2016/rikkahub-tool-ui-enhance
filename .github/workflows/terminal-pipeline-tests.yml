@@ -6,7 +6,7 @@ on:
       suite:
         description: 'Full page samples, transport preflight, or same-device AB/BA experiment'
         type: choice
-        options: [pipeline, transport, all, paired, bundlePaired, service, soak, mountDiagnostic]
+        options: [pipeline, transport, all, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
         default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'
@@ -42,6 +42,8 @@ on:
       - '.github/workflows/terminal-pipeline-paired.yml'
       - 'benchmarks/terminal-pipeline-paired/**'
       - '.github/scripts/test_terminal_pipeline.py'
+      - '.github/scripts/terminal-byte-buffer-reports.py'
+      - '.github/scripts/test_terminal_byte_buffer.py'
       - '.github/scripts/build-terminal-proot.py'
       - '.github/scripts/test_terminal_proot.py'
       - 'benchmarks/proot-x86_64/**'
@@ -147,6 +149,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: true
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -167,7 +170,7 @@ jobs:
         if: ${{ !inputs.checks_only }}
         run: |
           cd .github/scripts
-          python3 -m unittest test_terminal_pipeline test_terminal_pipeline_paired test_terminal_bundle_reports test_terminal_bundle_paired
+          python3 -m unittest test_terminal_pipeline test_terminal_pipeline_paired test_terminal_bundle_reports test_terminal_bundle_paired test_terminal_byte_buffer
       - name: Run actual page and native PTY with real keyboard on non-root KVM guest
         if: ${{ !inputs.checks_only }}
         run: python3 .github/scripts/run-terminal-pipeline.py emulator

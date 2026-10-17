@@ -61,7 +61,7 @@ on:
       suite:
         description: 'Focused suites run once: renderSnapshot publication/rows; textMetrics width/height cache invalidation'
         type: choice
-        options: [all, renderSnapshot, textMetrics, chunkViews, stableMount, staticChecks]
+        options: [all, renderSnapshot, textMetrics, chunkViews, stableMount, byteBuffer, staticChecks]
         default: all
 
 jobs:
@@ -79,6 +79,7 @@ jobs:
         with:
           lfs: true
           submodules: recursive
+          fetch-depth: 0
 
       - name: Setup JDK 21
         uses: actions/setup-java@v4
@@ -168,7 +169,20 @@ jobs:
             --tests me.rerere.rikkahub.data.container.TerminalChunkViewsTest \
             --tests me.rerere.rikkahub.utils.TerminalScreenCacheTest \
             --tests me.rerere.rikkahub.data.container.TerminalBundleContractsTest \
+            --tests me.rerere.rikkahub.data.container.TerminalByteRingBufferTest \
+            --tests me.rerere.rikkahub.data.container.TerminalByteBufferWiringTest \
+            --tests me.rerere.rikkahub.data.container.TerminalByteBufferBenchmarkTest \
             --stacktrace
+
+      - name: Run byte-tail differential, concurrency, wiring and AB/BA allocation checks once
+        if: ${{ env.TERMINAL_UNIT_SUITE == 'byteBuffer' }}
+        run: |
+          bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest \
+            --tests me.rerere.rikkahub.data.container.TerminalByteRingBufferTest \
+            --tests me.rerere.rikkahub.data.container.TerminalByteBufferWiringTest \
+            --tests me.rerere.rikkahub.data.container.TerminalByteBufferBenchmarkTest \
+            --tests me.rerere.rikkahub.data.container.TerminalBundleContractsTest \
+            --tests me.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest --stacktrace
 
       - name: Run stable-mount convergence and production wiring contracts once
         if: ${{ env.TERMINAL_UNIT_SUITE == 'stableMount' }}
@@ -208,6 +222,16 @@ jobs:
       - name: Publish focused regression results
         if: ${{ always() && env.TERMINAL_UNIT_SUITE != 'staticChecks' }}
         run: |
+          if [ "$TERMINAL_UNIT_SUITE" = byteBuffer ]; then
+            python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalByteRingBufferTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalByteBufferWiringTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalByteBufferBenchmarkTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalBundleContractsTest \
+              --require-suite me.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest \
+              --require-case-group byteRing:15
+            exit $?
+          fi
           if [ "$TERMINAL_UNIT_SUITE" = stableMount ]; then
             python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
               --require-suite me.rerere.rikkahub.data.container.TerminalPipelineTraceTest \
@@ -260,7 +284,17 @@ jobs:
             --require-suite me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalChunkViewsTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalBundleContractsTest \
-            --require-suite me.rerere.rikkahub.utils.TerminalScreenCacheTest
+            --require-suite me.rerere.rikkahub.utils.TerminalScreenCacheTest \
+            --require-suite me.rerere.rikkahub.data.container.TerminalByteRingBufferTest \
+            --require-suite me.rerere.rikkahub.data.container.TerminalByteBufferWiringTest \
+            --require-suite me.rerere.rikkahub.data.container.TerminalByteBufferBenchmarkTest
+
+      - name: Independently validate and publish original byte-buffer measurements
+        if: ${{ success() && (env.TERMINAL_UNIT_SUITE == 'all' || env.TERMINAL_UNIT_SUITE == 'byteBuffer') }}
+        run: |
+          python3 -m unittest discover -s .github/scripts -p test_terminal_byte_buffer.py
+          python3 .github/scripts/terminal-byte-buffer-reports.py app/build/test-results/testReleaseUnitTest \
+            --output artifacts/terminal-byte-buffer/benchmark.json
 
       - name: Upload test reports
         if: always()
@@ -271,4 +305,5 @@ jobs:
             app/build/reports/tests/testReleaseUnitTest/**
             app/build/test-results/testReleaseUnitTest/**
             artifacts/terminal-validation/**
+            artifacts/terminal-byte-buffer/**
           retention-days: 7

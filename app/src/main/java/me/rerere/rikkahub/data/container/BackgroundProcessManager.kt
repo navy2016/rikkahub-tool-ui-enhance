@@ -1120,60 +1120,6 @@ class BackgroundProcessManager @Inject constructor(
         return env
     }
 
-    /**
-     * 交互式会话输出缓冲
-     * 仅保留最近 maxBytes 数据，供 UI 展示和 tool read/logs 复用
-     */
-    private class SessionOutputBuffer(
-        private val maxBytes: Int = INTERACTIVE_BUFFER_MAX_BYTES
-    ) {
-        private val data = ByteArrayOutputStream()
-        private var baseOffset: Long = 0L
-        private var totalWritten: Long = 0L
-
-        @Synchronized
-        fun append(bytes: ByteArray) {
-            data.write(bytes)
-            totalWritten += bytes.size
-            if (data.size() > maxBytes) {
-                val current = data.toByteArray()
-                val drop = current.size - maxBytes
-                val trimmed = current.copyOfRange(drop, current.size)
-                data.reset()
-                data.write(trimmed)
-                baseOffset += drop.toLong()
-            }
-        }
-
-        @Synchronized
-        fun snapshot(): ByteArray = data.toByteArray()
-
-        @Synchronized
-        fun snapshotAsString(): String = data.toByteArray().toString(Charsets.UTF_8)
-
-        @Synchronized
-        fun totalBytes(): Long = totalWritten
-
-        @Synchronized
-        fun readFrom(offset: Long, limitBytes: Int): BufferRead {
-            val safeLimit = limitBytes.coerceIn(1, maxBytes)
-            val effectiveOffset = offset.coerceAtLeast(baseOffset).coerceAtMost(totalWritten)
-            val localStart = (effectiveOffset - baseOffset).toInt()
-            val bytes = data.toByteArray()
-            val end = minOf(localStart + safeLimit, bytes.size)
-            val slice = if (localStart < end) bytes.copyOfRange(localStart, end) else ByteArray(0)
-            val toOffset = baseOffset + end
-            return BufferRead(
-                content = slice.toString(StandardCharsets.UTF_8),
-                fromOffset = effectiveOffset,
-                toOffset = toOffset,
-                totalBytes = totalWritten,
-                baseOffset = baseOffset,
-                hasMore = toOffset < totalWritten
-            )
-        }
-    }
-
     data class BufferRead(
         val content: String,
         val fromOffset: Long,
@@ -1287,7 +1233,7 @@ class BackgroundProcessManager @Inject constructor(
         val nativePtyEnabled: Boolean = false,
         val ptyMode: PtyMode = PtyMode.COOKED,
         val outputFlow: MutableSharedFlow<ByteArray>,
-        val outputBuffer: SessionOutputBuffer,
+        val outputBuffer: TerminalByteRingBuffer,
         val terminalEmulator: TerminalEmulator,
         val notifications: TerminalOutputNotifications = TerminalOutputNotifications(),
         val outputMutex: Mutex = Mutex(),
@@ -1505,7 +1451,7 @@ class BackgroundProcessManager @Inject constructor(
             // The session owns the parsed terminal state so navigation never has to rebuild a
             // live TUI by replaying geometry-dependent ANSI output at a different screen size.
             val outputFlow = MutableSharedFlow<ByteArray>(replay = 1, extraBufferCapacity = 127)
-            val outputBuffer = SessionOutputBuffer()
+            val outputBuffer = TerminalByteRingBuffer(INTERACTIVE_BUFFER_MAX_BYTES)
             val terminalEmulator = TerminalEmulator(
                 initialColumns = initialColumns,
                 initialRows = initialRows,
@@ -1748,7 +1694,11 @@ class BackgroundProcessManager @Inject constructor(
             "tail" -> (buffer.totalBytes() - limitBytes).coerceAtLeast(0L)
             else -> offset ?: interactiveReadOffsets[processId] ?: 0L
         }
-        val result = buffer.readFrom(fromOffset, limitBytes)
+        val slice = buffer.readFrom(fromOffset, limitBytes)
+        val result = BufferRead(
+            content = slice.content, fromOffset = slice.fromOffset, toOffset = slice.toOffset,
+            totalBytes = slice.totalBytes, baseOffset = slice.baseOffset, hasMore = slice.hasMore,
+        )
         if (mode == "new") {
             interactiveReadOffsets[processId] = result.toOffset
         }

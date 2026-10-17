@@ -27,6 +27,10 @@ _bundle_spec = importlib.util.spec_from_file_location('terminal_bundle_reports',
     Path(__file__).with_name('terminal-bundle-reports.py'))
 bundle_reports = importlib.util.module_from_spec(_bundle_spec)
 _bundle_spec.loader.exec_module(bundle_reports)
+_byte_spec = importlib.util.spec_from_file_location('terminal_byte_buffer_reports',
+    Path(__file__).with_name('terminal-byte-buffer-reports.py'))
+byte_reports = importlib.util.module_from_spec(_byte_spec)
+_byte_spec.loader.exec_module(byte_reports)
 
 
 def notice(level, title, message):
@@ -49,6 +53,7 @@ def digest(path):
 def sources():
     paths = [
         'app/src/main/java/me/rerere/rikkahub/data/container/BackgroundProcessManager.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalByteRingBuffer.kt',
         'app/src/main/java/me/rerere/rikkahub/data/container/NativePtyBridge.kt',
         'app/src/main/java/me/rerere/rikkahub/data/container/NativePtyProcess.kt',
         'app/src/main/java/me/rerere/rikkahub/data/container/PRootManager.kt',
@@ -81,6 +86,8 @@ def sources():
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPtyTransportInstrumentedTest.kt',
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPipelineWorkload.kt',
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalServiceLifecycleInstrumentedTest.kt',
+        'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalByteBufferInstrumentedTest.kt',
+        '.github/scripts/terminal-byte-buffer-reports.py',
         '.github/scripts/terminal-bundle-reports.py',
         '.github/scripts/run-terminal-pipeline.py',
         '.github/scripts/build-terminal-proot.py',
@@ -255,6 +262,7 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     selected = suite or os.environ.get('TERMINAL_PIPELINE_SUITE', 'pipeline')
     transport = selected == 'transport'
     service = selected == 'service'
+    byte_buffer = selected == 'byteBuffer'
     soak = selected == 'soak'
     mount_diagnostic = selected == 'mountDiagnostic'
     methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
@@ -267,6 +275,9 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     if service:
         test_class = 'me.rerere.rikkahub.pipeline.TerminalServiceLifecycleInstrumentedTest'
         methods = ('bundleForegroundRapidStopDuringStartupAndRestart', 'bundleExitedPtyHasExactOrderedTailAndReleasesCheckpoint')
+    if byte_buffer:
+        test_class = 'me.rerere.rikkahub.pipeline.TerminalByteBufferInstrumentedTest'
+        methods = ('byteBufferNativePtyWrapReadModesUtf8AndExitTail',)
     if soak:
         mode = os.environ.get('TERMINAL_SOAK_MODE', '')
         seconds = int(os.environ.get('TERMINAL_SOAK_SECONDS', '1800'))
@@ -316,6 +327,13 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
         notice('notice', 'Stable mount diagnostic (not acceptance)', json.dumps(values[0]))
         for start in range(0, len(transitions), 2):
             notice('notice', f'Stable mount transitions {start // 2 + 1}', json.dumps(transitions[start:start + 2]))
+        return report
+    if byte_buffer:
+        results = byte_reports.validate_pty('\n'.join(logs))
+        report = dict(manifest=manifest, device=device, installedApkHashes=installed_hashes, results=results)
+        (OUT / 'byte-buffer-results.json').write_text(json.dumps(report, indent=2) + '\n')
+        if emit_evidence:
+            notice('notice', 'Terminal byte-buffer PTY verified', json.dumps(results))
         return report
     if service or soak:
         results = bundle_reports.service('\n'.join(logs)) if service else bundle_reports.soak(
@@ -447,6 +465,11 @@ def emulator(operation=None):
                 services.mkdir(exist_ok=True)
                 for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
                     shutil.copyfile(OUT / name, services / name)
+                run('byteBuffer')
+                byte_buffer = OUT / 'byte-buffer-preflight'
+                byte_buffer.mkdir(exist_ok=True)
+                for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
+                    shutil.copyfile(OUT / name, byte_buffer / name)
                 run('pipeline')
             else:
                 run()
@@ -464,7 +487,8 @@ def failure_excerpt(path):
             line = raw.rstrip()[:550]
             tail.append(line)
             if any(word in line for word in ('TerminalPipelineActivity', 'PIPELINE_READY', 'PIPELINE_DIAGNOSTIC', 'PIPELINE_GEOMETRY',
-                                             'TRANSPORT_PROBE', 'NativePtyProcess', 'MOUNT_DIAGNOSTIC', 'SETTLE_FAILURE')):
+                                             'TRANSPORT_PROBE', 'NativePtyProcess', 'MOUNT_DIAGNOSTIC', 'SETTLE_FAILURE',
+                                             'BYTE_BUFFER_PTY', 'BYTE_BUFFER_EXIT')):
                 lifecycle.append(line)
             if remaining == 0 and blocks < 2 and any(marker in line for marker in
                 ('Error in ', 'stack=', 'java.lang.', 'FATAL EXCEPTION')):
