@@ -44,3 +44,20 @@ without undoing protocol/input/geometry/display corrections. This is not a passe
 - Performance candidates lacking evidence/benefit may be reverted independently of correctness fixes.
   Preserve original failures; never relax assertions/repeat for favorable timing. Release and independent
   APK verification follow all gates. Report/evidence only; no APK attachment.
+
+## First integration failure and consolidated correction
+
+At `d86ee64`, JVM457, full viewport162 and both Release-derived compile gates passed. Integration
+run39032047858 passed transport15/service2/byte-read137 and five new TUI cases, but its resize peer
+waited for `SIZE:10 60` from BusyBox `stty size` and timed out (test line209). The original run remains
+failed; page36/settlement12 had not started. Original artifact12101256364 (63733B, SHA256
+4ab67ffdde05e5bad69fbbd5f50dc08d04756117f71407ebf5c1df451c0f41bb) was relayed by39033177611.
+
+BusyBox1.36's `stty` uses `get_terminal_width_height`/`wh_helper`: valid inherited LINES/COLUMNS
+override the ioctl values. A separate local non-acceptance PTY diagnostic reproduced kernel10x60
+versus stty24x80, kernel20x100 versus stty24x80, and restored24x80; `env -u LINES -u COLUMNS stty size`
+reported each true kernel value while the parent environment stayed24/80. No local compilation.
+The original Android failure log did not capture peer output, so it is not claimed as that missing
+observation. The correction changes the test query only, records both readings and the inherited
+environment, requires unique request IDs and exact kernel/snapshot sizes, and keeps the15s bound.
+Production sources, parser oracle, workload sizes and already-passed gates are not changed/relabelled.

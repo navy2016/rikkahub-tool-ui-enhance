@@ -101,7 +101,10 @@ def validate_pty(text):
         'protocol': dict(responseHex=b'\x1b[?1;2c\x1b[>4;2m\x1b[5;11R'.hex(), responseBytes=21),
         'ime': dict(inputHex='e\u0301👍🏽\x7f\x7f'.encode().hex(), inputBytes=13),
         'mouse': dict(inputHex=b'\x1b[<0;3;1M\x1b[<0;3;1m'.hex(), inputBytes=18),
-        'resize': dict(kernelChecks=3),
+        'resize': dict(kernelChecks=3, kernelReadings=[dict(request=index + 1, rows=rows, columns=columns,
+            inheritedRows=24, inheritedColumns=80, envRows=24, envColumns=80,
+            snapshotRows=rows, snapshotColumns=columns) for index, (rows, columns) in
+            enumerate(((10, 60), (20, 100), (24, 80)))]),
         'overlay': dict(textIntact=True),
         'regular': dict(historyRows=1000, rawInput=True, alternateRoundTrip=True, peer='synthetic-pi-regular'),
     }
@@ -114,6 +117,10 @@ def validate_pty(text):
         target = dict(expected[case], case=case, suite='terminal-tui-bundle-pty-v1', passed=True)
         require(set(row) == set(target), 'Wrong PTY receipt fields')
         require(all(type(row[k]) is type(v) and row[k] == v for k, v in target.items()), 'Incorrect PTY receipt: ' + case)
+        if case == 'resize':
+            values = row['kernelReadings']
+            require(all(type(r) is dict and set(r) == set(target['kernelReadings'][0]) and
+                        all(type(v) is int for v in r.values()) for r in values), 'Invalid kernel reading scalars')
     return rows
 
 

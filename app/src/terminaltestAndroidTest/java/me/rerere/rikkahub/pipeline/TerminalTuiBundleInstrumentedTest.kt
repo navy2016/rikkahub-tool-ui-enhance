@@ -196,22 +196,65 @@ class TerminalTuiBundleInstrumentedTest : KoinComponent {
 
     @Test fun tuiPtyResizeReceiptMatchesKernelAndAtomicSnapshot() {
         runBlocking { proot.start().getOrThrow() }
-        val script = "stty -echo -onlcr; printf 'READY\\r\\n'; while IFS= read -r line; do printf 'SIZE:'; stty size; done"
+        // BusyBox stty reads TIOCGWINSZ but its shared helper prefers inherited LINES/COLUMNS.
+        // Remove ONLY those variables from the query subprocess; leave the session environment
+        // and production launch/resize behavior unchanged. Keep both observations as evidence.
+        val script = """
+            stty -echo -onlcr
+            printf 'READY\r\n'
+            while IFS= read -r line; do
+                case "${'$'}line" in SIZE:*) token=${'$'}{line#SIZE:};; *) exit 9;; esac
+                inherited=${'$'}(stty size) || exit 10
+                kernel=${'$'}(env -u LINES -u COLUMNS stty size) || exit 11
+                printf 'SIZE:%s:%s;INHERITED:%s;ENV:%s %s\r\n' "${'$'}token" "${'$'}kernel" "${'$'}inherited" "${'$'}LINES" "${'$'}COLUMNS"
+            done
+        """.trimIndent()
         val started = runBlocking { manager.startInteractiveSession("tui-resize-${UUID.randomUUID()}", shell(script)) }
         assertTrue(started.message, started.success)
         val id = started.processId
         try {
+            assertEquals("native-pty", started.terminalBackend)
             awaitOutput(id, "READY")
+            val readings = JSONArray()
             for ((columns, rows) in listOf(60 to 10, 100 to 20, 80 to 24)) {
                 val ack = runBlocking { manager.resizeInteractiveSessionAcknowledged(id, columns, rows).getOrThrow() }
                 assertEquals(ack, manager.interactiveSessionSize(id))
-                runBlocking { manager.sendInput(id, "SIZE").getOrThrow() }
-                awaitOutput(id, "SIZE:$rows $columns")
+                val response = Regex("(?m)^SIZE:${ack.request}:(\\d+) (\\d+);INHERITED:(\\d+) (\\d+);ENV:(\\d+) (\\d+)\\r?\\n")
+                runBlocking { manager.sendInput(id, "SIZE:${ack.request}").getOrThrow() }
+                try {
+                    // Wait for a COMPLETE independently observed response, not for values equal
+                    // to the expectation. A wrong dimension fails immediately at assertEquals.
+                    compose.waitUntil(15_000) { response.containsMatchIn(manager.readInteractiveBuffer(id).orEmpty()) }
+                } catch (error: Throwable) {
+                    val diagnostic = JSONObject().put("request", ack.request).put("columns", columns).put("rows", rows)
+                        .put("syntheticPeerTail", manager.readInteractiveBuffer(id).orEmpty().takeLast(500))
+                    InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
+                        putString("stream", "\nTUI_RESIZE_FAILURE $diagnostic\n")
+                    })
+                    throw error
+                }
+                val match = requireNotNull(response.find(manager.readInteractiveBuffer(id).orEmpty()))
+                val actualRows = match.groupValues[1].toInt()
+                val actualColumns = match.groupValues[2].toInt()
                 val snap = requireNotNull(manager.readInteractiveOutput(id, renderTerminal = true))
+                val reading = JSONObject().put("request", ack.request).put("rows", actualRows).put("columns", actualColumns)
+                    .put("inheritedRows", match.groupValues[3].toInt()).put("inheritedColumns", match.groupValues[4].toInt())
+                    .put("envRows", match.groupValues[5].toInt()).put("envColumns", match.groupValues[6].toInt())
+                    .put("snapshotRows", snap.terminalRows).put("snapshotColumns", snap.terminalColumns)
+                InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
+                    putString("stream", "\nTUI_RESIZE_OBSERVED $reading\n")
+                })
+                assertEquals(rows, actualRows)
+                assertEquals(columns, actualColumns)
                 assertEquals(columns, snap.terminalColumns)
                 assertEquals(rows, snap.terminalRows)
+                assertEquals(24, reading.getInt("envRows"))
+                assertEquals(80, reading.getInt("envColumns"))
+                assertEquals(reading.getInt("envRows"), reading.getInt("inheritedRows"))
+                assertEquals(reading.getInt("envColumns"), reading.getInt("inheritedColumns"))
+                readings.put(reading)
             }
-            receipt("resize", JSONObject().put("kernelChecks", 3))
+            receipt("resize", JSONObject().put("kernelChecks", 3).put("kernelReadings", readings))
         } finally { runBlocking { manager.closeInteractiveSession(id) }; manager.removeProcessRecord(id) }
     }
 

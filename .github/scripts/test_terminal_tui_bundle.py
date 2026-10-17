@@ -41,7 +41,10 @@ def pty_samples():
     values = [dict(case='protocol', responseBytes=21, responseHex='1b5b3f313b32631b5b3e343b326d1b5b353b313152'),
               dict(case='ime', inputBytes=13, inputHex='65cc81f09f918df09f8fbd7f7f'),
               dict(case='mouse', inputBytes=18, inputHex='1b5b3c303b333b314d1b5b3c303b333b316d'),
-              dict(case='resize', kernelChecks=3), dict(case='overlay', textIntact=True),
+              dict(case='resize', kernelChecks=3, kernelReadings=[dict(request=i + 1, rows=rows, columns=columns,
+                  inheritedRows=24, inheritedColumns=80, envRows=24, envColumns=80,
+                  snapshotRows=rows, snapshotColumns=columns) for i, (rows, columns) in
+                  enumerate(((10, 60), (20, 100), (24, 80)))]), dict(case='overlay', textIntact=True),
               dict(case='regular', historyRows=1000, rawInput=True, alternateRoundTrip=True, peer='synthetic-pi-regular')]
     return [dict(row, passed=True, suite='terminal-tui-bundle-pty-v1') for row in values]
 
@@ -106,6 +109,24 @@ class TuiBundleReportsTest(unittest.TestCase):
             rows[index][field] = value
             with self.assertRaises(ValueError):
                 report.validate_display(records('TUI_DISPLAY ', rows))
+
+    def test_resize_requires_observed_kernel_dimensions_and_unchanged_inherited_environment(self):
+        for key, wrong in (('request', True), ('rows', 24), ('columns', 80), ('envRows', 10),
+                           ('snapshotColumns', 60), ('inheritedColumns', 100)):
+            values = pty_samples()
+            values[3]['kernelReadings'][1][key] = wrong
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                report.validate_pty(records('TUI_PTY ', values))
+        for readings in ([], pty_samples()[3]['kernelReadings'][:-1], list(reversed(pty_samples()[3]['kernelReadings']))):
+            values = pty_samples()
+            values[3]['kernelReadings'] = readings
+            with self.assertRaises(ValueError):
+                report.validate_pty(records('TUI_PTY ', values))
+        source = (ROOT / 'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalTuiBundleInstrumentedTest.kt').read_text()
+        self.assertIn('env -u LINES -u COLUMNS stty size', source)
+        self.assertIn('assertEquals(rows, actualRows)', source)
+        self.assertIn('assertEquals(columns, actualColumns)', source)
+        self.assertIn('TUI_RESIZE_OBSERVED', source)
 
     def test_all_new_tests_are_wired_once_and_exhaustively(self):
         workflow = (ROOT / '.github/workflows/terminal-emulator-tests.yml').read_text()
