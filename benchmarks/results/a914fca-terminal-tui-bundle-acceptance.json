@@ -1,0 +1,56 @@
+{
+  "sourceSha": "a914fca4594ccf9a75290e4acc3880f02d442e5e",
+  "firstValidationSha": "d86ee64fa7d68ff581b9e9a625e5a7ccb40dea51",
+  "semanticReferenceSha": "917995852c9e5eb195cb44262f41a1238f422bca",
+  "baselineSha": "7f60e641f3840c1a3e025202496a381954266c8e",
+  "productionTree": "639ee4f3286cb647a0b09cfa61a3dc1659586e1d",
+  "branch": "opt/terminal-verified-a79e7b6",
+  "runs": {
+    "jvm": {"id": 39031384622, "tests": 457, "conclusion": "success"},
+    "viewportStatic": {"id": 39031390295, "conclusion": "success"},
+    "pipelineStatic": {"id": 39031395701, "conclusion": "success"},
+    "viewport": {"id": 39031817089, "tests": 162, "conclusion": "success"},
+    "pipelineFirst": {"id": 39032047858, "conclusion": "failure", "failedCase": "tuiPtyResizeReceiptMatchesKernelAndAtomicSnapshot", "pageEchoes": 0},
+    "pipelineCorrected": {"id": 39033990454, "conclusion": "success", "transportProbes": 15, "serviceCases": 2, "byteReads": 137, "tuiCases": 6, "pageEchoes": 36, "settlements": 12},
+    "release": {"id": 39036798535, "conclusion": "success"},
+    "independentApkVerification": {"id": 39037487624, "conclusion": "success"},
+    "firstEvidenceRelay": {"id": 39033177611, "conclusion": "success"},
+    "correctedEvidenceRelay": {"id": 39036530358, "conclusion": "success"}
+  },
+  "apk": {
+    "sha256": "f7659d732c754e934ff3764d9f9a28733c3f514f1c39c2ccb3e05ca70fab0712",
+    "bytes": 83730691,
+    "package": "me.rerere.rikkahub.dev.next.mod",
+    "versionName": "2.1.62",
+    "versionCode": 151,
+    "nativeAbis": ["arm64-v8a"],
+    "debuggable": false,
+    "signerSha256": "f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265",
+    "artifactId": 12102408409,
+    "artifactZipSha256": "dce656aa447098b5097dde2a63f6bb525719c94c55fd05edf5f504bc6e8ef2ee"
+  },
+  "originalEvidenceSha256": {
+    "parser": "abbe2ccb7dab5afb2e6e2c27114b3cb3aa38e819071145516e81dff371d8d2ec",
+    "tuiDisplay": "0c6d31250bad6d74918e37dde5ac641e066dfef6a7f97cf9f0025fe0e1b349e4",
+    "correctedTui": "3447481316e7835c9ea7d615bfe51d698f2b249651299e779af4af7e332b1506",
+    "correctedPage": "5ed6599c9b7e37a5053618e8eb6c71e52db06bee7c340e72494ea05d72fcfd9a",
+    "releaseComparison": "f90a5ec2f8e646af814c4c75663440dd0b93c54fabb3bd8c804c10821182228a"
+  },
+  "delivery": {
+    "report": "terminal-tui-bundle-a914fca-report.md",
+    "reportSha256": "eb58252a2fbd60c5d0f7c7f4cbdcc32693a2679b7a0b0a9977f81c9219e8ea85",
+    "evidence": "terminal-tui-bundle-a914fca-evidence.tar.gz",
+    "evidenceSha256": "1356efe7bd3c989bd9a65034f41a6e3baf75f809a84239d5bb4fa0353d176333",
+    "evidenceBytes": 716112,
+    "hashedFiles": 138
+  },
+  "localApkDownloaded": false,
+  "physicalDeviceVerified": false,
+  "pageApiAnnotationParts": 0,
+  "pageOriginalArtifactVerified": true,
+  "validationRounds": 2,
+  "newFullV6Run": false,
+  "newWholePageAbComparison": false,
+  "newThirtyMinuteSoak": false,
+  "notes": "Cloud verified, physical device pending. JVM/viewport evidence uses identical unchanged production/build inputs; not a new all-suite run at the final SHA. Parser reduction is a fixed-workload JVM result only. Original integration failure retained. No APK in delivery."
+}
