@@ -1,0 +1,52 @@
+{
+  "sourceSha": "bff4a51f762d33ac9164b4139f0a64d34a902283",
+  "baselineSha": "8ed4f06e10039233511c4ef43bb39ed717ef6ef6",
+  "productionTree": "c1463f057fda3bbc693f7e8164065da4baebcdb1",
+  "branch": "opt/terminal-verified-a79e7b6",
+  "runs": {
+    "unit": {"id": 39092649808, "tests": 210, "conclusion": "success"},
+    "viewportStatic": {"id": 39092656181, "conclusion": "success"},
+    "pageStatic": {"id": 39092662487, "conclusion": "success"},
+    "viewport": {"id": 39093035783, "tests": 168, "candidateRectangles": 24, "conclusion": "success"},
+    "negativeControl": {"id": 39093041553, "tests": 2, "clippedRectangles": 4, "conclusion": "success", "meaning": "Baseline clipping reproduced, not baseline visibility acceptance"},
+    "page": {"id": 39093214081, "transport": 15, "service": 2, "byteReads": 137, "tui": 6, "bottomCases": 2, "rectangles": 14, "echoes": 36, "settlements": 12, "conclusion": "success"},
+    "pageEvidenceRelay": {"id": 39094400633, "artifactId": 12124111573, "conclusion": "success"},
+    "release": {"id": 39094656675, "conclusion": "success"},
+    "independentVerification": {"id": 39095178074, "referenceRun": 39036798535, "conclusion": "success"}
+  },
+  "apk": {
+    "sha256": "89393bf342ffc15f71979d25758db28f3a2c258c8a3c684f04508a093de21efa",
+    "bytes": 83731523,
+    "package": "me.rerere.rikkahub.dev.next.mod",
+    "versionName": "2.1.62",
+    "versionCode": 151,
+    "debuggable": false,
+    "nativeAbis": ["arm64-v8a"],
+    "signerSha256": "f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265",
+    "artifactId": 12124407430,
+    "artifactZipSha256": "0549ce240f4e8a281463962a2c1785a8a66fe0be6562161efc5c43e17a8cccce"
+  },
+  "originalEvidenceSha256": {
+    "candidateRectangles": "f2157e105a95f49343df5c377f173e522f9f7cc62344443ada90069c8ec039ab",
+    "negativeControlRectangles": "2c5f5a3d2e58bcd8547b7b06e8580cc04133197cd876554e83ab8fa447ba0784",
+    "pageBottom": "4223e04606e166f0f670b330ac02efaaf2642b361cc19cddcbc075ab4e2a6e4a",
+    "pageEchoes": "4f8fa442cf637639498a17d41d222ed74ac13973a0eb030aa491d0adfc86fc5f",
+    "pageTui": "3bd0e26bc5390088c5d16dc88bba83f84de9e56467f8036e78cae200cf5c50ac",
+    "releaseComparison": "dc9771b2149495a686e76facbf161f0e7c9e0f584219cc4e04eea5e944876964"
+  },
+  "delivery": {
+    "report": "terminal-bottom-visibility-bff4a51-report.md",
+    "reportSha256": "d006bf02d3cf6654476c0a8f071ad03652882d28a50017fca841c9aa51a5a142",
+    "evidence": "terminal-bottom-visibility-bff4a51-evidence.tar.gz",
+    "evidenceSha256": "93bf517196ea45c994eb837c5a14e52be7cfa35afe2c190238f0b3071633e54e",
+    "evidenceBytes": 629264,
+    "hashedFiles": 131
+  },
+  "validationRounds": 1,
+  "correctionRoundUsed": false,
+  "localApkDownloaded": false,
+  "physicalDeviceVerified": false,
+  "pageApiMissingPostTuiAnnotations": true,
+  "pageOriginalArtifactVerified": true,
+  "notes": "All first-round cloud gates passed. Same test source for baseline negative control and candidate; separate runners, not a performance AB experiment. User phone retest remains pending. No APK in delivery."
+}
