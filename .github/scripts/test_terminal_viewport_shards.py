@@ -14,7 +14,8 @@ class ViewportShardTest(unittest.TestCase):
         interaction = source.split('if [ "$group" = all ] || [ "$group" = interaction ]; then\n', 1)[1].split('\nfi', 1)[0]
         bundle = source.split('if [ "$group" = all ] || [ "$group" = bundle ]; then\n', 1)[1].split('\nfi', 1)[0]
         tui = source.split('if [ "$group" = all ] || [ "$group" = tuiDisplay ]; then\n', 1)[1].split('\nfi', 1)[0]
-        assignments = re.findall(r'^run_arm (\S+)(?: (\w+))?', geometry + '\n' + interaction + '\n' + bundle + '\n' + tui, re.M)
+        bottom = source.split('if [ "$group" = all ] || [ "$group" = bottomVisibility ]; then\n', 1)[1].split('\nfi', 1)[0]
+        assignments = re.findall(r'^run_arm (\S+)(?: (\w+))?', geometry + '\n' + interaction + '\n' + bundle + '\n' + tui + '\n' + bottom, re.M)
         classes = [name or 'TerminalViewportGestureInstrumentedTest' for _, name in assignments]
         expected = {p.stem for p in TESTS.glob('*InstrumentedTest.kt')}
         self.assertEqual(expected, set(classes))
@@ -29,14 +30,21 @@ class ViewportShardTest(unittest.TestCase):
     def test_counts_matrix_and_report_routing_stay_complete(self):
         workflow = (ROOT / '.github/workflows/terminal-viewport-interactions.yml').read_text()
         self.assertIn('fail-fast: false', workflow)
-        self.assertIn('["geometry","interaction","bundle","tuiDisplay"]', workflow)
+        self.assertIn('["geometry","interaction","bundle","tuiDisplay","bottomVisibility"]', workflow)
         self.assertIn('TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}', workflow)
         self.assertIn('${{ matrix.group }}-${{ github.run_attempt }}', workflow)
         self.assertIn('run-terminal-with-timeout.py 900', workflow)
         # Full-suite branches only; focused entries may repeat names or choose individual methods.
-        full = workflow.split('if [ "$TERMINAL_VIEWPORT_GROUP" = interaction ]; then', 1)[1]
+        full = workflow.split('- name: Require every case assigned to this shard', 1)[1]
+        full = re.sub(r'          if \[ "\$TERMINAL_VIEWPORT_GROUP" = bottomControl \]; then.*?\n          fi', '', full, flags=re.S)
+        # Focused suite entries overlap the all-suite inventory; omit only these explicit groups.
+        for suite in ('chunkViews', 'textMetrics', 'renderSnapshot', 'defaultBottom'):
+            start = full.find('          if [ "$TERMINAL_VIEWPORT_SUITE" = ' + suite + ' ]; then')
+            if start >= 0:
+                end = full.index('\n          fi', start) + len('\n          fi')
+                full = full[:start] + full[end:]
         tokens = set(re.findall(r"--require-case-group '([^']+)'", full))
-        self.assertEqual(162, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
+        self.assertEqual(168, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
         # Most groups use a shared method prefix; render controls retain two distinct names.
         methods = [name for path in TESTS.glob('*InstrumentedTest.kt')
                    for name in re.findall(r'@Test\s+fun\s+(\w+)\(', path.read_text())]

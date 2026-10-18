@@ -66,7 +66,7 @@ internal data class TerminalItemViewport(
     } == true
 
     /** Same semantic content bottom as the eager controller, not necessarily the structural tail. */
-    val followRowIndex: Int? get() = frame.contentBounds.lastNonBlankRow?.takeIf { it in frame.rows.indices }
+    val followRowIndex: Int? get() = frame.terminalFollowRowIndex()
 
     fun nearFollow(): Boolean {
         if (!ready) return false

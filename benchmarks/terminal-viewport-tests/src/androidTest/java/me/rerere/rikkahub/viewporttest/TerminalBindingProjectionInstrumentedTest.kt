@@ -122,7 +122,7 @@ class TerminalBindingProjectionInstrumentedTest {
                 gestureConfig = TerminalViewportGestureConfig(true, false, 2))
             SideEffect { panelCompositions++; committedPulse = pulse }
             val chunks = terminalHistoryChunks(frame.historyCount, frame.historyStartSequence,
-                usesTuiViewport = bound.eagerMeasurement == null)
+                usesTuiViewport = tui || supplied)
             Layout(modifier = Modifier.testTag("binding-output").onSizeChanged { measuredHeight = it.height },
                 content = {
                     TerminalTranscriptViewport(frame, rows.toList(), style, chunks, TerminalRenderMode.DEFAULT,
@@ -204,9 +204,10 @@ class TerminalBindingProjectionInstrumentedTest {
         settle(f)
         compose.runOnIdle {
             assertFalse(f.tui)
-            assertNull(f.bound.eagerMeasurement)
+            assertNotNull(f.bound.eagerMeasurement)
             assertSame(before.binding, f.bound.binding)
-            assertEquals(0, f.measurements.retainedEagerHistoryRows)
+            assertEquals(f.frame.historyCount, f.measurements.retainedEagerHistoryRows)
+            assertEquals(me.rerere.rikkahub.data.container.ViewportMode.SCREEN, f.controller.state.value.mode)
         }
         compose.runOnIdle { f.overrideSupplier = false }
         settle(f)
@@ -218,7 +219,11 @@ class TerminalBindingProjectionInstrumentedTest {
         val initial = compose.runOnIdle { f.bound }
         compose.runOnIdle { f.tui = true }
         settle(f)
-        compose.runOnIdle { assertNull(f.bound.eagerMeasurement); assertTrue(f.legacyTui) }
+        compose.runOnIdle {
+            assertNotNull(f.bound.eagerMeasurement)
+            assertTrue(f.legacyTui)
+            assertEquals(me.rerere.rikkahub.data.container.ViewportMode.SCREEN, f.controller.state.value.mode)
+        }
         compose.runOnIdle { f.tui = false; f.fontSp = 18 }
         settle(f)
         assertBottom(f)

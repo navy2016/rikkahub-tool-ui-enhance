@@ -61,7 +61,7 @@ on:
       suite:
         description: 'Focused suites run once: renderSnapshot publication/rows; textMetrics width/height cache invalidation'
         type: choice
-        options: [all, renderSnapshot, textMetrics, chunkViews, stableMount, byteBuffer, staticChecks]
+        options: [all, renderSnapshot, textMetrics, chunkViews, stableMount, byteBuffer, bottomVisibility, staticChecks]
         default: all
 
 jobs:
@@ -176,7 +176,26 @@ jobs:
             --tests me.rerere.rikkahub.utils.TerminalParserBundleTest \
             --tests me.rerere.rikkahub.data.container.TerminalConsistencyBundleTest \
             --tests me.rerere.rikkahub.data.container.TerminalDisplayPolicyTest \
+            --tests me.rerere.rikkahub.data.container.TerminalBottomVisibilityTest \
             --stacktrace
+
+      - name: Run bottom visibility semantics and affected viewport contracts once
+        if: ${{ env.TERMINAL_UNIT_SUITE == 'bottomVisibility' }}
+        run: |
+          bash .github/scripts/run-terminal-gradle.sh :app:testReleaseUnitTest \
+            --tests me.rerere.rikkahub.data.container.TerminalBottomVisibilityTest \
+            --tests me.rerere.rikkahub.data.container.TerminalViewportControllerTest \
+            --tests me.rerere.rikkahub.data.container.TerminalViewportReducerTest \
+            --tests me.rerere.rikkahub.data.container.TerminalItemViewportTest \
+            --tests me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest \
+            --tests me.rerere.rikkahub.data.container.TerminalRenderedRowsTest \
+            --tests me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest \
+            --tests me.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest \
+            --tests me.rerere.rikkahub.data.container.TerminalPipelineTraceTest \
+            --tests me.rerere.rikkahub.data.container.TerminalUiSourceTest \
+            --tests me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest \
+            --tests me.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest \
+            --tests me.rerere.rikkahub.data.container.TerminalConsistencyBundleTest --stacktrace
 
       - name: Run byte-tail differential, concurrency, wiring and AB/BA allocation checks once
         if: ${{ env.TERMINAL_UNIT_SUITE == 'byteBuffer' }}
@@ -226,6 +245,24 @@ jobs:
       - name: Publish focused regression results
         if: ${{ always() && env.TERMINAL_UNIT_SUITE != 'staticChecks' }}
         run: |
+          if [ "$TERMINAL_UNIT_SUITE" = bottomVisibility ]; then
+            python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalBottomVisibilityTest \
+              --require-case-group 'bottomVisibility:10' \
+              --require-suite me.rerere.rikkahub.data.container.TerminalViewportControllerTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalViewportReducerTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalItemViewportTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalRenderedRowsTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalPipelineTraceTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalUiSourceTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest \
+              --require-suite me.rerere.rikkahub.data.container.TerminalConsistencyBundleTest
+            exit $?
+          fi
           if [ "$TERMINAL_UNIT_SUITE" = byteBuffer ]; then
             python3 .github/scripts/report-terminal-tests.py app/build/test-results/testReleaseUnitTest \
               --require-suite me.rerere.rikkahub.data.container.TerminalByteRingBufferTest \
@@ -295,7 +332,8 @@ jobs:
             --require-suite me.rerere.rikkahub.utils.TerminalProtocolBundleTest \
             --require-suite me.rerere.rikkahub.utils.TerminalParserBundleTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalConsistencyBundleTest \
-            --require-suite me.rerere.rikkahub.data.container.TerminalDisplayPolicyTest
+            --require-suite me.rerere.rikkahub.data.container.TerminalDisplayPolicyTest \
+            --require-suite me.rerere.rikkahub.data.container.TerminalBottomVisibilityTest
 
       - name: Validate complete TUI parser allocation evidence and source contract
         if: ${{ success() && env.TERMINAL_UNIT_SUITE == 'all' }}

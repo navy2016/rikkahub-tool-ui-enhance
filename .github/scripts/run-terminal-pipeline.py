@@ -35,6 +35,10 @@ _tui_spec = importlib.util.spec_from_file_location('terminal_tui_reports',
     Path(__file__).with_name('terminal-tui-bundle-reports.py'))
 tui_reports = importlib.util.module_from_spec(_tui_spec)
 _tui_spec.loader.exec_module(tui_reports)
+_bottom_spec = importlib.util.spec_from_file_location('terminal_bottom_reports',
+    Path(__file__).with_name('terminal-bottom-visibility-reports.py'))
+bottom_reports = importlib.util.module_from_spec(_bottom_spec)
+_bottom_spec.loader.exec_module(bottom_reports)
 
 
 def notice(level, title, message):
@@ -93,6 +97,13 @@ def sources():
         'app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalCursorOverlayText.kt',
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalTuiBundleInstrumentedTest.kt',
         '.github/scripts/terminal-tui-bundle-reports.py',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportGeometry.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalEagerViewportGeometry.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalEagerGeometryCache.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt',
+        'app/src/main/java/me/rerere/rikkahub/data/container/TerminalItemViewport.kt',
+        'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalBottomVisibilityPageTest.kt',
+        '.github/scripts/terminal-bottom-visibility-reports.py',
         'app/src/main/cpp/rikkahub_pty.cpp', 'app/build.gradle.kts',
         'app/src/terminaltest/AndroidManifest.xml',
         'app/src/terminaltest/java/me/rerere/rikkahub/pipeline/TerminalPipelineTestActivity.kt',
@@ -286,11 +297,15 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     soak = selected == 'soak'
     mount_diagnostic = selected == 'mountDiagnostic'
     tui = selected == 'tuiOnly'
+    bottom = selected == 'bottomOnly'
     methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
         'pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
         'pipelineStableVirtualPtyEchoKeyboardAndRemount')
     test_class = 'me.rerere.rikkahub.pipeline.TerminalPtyTransportInstrumentedTest' if transport else CLASS
     extra_arguments = []
+    if bottom:
+        test_class = 'me.rerere.rikkahub.pipeline.TerminalBottomVisibilityPageTest'
+        methods = bottom_reports.PAGE_METHODS
     if tui:
         test_class = 'me.rerere.rikkahub.pipeline.TerminalTuiBundleInstrumentedTest'
         methods = tui_reports.PTY_METHODS
@@ -339,6 +354,13 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             if 'mCurrentFocus=' in line or 'mFocusedApp=' in line) + '\n')
     if failed:
         raise ValueError('; '.join(failed))
+    if bottom:
+        cases = bottom_reports.validate_page('\n'.join(logs))
+        report = dict(suite='terminal-bottom-page-v1', sourceSha=manifest['sourceSha'], runId=manifest['runId'],
+            productionSha=manifest['sourceSha'], manifest=manifest, device=device, installedApkHashes=installed_hashes,
+            cases=cases, note='Actual Text/viewport rectangles from real page/native PTY; not phone acceptance or FPS.')
+        bottom_reports.publish('Terminal bottom page', report, OUT / 'bottom-page.json')
+        return report
     if tui:
         cases = tui_reports.validate_pty('\n'.join(logs))
         report = dict(suite='terminal-tui-bundle-pty-v1', sourceSha=manifest['sourceSha'], runId=manifest['runId'],
@@ -487,7 +509,7 @@ def emulator(operation=None):
             output(['adb', 'shell', 'input', 'keyevent', '82'])
             if operation is not None:
                 operation()
-            elif os.environ.get('TERMINAL_PIPELINE_SUITE') in ('all', 'tuiBundle'):
+            elif os.environ.get('TERMINAL_PIPELINE_SUITE') in ('all', 'tuiBundle', 'bottomVisibility'):
                 run('transport')
                 # Keep the successful preflight's logs; the page run has independent lifecycle,
                 # fresh captures and completion receipts but uses the very same APK and guest.
@@ -506,12 +528,18 @@ def emulator(operation=None):
                 byte_buffer.mkdir(exist_ok=True)
                 for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
                     shutil.copyfile(OUT / name, byte_buffer / name)
-                if os.environ.get('TERMINAL_PIPELINE_SUITE') == 'tuiBundle':
+                if os.environ.get('TERMINAL_PIPELINE_SUITE') in ('tuiBundle', 'bottomVisibility'):
                     run('tuiOnly')
                     tui_preflight = OUT / 'tui-preflight'
                     tui_preflight.mkdir(exist_ok=True)
                     for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
                         shutil.copyfile(OUT / name, tui_preflight / name)
+                if os.environ.get('TERMINAL_PIPELINE_SUITE') == 'bottomVisibility':
+                    run('bottomOnly')
+                    bottom_preflight = OUT / 'bottom-preflight'
+                    bottom_preflight.mkdir(exist_ok=True)
+                    for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
+                        shutil.copyfile(OUT / name, bottom_preflight / name)
                 run('pipeline')
             else:
                 run()

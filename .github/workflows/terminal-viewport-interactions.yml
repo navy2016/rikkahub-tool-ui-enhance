@@ -6,7 +6,7 @@ on:
       suite:
         description: 'all, fresh default, publication regressions, or lint/Release type checking without tests'
         type: choice
-        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, tuiDisplay, staticChecks]
+        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, tuiDisplay, bottomVisibility, bottomControl, staticChecks]
         default: all
       production_sha:
         description: 'Optional exact archived production SHA for defaultBottom only; tests remain from this ref'
@@ -57,14 +57,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'tuiDisplay' && '["tuiDisplay"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle","tuiDisplay"]') }}
+        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'tuiDisplay' && '["tuiDisplay"]' || inputs.suite == 'bottomVisibility' && '["bottomVisibility"]' || inputs.suite == 'bottomControl' && '["bottomControl"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle","tuiDisplay","bottomVisibility"]') }}
     env:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
       TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
+      TERMINAL_BOTTOM_CONTROL: ${{ matrix.group == 'bottomControl' }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Bind negative control to exact prior production without modifying the test oracle
+        if: ${{ matrix.group == 'bottomControl' }}
+        run: |
+          set -euo pipefail
+          baseline=8ed4f06e10039233511c4ef43bb39ed717ef6ef6
+          [ "$(git rev-parse "$baseline:app/src/main")" = 639ee4f3286cb647a0b09cfa61a3dc1659586e1d ]
+          git archive "$baseline" app/src/main | tar -x
+          echo "::notice title=Bottom visibility negative-control source::tests=$GITHUB_SHA production=$baseline; clipped rectangles are EXPECTED here only"
       - name: Bind optional old production source to current fresh-default regression tests
         if: ${{ inputs.production_sha != '' }}
         env:
@@ -86,7 +95,10 @@ jobs:
       - name: Test JUnit validation reporting
         if: ${{ matrix.group != 'staticChecks' }}
         run: |
-          if [ "$TERMINAL_VIEWPORT_SUITE" = renderSnapshot ]; then
+          if [ "$TERMINAL_VIEWPORT_SUITE" = bottomControl ]; then
+            cd .github/scripts
+            python3 -B -m unittest test_terminal_bottom_visibility.BottomVisibilityReportTest
+          elif [ "$TERMINAL_VIEWPORT_SUITE" = renderSnapshot ]; then
             cd .github/scripts
             python3 -m unittest test_terminal_viewport_shards test_terminal_render_snapshot test_terminal_panel_subscription
           elif [ "$TERMINAL_VIEWPORT_SUITE" = textMetrics ]; then
@@ -158,6 +170,20 @@ jobs:
       - name: Require every case assigned to this shard
         if: ${{ always() && matrix.group != 'staticChecks' }}
         run: |
+          if [ "$TERMINAL_VIEWPORT_GROUP" = bottomControl ]; then
+            python3 .github/scripts/report-terminal-tests.py \
+              benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalBottomVisibilityInstrumentedTest \
+              --require-case-group 'bottomVisibility:2'
+            exit $?
+          fi
+          if [ "$TERMINAL_VIEWPORT_GROUP" = bottomVisibility ]; then
+            python3 .github/scripts/report-terminal-tests.py \
+              benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalBottomVisibilityInstrumentedTest \
+              --require-case-group 'bottomVisibility:6'
+            exit $?
+          fi
           if [ "$TERMINAL_VIEWPORT_SUITE" = chunkViews ]; then
             if [ "$TERMINAL_VIEWPORT_GROUP" = chunksRender ]; then
               python3 .github/scripts/report-terminal-tests.py \
@@ -312,6 +338,14 @@ jobs:
       - name: Require all TUI cursor pointer and regular-history evidence
         if: ${{ always() && matrix.group == 'tuiDisplay' }}
         run: python3 -B .github/scripts/terminal-tui-bundle-reports.py display
+      - name: Require actual blank-cursor and TUI rectangle evidence
+        if: ${{ always() && (matrix.group == 'bottomVisibility' || matrix.group == 'bottomControl') }}
+        run: |
+          if [ "$TERMINAL_BOTTOM_CONTROL" = true ]; then
+            python3 -B .github/scripts/terminal-bottom-visibility-reports.py --control
+          else
+            python3 -B .github/scripts/terminal-bottom-visibility-reports.py
+          fi
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

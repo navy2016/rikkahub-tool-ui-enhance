@@ -15,6 +15,8 @@ internal data class TerminalViewportMetrics(
     val preservePhysicalGrid: Boolean = false,
     val imeVisible: Boolean = false,
     val avoidIme: Boolean = false,
+    /** Production computes avoidance from completed eager geometry. Explicit test/legacy policies stay explicit. */
+    val automaticImeAvoidance: Boolean = false,
 )
 
 internal data class TerminalViewportGesture(val id: Long, val origin: ViewportScrollOrigin)
@@ -125,13 +127,17 @@ internal class TerminalViewportController(
         val previousMetrics = lastValidMetrics
         this.frame = frame
         this.renderedRows = renderedRows
-        this.metrics = metrics
+        val resolvedMetrics = if (metrics.automaticImeAvoidance && eagerGeometry != null) {
+            metrics.copy(avoidIme = metrics.imeVisible && requireNotNull(eagerGeometry).viewportContentHeight(
+                metrics.usesTuiViewport, metrics.preservePhysicalGrid) + metrics.tailPaddingPx > metrics.viewportHeightPx)
+        } else metrics
+        this.metrics = resolvedMetrics
         scrollPx = currentScrollPx.coerceAtLeast(0)
         if (!ready()) {
             mutableState.value = state.value.copy(scrollEffect = null)
             return
         }
-        lastValidMetrics = metrics
+        lastValidMetrics = resolvedMetrics
 
         val activeBottomRow = activeBottomRow(frame, metrics)
         if (!metrics.imeVisible) {
@@ -559,16 +565,15 @@ internal class TerminalViewportController(
     }
 
     private fun activeBottomRow(frame: TerminalEmulator.RenderFrame, metrics: TerminalViewportMetrics): Int? =
-        if (metrics.preservePhysicalGrid) frame.screenLineIds.lastIndex.takeIf { it >= 0 } else {
-            terminalEffectiveScreenBottomRow(frame.screenContentBounds, frame.cursorRow, frame.cursorVisible)
-        }
+        frame.terminalActiveBottomRow(metrics.preservePhysicalGrid)
 
     private fun bottomTarget(frame: TerminalEmulator.RenderFrame, metrics: TerminalViewportMetrics): Int {
-        val geometry = eagerGeometry?.takeIf { it.frame === frame && !metrics.usesTuiViewport }
+        val geometry = eagerGeometry?.takeIf { it.frame === frame }
         if (geometry != null) {
-            val last = frame.contentBounds.lastNonBlankRow?.takeIf { it in frame.rows.indices } ?: return 0
-            return (geometry.bottom(last) + metrics.tailPaddingPx - metrics.viewportHeightPx).coerceIn(0, metrics.maxScrollPx)
+            return geometry.followTarget(metrics, imeAnchor?.bottomScreenRow)
         }
+        // Legacy uniform-grid callers only. Production eager/TUI bindings require measured
+        // geometry in ready(), and can never publish a nominal-history fallback target.
         return if (metrics.usesTuiViewport) {
             terminalTuiViewportScrollTarget(
                 screenStartRow = frame.screenStartRow,
@@ -580,7 +585,7 @@ internal class TerminalViewportController(
             )
         } else {
             terminalImeAnchorScrollTarget(
-                lastNonBlankRow = frame.contentBounds.lastNonBlankRow,
+                lastNonBlankRow = frame.terminalFollowRowIndex(),
                 terminalCellHeightPx = metrics.cellHeightPx,
                 viewportHeightPx = metrics.viewportHeightPx,
                 terminalTailPaddingPx = metrics.tailPaddingPx,

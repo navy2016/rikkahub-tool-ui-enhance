@@ -36,6 +36,7 @@ run_arm() {
       -Pandroid.testInstrumentationRunnerArguments.class="me.rerere.rikkahub.viewporttest.$test_class" \
       -Pandroid.testInstrumentationRunnerArguments.viewportLazyHistory="$arm" \
       -Pandroid.testInstrumentationRunnerArguments.viewportWidthMode="$arm" \
+      -Pandroid.testInstrumentationRunnerArguments.bottomVisibilityControl="${TERMINAL_BOTTOM_CONTROL:-false}" \
       --stacktrace || arm_status=$?
 
   find "$results_root" -mindepth 1 -maxdepth 1 ! -name 'viewport-*' -exec cp -a {} "$stage"/ \;
@@ -97,7 +98,13 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
-case "$group" in all|geometry|interaction|bundle|tuiDisplay) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
+if [ "$group" = bottomControl ]; then
+  run_arm bottom-control-cursor TerminalBottomVisibilityInstrumentedTest#bottomVisibilityBlankCursorIsEntirelyVisible 180
+  run_arm bottom-control-history TerminalBottomVisibilityInstrumentedTest#bottomVisibilityTuiHistoryGrowthNeverAccumulatesClipping 300
+  adb logcat -d -v threadtime TerminalBottomVisibility:I '*:S' > artifacts/terminal-validation/bottom-visibility-logcat.txt
+  exit "$overall_status"
+fi
+case "$group" in all|geometry|interaction|bundle|tuiDisplay|bottomVisibility) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
 
 if [ "$group" = all ] || [ "$group" = geometry ]; then
 run_arm chunk-views TerminalChunkViewsInstrumentedTest 360
@@ -134,5 +141,9 @@ fi
 if [ "$group" = all ] || [ "$group" = tuiDisplay ]; then
 run_arm tui-display TerminalTuiDisplayInstrumentedTest 480
 adb logcat -d -v threadtime TerminalTuiDisplay:I '*:S' > artifacts/terminal-validation/tui-display-logcat.txt
+fi
+if [ "$group" = all ] || [ "$group" = bottomVisibility ]; then
+run_arm bottom-visibility TerminalBottomVisibilityInstrumentedTest 600
+adb logcat -d -v threadtime TerminalBottomVisibility:I '*:S' > artifacts/terminal-validation/bottom-visibility-logcat.txt
 fi
 exit "$overall_status"

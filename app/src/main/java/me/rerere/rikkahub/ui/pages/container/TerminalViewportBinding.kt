@@ -7,14 +7,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -193,19 +191,10 @@ internal fun rememberTerminalBoundViewport(
     }
     var visitedVirtual by remember(sessionKey) { mutableStateOf(armed || controller.state.value.anchorRowHeightPx > 0) }
     val virtual = wantsVirtual && armed
-    // Natural Text heights are not the nominal "W" cell height (fallback fonts, spans and pixel
-    // rounding). Gating measurement on a previous virtual visit made fresh DEFAULT sessions aim
-    // above the real tail and snap upward on drag release. Measure from the very first layout;
-    // preserve the existing TUI/physical-grid path and the one scroll writer.
-    // The composition needs only the TUI policy. Calling the entire metrics supplier here also
-    // subscribes its caller to ScrollState.maxValue and layout/IME sizes: every content-height
-    // change would recompose the panel after layout. Project the Boolean; the snapshotFlow below
-    // still observes ALL live metrics and is solely responsible for viewport reconciliation.
-    val latestMetrics by rememberUpdatedState(metrics)
-    val usesTuiViewport by remember(sessionKey) {
-        derivedStateOf(structuralEqualityPolicy()) { latestMetrics().usesTuiViewport }
-    }
-    val measuredEager = !virtual && !usesTuiViewport
+    // Text stays naturally measured in TUI too. HistoryCount*nominalHeight accumulates drift
+    // above the physical screen; the complete measured prefix must gate EVERY eager target.
+    // Do not call metrics() in composition: the frame collector still reads all live metrics.
+    val measuredEager = !virtual
     val latestInput by rememberUpdatedState(TerminalViewportBindingInput(pass, virtual, measuredEager, metrics))
     val latestWants by rememberUpdatedState(wantsVirtual)
     val binding = remember(sessionKey, controller, eager, lazy, measurements, widthCheckpoint) {

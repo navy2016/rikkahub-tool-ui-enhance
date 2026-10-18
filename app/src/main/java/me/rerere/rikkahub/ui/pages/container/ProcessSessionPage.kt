@@ -102,6 +102,7 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -130,6 +131,7 @@ import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.container.effectiveTerminalRenderMode
 import me.rerere.rikkahub.data.container.terminalRendererForCommand
 import me.rerere.rikkahub.data.container.terminalEffectiveScreenBottomRow
+import me.rerere.rikkahub.data.container.terminalFollowRowIndex
 import me.rerere.rikkahub.data.container.ControlInput
 import me.rerere.rikkahub.data.container.TerminalUiInput
 import me.rerere.rikkahub.data.container.TerminalUiInputQueue
@@ -974,6 +976,7 @@ private fun TerminalInteractivePanel(
     val placementHorizontalOffset = remember(processId) { AtomicReference<Int?>(null) }
     val fullOutputViewportHeightPx = remember(processId) { AtomicInteger(0) }
     var outputViewportHeightPx by remember(processId) { mutableIntStateOf(0) }
+    var outputContainerSize by remember(processId) { mutableStateOf(IntSize.Zero) }
     val activeTerminalMouseButton = remember(processId) { AtomicReference<MouseButton?>(null) }
     val activeTerminalMousePosition = remember(processId) { AtomicReference<MouseEvent?>(null) }
     val terminalPointerMap = remember(processId) { TerminalPointerMap() }
@@ -1005,6 +1008,7 @@ private fun TerminalInteractivePanel(
         terminalFrameIsAlternateScreen || shouldPreserveFullTerminalGrid
     )
     val currentLastNonBlankRow by rememberUpdatedState(terminalContentBounds.lastNonBlankRow)
+    val currentFollowRow by rememberUpdatedState(publishedRenderSnapshot.frame.terminalFollowRowIndex())
     val currentTerminalTailPaddingPx by rememberUpdatedState(terminalTailPaddingPx)
     val currentPreserveFullTerminalGrid by rememberUpdatedState(shouldPreserveFullTerminalGrid)
     val currentScreenStartRow by rememberUpdatedState(terminalScreenStartRow)
@@ -1031,7 +1035,7 @@ private fun TerminalInteractivePanel(
             } ?: 0
         }
     } else {
-        currentLastNonBlankRow?.let { lastRow ->
+        currentFollowRow?.let { lastRow ->
             (lastRow + 1) * terminalCellHeightPx + currentTerminalTailPaddingPx
         } ?: 0
     }
@@ -1068,6 +1072,7 @@ private fun TerminalInteractivePanel(
         preservePhysicalGrid = currentPreservePhysicalGrid,
         imeVisible = currentImeVisible && currentFullscreen,
         avoidIme = currentShouldAvoidIme,
+        automaticImeAvoidance = true,
     )
 
     // Read once at the binding's scope. Retained child content receives the same publication,
@@ -1490,6 +1495,44 @@ private fun TerminalInteractivePanel(
         recordImeTransition(imeVisible)
     }
 
+    // These inputs can change with no parent size callback (status strip / font / COLS). Recompute
+    // PTY grid hints explicitly, but keep the actual scrolling viewport height owned by the child.
+    LaunchedEffect(processId, outputContainerSize, terminalVisualTopPaddingPx, terminalCellWidthPx,
+        terminalCellHeightPx, forcedTerminalColumns) {
+        val size = outputContainerSize
+        if (size.width <= 0 || size.height <= 0) return@LaunchedEffect
+        recordImeTransition(currentImeVisible)
+        val imeTransitionActive = currentImeVisible || currentActualImeHeightPx > 0 ||
+            System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
+        // LIST is a clipped preview of the live full-size grid; its placement never resizes the PTY.
+        if (currentFullscreen) {
+            val measuredCols = (size.width / terminalCellWidthPx)
+                .coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
+            measuredTerminalColumns = measuredCols
+            val cols = (forcedTerminalColumns ?: measuredCols)
+                .coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
+            val rows = ((size.height - terminalVisualTopPaddingPx).coerceAtLeast(0) / terminalCellHeightPx)
+                .coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
+            if (cols != terminalColumns) terminalColumns = cols
+            if (rows != measuredTerminalRows.getAndSet(rows)) {
+                viewportRowResizeJob.getAndSet(null)?.cancel()
+                val firstMeasurement = !outputViewportMeasured.getAndSet(true)
+                if (firstMeasurement && !imeTransitionActive) terminalRows = rows else {
+                    viewportRowResizeJob.set(scope.launch {
+                        delay(TERMINAL_PTY_RESIZE_DEBOUNCE_MS)
+                        val transitionStillActive = currentImeVisible || currentActualImeHeightPx > 0 ||
+                            System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
+                        val stableRows = measuredTerminalRows.get()
+                        if (currentFullscreen && !transitionStillActive && stableRows != terminalRows) {
+                            // The IME is a visual viewport overlay, not a terminal resize.
+                            terminalRows = stableRows
+                        }
+                    })
+                }
+            }
+        }
+    }
+
     LaunchedEffect(processId, terminalColumns, terminalRows) {
         // A cancelled older coroutine may already have committed at the kernel. Read the
         // session's acknowledgement rather than relying on that coroutine returning to this UI.
@@ -1834,56 +1877,7 @@ private fun TerminalInteractivePanel(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .onSizeChanged { size ->
-                            // outputViewportHeightPx is the grid-usable viewport height, i.e. the
-                            // measured column height minus the reserved status-bar strip. This keeps
-                            // the auto-scroll bottom anchor and shouldAvoidIme consistent with the
-                            // PTY rows computation (which also subtracts the strip), so the last rows
-                            // are never pushed below the visible/IME area when the status bar is shown.
-                            val viewportHeightPx = (size.height - terminalVisualTopPaddingPx).coerceAtLeast(0)
-                            recordImeTransition(currentImeVisible)
-                            outputViewportHeightPx = viewportHeightPx
-                            val imeTransitionActive = currentImeVisible || currentActualImeHeightPx > 0 ||
-                                System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
-                            if (currentFullscreen && (!imeTransitionActive || fullOutputViewportHeightPx.get() == 0)) {
-                                fullOutputViewportHeightPx.set(viewportHeightPx)
-                            }
-                            // LIST is a clipped preview of the live full-size grid. It must never
-                            // resize the emulator/PTY or send SIGWINCH merely because the card is
-                            // smaller; otherwise returning to FULL loses TUI-owned bottom rows.
-                            if (currentFullscreen) {
-                                val measuredCols = (size.width / terminalCellWidthPx)
-                                    .coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
-                                measuredTerminalColumns = measuredCols
-                                val cols = (forcedTerminalColumns ?: measuredCols)
-                                    .coerceIn(TerminalEmulator.MIN_COLUMNS, TerminalEmulator.MAX_COLUMNS)
-                                // Reserve the status-bar strip so the physical grid still fits
-                                // below it without losing its bottom rows.
-                                val rows = ((size.height - terminalVisualTopPaddingPx) / terminalCellHeightPx)
-                                    .coerceIn(TerminalEmulator.MIN_ROWS, TerminalEmulator.MAX_ROWS)
-                                if (cols != terminalColumns) terminalColumns = cols
-                                if (rows != measuredTerminalRows.getAndSet(rows)) {
-                                    viewportRowResizeJob.getAndSet(null)?.cancel()
-                                    val firstMeasurement = !outputViewportMeasured.getAndSet(true)
-                                    if (firstMeasurement && !imeTransitionActive) {
-                                        terminalRows = rows
-                                    } else {
-                                        viewportRowResizeJob.set(scope.launch {
-                                            delay(TERMINAL_PTY_RESIZE_DEBOUNCE_MS)
-                                            val transitionStillActive = currentImeVisible || currentActualImeHeightPx > 0 ||
-                                                System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
-                                            val stableRows = measuredTerminalRows.get()
-                                            if (currentFullscreen && !transitionStillActive && stableRows != terminalRows) {
-                                                // The IME is a visual viewport overlay, not a terminal resize.
-                                                // Keeping PTY rows stable prevents a final SIGWINCH redraw after
-                                                // Compose has already animated the output into place.
-                                                terminalRows = stableRows
-                                            }
-                                        })
-                                    }
-                                }
-                            }
-                        }
+                        .onSizeChanged { outputContainerSize = it }
                         .nestedScroll(fastFlingConnection)
                 ) {
                     // Status-bar strip is a fixed (non-scrollable) top strip so it never participates
@@ -1904,20 +1898,27 @@ private fun TerminalInteractivePanel(
                         pointerMap = terminalPointerMap,
                         cellWidthPx = terminalCellWidthPx,
                         modifier = Modifier.weight(1f).fillMaxWidth()
+                            .onSizeChanged { size ->
+                                // Actual output viewport, AFTER status strip, KEYS, input and IME.
+                                // No stale parent-minus-strip guess when the strip alone changes.
+                                outputViewportHeightPx = size.height
+                                val imeTransitionActive = currentImeVisible || currentActualImeHeightPx > 0 ||
+                                    System.currentTimeMillis() - lastImeTransitionAt.get() < TERMINAL_IME_RESIZE_DEBOUNCE_MS
+                                if (currentFullscreen && (!imeTransitionActive || fullOutputViewportHeightPx.get() == 0)) {
+                                    fullOutputViewportHeightPx.set(size.height)
+                                }
+                            }
                             .terminalPipelineDraw(processId, renderSnapshot.frame.revision, virtualHistoryEnabled,
                                 viewport = {
                                     val pass = boundViewport.pass
                                     val state = viewportController.state.value
                                     val items = if (virtualHistoryEnabled) viewportBinding.observation() else null
                                     val eagerGeometry = lazyHistoryMeasurements.peekEager(pass)
-                                    val last = renderSnapshot.frame.contentBounds.lastNonBlankRow
                                     val tail = if (virtualHistoryEnabled) {
                                         items?.isSatisfied(
                                             me.rerere.rikkahub.data.container.TerminalItemScrollTarget.Follow) == true
                                     } else if (eagerGeometry != null) {
-                                        val bottom = if (last != null) eagerGeometry.bottom(last) else 0
-                                        outputScroll.value == (bottom + currentTerminalTailPaddingPx -
-                                            outputViewportHeightPx).coerceIn(0, outputScroll.maxValue)
+                                        outputScroll.value == eagerGeometry.followTarget(viewportMetrics())
                                     } else false
                                     me.rerere.rikkahub.data.container.TerminalPipelineViewport(
                                         revision = renderSnapshot.frame.revision,

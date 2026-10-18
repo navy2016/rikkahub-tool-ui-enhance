@@ -81,6 +81,27 @@ internal class TerminalEagerViewportGeometry(
 
     fun height(index: Int): Int = offset(index + 1) - offset(index)
     fun bottom(index: Int): Int = offset(index + 1)
+
+    /** Space relevant to IME avoidance, excluding offscreen history in screen-following mode. */
+    fun viewportContentHeight(usesTuiViewport: Boolean, preservePhysicalGrid: Boolean): Int {
+        val screenBottom = frame.terminalActiveBottomRow(preservePhysicalGrid)
+        return if (usesTuiViewport) {
+            screenBottom?.let { bottom(frame.screenStartRow + it) - historyPrefix.totalHeightPx } ?: 0
+        } else frame.terminalFollowRowIndex()?.let(::bottom) ?: 0
+    }
+
+    fun followTarget(metrics: TerminalViewportMetrics, retainedScreenBottom: Int? = null): Int {
+        val minimum = if (metrics.usesTuiViewport) historyPrefix.totalHeightPx else 0
+        val last = if (metrics.usesTuiViewport) {
+            val active = maxOf(frame.terminalActiveBottomRow(metrics.preservePhysicalGrid) ?: -1,
+                retainedScreenBottom ?: -1).coerceAtMost(frame.screenLineIds.lastIndex)
+            active.takeIf { it >= 0 }?.let { frame.screenStartRow + it }
+        } else frame.terminalFollowRowIndex()
+        if (last == null) return minimum.coerceIn(0, metrics.maxScrollPx)
+        return maxOf(minimum, bottom(last) + metrics.tailPaddingPx - metrics.viewportHeightPx)
+            .coerceIn(0, metrics.maxScrollPx)
+    }
+
     fun capture(scrollPx: Int): TerminalItemScrollTarget.Anchor {
         val position = scrollPx.coerceIn(0, (contentHeightPx - 1).coerceAtLeast(0))
         var lo = 0
