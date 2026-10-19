@@ -1,0 +1,64 @@
+name: Terminal Long History Diagnosis
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bind diagnosis to unchanged phone-verified production
+        run: |
+          set -euo pipefail
+          [ "$GITHUB_REF" = refs/heads/opt/terminal-verified-a79e7b6 ]
+          [ "$(git rev-parse HEAD:app/src/main)" = c1463f057fda3bbc693f7e8164065da4baebcdb1 ]
+          git diff --exit-code 7218dd7e50577bc6fa94575aa476b2a436c71f61 HEAD -- app/src/main
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_long_history.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build only the isolated Release fixture and diagnostic driver
+        run: |
+          chmod +x gradlew
+          bash .github/scripts/run-terminal-gradle.sh -PterminalViewportTests=true \
+            :benchmarks:terminal-viewport-tests:assembleRelease \
+            :benchmarks:terminal-viewport-tests:assembleReleaseAndroidTest --stacktrace
+      - name: Enable KVM on the GitHub runner only
+        run: bash .github/scripts/enable-terminal-kvm.sh
+      - name: Run fixed diagnosis matrix once (not acceptance)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: default
+          profile: Nexus 6
+          cores: 2
+          ram-size: 4096M
+          heap-size: 768M
+          disable-animations: false
+          emulator-boot-timeout: 900
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: python3 .github/scripts/run-terminal-with-timeout.py 900 bash benchmarks/terminal-viewport-tests/run-long-history.sh
+      - name: Validate every original sample and source identity
+        if: always()
+        run: python3 -B .github/scripts/terminal-long-history-reports.py
+      - name: Preserve diagnostic evidence without APK attachments
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-long-history-diagnosis-${{ github.sha }}
+          path: |
+            artifacts/terminal-long-history/
+            artifacts/terminal-validation/
+            benchmarks/terminal-viewport-tests/build/outputs/androidTest-results/
+          retention-days: 14
+          if-no-files-found: error
