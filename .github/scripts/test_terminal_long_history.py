@@ -83,6 +83,11 @@ class LongHistoryTest(unittest.TestCase):
         self.assertNotIn('assembleDebug', workflow)
         self.assertIn('run-terminal-with-timeout.py 900', workflow)
         self.assertIn('acceptance=False', Path(report.__file__).read_text())
+        entry = (report.ROOT / '.github/workflows/terminal-viewport-interactions.yml').read_text()
+        self.assertIn("inputs.suite == 'longHistoryDiagnostic'", entry)
+        self.assertIn("inputs.suite != 'longHistoryDiagnostic'", entry)
+        self.assertIn('uses: ./.github/workflows/terminal-long-history.yml', entry)
+        self.assertIn('workflow_call:', workflow)
 
 
 if __name__ == '__main__':
