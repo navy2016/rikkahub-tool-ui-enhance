@@ -6,7 +6,7 @@ on:
       suite:
         description: 'all, fresh default, publication regressions, or lint/Release type checking without tests'
         type: choice
-        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, tuiDisplay, bottomVisibility, bottomControl, longHistoryDiagnostic, staticChecks]
+        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, tuiDisplay, bottomVisibility, bottomControl, longHistoryDiagnostic, longHistoryProbe, staticChecks]
         default: all
       production_sha:
         description: 'Optional exact archived production SHA for defaultBottom only; tests remain from this ref'
@@ -51,10 +51,12 @@ permissions:
 
 jobs:
   long-history:
-    if: ${{ inputs.suite == 'longHistoryDiagnostic' }}
+    if: ${{ inputs.suite == 'longHistoryDiagnostic' || inputs.suite == 'longHistoryProbe' }}
     uses: ./.github/workflows/terminal-long-history.yml
+    with:
+      probe: ${{ inputs.suite == 'longHistoryProbe' }}
   gestures:
-    if: ${{ inputs.suite != 'longHistoryDiagnostic' }}
+    if: ${{ inputs.suite != 'longHistoryDiagnostic' && inputs.suite != 'longHistoryProbe' }}
     name: viewport (${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 30

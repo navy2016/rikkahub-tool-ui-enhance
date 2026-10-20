@@ -2,7 +2,16 @@ name: Terminal Long History Diagnosis
 
 on:
   workflow_dispatch:
+    inputs:
+      probe:
+        description: 'Separate three-tick grouping experiment, NOT a v1 diagnosis rerun'
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      probe:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -11,6 +20,8 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      TERMINAL_LONG_HISTORY_PROBE: ${{ inputs.probe }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,7 +32,7 @@ jobs:
           [ "$GITHUB_REF" = refs/heads/opt/terminal-verified-a79e7b6 ]
           [ "$(git rev-parse HEAD:app/src/main)" = c1463f057fda3bbc693f7e8164065da4baebcdb1 ]
           git diff --exit-code 7218dd7e50577bc6fa94575aa476b2a436c71f61 HEAD -- app/src/main
-          python3 -B -m unittest discover -s .github/scripts -p test_terminal_long_history.py
+          python3 -B -m unittest discover -s .github/scripts -p 'test_terminal_long_history*.py'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -51,7 +62,12 @@ jobs:
           script: python3 .github/scripts/run-terminal-with-timeout.py 900 bash benchmarks/terminal-viewport-tests/run-long-history.sh
       - name: Validate every original sample and source identity
         if: always()
-        run: python3 -B .github/scripts/terminal-long-history-reports.py
+        run: |
+          if [ "$TERMINAL_LONG_HISTORY_PROBE" = true ]; then
+            python3 -B .github/scripts/terminal-long-history-probe.py
+          else
+            python3 -B .github/scripts/terminal-long-history-reports.py
+          fi
       - name: Preserve diagnostic evidence without APK attachments
         if: always()
         uses: actions/upload-artifact@v4

@@ -59,3 +59,34 @@ semantics scans are outside the viewport timer. Root measure/place/draw spans ar
 not exhaustive per-node CPU attribution; independent descendant passes need not enter the root probe.
 Composition-entry-to-SideEffect includes apply bookkeeping; completion includes frame/poll waits.
 Every sample and work counter is retained, no latency threshold or favorable re-run selection.
+
+## Original failure and independent grouping intervention
+
+At `ab703f95e0cbbb74a2f8a8b7319521f02fc9d73a`, run39195471176 compiled both Release fixture APKs
+but failed two of three diagnosis methods. The exact XML reports `Condition still not satisfied after
+45000 ms` in `settle`, called by `diagnose` line295 (streamIme), for5k/10k.1k completed all24 samples;
+5k/10k each retained four warmup samples before the failure. No timeout checkpoint was recorded, so
+the original run alone cannot prove whether output was still processing or a settle condition was stale.
+It is neither a complete baseline nor production acceptance. All32 original samples stay archived.
+
+Original artifact12161624116 (55328B, SHA256
+871c0022c091052050d2afa5ade1db6f605f6185a400dc278ff8d038fd3147cb) was relayed unchanged by39364166881.
+Selected original XML/logcat are archived locally; no APK or full build log was downloaded.1k formal
+TUI streamIme commit spans have median2.560s versus row-sync11.718ms; these are component work spans,
+not phone performance or a controlled candidate improvement. The composition span includes apply
+bookkeeping, so attributing it to Text alone is not justified.
+
+`suite=longHistoryProbe` is a separate non-acceptance intervention, not a shortened passing v1 run.
+The same unchanged production classes are invoked with fixture-only FLAT/CHUNKED/CHUNKED_LAYERS
+archival plans while TUI metrics, screen-following, dense row store, FIFO guard, natural Text heights
+and scroll executor remain unchanged.1k/5k/10k; one warmup then two formal ABC/CBA order reversals;
+cold and3tick (2lines/tick)240->140->240dp phases:18warmup+36formal samples. Each phase requires
+latest complete geometry and two stable new draws; actual cursor rectangles and all-row height/scroll
+range hashes must agree, and each mount must release all measurement ownership on disposal.
+
+The original24tick methods, all assertions and45s bound remain. Periodic/timeout checkpoints now
+record exact ticks, frame/pass/draw revisions, geometry, effect/writer, offsets and work counters.
+An additional5k FLAT3tick run samples the main-thread stack every20ms, separately from the timed
+observations. At most128 distinct keys and the12 most frequent stacks are retained; this perturbs
+that extra run and is not exhaustive/exact CPU accounting. These results cannot stand in for actual
+keyboard/nativePTY, repeated reentry, the original24tick matrix or final candidate acceptance.

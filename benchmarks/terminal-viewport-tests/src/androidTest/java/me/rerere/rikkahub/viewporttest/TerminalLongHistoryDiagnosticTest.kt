@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.viewporttest
 
 import android.os.SystemClock
+import android.os.Looper
 import android.util.Log
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
@@ -44,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.LockSupport
 import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
@@ -89,7 +92,11 @@ class TerminalLongHistoryDiagnosticTest {
         val publicationNs = ArrayList<Long>()
     }
 
-    private class Mount(val terminal: TerminalEmulator, val tui: Boolean) {
+    private class Mount(
+        val terminal: TerminalEmulator,
+        val tui: Boolean,
+        val probeMode: TerminalRenderMode? = null,
+    ) {
         private val frameStarted = SystemClock.elapsedRealtimeNanos()
         private val initial = terminal.renderFrame()
         val initialFrameNs = SystemClock.elapsedRealtimeNanos() - frameStarted
@@ -125,7 +132,7 @@ class TerminalLongHistoryDiagnosticTest {
             Snapshot.withMutableSnapshot {
                 check(!store.publish(frame, false, tui, false, SystemClock.uptimeMillis()))
                 source = TerminalRenderSnapshot.capture(frame, store)
-                if (resize) heightDp = if (step in 8..15) 140 else 240
+                if (resize) heightDp = if (if (probeMode == null) step in 8..15 else step == 1) 140 else 240
             }
             val synced = SystemClock.elapsedRealtimeNanos()
             stats.feedCaptureNs += fed - started
@@ -140,7 +147,7 @@ class TerminalLongHistoryDiagnosticTest {
         @Composable fun Content() {
             val request = streamRequest
             LaunchedEffect(request) {
-                if (request != 0) repeat(24) { step ->
+                if (request != 0) repeat(if (probeMode == null) 24 else 3) { step ->
                     withFrameNanos { }
                     publishTick(step, resize = request == 1)
                 }
@@ -162,7 +169,10 @@ class TerminalLongHistoryDiagnosticTest {
             cellHeight = rememberTextMeasurer().measure("W", style).size.height.coerceAtLeast(1)
             tail = with(density) { 8.dp.roundToPx() }
             val chunks = remember(frame.historyCount, frame.historyStartSequence) {
-                terminalHistoryChunks(frame.historyCount, frame.historyStartSequence, tui)
+                // Diagnostic-only intervention: change archival grouping, NEVER the TUI metrics,
+                // row synchronization, screen preservation, input or sole scroll executor.
+                terminalHistoryChunks(frame.historyCount, frame.historyStartSequence,
+                    tui && (probeMode == null || probeMode == TerminalRenderMode.FLAT))
             }
             val binding = rememberTerminalBoundViewport(this, controller, eager, lazy, measurements, frame, style,
                 wantsVirtual = false, metrics = { metrics() }, gestureConfig = TerminalViewportGestureConfig(true, false, 2))
@@ -174,7 +184,7 @@ class TerminalLongHistoryDiagnosticTest {
             MaterialTheme {
                 Box(Modifier.size(320.dp, heightDp.dp).testTag("long-history-output")
                     .onSizeChanged { viewportHeight = it.height }) {
-                    TerminalTranscriptViewport(frame, captured.rows, style, chunks, TerminalRenderMode.DEFAULT,
+                    TerminalTranscriptViewport(frame, captured.rows, style, chunks, probeMode ?: TerminalRenderMode.DEFAULT,
                         binding, horizontal, true, false,
                         Modifier.fillMaxSize().layout { child, constraints ->
                             val started = SystemClock.elapsedRealtimeNanos()
@@ -200,12 +210,34 @@ class TerminalLongHistoryDiagnosticTest {
                 }
             }
         }
+
+        fun checkpoint(): JSONObject {
+            val frame = source.frame
+            val state = controller.state.value
+            val geometry = if (hasBinding) measurements.peekEager(bound.pass) else null
+            return JSONObject().put("tui", tui).put("mode", probeMode?.id ?: "original")
+                .put("history", frame.historyCount).put("ticks", completedTicks).put("heightDp", heightDp)
+                .put("viewport", viewportHeight).put("frameRevision", frame.revision)
+                .put("passRevision", if (hasBinding) bound.pass.frame.revision else -1)
+                .put("drawnRevision", stats.lastDrawnRevision).put("draws", stats.drawCount)
+                .put("geometry", geometry != null).put("currentGeometry", geometry?.frame === frame)
+                .put("initialized", state.initialized).put("effect", state.scrollEffect?.id ?: -1)
+                .put("gesture", state.gesture?.id ?: -1).put("scrolling", eager.isScrollInProgress)
+                .put("writers", if (hasBinding) bound.binding.activeWriters else -1)
+                .put("scroll", eager.value).put("maxScroll", eager.maxValue)
+                .put("target", geometry?.followTarget(metrics()) ?: -1)
+                .put("commits", stats.commits).put("commitSpanNs", stats.commitSpanNs)
+                .put("rowSyncNs", stats.syncNs).put("rowMeasures", measurements.measuredRowCount)
+        }
     }
 
     private fun settle(mount: Mount, expectedTicks: Int) {
         var lastDraw = 0
         var stable = 0
         var lastRevision = -1L
+        val started = now()
+        var nextCheckpoint = started + 10_000_000_000L
+        try {
         compose.waitUntil(45_000) {
             var done = false
             compose.runOnUiThread {
@@ -224,8 +256,20 @@ class TerminalLongHistoryDiagnosticTest {
                 lastDraw = count
                 done = stable >= 2
                 if (!done) mount.drawPulse++
+                if (!done && now() >= nextCheckpoint) {
+                    Log.i("TerminalLongHistory", "LONG_WAIT " + mount.checkpoint()
+                        .put("expectedTicks", expectedTicks).put("elapsedNs", now() - started).put("stableDraws", stable))
+                    nextCheckpoint = now() + 10_000_000_000L
+                }
             }
             done
+        }
+        } catch (error: Exception) {
+            compose.runOnUiThread {
+                Log.e("TerminalLongHistory", "LONG_TIMEOUT " + mount.checkpoint()
+                    .put("expectedTicks", expectedTicks).put("elapsedNs", now() - started).put("stableDraws", stable))
+            }
+            throw error
         }
     }
 
@@ -312,7 +356,157 @@ class TerminalLongHistoryDiagnosticTest {
         }
     }
 
-    @Test fun longHistoryOneThousand() = diagnose(1000)
-    @Test fun longHistoryFiveThousand() = diagnose(5000)
-    @Test fun longHistoryTenThousand() = diagnose(10000)
+    /** Separate slow sampling pass, never included in the unprofiled paired timing observations. */
+    private class MainThreadSampler {
+        private val running = AtomicBoolean(true)
+        private val main = Looper.getMainLooper().thread
+        private val stacks = HashMap<String, Int>()
+        private var observations = 0
+        private val worker = Thread({
+            while (running.get()) {
+                val stack = main.stackTrace.take(48)
+                val key = stack.take(12).joinToString("\n") { "${it.className}.${it.methodName}:${it.lineNumber}" }
+                synchronized(stacks) {
+                    observations++
+                    if (key in stacks || stacks.size < 128) stacks[key] = (stacks[key] ?: 0) + 1
+                }
+                LockSupport.parkNanos(20_000_000L)
+            }
+        }, "terminal-main-sampler").apply { isDaemon = true; start() }
+
+        fun finish(): JSONObject {
+            running.set(false)
+            LockSupport.unpark(worker)
+            worker.join(5_000)
+            check(!worker.isAlive) { "Main sampler did not stop" }
+            return synchronized(stacks) {
+                JSONObject().put("observations", observations).put("intervalNs", 20_000_000L)
+                    .put("topStacks", JSONArray(stacks.entries.sortedByDescending { it.value }.take(12).map {
+                        JSONObject().put("count", it.value).put("stack", it.key)
+                    }))
+            }
+        }
+    }
+
+    private fun probe(size: Int) {
+        // NOT v1:3 ticks rather than24, one warmup then AB/BA pairs. Kept in an independent report.
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        fun digest(file: File): String {
+            val hash = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(65536)
+                while (true) { val count = input.read(buffer); if (count < 0) break; hash.update(buffer, 0, count) }
+            }
+            return hash.digest().joinToString("") { "%02x".format(it) }
+        }
+        Log.i("TerminalLongHistory", "LONG_PROBE_DEVICE " + JSONObject().put("size", size)
+            .put("pid", android.os.Process.myPid()).put("fingerprint", android.os.Build.FINGERPRINT)
+            .put("targetApk", digest(File(instrumentation.targetContext.applicationInfo.sourceDir)))
+            .put("testApk", digest(File(instrumentation.context.applicationInfo.sourceDir))))
+        val modes = listOf(TerminalRenderMode.FLAT, TerminalRenderMode.CHUNKED, TerminalRenderMode.CHUNKED_LAYERS)
+        var mounted by mutableStateOf<Mount?>(null, referentialEqualityPolicy())
+        compose.setContent { mounted?.let { key(it) { it.Content() } } }
+        fun model() = TerminalEmulator(80, 24, size).apply {
+            feed((0 until size + 23).joinToString("\r\n") { "line-$it 中文 e\u0301 👩‍💻" } + "\r\n")
+        }
+        fun shape(mount: Mount): String {
+            val frame = mount.source.frame
+            val geometry = requireNotNull(mount.measurements.peekEager(mount.bound.pass))
+            assertSame(frame, geometry.frame)
+            val value = (0 until size + 24).joinToString(",") { geometry.height(it).toString() } +
+                "|${mount.eager.maxValue}|${mount.horizontal.maxValue}|${mount.eager.value}"
+            return MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString("") { "%02x".format(it) }
+        }
+        fun record(mount: Mount, round: Int, phase: String, started: Long, nodes: Long, measures: Long, visits: Long): String {
+            val elapsed = now() - started
+            // End timing before actual semantics traversal, geometry hashing and disposal.
+            val frame = mount.source.frame
+            val expected = frame.rows[frame.screenStartRow + frame.cursorRow].text
+            val text = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(expected)), true)
+                .fetchSemanticsNodes().single()
+            val view = compose.onNodeWithTag("long-history-output").fetchSemanticsNode()
+            val top = text.positionInRoot.y - view.positionInRoot.y
+            val bottom = top + text.size.height
+            assertTrue("Probe cursor clipped", top >= -1 && bottom <= view.size.height + 1)
+            assertEquals(size + 24, mount.measurements.retainedRows)
+            assertTrue(mount.bound.binding.maximumWriters <= 1)
+            val signature = shape(mount)
+            val s = mount.stats
+            Log.i("TerminalLongHistory", "LONG_PROBE_SAMPLE " + JSONObject().put("size", size).put("tui", true)
+                .put("mode", mount.probeMode!!.id).put("round", round).put("warmup", round == 0).put("phase", phase)
+                .put("completedNs", elapsed).put("firstDrawNs", s.firstDrawNs - started)
+                .put("stateCreateNs", if (phase == "cold") mount.createStateNs else 0)
+                .put("initialFrameNs", if (phase == "cold") mount.initialFrameNs else 0)
+                .put("commitSpanNs", s.commitSpanNs).put("commits", s.commits).put("rootMeasureNs", s.measureNs)
+                .put("rootPlaceNs", s.placeNs).put("rootDrawNs", s.drawNs).put("rootDraws", s.drawCount)
+                .put("feedCaptureNs", s.feedCaptureNs).put("rowSyncNs", s.syncNs)
+                .put("syncVisited", s.syncVisited).put("syncSkipped", s.syncSkipped).put("fifoUses", s.fifoUses)
+                .put("ticks", mount.completedTicks).put("publicationNs", JSONArray(s.publicationNs))
+                .put("createdNodes", mount.measurements.createdRowNodes - nodes)
+                .put("rowMeasures", mount.measurements.measuredRowCount - measures)
+                .put("heightVisits", mount.measurements.eagerVisitedHistoryRows - visits)
+                .put("retainedRows", mount.measurements.retainedRows).put("shapeSha256", signature)
+                .put("cursorTop", top.toDouble()).put("cursorBottom", bottom.toDouble())
+                .put("rowHeight", text.size.height).put("viewportHeight", view.size.height)
+                .put("writers", mount.bound.binding.maximumWriters))
+            return signature
+        }
+        repeat(3) { round ->
+            val shapes = HashMap<String, String>()
+            for (mode in if (round % 2 == 0) modes else modes.reversed()) {
+                val terminal = model()
+                lateinit var mount: Mount
+                var started = 0L
+                compose.runOnIdle { mount = Mount(terminal, true, mode); started = now(); mounted = mount }
+                settle(mount, 0)
+                val cold = record(mount, round, "cold", started, 0, 0, 0)
+                shapes.putIfAbsent("cold", cold)?.let { assertEquals(it, cold) }
+                val nodes = mount.measurements.createdRowNodes
+                val measures = mount.measurements.measuredRowCount
+                val visits = mount.measurements.eagerVisitedHistoryRows
+                compose.runOnIdle { mount.stats = Counters(); mount.completedTicks = 0; started = now(); mount.streamRequest = 1 }
+                settle(mount, 3)
+                val streamed = record(mount, round, "streamIme3", started, nodes, measures, visits)
+                shapes.putIfAbsent("streamIme3", streamed)?.let { assertEquals(it, streamed) }
+                compose.runOnIdle { mounted = null }
+                compose.waitForIdle()
+                assertEquals(0, mount.measurements.retainedRows)
+                assertEquals(0, mount.measurements.retainedEagerHistoryRows)
+                Log.i("TerminalLongHistory", "LONG_PROBE_DISPOSE " + JSONObject().put("size", size)
+                    .put("mode", mode.id).put("round", round).put("retainedRows", mount.measurements.retainedRows)
+                    .put("retainedHeightRows", mount.measurements.retainedEagerHistoryRows))
+            }
+        }
+        // Sample only one fixed slow run, separately labelled. No baseline matrix or phone-FPS claim.
+        if (size == 5000) {
+            val terminal = model()
+            lateinit var mount: Mount
+            compose.runOnIdle { mount = Mount(terminal, true, TerminalRenderMode.FLAT); mounted = mount }
+            settle(mount, 0)
+            val sampler = MainThreadSampler()
+            try {
+                compose.runOnIdle { mount.stats = Counters(); mount.completedTicks = 0; mount.streamRequest = 1 }
+                settle(mount, 3)
+            } finally {
+                val data = sampler.finish()
+                val traces = data.getJSONArray("topStacks")
+                Log.i("TerminalLongHistory", "LONG_PROBE_STACK_INFO " + JSONObject().put("size", size)
+                    .put("observations", data.getInt("observations")).put("intervalNs", 20_000_000).put("parts", traces.length()))
+                repeat(traces.length()) { i ->
+                    Log.i("TerminalLongHistory", "LONG_PROBE_STACK " + traces.getJSONObject(i).put("index", i).put("size", size))
+                }
+            }
+            compose.runOnIdle { mounted = null }
+            compose.waitForIdle()
+            assertEquals(0, mount.measurements.retainedRows)
+        }
+    }
+
+    private fun selected(size: Int) {
+        if (InstrumentationRegistry.getArguments().getString("longHistoryProbe") == "true") probe(size) else diagnose(size)
+    }
+
+    @Test fun longHistoryOneThousand() = selected(1000)
+    @Test fun longHistoryFiveThousand() = selected(5000)
+    @Test fun longHistoryTenThousand() = selected(10000)
 }
