@@ -72,7 +72,7 @@ It is neither a complete baseline nor production acceptance. All32 original samp
 Original artifact12161624116 (55328B, SHA256
 871c0022c091052050d2afa5ade1db6f605f6185a400dc278ff8d038fd3147cb) was relayed unchanged by39364166881.
 Selected original XML/logcat are archived locally; no APK or full build log was downloaded.1k formal
-TUI streamIme commit spans have median2.560s versus row-sync11.718ms; these are component work spans,
+TUI streamIme commit spans have median2.570s versus row-sync11.718ms; these are component work spans,
 not phone performance or a controlled candidate improvement. The composition span includes apply
 bookkeeping, so attributing it to Text alone is not justified.
 
@@ -90,3 +90,56 @@ An additional5k FLAT3tick run samples the main-thread stack every20ms, separatel
 observations. At most128 distinct keys and the12 most frequent stacks are retained; this perturbs
 that extra run and is not exhaustive/exact CPU accounting. These results cannot stand in for actual
 keyboard/nativePTY, repeated reentry, the original24tick matrix or final candidate acceptance.
+
+## Candidate selected after grouping evidence
+
+The grouping probe passed3methods/54samples/27disposals at c7caf0a/run39383512446. Original report
+SHA256445021ad4c79dd61d96f9979c153c0e7cf25b9374aaa13554259f50d0ca4b473 was relayed by39384983992,
+artifact12246527399 (60882B); all samples/source/APK identities/geometry hashes were independently
+recomputed.5k separate sampler saw166/236 samples with SlotWriter.moveGroup in the retained top
+stacks; this is stack frequency, not exact CPU percentage.10k three-tick completed medians were
+17688.14ms flat,1698.23ms chunked,496.39ms layered. Two formal order-reversed observations support
+an intervention, not a general FPS claim. No report changes the failed24tick run's conclusion.
+
+Selected production scope: two new explicit per-command RENDER choices `tuiChunkedEager` and
+`tuiChunkedLayers`. Original default and every existing renderer's eligibility remain. Only owned,
+nonempty, main-screen TUI history with pan enabled and SEL/mouse/ALT/full-grid absent may group.
+Unknown main-screen commands do not get transcript semantics: SCREEN-following stays SCREEN,
+RAW stays RAW, the entire physical screen remains eager, and all natural row heights are required.
+This does not record ALT history, virtualize TUI, change parser/row-sync, or retain disposed UI.
+Outside TUI, new modes use existing default ordinary behavior; invalid TUI geometry falls back flat.
+
+Candidate verification must exercise these exact production modes: original24tick/2line viewport
+contraction and reentry workload at1k/5k/10k; same-device controlled small comparison; locked reading,
+font/column changes and source invalidation; mode/SEL/mouse/ALT/fullgrid handoffs; actual page/native
+PTY finite continuing output during realIME/reentry with status+KEYS. Existing bottom regressions and
+default/virtual behavior remain separate gates. No formal Release until all candidate gates pass.
+
+### Frozen first-candidate gates
+
+The production-mode comparison uses the SAME fixture APK/process/device for current default TUI
+compatibility versus each new opt-in mode. Baseline core renderer/synchronizer/controller/parser/font
+files are byte-identical to7218dd7; a five-file allowlist binds the intervention. This is not an old-APK
+comparison.1k/5k/10k x default/TUIchunked/TUIlayers x cold/3tick-stream x one warmup/four formal
+ABC/CBA rounds =90samples (18warmup72formal). Every sample stays, including slower candidates.
+For5k/10k streams, all four paired completions must improve and median completion AND commit spans
+must be at most80% of the control. Other cold/small-load medians must be at most115% of control+20ms.
+These fixed criteria apply before the first candidate measurement and are not changed after a failure.
+
+Correctness uses5 new viewport methods (31actual cursor rectangles,6pairs of24tick/48line streams
+and reentries,10compatibility gates,locked anchors/font/column/IME transitions). Full viewport inventory
+becomes173.6new JVM methods check opt-in/persistence/owned-source/gates/FIFO/wiring. Old negative
+control remains exact old production with byte-identical bottom oracle and c7caf0a API-compatible
+test helpers; candidate-only types are excluded ONLY in that disposable old-source runner.
+
+Two real-page nativePTY methods use each new mode with1万 retained rows/status/KEYS. The page first
+applies its history limit, then seeds10100lines. Three finite160tick producers emit two lines every
+100ms while actual keyboard opening/closing and page detach/reentry occur. New native output and
+new matching page draws must precede DONE; detached output advances at least3ticks. Exact native
+read/parsed byte sums are accumulated through bounded trace windows; initial seeding is excluded.
+Final real Text rectangles and unchanged grid/history are checked after each output burst; RAW UI
+submission and page/session/capture cleanup are required. The test peer explicitly sets canonical
+reads inside a recorded RAW session; it does not claim an account-backed Pi or a full raw-peer test.
+
+Only first candidate acceptance plus one consolidated correction is authorized. No new candidate run
+has been dispatched at the time this protocol was frozen. Baseline and probe failures remain original.

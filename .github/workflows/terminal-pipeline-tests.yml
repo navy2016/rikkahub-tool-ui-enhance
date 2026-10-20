@@ -6,7 +6,7 @@ on:
       suite:
         description: 'Full page samples, transport preflight, or same-device AB/BA experiment'
         type: choice
-        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
+        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, tuiHistory, tuiHistoryOnly, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
         default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'
@@ -170,7 +170,7 @@ jobs:
         if: ${{ !inputs.checks_only }}
         run: |
           cd .github/scripts
-          python3 -B -m unittest test_terminal_pipeline test_terminal_pipeline_paired test_terminal_bundle_reports test_terminal_bundle_paired test_terminal_byte_buffer test_terminal_tui_bundle test_terminal_bottom_visibility
+          python3 -B -m unittest test_terminal_pipeline test_terminal_pipeline_paired test_terminal_bundle_reports test_terminal_bundle_paired test_terminal_byte_buffer test_terminal_tui_bundle test_terminal_bottom_visibility test_terminal_tui_history
       - name: Run actual page and native PTY with real keyboard on non-root KVM guest
         if: ${{ !inputs.checks_only }}
         run: python3 .github/scripts/run-terminal-pipeline.py emulator

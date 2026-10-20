@@ -1,5 +1,7 @@
 set -euo pipefail
 case "${TERMINAL_LONG_HISTORY_PROBE:-false}" in true|false) ;; *) exit 2 ;; esac
+case "${TERMINAL_LONG_HISTORY_PERFORMANCE:-false}" in true|false) ;; *) exit 2 ;; esac
+[ "${TERMINAL_LONG_HISTORY_PROBE:-false}/${TERMINAL_LONG_HISTORY_PERFORMANCE:-false}" != true/true ]
 mkdir -p artifacts/terminal-long-history
 trap 'status=$?; adb logcat -d -v threadtime TerminalLongHistory:I AndroidRuntime:E TestRunner:I "*:S" > artifacts/terminal-long-history/diagnostic-logcat.txt || true; exit "$status"' EXIT
 adb wait-for-device
@@ -13,4 +15,5 @@ TERMINAL_TIMEOUT_LOG_PATH=artifacts/terminal-long-history/instrumentation.log \
     :benchmarks:terminal-viewport-tests:connectedReleaseAndroidTest \
     -Pandroid.testInstrumentationRunnerArguments.class=me.rerere.rikkahub.viewporttest.TerminalLongHistoryDiagnosticTest \
     -Pandroid.testInstrumentationRunnerArguments.longHistoryProbe="${TERMINAL_LONG_HISTORY_PROBE:-false}" \
+    -Pandroid.testInstrumentationRunnerArguments.longHistoryPerformance="${TERMINAL_LONG_HISTORY_PERFORMANCE:-false}" \
     --stacktrace

@@ -39,6 +39,10 @@ _bottom_spec = importlib.util.spec_from_file_location('terminal_bottom_reports',
     Path(__file__).with_name('terminal-bottom-visibility-reports.py'))
 bottom_reports = importlib.util.module_from_spec(_bottom_spec)
 _bottom_spec.loader.exec_module(bottom_reports)
+_history_spec = importlib.util.spec_from_file_location('terminal_tui_history_reports',
+    Path(__file__).with_name('terminal-tui-history-reports.py'))
+history_reports = importlib.util.module_from_spec(_history_spec)
+_history_spec.loader.exec_module(history_reports)
 
 
 def notice(level, title, message):
@@ -103,6 +107,8 @@ def sources():
         'app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt',
         'app/src/main/java/me/rerere/rikkahub/data/container/TerminalItemViewport.kt',
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalBottomVisibilityPageTest.kt',
+        'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalTuiHistoryPageTest.kt',
+        '.github/scripts/terminal-tui-history-reports.py',
         '.github/scripts/terminal-bottom-visibility-reports.py',
         'app/src/main/cpp/rikkahub_pty.cpp', 'app/build.gradle.kts',
         'app/src/terminaltest/AndroidManifest.xml',
@@ -298,11 +304,15 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     mount_diagnostic = selected == 'mountDiagnostic'
     tui = selected == 'tuiOnly'
     bottom = selected == 'bottomOnly'
+    tui_history = selected == 'tuiHistoryOnly'
     methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
         'pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
         'pipelineStableVirtualPtyEchoKeyboardAndRemount')
     test_class = 'me.rerere.rikkahub.pipeline.TerminalPtyTransportInstrumentedTest' if transport else CLASS
     extra_arguments = []
+    if tui_history:
+        test_class = 'me.rerere.rikkahub.pipeline.TerminalTuiHistoryPageTest'
+        methods = history_reports.PAGE_METHODS
     if bottom:
         test_class = 'me.rerere.rikkahub.pipeline.TerminalBottomVisibilityPageTest'
         methods = bottom_reports.PAGE_METHODS
@@ -354,6 +364,14 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             if 'mCurrentFocus=' in line or 'mFocusedApp=' in line) + '\n')
     if failed:
         raise ValueError('; '.join(failed))
+    if tui_history:
+        results = history_reports.validate_page('\n'.join(logs))
+        report = dict(suite='terminal-tui-history-page-v1', sourceSha=manifest['sourceSha'], runId=manifest['runId'],
+            manifest=manifest, device=device, installedApkHashes=installed_hashes, **results,
+            note='Real page/native PTY/actual IME:10k retained history, finite160tick producers, new draws before DONE; '
+                 'synthetic canonical test peer inside RAW session/UI, not real Pi or phone performance.')
+        history_reports.publish('Terminal TUI history page', report, OUT / 'tui-history-page.json')
+        return report
     if bottom:
         cases = bottom_reports.validate_page('\n'.join(logs))
         report = dict(suite='terminal-bottom-page-v1', sourceSha=manifest['sourceSha'], runId=manifest['runId'],
@@ -509,7 +527,7 @@ def emulator(operation=None):
             output(['adb', 'shell', 'input', 'keyevent', '82'])
             if operation is not None:
                 operation()
-            elif os.environ.get('TERMINAL_PIPELINE_SUITE') in ('all', 'tuiBundle', 'bottomVisibility'):
+            elif os.environ.get('TERMINAL_PIPELINE_SUITE') in ('all', 'tuiBundle', 'bottomVisibility', 'tuiHistory'):
                 run('transport')
                 # Keep the successful preflight's logs; the page run has independent lifecycle,
                 # fresh captures and completion receipts but uses the very same APK and guest.
@@ -528,18 +546,24 @@ def emulator(operation=None):
                 byte_buffer.mkdir(exist_ok=True)
                 for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
                     shutil.copyfile(OUT / name, byte_buffer / name)
-                if os.environ.get('TERMINAL_PIPELINE_SUITE') in ('tuiBundle', 'bottomVisibility'):
+                if os.environ.get('TERMINAL_PIPELINE_SUITE') in ('tuiBundle', 'bottomVisibility', 'tuiHistory'):
                     run('tuiOnly')
                     tui_preflight = OUT / 'tui-preflight'
                     tui_preflight.mkdir(exist_ok=True)
                     for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
                         shutil.copyfile(OUT / name, tui_preflight / name)
-                if os.environ.get('TERMINAL_PIPELINE_SUITE') == 'bottomVisibility':
+                if os.environ.get('TERMINAL_PIPELINE_SUITE') in ('bottomVisibility', 'tuiHistory'):
                     run('bottomOnly')
                     bottom_preflight = OUT / 'bottom-preflight'
                     bottom_preflight.mkdir(exist_ok=True)
                     for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
                         shutil.copyfile(OUT / name, bottom_preflight / name)
+                if os.environ.get('TERMINAL_PIPELINE_SUITE') == 'tuiHistory':
+                    run('tuiHistoryOnly')
+                    history_preflight = OUT / 'tui-history-preflight'
+                    history_preflight.mkdir(exist_ok=True)
+                    for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
+                        shutil.copyfile(OUT / name, history_preflight / name)
                 run('pipeline')
             else:
                 run()
@@ -558,7 +582,7 @@ def failure_excerpt(path):
             tail.append(line)
             if any(word in line for word in ('TerminalPipelineActivity', 'PIPELINE_READY', 'PIPELINE_DIAGNOSTIC', 'PIPELINE_GEOMETRY',
                                              'TRANSPORT_PROBE', 'NativePtyProcess', 'MOUNT_DIAGNOSTIC', 'SETTLE_FAILURE',
-                                             'BYTE_BUFFER_PTY', 'BYTE_BUFFER_EXIT')):
+                                             'BYTE_BUFFER_PTY', 'BYTE_BUFFER_EXIT', 'TUI_HISTORY_PAGE_FAILURE')):
                 lifecycle.append(line)
             if remaining == 0 and blocks < 2 and any(marker in line for marker in
                 ('Error in ', 'stack=', 'java.lang.', 'FATAL EXCEPTION')):

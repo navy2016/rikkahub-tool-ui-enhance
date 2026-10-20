@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -57,6 +58,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.container.TerminalItemScrollTarget
 import me.rerere.rikkahub.data.container.TerminalItemViewport
@@ -76,6 +78,8 @@ import me.rerere.rikkahub.ui.pages.container.TerminalTranscriptViewport
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderSnapshot
 import me.rerere.rikkahub.ui.pages.container.TerminalRowStore
 import me.rerere.rikkahub.data.container.TerminalWidthCheckpointStore
+import me.rerere.rikkahub.data.container.terminalTuiHistoryAllowed
+import me.rerere.rikkahub.data.container.effectiveTerminalRenderMode
 import me.rerere.rikkahub.ui.pages.container.TerminalVirtualHistoryPolicy
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderModeDialog
 import me.rerere.rikkahub.ui.pages.container.rememberTerminalBoundViewport
@@ -561,6 +565,7 @@ class TerminalItemViewportInstrumentedTest {
         private val foreground: Color = Color.Unspecified,
         private val sparse: Boolean = false,
         val widthCheckpoint: TerminalWidthCheckpointStore? = null,
+        private val mountStreamFrames: Int = 0,
     ) {
         val terminal = terminalOverride ?: TerminalEmulator(initialColumns = 80, initialRows = 24,
             maxScrollbackLines = historyRows).apply {
@@ -601,6 +606,10 @@ class TerminalItemViewportInstrumentedTest {
         var ime by mutableStateOf(false)
         var avoidIme by mutableStateOf(true)
         var tui by mutableStateOf(false)
+        var fullGrid by mutableStateOf(false)
+        var tuiHistory = false
+        var effectiveMode = initialMode
+        var historyChunksCount = 0
         var rtl by mutableStateOf(false)
         var showRendererDialog by mutableStateOf(false)
         var inputText by mutableStateOf("")
@@ -618,6 +627,8 @@ class TerminalItemViewportInstrumentedTest {
         val maximumWriters get() = bound.binding.maximumWriters
         var outputDuringJump = false
         @Volatile var appendCount = 0
+        var mountStreamJob: Job? = null
+            private set
         private lateinit var scope: CoroutineScope
 
         fun observation(): TerminalItemViewport? = bound.binding.observation()
@@ -636,11 +647,16 @@ class TerminalItemViewportInstrumentedTest {
                 anchorHistoryGeneration = state.anchor?.historyGeneration, anchorScreenGeneration = state.anchor?.screenGeneration)
         }
 
-        fun stream(frames: Int, linesPerFrame: Int = 1, beforeFrame: (Int) -> Unit = {}) = scope.launch {
+        fun stream(frames: Int, linesPerFrame: Int = 1, label: String = "stream", trailingNewline: Boolean = false,
+            beforeFrame: (Int) -> Unit = {}) = scope.launch {
             repeat(frames) { frameIndex ->
                 withFrameNanos { }
                 beforeFrame(frameIndex)
-                repeat(linesPerFrame) { terminal.feed("\r\nstream-${appendCount++} \u001B[32m中文\u001B[0m") }
+                repeat(linesPerFrame) {
+                    val text = "$label-${appendCount++} \u001B[32m中文\u001B[0m" +
+                        if (trailingNewline) " e\u0301 👩‍💻" else ""
+                    terminal.feed(if (trailingNewline) "$text\r\n" else "\r\n$text")
+                }
                 publish()
             }
         }
@@ -660,6 +676,12 @@ class TerminalItemViewportInstrumentedTest {
 
         @Composable fun Content() {
             scope = rememberCoroutineScope()
+            LaunchedEffect(this) {
+                if (mountStreamFrames > 0) {
+                    mountStreamJob = stream(mountStreamFrames, 2, "reentry", trailingNewline = true)
+                    mountStreamJob!!.join()
+                }
+            }
             CompositionLocalProvider(
                 LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
                 LocalDensity provides (densityOverride ?: LocalDensity.current),
@@ -682,17 +704,24 @@ class TerminalItemViewportInstrumentedTest {
             val textMeasurer = rememberTextMeasurer()
             cellHeight = textMeasurer.measure("W", style).size.height.coerceAtLeast(1)
             tailPadding = with(density) { 8.dp.roundToPx() }
-            val chunks = remember(frame.historyCount, frame.historyStartSequence, tui, frame.isAlternateScreen) {
-                terminalHistoryChunks(frame.historyCount, frame.historyStartSequence, tui || frame.isAlternateScreen)
+            val usesTui = tui || frame.isAlternateScreen || fullGrid
+            val allowed = terminalTuiHistoryAllowed(mode, frame, usesTui, fullGrid || frame.isAlternateScreen,
+                config.panEnabled, config.selectionMode)
+            tuiHistory = allowed
+            val chunks = remember(frame.historyCount, frame.historyStartSequence, usesTui, allowed) {
+                terminalHistoryChunks(frame.historyCount, frame.historyStartSequence, usesTui && !allowed)
             }
+            historyChunksCount = chunks.size
+            effectiveMode = effectiveTerminalRenderMode(mode, chunks.isNotEmpty(), tuiHistoryAllowed = allowed)
             policy = rememberTerminalVirtualHistoryPolicy(this, mode, ime)
             val wants = mode.isVirtualHistory &&
                 policy.allows(chunks.isNotEmpty(), config.panEnabled, config.selectionMode,
-                    tui || frame.isAlternateScreen, ime, avoidIme)
+                    usesTui, ime, avoidIme)
             val currentBound = rememberTerminalBoundViewport(
                 this, controller, eager, lazy, measurements, frame, style, wants,
                 metrics = { TerminalViewportMetrics(eager.maxValue, viewportHeight, cellHeight, tailPadding,
-                    usesTuiViewport = tui || frame.isAlternateScreen, imeVisible = ime, avoidIme = ime && avoidIme) },
+                    usesTuiViewport = usesTui, preservePhysicalGrid = fullGrid,
+                    imeVisible = ime, avoidIme = ime && avoidIme) },
                 gestureConfig = config, widthCheckpoint = widthCheckpoint)
             bound = currentBound
             SideEffect {
@@ -710,7 +739,7 @@ class TerminalItemViewportInstrumentedTest {
                         .nestedScroll(currentBound.gestures.connection)) {
                         TerminalTranscriptViewport(frame, source.rows, style, chunks, mode, currentBound,
                             horizontal, config.panEnabled, config.selectionMode, Modifier.fillMaxSize(),
-                            rowSource = source)
+                            rowSource = source, tuiHistoryAllowed = allowed)
                     }
                 }
                 if (systemIme) {
@@ -722,8 +751,9 @@ class TerminalItemViewportInstrumentedTest {
                     }
                 } else output(Modifier.size(320.dp, heightDp.dp))
                 if (showRendererDialog) {
-                    TerminalRenderModeDialog(mode, chunks.isNotEmpty(), tui,
+                    TerminalRenderModeDialog(mode, chunks.isNotEmpty(), usesTui,
                         virtualHistoryAllowed = isVirtual, virtualHistoryImeFallback = policy.imeFallback,
+                        tuiHistoryAllowed = allowed,
                         onDismiss = { showRendererDialog = false }, onSave = {
                             mode = it
                             policy.reapplied(ime)

@@ -109,6 +109,14 @@ historyCount乘标称高度。默认图层、8dp尾部、KEYS、输入协议及�
 `benchmarks/TERMINAL_LONG_HISTORY.md`。保留实测行高／光标完整可见／历史容量／默认渲染／
 KEYS和唯一滚动执行器。不重做已否定的单行重组作用域实验，不把组件诊断当成实机FPS。
 
+长历史基线诊断39195471176有2/3用例超时，32原始样本保留，不重标通过。独立三模式诊断
+c7caf0a／39383512446完成54样本和27卸载；调用栈指向SlotWriter.moveGroup，分块减轻
+长历史头删后的大组移动。证据已中转取回并复算。当前候选仅新增显式RENDER选项
+TUI_CHUNKED／TUI_CHUNKED_LAYERS，仅可信主屏归档历史、pan且无SEL/MOUSE/全网格/ALT
+可启用。默认和原模式资格、RAW、SCREEN跟随、真实行高、解析/同步/滚动核心均不变。
+候选验收协议见TERMINAL_LONG_HISTORY.md：173视口、新6JVM、实际页面持续输出/真实键盘/
+重进和90同机组件样本；尚未启动候选验收，不能据诊断声明生产或实机通过。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

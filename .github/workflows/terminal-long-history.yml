@@ -7,9 +7,16 @@ on:
         description: 'Separate three-tick grouping experiment, NOT a v1 diagnosis rerun'
         type: boolean
         default: false
+      performance:
+        description: 'Exact production-mode performance gate, independent of the old diagnosis'
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       probe:
+        type: boolean
+        default: false
+      performance:
         type: boolean
         default: false
 
@@ -22,6 +29,7 @@ jobs:
     timeout-minutes: 30
     env:
       TERMINAL_LONG_HISTORY_PROBE: ${{ inputs.probe }}
+      TERMINAL_LONG_HISTORY_PERFORMANCE: ${{ inputs.performance }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,9 +38,14 @@ jobs:
         run: |
           set -euo pipefail
           [ "$GITHUB_REF" = refs/heads/opt/terminal-verified-a79e7b6 ]
-          [ "$(git rev-parse HEAD:app/src/main)" = c1463f057fda3bbc693f7e8164065da4baebcdb1 ]
-          git diff --exit-code 7218dd7e50577bc6fa94575aa476b2a436c71f61 HEAD -- app/src/main
-          python3 -B -m unittest discover -s .github/scripts -p 'test_terminal_long_history*.py'
+          if [ "$TERMINAL_LONG_HISTORY_PERFORMANCE" = true ]; then
+            [ "$TERMINAL_LONG_HISTORY_PROBE" = false ]
+            python3 -B .github/scripts/terminal-tui-history-reports.py guard
+          else
+            [ "$(git rev-parse HEAD:app/src/main)" = c1463f057fda3bbc693f7e8164065da4baebcdb1 ]
+            git diff --exit-code 7218dd7e50577bc6fa94575aa476b2a436c71f61 HEAD -- app/src/main
+          fi
+          python3 -B -m unittest discover -s .github/scripts -p 'test_terminal_*history*.py'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -63,11 +76,19 @@ jobs:
       - name: Validate every original sample and source identity
         if: always()
         run: |
-          if [ "$TERMINAL_LONG_HISTORY_PROBE" = true ]; then
+          if [ "$TERMINAL_LONG_HISTORY_PERFORMANCE" = true ]; then
+            python3 -B .github/scripts/terminal-tui-history-performance.py
+          elif [ "$TERMINAL_LONG_HISTORY_PROBE" = true ]; then
             python3 -B .github/scripts/terminal-long-history-probe.py
           else
             python3 -B .github/scripts/terminal-long-history-reports.py
           fi
+      - name: Publish first bounded performance evidence parts
+        if: ${{ always() && inputs.performance }}
+        run: python3 -B .github/scripts/terminal-tui-history-reports.py performanceEvidence --page 1
+      - name: Publish remaining bounded performance evidence parts
+        if: ${{ always() && inputs.performance }}
+        run: python3 -B .github/scripts/terminal-tui-history-reports.py performanceEvidence --page 2
       - name: Preserve diagnostic evidence without APK attachments
         if: always()
         uses: actions/upload-artifact@v4

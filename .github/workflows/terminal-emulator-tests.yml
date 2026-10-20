@@ -176,6 +176,7 @@ jobs:
             --tests me.rerere.rikkahub.utils.TerminalParserBundleTest \
             --tests me.rerere.rikkahub.data.container.TerminalConsistencyBundleTest \
             --tests me.rerere.rikkahub.data.container.TerminalDisplayPolicyTest \
+            --tests me.rerere.rikkahub.data.container.TerminalTuiHistoryTest \
             --tests me.rerere.rikkahub.data.container.TerminalBottomVisibilityTest \
             --stacktrace
 
@@ -333,6 +334,8 @@ jobs:
             --require-suite me.rerere.rikkahub.utils.TerminalParserBundleTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalConsistencyBundleTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalDisplayPolicyTest \
+            --require-suite me.rerere.rikkahub.data.container.TerminalTuiHistoryTest \
+            --require-case-group 'tuiHistory:6' \
             --require-suite me.rerere.rikkahub.data.container.TerminalBottomVisibilityTest
 
       - name: Validate complete TUI parser allocation evidence and source contract

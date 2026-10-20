@@ -50,14 +50,16 @@ internal fun TerminalConfiguredTranscript(
     observer: TerminalTranscriptCompositionObserver? = null,
     measurement: TerminalRowMeasurementScope? = null,
     rowSource: TerminalRenderSnapshot? = null,
+    tuiHistoryAllowed: Boolean = false,
 ) {
     val effective = effectiveTerminalRenderMode(mode, historyChunks.isNotEmpty(), virtualHistoryAllowed = false,
-        regularHistoryAllowed = mode == TerminalRenderMode.REGULAR_HISTORY)
+        regularHistoryAllowed = mode == TerminalRenderMode.REGULAR_HISTORY, tuiHistoryAllowed = tuiHistoryAllowed)
     val content: @Composable () -> Unit = {
         TerminalRenderedTranscript(rows, style,
             if (effective == TerminalRenderMode.FLAT) emptyList() else historyChunks,
             isolateChunkDrawing = effective == TerminalRenderMode.CHUNKED_LAYERS ||
-                effective == TerminalRenderMode.REGULAR_HISTORY, observer = observer,
+                effective == TerminalRenderMode.REGULAR_HISTORY || effective == TerminalRenderMode.TUI_CHUNKED_LAYERS,
+            observer = observer,
             rowSource = rowSource)
     }
     if (measurement == null) content() else {
@@ -115,6 +117,7 @@ internal fun TerminalRenderModeDialog(
     error: String? = null,
     onDismiss: () -> Unit,
     onSave: (TerminalRenderMode) -> Unit,
+    tuiHistoryAllowed: Boolean = false,
 ) {
     var pending by remember(value) { mutableStateOf(value) }
     AlertDialog(
@@ -133,9 +136,9 @@ internal fun TerminalRenderModeDialog(
                         style = MaterialTheme.typography.bodySmall)
                 }
                 Text("已选：${value.label} · 实际：${effectiveTerminalRenderMode(appliedMode, hasHistoryChunks,
-                    virtualHistoryAllowed, cursorOverlayAllowed, regularHistoryAllowed).label}",
+                    virtualHistoryAllowed, cursorOverlayAllowed, regularHistoryAllowed, tuiHistoryAllowed).label}",
                     modifier = Modifier.testTag("terminal-render-effective"), style = MaterialTheme.typography.bodySmall)
-                if ((usesTuiViewport || !hasHistoryChunks) && !cursorOverlayAllowed) {
+                if ((usesTuiViewport || !hasHistoryChunks) && !cursorOverlayAllowed && !tuiHistoryAllowed) {
                     Text(if (usesTuiViewport) "当前为 TUI／全网格，沿用逐行兼容绘制；返回普通历史后使用所选模式。"
                         else "当前没有可分块历史，沿用逐行兼容绘制；产生有效历史后使用所选模式。",
                         style = MaterialTheme.typography.bodySmall)
@@ -157,6 +160,8 @@ internal fun TerminalRenderModeDialog(
                                     TerminalRenderMode.VIRTUAL_HISTORY_IME -> "实验选项：长历史在键盘显示时保留虚拟行树；自动跟随、锁定阅读和 IME 高度设置不变。短内容需要保留原位时仍回退。"
                                     TerminalRenderMode.REGULAR_HISTORY -> "实验选项：仅显式 pi --tui-mode regular 启动时启用自然行高历史分块；RAW 输入不变。未知命令、全网格、备用屏幕、SEL 或 MOUSE 保留兼容路径。"
                                     TerminalRenderMode.CURSOR_OVERLAY -> "实验选项：竖线／下划线光标叠加在原文字上，不替换字符；块光标、SEL 和 MOUSE 保持原绘制。"
+                                    TerminalRenderMode.TUI_CHUNKED -> "实验选项：仅主屏 TUI 的已归档历史分块，不增加独立图层；活动屏幕与跟随规则不变。SEL、MOUSE、全网格和备用屏幕保持兼容路径。"
+                                    TerminalRenderMode.TUI_CHUNKED_LAYERS -> "实验选项：主屏 TUI 的已归档历史分块并复用绘制记录；使用额外图层。活动屏幕与跟随规则不变，兼容回退同 TUI 轻量分块。"
                                 }, style = MaterialTheme.typography.bodySmall)
                             }
                         }

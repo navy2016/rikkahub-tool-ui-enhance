@@ -139,6 +139,7 @@ import me.rerere.rikkahub.data.container.TerminalSizeReceipt
 import me.rerere.rikkahub.data.container.terminalTextEdit
 import me.rerere.rikkahub.data.container.terminalRegularHistoryAllowed
 import me.rerere.rikkahub.data.container.terminalCursorOverlayAllowed
+import me.rerere.rikkahub.data.container.terminalTuiHistoryAllowed
 import me.rerere.rikkahub.data.container.awaitTerminalSynchronizedOutput
 import me.rerere.rikkahub.data.container.ProcessStatus
 import me.rerere.rikkahub.data.container.PRootManager
@@ -1007,6 +1008,10 @@ private fun TerminalInteractivePanel(
     val currentPreservePhysicalGrid by rememberUpdatedState(
         terminalFrameIsAlternateScreen || shouldPreserveFullTerminalGrid
     )
+    val tuiHistory = terminalTuiHistoryAllowed(
+        appliedTerminalRenderMode, publishedRenderSnapshot.frame, currentUsesTuiViewport,
+        currentPreservePhysicalGrid, terminalPanMode, selectionMode,
+    )
     val currentLastNonBlankRow by rememberUpdatedState(terminalContentBounds.lastNonBlankRow)
     val currentFollowRow by rememberUpdatedState(publishedRenderSnapshot.frame.terminalFollowRowIndex())
     val currentTerminalTailPaddingPx by rememberUpdatedState(terminalTailPaddingPx)
@@ -1019,11 +1024,12 @@ private fun TerminalInteractivePanel(
         terminalScreenStartRow,
         terminalHistoryStartSequence,
         currentUsesTuiViewport,
+        tuiHistory,
     ) {
         terminalHistoryChunks(
             historyCount = terminalScreenStartRow,
             firstSequence = terminalHistoryStartSequence,
-            usesTuiViewport = currentUsesTuiViewport,
+            usesTuiViewport = currentUsesTuiViewport && !tuiHistory,
         )
     }
     val terminalContentHeightPx = if (currentUsesTuiViewport) {
@@ -1716,6 +1722,7 @@ private fun TerminalInteractivePanel(
                         virtualHistoryAllowed = virtualHistoryEnabled,
                         cursorOverlayAllowed = wantsCursorOverlay,
                         regularHistoryAllowed = regularHistory,
+                        tuiHistoryAllowed = tuiHistory,
                     ),
                     onRenderModeClick = {
                         terminalRenderError = null
@@ -1897,6 +1904,7 @@ private fun TerminalInteractivePanel(
                         selectionMode = selectionMode,
                         pointerMap = terminalPointerMap,
                         cellWidthPx = terminalCellWidthPx,
+                        tuiHistoryAllowed = tuiHistory,
                         modifier = Modifier.weight(1f).fillMaxWidth()
                             .onSizeChanged { size ->
                                 // Actual output viewport, AFTER status strip, KEYS, input and IME.
@@ -2045,6 +2053,7 @@ private fun TerminalInteractivePanel(
             selectionActive = selectionMode,
             cursorOverlayAllowed = wantsCursorOverlay,
             regularHistoryAllowed = regularHistory,
+            tuiHistoryAllowed = tuiHistory,
             saving = savingTerminalRenderMode,
             error = terminalRenderError,
             onDismiss = { terminalSettingsDialog = null },

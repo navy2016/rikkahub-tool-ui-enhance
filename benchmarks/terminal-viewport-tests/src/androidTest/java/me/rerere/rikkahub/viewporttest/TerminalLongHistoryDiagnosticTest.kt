@@ -50,6 +50,8 @@ import java.util.concurrent.locks.LockSupport
 import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
+import me.rerere.rikkahub.data.container.effectiveTerminalRenderMode
+import me.rerere.rikkahub.data.container.terminalTuiHistoryAllowed
 import me.rerere.rikkahub.ui.pages.container.TerminalBoundViewport
 import me.rerere.rikkahub.ui.pages.container.TerminalLazyItemMeasurements
 import me.rerere.rikkahub.ui.pages.container.TerminalRenderSnapshot
@@ -96,6 +98,7 @@ class TerminalLongHistoryDiagnosticTest {
         val terminal: TerminalEmulator,
         val tui: Boolean,
         val probeMode: TerminalRenderMode? = null,
+        val productionModes: Boolean = false,
     ) {
         private val frameStarted = SystemClock.elapsedRealtimeNanos()
         private val initial = terminal.renderFrame()
@@ -118,6 +121,9 @@ class TerminalLongHistoryDiagnosticTest {
         var cellHeight = 1
         var tail = 1
         var stats = Counters()
+        var historyAllowed = false
+        var effectiveMode = TerminalRenderMode.DEFAULT
+        var chunkCount = 0
         lateinit var bound: TerminalBoundViewport
         val hasBinding: Boolean get() = ::bound.isInitialized
 
@@ -168,12 +174,19 @@ class TerminalLongHistoryDiagnosticTest {
                 lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both))
             cellHeight = rememberTextMeasurer().measure("W", style).size.height.coerceAtLeast(1)
             tail = with(density) { 8.dp.roundToPx() }
-            val chunks = remember(frame.historyCount, frame.historyStartSequence) {
+            val allowed = productionModes && terminalTuiHistoryAllowed(
+                checkNotNull(probeMode), frame, tui, frame.isAlternateScreen, true, false)
+            historyAllowed = allowed
+            val chunks = remember(frame.historyCount, frame.historyStartSequence, allowed) {
                 // Diagnostic-only intervention: change archival grouping, NEVER the TUI metrics,
                 // row synchronization, screen preservation, input or sole scroll executor.
                 terminalHistoryChunks(frame.historyCount, frame.historyStartSequence,
-                    tui && (probeMode == null || probeMode == TerminalRenderMode.FLAT))
+                    if (productionModes) tui && !allowed
+                    else tui && (probeMode == null || probeMode == TerminalRenderMode.FLAT))
             }
+            chunkCount = chunks.size
+            effectiveMode = effectiveTerminalRenderMode(probeMode ?: TerminalRenderMode.DEFAULT,
+                chunks.isNotEmpty(), tuiHistoryAllowed = allowed)
             val binding = rememberTerminalBoundViewport(this, controller, eager, lazy, measurements, frame, style,
                 wantsVirtual = false, metrics = { metrics() }, gestureConfig = TerminalViewportGestureConfig(true, false, 2))
             bound = binding
@@ -206,7 +219,7 @@ class TerminalLongHistoryDiagnosticTest {
                             stats.drawCount++
                             if (stats.firstDrawNs == 0L) stats.firstDrawNs = ended
                             stats.lastDrawnRevision = frame.revision
-                        }, rowSource = captured)
+                        }, rowSource = captured, tuiHistoryAllowed = allowed)
                 }
             }
         }
@@ -388,7 +401,7 @@ class TerminalLongHistoryDiagnosticTest {
         }
     }
 
-    private fun probe(size: Int) {
+    private fun probe(size: Int, productionModes: Boolean = false) {
         // NOT v1:3 ticks rather than24, one warmup then AB/BA pairs. Kept in an independent report.
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         fun digest(file: File): String {
@@ -399,11 +412,14 @@ class TerminalLongHistoryDiagnosticTest {
             }
             return hash.digest().joinToString("") { "%02x".format(it) }
         }
-        Log.i("TerminalLongHistory", "LONG_PROBE_DEVICE " + JSONObject().put("size", size)
+        val marker = if (productionModes) "LONG_PERF" else "LONG_PROBE"
+        Log.i("TerminalLongHistory", "${marker}_DEVICE " + JSONObject().put("size", size)
             .put("pid", android.os.Process.myPid()).put("fingerprint", android.os.Build.FINGERPRINT)
             .put("targetApk", digest(File(instrumentation.targetContext.applicationInfo.sourceDir)))
             .put("testApk", digest(File(instrumentation.context.applicationInfo.sourceDir))))
-        val modes = listOf(TerminalRenderMode.FLAT, TerminalRenderMode.CHUNKED, TerminalRenderMode.CHUNKED_LAYERS)
+        val modes = if (productionModes) listOf(TerminalRenderMode.DEFAULT,
+            TerminalRenderMode.TUI_CHUNKED, TerminalRenderMode.TUI_CHUNKED_LAYERS)
+            else listOf(TerminalRenderMode.FLAT, TerminalRenderMode.CHUNKED, TerminalRenderMode.CHUNKED_LAYERS)
         var mounted by mutableStateOf<Mount?>(null, referentialEqualityPolicy())
         compose.setContent { mounted?.let { key(it) { it.Content() } } }
         fun model() = TerminalEmulator(80, 24, size).apply {
@@ -432,7 +448,12 @@ class TerminalLongHistoryDiagnosticTest {
             assertTrue(mount.bound.binding.maximumWriters <= 1)
             val signature = shape(mount)
             val s = mount.stats
-            Log.i("TerminalLongHistory", "LONG_PROBE_SAMPLE " + JSONObject().put("size", size).put("tui", true)
+            if (productionModes) {
+                assertEquals(mount.probeMode!!.isTuiHistory, mount.historyAllowed)
+                assertEquals(if (mount.historyAllowed) mount.probeMode else TerminalRenderMode.FLAT, mount.effectiveMode)
+                assertEquals(mount.historyAllowed, mount.chunkCount > 0)
+            }
+            Log.i("TerminalLongHistory", "${marker}_SAMPLE " + JSONObject().put("size", size).put("tui", true)
                 .put("mode", mount.probeMode!!.id).put("round", round).put("warmup", round == 0).put("phase", phase)
                 .put("completedNs", elapsed).put("firstDrawNs", s.firstDrawNs - started)
                 .put("stateCreateNs", if (phase == "cold") mount.createStateNs else 0)
@@ -448,16 +469,18 @@ class TerminalLongHistoryDiagnosticTest {
                 .put("retainedRows", mount.measurements.retainedRows).put("shapeSha256", signature)
                 .put("cursorTop", top.toDouble()).put("cursorBottom", bottom.toDouble())
                 .put("rowHeight", text.size.height).put("viewportHeight", view.size.height)
-                .put("writers", mount.bound.binding.maximumWriters))
+                .put("writers", mount.bound.binding.maximumWriters)
+                .put("productionModes", productionModes).put("historyAllowed", mount.historyAllowed)
+                .put("effectiveMode", mount.effectiveMode.id).put("chunks", mount.chunkCount))
             return signature
         }
-        repeat(3) { round ->
+        repeat(if (productionModes) 5 else 3) { round ->
             val shapes = HashMap<String, String>()
             for (mode in if (round % 2 == 0) modes else modes.reversed()) {
                 val terminal = model()
                 lateinit var mount: Mount
                 var started = 0L
-                compose.runOnIdle { mount = Mount(terminal, true, mode); started = now(); mounted = mount }
+                compose.runOnIdle { mount = Mount(terminal, true, mode, productionModes); started = now(); mounted = mount }
                 settle(mount, 0)
                 val cold = record(mount, round, "cold", started, 0, 0, 0)
                 shapes.putIfAbsent("cold", cold)?.let { assertEquals(it, cold) }
@@ -472,13 +495,13 @@ class TerminalLongHistoryDiagnosticTest {
                 compose.waitForIdle()
                 assertEquals(0, mount.measurements.retainedRows)
                 assertEquals(0, mount.measurements.retainedEagerHistoryRows)
-                Log.i("TerminalLongHistory", "LONG_PROBE_DISPOSE " + JSONObject().put("size", size)
+                Log.i("TerminalLongHistory", "${marker}_DISPOSE " + JSONObject().put("size", size)
                     .put("mode", mode.id).put("round", round).put("retainedRows", mount.measurements.retainedRows)
                     .put("retainedHeightRows", mount.measurements.retainedEagerHistoryRows))
             }
         }
         // Sample only one fixed slow run, separately labelled. No baseline matrix or phone-FPS claim.
-        if (size == 5000) {
+        if (size == 5000 && !productionModes) {
             val terminal = model()
             lateinit var mount: Mount
             compose.runOnIdle { mount = Mount(terminal, true, TerminalRenderMode.FLAT); mounted = mount }
@@ -503,7 +526,9 @@ class TerminalLongHistoryDiagnosticTest {
     }
 
     private fun selected(size: Int) {
-        if (InstrumentationRegistry.getArguments().getString("longHistoryProbe") == "true") probe(size) else diagnose(size)
+        if (InstrumentationRegistry.getArguments().getString("longHistoryPerformance") == "true") {
+            probe(size, productionModes = true)
+        } else if (InstrumentationRegistry.getArguments().getString("longHistoryProbe") == "true") probe(size) else diagnose(size)
     }
 
     @Test fun longHistoryOneThousand() = selected(1000)

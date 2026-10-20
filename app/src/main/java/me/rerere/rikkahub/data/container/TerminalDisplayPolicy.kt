@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.data.container
 
+import me.rerere.rikkahub.utils.TerminalEmulator
+import me.rerere.rikkahub.utils.ownedRows
+
 private val REGULAR_COMMAND_CHARACTERS = Regex("^[A-Za-z0-9_./=+\\- \\t]+$")
 private val REGULAR_COMMAND_SEPARATOR = Regex("[ \\t]+")
 
@@ -39,3 +42,15 @@ internal fun terminalRegularHistoryAllowed(
 
 internal fun terminalCursorOverlayAllowed(mode: TerminalRenderMode, pan: Boolean, selection: Boolean): Boolean =
     mode == TerminalRenderMode.CURSOR_OVERLAY && pan && !selection
+
+/** Opt-in grouping of owned archival history only; does NOT reinterpret the command or TUI screen policy. */
+internal fun terminalTuiHistoryAllowed(
+    mode: TerminalRenderMode,
+    frame: TerminalEmulator.RenderFrame,
+    usesTuiViewport: Boolean,
+    preservePhysicalGrid: Boolean,
+    panEnabled: Boolean,
+    selectionMode: Boolean,
+): Boolean = mode.isTuiHistory && usesTuiViewport && !preservePhysicalGrid &&
+    !frame.isAlternateScreen && !frame.mouseTracking && panEnabled && !selectionMode &&
+    frame.historyCount > 0 && frame.ownedRows()?.includesHistory == true

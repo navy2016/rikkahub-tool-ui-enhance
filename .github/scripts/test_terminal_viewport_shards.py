@@ -15,7 +15,8 @@ class ViewportShardTest(unittest.TestCase):
         bundle = source.split('if [ "$group" = all ] || [ "$group" = bundle ]; then\n', 1)[1].split('\nfi', 1)[0]
         tui = source.split('if [ "$group" = all ] || [ "$group" = tuiDisplay ]; then\n', 1)[1].split('\nfi', 1)[0]
         bottom = source.split('if [ "$group" = all ] || [ "$group" = bottomVisibility ]; then\n', 1)[1].split('\nfi', 1)[0]
-        assignments = re.findall(r'^run_arm (\S+)(?: (\w+))?', geometry + '\n' + interaction + '\n' + bundle + '\n' + tui + '\n' + bottom, re.M)
+        history = source.split('if [ "$group" = all ] || [ "$group" = tuiHistory ]; then\n', 1)[1].split('\nfi', 1)[0]
+        assignments = re.findall(r'^run_arm (\S+)(?: (\w+))?', '\n'.join((geometry, interaction, bundle, tui, bottom, history)), re.M)
         classes = [name or 'TerminalViewportGestureInstrumentedTest' for _, name in assignments]
         expected = {p.stem for p in TESTS.glob('*InstrumentedTest.kt')}
         self.assertEqual(expected, set(classes))
@@ -30,7 +31,7 @@ class ViewportShardTest(unittest.TestCase):
     def test_counts_matrix_and_report_routing_stay_complete(self):
         workflow = (ROOT / '.github/workflows/terminal-viewport-interactions.yml').read_text()
         self.assertIn('fail-fast: false', workflow)
-        self.assertIn('["geometry","interaction","bundle","tuiDisplay","bottomVisibility"]', workflow)
+        self.assertIn('["geometry","interaction","bundle","tuiDisplay","bottomVisibility","tuiHistory"]', workflow)
         self.assertIn('TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}', workflow)
         self.assertIn('${{ matrix.group }}-${{ github.run_attempt }}', workflow)
         self.assertIn('run-terminal-with-timeout.py 900', workflow)
@@ -44,7 +45,7 @@ class ViewportShardTest(unittest.TestCase):
                 end = full.index('\n          fi', start) + len('\n          fi')
                 full = full[:start] + full[end:]
         tokens = set(re.findall(r"--require-case-group '([^']+)'", full))
-        self.assertEqual(168, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
+        self.assertEqual(173, sum(int(token.rsplit(':', 1)[1]) for token in tokens))
         # Most groups use a shared method prefix; render controls retain two distinct names.
         methods = [name for path in TESTS.glob('*InstrumentedTest.kt')
                    for name in re.findall(r'@Test\s+fun\s+(\w+)\(', path.read_text())]

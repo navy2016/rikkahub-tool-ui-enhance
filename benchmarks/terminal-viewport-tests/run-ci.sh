@@ -104,7 +104,7 @@ if [ "$group" = bottomControl ]; then
   adb logcat -d -v threadtime TerminalBottomVisibility:I '*:S' > artifacts/terminal-validation/bottom-visibility-logcat.txt
   exit "$overall_status"
 fi
-case "$group" in all|geometry|interaction|bundle|tuiDisplay|bottomVisibility) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
+case "$group" in all|geometry|interaction|bundle|tuiDisplay|bottomVisibility|tuiHistory) ;; *) echo "Unknown viewport group: $group" >&2; exit 2 ;; esac
 
 if [ "$group" = all ] || [ "$group" = geometry ]; then
 run_arm chunk-views TerminalChunkViewsInstrumentedTest 360
@@ -145,5 +145,9 @@ fi
 if [ "$group" = all ] || [ "$group" = bottomVisibility ]; then
 run_arm bottom-visibility TerminalBottomVisibilityInstrumentedTest 600
 adb logcat -d -v threadtime TerminalBottomVisibility:I '*:S' > artifacts/terminal-validation/bottom-visibility-logcat.txt
+fi
+if [ "$group" = all ] || [ "$group" = tuiHistory ]; then
+run_arm tui-history TerminalTuiHistoryInstrumentedTest 600
+adb logcat -d -v threadtime TerminalTuiHistory:I '*:S' > artifacts/terminal-validation/tui-history-logcat.txt
 fi
 exit "$overall_status"

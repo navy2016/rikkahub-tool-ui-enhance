@@ -36,6 +36,7 @@ internal fun TerminalTranscriptViewport(
     compositionObserver: TerminalTranscriptCompositionObserver? = null,
     pointerMap: TerminalPointerMap? = null,
     cellWidthPx: Int = 1,
+    tuiHistoryAllowed: Boolean = false,
 ) {
     if (rowSource != null) require(rowSource.frame === frame && rowSource.rows === rows) {
         "Terminal viewport row source mismatch"
@@ -64,7 +65,8 @@ internal fun TerminalTranscriptViewport(
                 CompositionLocalProvider(LocalTerminalPointerScope provides pointerScope,
                     LocalTerminalCursorOverlays provides overlays) {
                     TerminalConfiguredTranscript(rows, style, historyChunks, mode,
-                        measurement = bound.eagerMeasurement, rowSource = rowSource, observer = compositionObserver)
+                        measurement = bound.eagerMeasurement, rowSource = rowSource, observer = compositionObserver,
+                        tuiHistoryAllowed = tuiHistoryAllowed)
                 }
             }
             if (selectionMode) SelectionContainer { Column { content() } } else content()
