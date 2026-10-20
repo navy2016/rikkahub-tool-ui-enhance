@@ -2,6 +2,9 @@ package me.rerere.rikkahub.pipeline
 
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.InputDevice
+import android.view.KeyEvent
+import android.view.MotionEvent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -17,7 +20,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.test.espresso.Espresso
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
@@ -52,6 +54,24 @@ class TerminalTuiHistoryPageTest : KoinComponent {
     private val proot: PRootManager by inject()
     private val settings: SettingsStore by inject()
     private fun now() = SystemClock.elapsedRealtimeNanos()
+    private fun tap(x: Float, y: Float) {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val downTime = SystemClock.uptimeMillis()
+        for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action, x, y, 0)
+            event.source = InputDevice.SOURCE_TOUCHSCREEN
+            try { assertTrue("Touch injection rejected", automation.injectInputEvent(event, true)) }
+            finally { event.recycle() }
+        }
+    }
+    private fun back() {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val downTime = SystemClock.uptimeMillis()
+        for (action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
+            val event = KeyEvent(downTime, SystemClock.uptimeMillis(), action, KeyEvent.KEYCODE_BACK, 0)
+            assertTrue("Back injection rejected", automation.injectInputEvent(event, true))
+        }
+    }
     private fun emit(marker: String, value: JSONObject) {
         InstrumentationRegistry.getInstrumentation().sendStatus(0, Bundle().apply {
             putString("stream", "\n$marker $value\n")
@@ -159,7 +179,6 @@ class TerminalTuiHistoryPageTest : KoinComponent {
             compose.waitUntil(30_000) { ready(false) && !manager.hasPendingTerminalResize(id) }
             val physicalRows = terminal.rows
             val sentinel = terminal.renderFrame().historyLineIds[5000]
-            val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
             val rectangles = JSONArray()
             fun rectangle(phase: String, ime: Boolean) {
                 var lastDraw = trace.viewport()?.draw ?: 0L
@@ -235,8 +254,8 @@ class TerminalTuiHistoryPageTest : KoinComponent {
                 val began = now()
                 var detachedTicks = 0
                 when (phase) {
-                    "imeOpen" -> device.click(inputBounds.center.x.toInt(), inputBounds.center.y.toInt())
-                    "imeClosed" -> device.pressBack()
+                    "imeOpen" -> tap(inputBounds.center.x, inputBounds.center.y)
+                    "imeClosed" -> back()
                     "reentry" -> {
                         val oldDisposals = disposals.get()
                         compose.runOnUiThread { mounted = false }

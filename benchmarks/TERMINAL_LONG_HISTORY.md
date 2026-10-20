@@ -143,3 +143,24 @@ reads inside a recorded RAW session; it does not claim an account-backed Pi or a
 
 Only first candidate acceptance plus one consolidated correction is authorized. No new candidate run
 has been dispatched at the time this protocol was frozen. Baseline and probe failures remain original.
+
+### First candidate and consolidated test-only correction
+
+Candidate `5eecb476370f22e6474f8f54e3bbf5ee5c898363`, production tree
+`71b1b14fde6b0bc3ec413b8024012060c404858b`:473JVM (39413045004),173viewport (39413066710),
+90production-mode comparison samples (39413082782) passed. All12predeclared performance decisions
+passed.10k three-tick completion medians: unchanged default18198.57ms, TUIchunked1959.07ms,
+TUIlayers567.57ms.10k cold medians:2131.00/2191.87/969.97ms respectively; lightweight grouping is
+not a cold-mount improvement. These inclusive component scopes remain unrelated to phoneFPS.
+
+Two first-round jobs failed BEFORE instrumentation: bottomControl39413076265 incorrectly included
+c7caf0a's diagnostic `followTarget` calls in the old-source test pair; page39413103263 referenced
+UiAutomator absent from that module. Original compilation failures remain failures, not device
+regressions or successful page coverage. The consolidated correction changes only test sources:
+old-source API-compatible helpers now come from7218dd7 (same bottom/default oracle bytes), excluding
+new diagnostics; real-page touch/BACK use platform UiAutomation input injection without adding a
+dependency. Existing output regex was already correct and is now checked by host regression.
+No production source, timing/geometry assertion, threshold, workload size or font is changed.
+Only these two jobs are reverified; successful first-round gates are not rerun to select faster data.
+This consumes the one consolidated correction round when dispatched. Release remains blocked until
+the real-page/nativePTY/IME/reentry and old-source controls actually finish successfully.

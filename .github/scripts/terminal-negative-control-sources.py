@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPAT = 'c7caf0a8249431c09263846523b5022f288c4e28'
+COMPAT = '7218dd7e50577bc6fa94575aa476b2a436c71f61'
 TESTS = 'benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/'
 ORACLES = (TESTS + 'TerminalBottomVisibilityInstrumentedTest.kt', TESTS + 'TerminalDefaultBottomInstrumentedTest.kt')
 
@@ -22,6 +22,8 @@ def main():
     assert all(raw == git('show', COMPAT + ':' + name) for name, raw in oracles.items()), 'Rectangle oracle changed; require explicit review'
     compatible = git('ls-tree', '-r', '--name-only', COMPAT, '--', TESTS).decode().splitlines()
     assert compatible and all(name.startswith(TESTS) and name.endswith('.kt') for name in compatible)
+    assert not any('TerminalLongHistoryDiagnosticTest' in name or 'TerminalTuiHistoryInstrumentedTest' in name
+                   for name in compatible), 'Candidate-only diagnostics must not compile against the old geometry API'
     for path in (ROOT / TESTS).glob('*.kt'):
         if str(path.relative_to(ROOT)) not in compatible:
             path.unlink()  # Disposable runner only: new candidate-only types do not exist in old production.

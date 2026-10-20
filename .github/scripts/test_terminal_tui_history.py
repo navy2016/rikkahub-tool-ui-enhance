@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 
@@ -183,6 +184,22 @@ class TuiHistoryReportsTest(unittest.TestCase):
         prod=(ROOT/'app/src/main/java/me/rerere/rikkahub/data/container/TerminalRenderMode.kt').read_text()
         self.assertIn('val DEFAULT = CHUNKED_LAYERS',prod)
         self.assertEqual(5,len(rules.CHANGED_MAIN))
+
+    def test_correction_keeps_compatible_old_sources_and_uses_platform_input(self):
+        negative=load('history_negative','terminal-negative-control-sources.py')
+        self.assertEqual(rules.BASELINE,negative.COMPAT)
+        names=subprocess.check_output(['git','ls-tree','-r','--name-only',negative.COMPAT,'--',negative.TESTS],cwd=ROOT,text=True).splitlines()
+        self.assertFalse(any('TerminalLongHistoryDiagnosticTest' in p or 'TerminalTuiHistoryInstrumentedTest' in p for p in names))
+        for name in negative.ORACLES:
+            self.assertEqual((ROOT/name).read_bytes(),subprocess.check_output(['git','show',negative.COMPAT+':'+name],cwd=ROOT))
+        page=(ROOT/rules.PAGE_FILE).read_text()
+        self.assertNotIn('uiautomator',page)
+        self.assertNotIn('UiDevice',page)
+        self.assertIn('automation.injectInputEvent(event, true)',page)
+        self.assertIn('finally { event.recycle() }',page)
+        pattern=re.search(r'val ticks = Regex\("(.*?)"\)',page)[1]
+        regex=pattern.replace('$phase','imeOpen').replace('\\\\','\\')
+        self.assertEqual('003',re.search(regex,'LIVE:imeOpen:003 中文')[1])
 
 
 if __name__ == '__main__': unittest.main()
