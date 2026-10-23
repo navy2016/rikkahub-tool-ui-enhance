@@ -117,9 +117,16 @@ TUI_CHUNKED／TUI_CHUNKED_LAYERS，仅可信主屏归档历史、pan且无SEL/MO
 候选验收协议见TERMINAL_LONG_HISTORY.md：173视口、新6JVM、实际页面持续输出/真实键盘/
 重进和90同机组件样本，不据诊断声明生产或实机通过。候选5eecb47／生产树
 71b1b14fde6b0bc3ec413b8024012060c404858b首轮473JVM、173视口和90组件样本已通过；
-旧版负对照39413076265及真实页面39413103263在测试包编译失败，原失败保留。剩余一次
-汇总修正仅旧版测试快照与平台输入注入，不改生产／断言／性能阈值。仅重验这两项，通过
-才可构建Release；不能把编译成功或组件结果当成真实页面／实机通过。
+旧版负对照39413076265及真实页面39413103263在测试包编译失败，原失败保留。汇总修正
+2c1f1ef仅旧版测试快照与平台输入注入，不改生产／断言／性能阈值；负对照39436610415
+已通过2用例／4预期裁切矩形，真实页面39436622755编译后两项均失败：
+"IME/reentry resized the PTY grid expected:<32> but was:<25>"，位置TerminalTuiHistoryPageTest.kt:289。
+轻量分块initial无IME矩形已25行，而保存基线32；图层initial32、imeOpen25，其变化时序
+仍未证明。新测试缺少desiredRows收敛且提前保存physicalRows，不据此重标通过或认定生产
+IME回归。仅4部分矩形／2imeOpen输出重叠，重进／输入／清理未完成。两轮预算已用完，
+仅归档，禁止自动第三轮、生产修复／回滚或Release；须用户明确追加定向授权。报告见
+benchmarks/results/2c1f1ef-terminal-long-history-blocked.md，身份清单为同目录
+2c1f1ef-terminal-long-history-checkpoint.json。
 
 使用 Android Studio 或命令行 Gradle：
 

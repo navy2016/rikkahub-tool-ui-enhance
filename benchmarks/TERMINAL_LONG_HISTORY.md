@@ -164,3 +164,28 @@ No production source, timing/geometry assertion, threshold, workload size or fon
 Only these two jobs are reverified; successful first-round gates are not rerun to select faster data.
 This consumes the one consolidated correction round when dispatched. Release remains blocked until
 the real-page/nativePTY/IME/reentry and old-source controls actually finish successfully.
+
+### Consolidated correction outcome: blocked, no third round
+
+`2c1f1efa9660d0601ee1d6db65565694858b624d` retains the exact candidate production tree. Corrected
+negative control39436610415 passed2cases/4expected clipped rectangles. Corrected real page39436622755
+compiled, then BOTH methods failed at `TerminalTuiHistoryPageTest.kt:289`:
+`IME/reentry resized the PTY grid expected:<32> but was:<25>`. No Release follows this failed gate.
+
+Originals show lightweight grouping already had25rows at its initial, IME-hidden rectangle despite
+the earlier captured32row baseline; layers initial32 then imeOpen25. Thus the eager failure cannot
+establish an IME-triggered resize, and the layered request timing remains unresolved. Test readiness
+checks pending submitted requests but not the desired actual grid or a not-yet-submitted UI debounce;
+`physicalRows` is captured before initial rectangles. Resize production code is unchanged from baseline.
+Do not relabel this as fixture-only success or a proven new production regression.
+
+Only4partial cursor rectangles/2output-opening overlaps exist. IME close/reentry/RAW input/cleanup
+receipts and per-phase byte assertions are uncompleted. Same-run15transport/2service/137byte reads/
+6oldTUI/14default-bottom preflights passed, but final36echo suite was not reached. Artifact12272853233
+was relayed by39901820499 and9selected members independently checked without APK/full build logs.
+
+Both authorized rounds are used. Report/source-bound checkpoint:
+`benchmarks/results/2c1f1ef-terminal-long-history-blocked.md` and
+`benchmarks/results/2c1f1ef-terminal-long-history-checkpoint.json`.
+Only documentation/evidence may continue. A further test-baseline convergence/resize-provenance round
+requires explicit new user authority; no threshold/row-assertion relaxation or performance rerun selection.

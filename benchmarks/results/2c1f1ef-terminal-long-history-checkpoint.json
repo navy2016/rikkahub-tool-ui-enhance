@@ -1,0 +1,323 @@
+{
+  "suite": "terminal-tui-history-blocked-checkpoint-v1",
+  "candidateSourceSha": "5eecb476370f22e6474f8f54e3bbf5ee5c898363",
+  "correctedSourceSha": "2c1f1efa9660d0601ee1d6db65565694858b624d",
+  "baselineSha": "7218dd7e50577bc6fa94575aa476b2a436c71f61",
+  "productionTree": "71b1b14fde6b0bc3ec413b8024012060c404858b",
+  "status": "blocked-real-page",
+  "releaseBlocked": true,
+  "candidateRoundsUsed": 2,
+  "releaseBuilt": false,
+  "localApkDownloaded": false,
+  "physicalPerformanceVerified": false,
+  "gates": {
+    "first-unit": {
+      "runId": 39413045004,
+      "sourceSha": "5eecb476370f22e6474f8f54e3bbf5ee5c898363",
+      "conclusion": "success"
+    },
+    "first-viewport": {
+      "runId": 39413066710,
+      "sourceSha": "5eecb476370f22e6474f8f54e3bbf5ee5c898363",
+      "conclusion": "success"
+    },
+    "first-performance": {
+      "runId": 39413082782,
+      "sourceSha": "5eecb476370f22e6474f8f54e3bbf5ee5c898363",
+      "conclusion": "success"
+    },
+    "first-negative-failed": {
+      "runId": 39413076265,
+      "sourceSha": "5eecb476370f22e6474f8f54e3bbf5ee5c898363",
+      "conclusion": "failure"
+    },
+    "first-page-failed": {
+      "runId": 39413103263,
+      "sourceSha": "5eecb476370f22e6474f8f54e3bbf5ee5c898363",
+      "conclusion": "failure"
+    },
+    "corrected-negative": {
+      "runId": 39436610415,
+      "sourceSha": "2c1f1efa9660d0601ee1d6db65565694858b624d",
+      "conclusion": "success"
+    },
+    "corrected-page": {
+      "runId": 39436622755,
+      "sourceSha": "2c1f1efa9660d0601ee1d6db65565694858b624d",
+      "conclusion": "failure"
+    }
+  },
+  "unitCases": 473,
+  "viewportCases": 173,
+  "candidateRectangles": 31,
+  "candidateStreams": 6,
+  "fallbackTransitions": 10,
+  "negativeControl": {
+    "cases": 2,
+    "rectangles": 4,
+    "paired": [
+      {
+        "case": "cursor",
+        "phase": "initial",
+        "beforeOutsidePx": 16,
+        "afterOutsidePx": 0
+      },
+      {
+        "case": "tuiGrowth",
+        "phase": "128",
+        "beforeOutsidePx": 907,
+        "afterOutsidePx": 0
+      },
+      {
+        "case": "tuiGrowth",
+        "phase": "512",
+        "beforeOutsidePx": 3212,
+        "afterOutsidePx": 0
+      },
+      {
+        "case": "tuiGrowth",
+        "phase": "1024",
+        "beforeOutsidePx": 6283,
+        "afterOutsidePx": 0
+      }
+    ]
+  },
+  "originalDiagnosis": {
+    "runId": 39195471176,
+    "passedMethods": 1,
+    "failedMethods": 2,
+    "samples": 32,
+    "relabelled": false
+  },
+  "independentProbe": {
+    "runId": 39383512446,
+    "samples": 54,
+    "disposals": 27,
+    "acceptance": false
+  },
+  "pagePreflights": {
+    "transportProbes": 15,
+    "serviceCases": 2,
+    "byteBufferReadChecks": 137,
+    "tuiProtocolCases": 6,
+    "defaultBottomRectangles": 14,
+    "generalEcho36SampleSuiteRun": false,
+    "provenance": "Original same-run API receipts/JSON; raw bottom and byte-buffer logs revalidated"
+  },
+  "changedProductionFiles": [
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalDisplayPolicy.kt",
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalRenderMode.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderControls.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptViewport.kt"
+  ],
+  "performance": {
+    "samples": 90,
+    "warmup": 18,
+    "formal": 72,
+    "disposals": 45,
+    "decisions": 12,
+    "allPredeclaredDecisionsPassed": true,
+    "interpretation": "Same-APK component experiment; not phone FPS or a full-page performance acceptance",
+    "completionMediansMs": [
+      {
+        "size": 1000,
+        "phase": "cold",
+        "mode": "chunkedLayers",
+        "completedMs": 128.0192935,
+        "commitSpanMs": 12.490755
+      },
+      {
+        "size": 1000,
+        "phase": "cold",
+        "mode": "tuiChunkedEager",
+        "completedMs": 130.335985,
+        "commitSpanMs": 11.9288615
+      },
+      {
+        "size": 1000,
+        "phase": "cold",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 109.835587,
+        "commitSpanMs": 12.1365385
+      },
+      {
+        "size": 1000,
+        "phase": "streamIme3",
+        "mode": "chunkedLayers",
+        "completedMs": 389.95698,
+        "commitSpanMs": 247.255962
+      },
+      {
+        "size": 1000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedEager",
+        "completedMs": 241.950531,
+        "commitSpanMs": 64.4523485
+      },
+      {
+        "size": 1000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 222.5246595,
+        "commitSpanMs": 70.775121
+      },
+      {
+        "size": 5000,
+        "phase": "cold",
+        "mode": "chunkedLayers",
+        "completedMs": 750.088459,
+        "commitSpanMs": 133.1464095
+      },
+      {
+        "size": 5000,
+        "phase": "cold",
+        "mode": "tuiChunkedEager",
+        "completedMs": 736.1759485,
+        "commitSpanMs": 137.513016
+      },
+      {
+        "size": 5000,
+        "phase": "cold",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 440.0718045,
+        "commitSpanMs": 157.030567
+      },
+      {
+        "size": 5000,
+        "phase": "streamIme3",
+        "mode": "chunkedLayers",
+        "completedMs": 4801.0579955,
+        "commitSpanMs": 4149.850622
+      },
+      {
+        "size": 5000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedEager",
+        "completedMs": 792.797819,
+        "commitSpanMs": 189.5864695
+      },
+      {
+        "size": 5000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 358.337828,
+        "commitSpanMs": 178.855936
+      },
+      {
+        "size": 10000,
+        "phase": "cold",
+        "mode": "chunkedLayers",
+        "completedMs": 2130.9998855,
+        "commitSpanMs": 475.8389055
+      },
+      {
+        "size": 10000,
+        "phase": "cold",
+        "mode": "tuiChunkedEager",
+        "completedMs": 2191.866354,
+        "commitSpanMs": 462.626666
+      },
+      {
+        "size": 10000,
+        "phase": "cold",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 969.9701075,
+        "commitSpanMs": 457.3779085
+      },
+      {
+        "size": 10000,
+        "phase": "streamIme3",
+        "mode": "chunkedLayers",
+        "completedMs": 18198.5670465,
+        "commitSpanMs": 16380.6652955
+      },
+      {
+        "size": 10000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedEager",
+        "completedMs": 1959.069022,
+        "commitSpanMs": 306.435792
+      },
+      {
+        "size": 10000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 567.5700555,
+        "commitSpanMs": 352.139872
+      }
+    ]
+  },
+  "page": {
+    "runId": 39436622755,
+    "methods": 2,
+    "passedMethods": 0,
+    "capturedBaselineRows": 32,
+    "actualNewHistory": 10000,
+    "expectedNoImeGridRows": 25,
+    "completePageAcceptance": false,
+    "uncompleted": [
+      "imeClosed",
+      "reentry",
+      "RAW-input-echo",
+      "cleanup-receipts"
+    ],
+    "causalConclusion": "Eager changed before IME; layered timing unresolved; no proof of a new production IME resize regression",
+    "partialRectangleCount": 4,
+    "partialOverlapCount": 2,
+    "error": "IME/reentry resized the PTY grid expected:<32> but was:<25>",
+    "source": "app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalTuiHistoryPageTest.kt:289",
+    "initialRowsByMode": {
+      "tuiChunkedEager": 25,
+      "tuiChunkedLayers": 32
+    },
+    "afterImeRowsByMode": {
+      "tuiChunkedEager": 25,
+      "tuiChunkedLayers": 25
+    }
+  },
+  "nextAuthorityRequired": true,
+  "proposedNextScope": "One explicitly authorized page-only convergence/resize-provenance correction and verification; no performance resampling or assertion relaxation",
+  "report": "benchmarks/results/2c1f1ef-terminal-long-history-blocked.md",
+  "reportSha256": "a6bb77956e54e0e05c0ddee61134df63ef6ae428a1a98e287ba7fd22ece46ef6",
+  "evidenceVerificationSha256": "8c329d3a69fd07dc54624176d174d5847e490ce88d1266bd0ccdc4a43a9990f3",
+  "deliveryEvidence": "terminal-long-history-2c1f1ef-blocked-evidence.tar.gz",
+  "documentHashes": {
+    "corrected-page-original/artifact-metadata.json": "67b318cb171513507bdaf9de11bf40a7d6e7ccb47a27d40500d68103b61f22fc",
+    "corrected-page-original/extraction.json": "b63687e047f018f5126606efe9bd7cd2b92bd0161a727273672614ee8fc10893",
+    "corrected-page-original/relay-receipt.json": "4cee4db35decf4dea1eb35103f319a6fe41edff23990a59d477df50aac16f093",
+    "corrected-page-original/terminal-pipeline/bottom-page.json": "abbcb41831bbb1c1475780e5608855e55b5f4ae0359c8c47f40a98af1c052f29",
+    "corrected-page-original/terminal-pipeline/device.json": "575f3cb2e632ab2c988d012db0fb235815a2a09a9257c5270c5b972cfc6c29ab",
+    "corrected-page-original/terminal-pipeline/instrumentation.log": "df3822ebd25934967a30f6f5d630dc6a8c0b80f416efd473f1c23627689c224d",
+    "corrected-page-original/terminal-pipeline/manifest.json": "c6493a1c0e7b47cc5f9210355add7415ec72da6c0a70e7d0ebaa7d55717a90d2",
+    "corrected-page-original/terminal-pipeline/pipeline-logcat.txt": "00a999b8c1cd87f4986ae601c5bac79412cb429a296cc35d1922f5b4114c415e",
+    "corrected-page-original/terminal-pipeline/tui-results.json": "4cba94af5adbb9bab286cd2dbf03c2a757ec7a719a1fb1486ae6d401f25e1375",
+    "corrected-page-original/terminal-pipeline/tuiHistoryPageChunkedKeyboardAndReentryDuringNativeOutput.log": "753fc40941e995000f4e0ec9da994c63241ca1cc1f1f76db7f94ef0eccfe3d01",
+    "corrected-page-original/terminal-pipeline/tuiHistoryPageLayersKeyboardAndReentryDuringNativeOutput.log": "00011225e92c29266e022d4e0dee1bcf20a6a3ae7300abdbc28200ec3e556e53",
+    "corrected-page-original/terminal-pipeline/window-focus.txt": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "evidence/corrected-negative-receipt.json": "bc4c7b4c6b4bee4ba1ee57acebfc681dac0ec3632e71a6fb8185ba87b3ce5389",
+    "evidence/corrected-negative-terminal-bottom-visibility.json": "2690e03472499e462698b53f8c61a3dded528990ad673cff5463b393b1ecc7be",
+    "evidence/corrected-page-receipt.json": "3d088410645eb15b6c866c6312fc81ca0e34c2359db66015027b1c7ef76c1123",
+    "evidence/corrected-page-terminal-tui-pty.json": "4cba94af5adbb9bab286cd2dbf03c2a757ec7a719a1fb1486ae6d401f25e1375",
+    "evidence/first-negative-failed-receipt.json": "cf279928690d25eeaf38b5a4912f7fcaa8492d17876b5801005aa368a74efa80",
+    "evidence/first-page-failed-receipt.json": "d2046d2e9b2ca01024c70e237a8d499c7644a5589192405956675fc50ceb614e",
+    "evidence/first-performance-receipt.json": "19904c613037d8ace5abcdc9a2065f6b4ff1c00ad3920b792611667bae54db7a",
+    "evidence/first-performance-terminal-tui-history-performance.json": "e1a9c13a5511a7c5c2b78351f885fe2cdbfbb589145eb80662a12c9353ac4962",
+    "evidence/first-unit-receipt.json": "fb6254e7e92a6fe61e7ffe272cbbc524f2d338a3b53ddf72d6640340456d7511",
+    "evidence/first-unit-terminal-byte-buffer.json": "8a3cd53754a3cd05a137cc9563b3819eafb343a619eb3645c83628645bb04113",
+    "evidence/first-unit-terminal-tui-parser.json": "a79bde439224b9165cceab28eecc95e39f5c29dde43322ea3fef97f4d15917d0",
+    "evidence/first-viewport-receipt.json": "078db1c378d7228aed56c5abf31dc1e3630c5f93f24137a0170497d1ea55a873",
+    "evidence/first-viewport-terminal-binding-projection.json": "969b4aec890537a5b340cb4eb8f3d2177ce1e0cbb139591690b25c21e988b09b",
+    "evidence/first-viewport-terminal-bottom-visibility.json": "4bf853ef070720d4e06b6fd92685b7a1b4c7eb43ed3c30b5871cccd4133714fb",
+    "evidence/first-viewport-terminal-chunk-views.json": "90616e0d58fcc2e6a8cc2f50ee0c1a7217242663635ff27d0b4f00651b0aa595",
+    "evidence/first-viewport-terminal-panel-subscription.json": "75f2bed6c10b25d85b5903b4bf4891018b7fcd605ff2d75b87ebee1402e5a0f2",
+    "evidence/first-viewport-terminal-render-snapshot.json": "cc5079b33bcd9cdb04934cfdbd793a5a20c80d83152523720874406e1e642d9d",
+    "evidence/first-viewport-terminal-row-width.json": "65fd03cbdb30d98a2b64958fa646d9b3d624827bd2bbe175a1f7ff2a54be84b5",
+    "evidence/first-viewport-terminal-scroll-completion.json": "6471010d53c9df5cd2c6d813d80061185395742ce5ff089c6dd58dd90cce09e3",
+    "evidence/first-viewport-terminal-text-metrics.json": "c1a1ee3d20c88c0689b02b94b34ed77ffbbd58ec59016f3c93c20cb96b43ffa9",
+    "evidence/first-viewport-terminal-tui-display.json": "d126434e8373ad17ca2f1e67c6083d75fe6ffefa64d9a6f7e2d79375a64f2cea",
+    "evidence/first-viewport-terminal-tui-history-viewport.json": "fd27704e7ea44dddf4cb0f0b56a3f2295eabc0c0bd96ec05870f9056f06ce1b2",
+    "probe-original/artifacts/terminal-long-history/grouping-probe.json": "445021ad4c79dd61d96f9979c153c0e7cf25b9374aaa13554259f50d0ca4b473"
+  },
+  "sourceVersionCount": 222
+}
