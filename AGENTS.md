@@ -128,6 +128,13 @@ IME回归。仅4部分矩形／2imeOpen输出重叠，重进／输入／清理�
 benchmarks/results/2c1f1ef-terminal-long-history-blocked.md，身份清单为同目录
 2c1f1ef-terminal-long-history-checkpoint.json。
 
+用户在该阻塞报告后明确要求“继续推进优化”，并继续确认推进。本次仅追加一次定向页面
+收敛／resize来源验收：以dd06a6b为文档基线、生产树仍71b1b14fde6b0bc3ec413b8024012060c404858b。
+允许修正新页面测试的初始网格收敛、查询真实内核尺寸、报告与必要CI接线；原断言／160tick
+负载／默认／KEYS／输入／生产核心不改。新增V2证据不能重标V1失败。运行两项新页面及原
+此前未到达的36回显页面套件；不重跑已通过性能／组件门禁，不自动再追加修正轮。只有
+追加页面验收通过才能继续既定Release；如指向生产问题，先说明因果和具体修复范围。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

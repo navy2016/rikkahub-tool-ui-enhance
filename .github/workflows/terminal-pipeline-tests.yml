@@ -6,7 +6,7 @@ on:
       suite:
         description: 'Full page samples, transport preflight, or same-device AB/BA experiment'
         type: choice
-        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, tuiHistory, tuiHistoryOnly, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
+        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, tuiHistory, tuiHistoryOnly, tuiHistoryCompletion, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
         default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'
@@ -159,7 +159,11 @@ jobs:
           node-version: '20'
       - uses: gradle/actions/setup-gradle@v4
       - name: Build pinned x86_64 fork-compatibility asset for test variant only
+        # Runtime compilation remains CI-only; no production runtime assets change.
         run: python3 .github/scripts/build-terminal-proot.py
+      - name: Bind explicitly added page-only convergence round to unchanged candidate production
+        if: ${{ inputs.suite == 'tuiHistoryCompletion' }}
+        run: python3 -B .github/scripts/terminal-tui-history-page-convergence.py
       - name: Validate diagnostics and build Release-derived full-page test pair
         run: |
           chmod +x gradlew
@@ -170,10 +174,16 @@ jobs:
         if: ${{ !inputs.checks_only }}
         run: |
           cd .github/scripts
-          python3 -B -m unittest test_terminal_pipeline test_terminal_pipeline_paired test_terminal_bundle_reports test_terminal_bundle_paired test_terminal_byte_buffer test_terminal_tui_bundle test_terminal_bottom_visibility test_terminal_tui_history
+          python3 -B -m unittest test_terminal_pipeline test_terminal_pipeline_paired test_terminal_bundle_reports test_terminal_bundle_paired test_terminal_byte_buffer test_terminal_tui_bundle test_terminal_bottom_visibility test_terminal_tui_history test_terminal_tui_page_convergence
       - name: Run actual page and native PTY with real keyboard on non-root KVM guest
         if: ${{ !inputs.checks_only }}
         run: python3 .github/scripts/run-terminal-pipeline.py emulator
+      - name: Publish bounded original v2 page evidence part one
+        if: ${{ success() && !inputs.checks_only && inputs.suite == 'tuiHistoryCompletion' }}
+        run: python3 -B .github/scripts/terminal-tui-history-page-convergence.py evidence --page 1
+      - name: Publish bounded original v2 page evidence part two
+        if: ${{ success() && !inputs.checks_only && inputs.suite == 'tuiHistoryCompletion' }}
+        run: python3 -B .github/scripts/terminal-tui-history-page-convergence.py evidence --page 2
       - name: Preserve exact source identities, samples and focused diagnostics
         if: always()
         uses: actions/upload-artifact@v4

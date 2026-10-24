@@ -189,3 +189,24 @@ Both authorized rounds are used. Report/source-bound checkpoint:
 `benchmarks/results/2c1f1ef-terminal-long-history-checkpoint.json`.
 Only documentation/evidence may continue. A further test-baseline convergence/resize-provenance round
 requires explicit new user authority; no threshold/row-assertion relaxation or performance rerun selection.
+
+### Explicitly authorized additional page convergence round
+
+After the blocked report, the user requested continuing optimization and confirmed continuation.
+This authorizes ONE scoped page-only correction/verification, not renewed performance sampling or
+unbounded acceptance retries. Production stays at tree71b1b14fde6b0bc3ec413b8024012060c404858b.
+
+V2 locks the initial PTY row baseline only after actual no-IME viewport/cell target, acknowledged
+model/snapshot dimensions and two different same-geometry terminal draws agree. Each later rectangle
+retains that row target; the original row/byte/history/cursor assertions remain. Five query-only peer
+commands per mode independently read `env -u LINES -u COLUMNS stty size`, outside160tick byte windows.
+The inherited24x80environment is not changed. Bounded ordered size receipt/pending/model observations
+cover mount, output, actual IME and detachment/reentry; they are observations, not exhaustive request
+creation trace or proof of absence between polls. No production trace hook or resize API is added.
+
+Independent `terminal-tui-history-page-convergence.py` preserves the V1 validator/source and rejects
+V1/mixed/partial reports. V2 requires10kernel replies,10actual final rectangles,6ongoing-output overlaps,
+complete exact-byte windows and page/session/capture cleanup. `tuiHistoryCompletion` runs these two
+methods then the previously unreached36echo/12convergence page suite in the same APK/guest. Previous
+preflights and fixed performance samples remain their original evidence. Release remains blocked
+until this additional round completes; a failure is retained, not relaxed or silently retried.

@@ -31,6 +31,7 @@ import me.rerere.rikkahub.data.container.PtyMode
 import me.rerere.rikkahub.data.container.TerminalPipelineTrace
 import me.rerere.rikkahub.data.container.TerminalPipelineStage
 import me.rerere.rikkahub.data.container.TerminalRenderMode
+import me.rerere.rikkahub.data.container.TerminalSizeReceipt
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -115,6 +116,11 @@ class TerminalTuiHistoryPageTest : KoinComponent {
                         worker=${'$'}!
                         ;;
                     ACK:*) printf '%s\r\n' "${'$'}command" ;;
+                    SIZE:*)
+                        token=${'$'}{command#SIZE:}
+                        kernel=${'$'}(env -u LINES -u COLUMNS stty size) || exit 11
+                        printf 'SIZE:%s:%s;ENV:%s %s\r\n' "${'$'}token" "${'$'}kernel" "${'$'}LINES" "${'$'}COLUMNS"
+                        ;;
                 esac
             done
         """.trimIndent()
@@ -123,6 +129,10 @@ class TerminalTuiHistoryPageTest : KoinComponent {
         val disposals = AtomicInteger()
         var processId: String? = null
         var recording: TerminalPipelineTrace.Capture? = null
+        var phaseLabel = "setup"
+        val resizeObservations = JSONArray()
+        val kernelReadings = JSONArray()
+        var lastGridReadiness: JSONObject? = null
         try {
             runBlocking {
                 val key = MessageDigest.getInstance("SHA-256").digest(command.toByteArray()).joinToString("") { "%02x".format(it) }
@@ -156,19 +166,43 @@ class TerminalTuiHistoryPageTest : KoinComponent {
             }
             fun received(marker: String) = manager.readInteractiveBuffer(id)?.contains(marker) == true
             fun send(value: String) = runBlocking { manager.sendInput(id, value).getOrThrow() }
-            compose.waitUntil(15_000) { received("READY\r\n") }
             val terminal = requireNotNull(manager.getInteractiveTerminalEmulator(id))
+            var previousSize: List<Any?>? = null
+            fun observeSize() {
+                val ack = requireNotNull(manager.interactiveSessionSize(id))
+                val model = synchronized(terminal) { listOf(terminal.columns, terminal.rows) }
+                val pending = manager.hasPendingTerminalResize(id)
+                if (manager.interactiveSessionSize(id) != ack) return // Do not publish a mixed receipt/model observation.
+                val sample = trace.viewport()
+                val signature = listOf(phaseLabel, mounted, ack.request, ack.columns, ack.rows,
+                    model[0], model[1], pending, sample?.viewport?.ime)
+                if (previousSize != signature) {
+                    check(resizeObservations.length() < 128) { "Resize observation inventory overflow" }
+                    val observation = JSONObject().put("mode", mode.id).put("phase", phaseLabel).put("timeNs", now())
+                        .put("request", ack.request).put("columns", ack.columns).put("rows", ack.rows)
+                        .put("modelColumns", model[0]).put("modelRows", model[1]).put("pending", pending)
+                        .put("mounted", mounted).put("ime", sample?.viewport?.ime ?: false)
+                        .put("draw", sample?.draw ?: 0).put("revision", sample?.viewport?.revision ?: -1)
+                    resizeObservations.put(observation)
+                    emit("TUI_HISTORY_PAGE_SIZE", observation)
+                    previousSize = signature
+                }
+            }
+            compose.waitUntil(15_000) { received("READY\r\n") }
+            phaseLabel = "mount"
             compose.runOnUiThread { mounted = true }
             Espresso.closeSoftKeyboard()
             // The page owns the history preference. A detached fresh session still has its
             // default limit; do not seed10k until the real page has applied the requested limit.
             compose.waitUntil(30_000) {
+                observeSize()
                 terminal.maxScrollbackLines() == 10000 && terminal.columns == 80 &&
                     trace.viewport()?.viewport?.let { it.initialized && !it.ime && it.sameFrame } == true &&
                     !manager.hasPendingTerminalResize(id)
             }
             send("SEED")
-            compose.waitUntil(30_000) { received("SEEDED\r\n") }
+            phaseLabel = "seed"
+            compose.waitUntil(30_000) { observeSize(); received("SEEDED\r\n") }
             assertEquals(10000, terminal.renderFrame().historyCount)
             fun ready(ime: Boolean): Boolean {
                 val p = trace.viewport()?.viewport ?: return false
@@ -176,55 +210,134 @@ class TerminalTuiHistoryPageTest : KoinComponent {
                     !p.virtual && !p.bindingVirtual && !p.alternate && p.pan && !p.selection && p.ime == ime &&
                     p.sameFrame && p.geometryReady && p.initialized && p.following && p.writers <= 1
             }
-            compose.waitUntil(30_000) { ready(false) && !manager.hasPendingTerminalResize(id) }
-            val physicalRows = terminal.rows
-            val sentinel = terminal.renderFrame().historyLineIds[5000]
             val rectangles = JSONArray()
-            fun rectangle(phase: String, ime: Boolean) {
+            fun rectangle(phase: String, ime: Boolean, preserved: TerminalSizeReceipt? = null): JSONObject {
+                phaseLabel = phase
                 var lastDraw = trace.viewport()?.draw ?: 0L
                 var lastRect: List<Any>? = null
                 var confirmations = 0
+                var firstStableDraw = 0L
                 var accepted: JSONObject? = null
                 compose.waitUntil(30_000) {
+                    observeSize()
                     val sample = trace.viewport() ?: return@waitUntil false
                     val p = sample.viewport
                     if (sample.draw <= lastDraw || !ready(ime) || p.writers != 0 || p.effectId != null ||
                         p.gestureId != null || p.scrolling || !p.tailSatisfied || manager.hasPendingTerminalResize(id)) {
+                        if (sample.draw > lastDraw) { confirmations = 0; lastRect = null; lastDraw = sample.draw }
                         compose.runOnUiThread { trace.requestViewportDraw() }
                         return@waitUntil false
                     }
                     lastDraw = sample.draw
                     val frame = terminal.renderFrame()
-                    if (p.revision != frame.revision) return@waitUntil false
+                    if (p.revision != frame.revision) {
+                        confirmations = 0
+                        lastRect = null
+                        compose.runOnUiThread { trace.requestViewportDraw() }
+                        return@waitUntil false
+                    }
                     assertTrue(frame.cursorVisible)
                     val expected = frame.rows[frame.historyCount + frame.cursorRow].text
                     assertTrue("Expected completed blank input cursor", expected.text.isBlank())
                     val row = compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.Text, listOf(expected)), true)
                         .fetchSemanticsNodes().single()
                     val view = compose.onNodeWithTag("terminal-trace-output").fetchSemanticsNode()
+                    val cellHeight = terminal.cellPixelSize().second
+                    assertTrue(cellHeight > 0)
+                    val measuredRows = (view.size.height / cellHeight).coerceIn(6, 80)
+                    val desiredRows = preserved?.rows ?: measuredRows
+                    val ack = requireNotNull(manager.interactiveSessionSize(id))
+                    val snapshot = requireNotNull(manager.readInteractiveOutput(id, mode = "tail", limitBytes = 1,
+                        renderTerminal = true))
+                    lastGridReadiness = JSONObject().put("phase", phase).put("ime", ime).put("draw", sample.draw)
+                        .put("request", ack.request).put("rows", terminal.rows).put("ackRows", ack.rows)
+                        .put("desiredRows", desiredRows).put("measuredRows", measuredRows).put("viewport", view.size.height)
+                        .put("cellHeight", cellHeight).put("pending", manager.hasPendingTerminalResize(id))
+                    // Submitted-request idleness alone misses the UI's not-yet-submitted mount
+                    // debounce. Match the ACTUAL target grid and its acknowledged model first.
+                    if (terminal.rows != desiredRows || ack.rows != desiredRows || terminal.columns != 80 || ack.columns != 80 ||
+                        snapshot.terminalRows != desiredRows || snapshot.terminalColumns != 80 ||
+                        manager.hasPendingTerminalResize(id) ||
+                        manager.interactiveSessionSize(id) != ack || terminal.revision() != frame.revision) {
+                        confirmations = 0
+                        lastRect = null
+                        compose.runOnUiThread { trace.requestViewportDraw() }
+                        return@waitUntil false
+                    }
                     val top = row.positionInRoot.y - view.positionInRoot.y
                     val bottom = top + row.size.height
                     assertTrue("Actual cursor clipped in $phase", top >= -1 && bottom <= view.size.height + 1)
-                    val signature = listOf(frame.revision, top, bottom, row.size.height, view.size.height)
+                    val signature = listOf(frame.revision, top, bottom, row.size.height, view.size.height,
+                        cellHeight, desiredRows, terminal.rows, terminal.columns, ack.request)
                     confirmations = if (lastRect == signature) confirmations + 1 else 1
+                    if (confirmations == 1) firstStableDraw = sample.draw
                     lastRect = signature
                     accepted = JSONObject().put("mode", mode.id).put("phase", phase).put("ime", ime)
                         .put("top", top.toDouble()).put("bottom", bottom.toDouble()).put("rowHeight", row.size.height)
                         .put("viewport", view.size.height).put("historyRows", frame.historyCount)
                         .put("rows", terminal.rows).put("draw", sample.draw).put("revision", frame.revision)
+                        .put("columns", terminal.columns).put("request", ack.request).put("timeNs", now())
+                        .put("desiredRows", desiredRows).put("measuredRows", measuredRows).put("cellHeight", cellHeight)
+                        .put("gridSource", if (preserved == null) "measured" else "preserved")
+                        .put("pendingResize", false).put("ackRows", ack.rows).put("ackColumns", ack.columns)
+                        .put("snapshotRows", snapshot.terminalRows).put("snapshotColumns", snapshot.terminalColumns)
+                        .put("firstStableDraw", firstStableDraw)
                         .put("confirmations", confirmations)
                     if (confirmations < 2) compose.runOnUiThread { trace.requestViewportDraw() }
                     confirmations >= 2
                 }
                 rectangles.put(requireNotNull(accepted))
                 emit("TUI_HISTORY_PAGE_RECT", requireNotNull(accepted))
+                return requireNotNull(accepted)
             }
-            rectangle("initial", false)
+            val initial = rectangle("initial", false)
+            // Freeze only AFTER target-grid convergence and two actual same-source draws.
+            val baseline = TerminalSizeReceipt(initial.getLong("request"), initial.getInt("columns"), initial.getInt("rows"))
+            val physicalRows = baseline.rows
+            val sentinel = terminal.renderFrame().historyLineIds[5000]
+            fun kernelSize(phase: String, ime: Boolean) {
+                val before = requireNotNull(manager.interactiveSessionSize(id))
+                assertEquals("Applied rows changed after the measured baseline", physicalRows, before.rows)
+                assertEquals(80, before.columns)
+                val began = now()
+                val response = Regex("(?m)^SIZE:$phase:(\\d+) (\\d+);ENV:(\\d+) (\\d+)\\r?\\n")
+                send("SIZE:$phase")
+                compose.waitUntil(15_000) { observeSize(); response.containsMatchIn(manager.readInteractiveBuffer(id).orEmpty()) }
+                val match = requireNotNull(response.find(manager.readInteractiveBuffer(id).orEmpty()))
+                val actualRows = match.groupValues[1].toInt()
+                val actualColumns = match.groupValues[2].toInt()
+                val snapshot = requireNotNull(manager.readInteractiveOutput(id, mode = "tail", limitBytes = 1, renderTerminal = true))
+                val after = requireNotNull(manager.interactiveSessionSize(id))
+                val reading = JSONObject().put("mode", mode.id).put("phase", phase).put("ime", ime)
+                    .put("beforeNs", began).put("afterNs", now()).put("request", after.request)
+                    .put("beforeRequest", before.request).put("reply", match.value)
+                    .put("rows", actualRows).put("columns", actualColumns).put("modelRows", terminal.rows)
+                    .put("modelColumns", terminal.columns).put("snapshotRows", snapshot.terminalRows)
+                    .put("snapshotColumns", snapshot.terminalColumns).put("envRows", match.groupValues[3].toInt())
+                    .put("envColumns", match.groupValues[4].toInt()).put("pendingResize", manager.hasPendingTerminalResize(id))
+                kernelReadings.put(reading)
+                emit("TUI_HISTORY_PAGE_KERNEL", reading)
+                assertEquals("Kernel rows differ from measured baseline", physicalRows, actualRows)
+                assertEquals(80, actualColumns)
+                assertEquals("Size changed during the independent kernel query", before, after)
+                assertEquals(physicalRows, snapshot.terminalRows)
+                assertEquals(80, snapshot.terminalColumns)
+                assertEquals("Inherited session environment must not change", 24, reading.getInt("envRows"))
+                assertEquals(80, reading.getInt("envColumns"))
+                compose.waitUntil(15_000) {
+                    observeSize()
+                    ready(ime) && trace.viewport()!!.viewport.revision == terminal.revision() &&
+                        !manager.hasPendingTerminalResize(id)
+                }
+            }
+            kernelSize("initial", false)
             val input = compose.onNode(hasSetTextAction()).fetchSemanticsNode()
             val inputBounds = input.boundsInWindow
             val overlaps = JSONArray()
             val outputWindows = JSONArray()
             for ((phase, ime) in listOf("imeOpen" to true, "imeClosed" to false, "reentry" to false)) {
+                phaseLabel = phase
+                observeSize()
                 trace.beginWindow()
                 var windows = 0
                 var readBytes = 0L
@@ -243,6 +356,7 @@ class TerminalTuiHistoryPageTest : KoinComponent {
                 }
                 val ticks = Regex("LIVE:$phase:(\\d{3})")
                 fun tick(): Int {
+                    observeSize()
                     drainTrace()
                     return ticks.findAll(manager.readInteractiveBuffer(id).orEmpty()).lastOrNull()?.groupValues?.get(1)?.toInt() ?: -1
                 }
@@ -251,6 +365,7 @@ class TerminalTuiHistoryPageTest : KoinComponent {
                 val beforeTick = tick()
                 val beforeDraw = trace.viewport()!!.draw
                 val beforeRevision = trace.viewport()!!.viewport.revision
+                val beforeSize = requireNotNull(manager.interactiveSessionSize(id))
                 val began = now()
                 var detachedTicks = 0
                 when (phase) {
@@ -259,7 +374,7 @@ class TerminalTuiHistoryPageTest : KoinComponent {
                     "reentry" -> {
                         val oldDisposals = disposals.get()
                         compose.runOnUiThread { mounted = false }
-                        compose.waitUntil(10_000) { disposals.get() > oldDisposals }
+                        compose.waitUntil(10_000) { observeSize(); disposals.get() > oldDisposals }
                         val firstDetached = tick()
                         compose.waitUntil(10_000) { tick() >= firstDetached + 3 }
                         detachedTicks = tick() - firstDetached
@@ -269,9 +384,12 @@ class TerminalTuiHistoryPageTest : KoinComponent {
                 // No global-idle or semantics traversal while the producer is active. Require
                 // a NEW matching draw and MORE native output before the finite DONE marker.
                 compose.waitUntil(30_000) {
+                    observeSize()
                     drainTrace()
                     ready(ime) && trace.viewport()!!.draw > beforeDraw &&
-                        trace.viewport()!!.viewport.revision > beforeRevision && tick() > beforeTick
+                        trace.viewport()!!.viewport.revision > beforeRevision && tick() > beforeTick &&
+                        terminal.rows == physicalRows && manager.interactiveSessionSize(id)?.rows == physicalRows &&
+                        !manager.hasPendingTerminalResize(id)
                 }
                 val afterTick = tick()
                 assertFalse("Interaction happened after output ended", received("DONE:$phase\r\n"))
@@ -280,11 +398,13 @@ class TerminalTuiHistoryPageTest : KoinComponent {
                     .put("beforeTick", beforeTick).put("afterTick", afterTick).put("detachedTicks", detachedTicks)
                     .put("elapsedNs", now() - began).put("beforeDraw", beforeDraw).put("afterDraw", trace.viewport()!!.draw)
                     .put("beforeRevision", beforeRevision).put("afterRevision", trace.viewport()!!.viewport.revision)
+                    .put("beforeRequest", beforeSize.request).put("afterRequest", manager.interactiveSessionSize(id)!!.request)
+                    .put("beforeRows", beforeSize.rows).put("afterRows", terminal.rows)
                     .put("producerStillRunning", true).put("historyRows", terminal.renderFrame().historyCount)
                 overlaps.put(overlap)
                 emit("TUI_HISTORY_PAGE_OVERLAP", overlap)
-                compose.waitUntil(45_000) { drainTrace(); received("DONE:$phase\r\n") }
-                rectangle(phase, ime)
+                compose.waitUntil(45_000) { observeSize(); drainTrace(); received("DONE:$phase\r\n") }
+                rectangle(phase, ime, baseline)
                 drainTrace()
                 assertEquals("IME/reentry resized the PTY grid", physicalRows, terminal.rows)
                 assertTrue("Surviving archived history vanished", sentinel in terminal.renderFrame().historyLineIds)
@@ -296,23 +416,31 @@ class TerminalTuiHistoryPageTest : KoinComponent {
                 assertTrue(published > 0 && drawn > 0)
                 outputWindows.put(JSONObject().put("phase", phase).put("windows", windows).put("readBytes", readBytes)
                     .put("fedBytes", fedBytes).put("expectedBytes", expectedBytes).put("published", published).put("drawn", drawn))
+                // Query-only peer lines are OUTSIDE the exact160tick burst byte window.
+                kernelSize(phase, ime)
             }
             // Verify the actual RAW UI bridge still submits a complete line through native PTY.
+            phaseLabel = "input"
             val field = compose.onNode(hasSetTextAction()).fetchSemanticsNode()
             val setText = requireNotNull(field.config[SemanticsActions.SetText].action)
             val submit = requireNotNull(field.config[SemanticsActions.OnImeAction].action)
             compose.runOnUiThread { assertTrue(setText(AnnotatedString("ACK:bridge"))); assertTrue(submit()) }
             compose.waitUntil(15_000) { received("ACK:bridge\r\n") }
-            rectangle("input", false)
-            emit("TUI_HISTORY_PAGE", JSONObject().put("suite", "terminal-tui-history-page-v1").put("mode", mode.id)
+            rectangle("input", false, baseline)
+            kernelSize("input", false)
+            emit("TUI_HISTORY_PAGE", JSONObject().put("suite", "terminal-tui-history-page-v2").put("mode", mode.id)
                 .put("nativePty", true).put("rawInput", true).put("ptyMode", "raw").put("peerInputDiscipline", "canonical-test-peer")
                 .put("statusAndKeys", true).put("historyRows", 10000).put("physicalRows", physicalRows)
                 .put("rectangles", rectangles).put("overlaps", overlaps).put("outputWindows", outputWindows).put("inputEcho", "ACK:bridge")
                 .put("survivingHistoryRetained", true).put("traceDropped", 0)
+                .put("baselineRequest", baseline.request).put("kernelReadings", kernelReadings)
+                .put("resizeObservations", resizeObservations).put("gridContract", "measured-target-ack-kernel-v1")
                 .put("disposalsBeforeCleanup", disposals.get()))
         } catch (error: Throwable) {
             val p = recording?.viewport()
             emit("TUI_HISTORY_PAGE_FAILURE", JSONObject().put("mode", mode.id).put("message", error.toString().take(500))
+                .put("phase", phaseLabel).put("grid", lastGridReadiness).put("kernelReadings", kernelReadings)
+                .put("resizeObservations", resizeObservations)
                 .put("draw", p?.draw).put("viewport", p?.viewport?.toString()).put("disposed", disposals.get()))
             throw error
         } finally {

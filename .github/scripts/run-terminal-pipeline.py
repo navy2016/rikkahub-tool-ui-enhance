@@ -43,6 +43,10 @@ _history_spec = importlib.util.spec_from_file_location('terminal_tui_history_rep
     Path(__file__).with_name('terminal-tui-history-reports.py'))
 history_reports = importlib.util.module_from_spec(_history_spec)
 _history_spec.loader.exec_module(history_reports)
+_convergence_spec = importlib.util.spec_from_file_location('terminal_tui_page_convergence',
+    Path(__file__).with_name('terminal-tui-history-page-convergence.py'))
+convergence_reports = importlib.util.module_from_spec(_convergence_spec)
+_convergence_spec.loader.exec_module(convergence_reports)
 
 
 def notice(level, title, message):
@@ -109,6 +113,7 @@ def sources():
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalBottomVisibilityPageTest.kt',
         'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalTuiHistoryPageTest.kt',
         '.github/scripts/terminal-tui-history-reports.py',
+        '.github/scripts/terminal-tui-history-page-convergence.py',
         '.github/scripts/terminal-bottom-visibility-reports.py',
         'app/src/main/cpp/rikkahub_pty.cpp', 'app/build.gradle.kts',
         'app/src/terminaltest/AndroidManifest.xml',
@@ -365,12 +370,14 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     if failed:
         raise ValueError('; '.join(failed))
     if tui_history:
-        results = history_reports.validate_page('\n'.join(logs))
-        report = dict(suite='terminal-tui-history-page-v1', sourceSha=manifest['sourceSha'], runId=manifest['runId'],
+        guard = convergence_reports.source_guard()
+        results = convergence_reports.validate_page('\n'.join(logs))
+        report = dict(suite=convergence_reports.SUITE, sourceSha=manifest['sourceSha'], runId=manifest['runId'],
             manifest=manifest, device=device, installedApkHashes=installed_hashes, **results,
+            sourceGuard=guard,
             note='Real page/native PTY/actual IME:10k retained history, finite160tick producers, new draws before DONE; '
                  'synthetic canonical test peer inside RAW session/UI, not real Pi or phone performance.')
-        history_reports.publish('Terminal TUI history page', report, OUT / 'tui-history-page.json')
+        history_reports.publish('Terminal TUI history page v2', report, OUT / 'tui-history-page-v2.json', emit_compact=False)
         return report
     if bottom:
         cases = bottom_reports.validate_page('\n'.join(logs))
@@ -527,6 +534,16 @@ def emulator(operation=None):
             output(['adb', 'shell', 'input', 'keyevent', '82'])
             if operation is not None:
                 operation()
+            elif os.environ.get('TERMINAL_PIPELINE_SUITE') == 'tuiHistoryCompletion':
+                # One explicitly added page-only round: finish new-mode correctness, then the
+                # previously unreached36echo page suite. Never resample component performance.
+                import shutil
+                run('tuiHistoryOnly')
+                history_preflight = OUT / 'tui-history-v2-completion'
+                history_preflight.mkdir(exist_ok=False)
+                for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
+                    shutil.copyfile(OUT / name, history_preflight / name)
+                run('pipeline')
             elif os.environ.get('TERMINAL_PIPELINE_SUITE') in ('all', 'tuiBundle', 'bottomVisibility', 'tuiHistory'):
                 run('transport')
                 # Keep the successful preflight's logs; the page run has independent lifecycle,
