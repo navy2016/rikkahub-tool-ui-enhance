@@ -1,0 +1,240 @@
+{
+  "suite": "terminal-long-history-accepted-v1",
+  "sourceSha": "212b93e04980b1087118007bd59da010a15435d8",
+  "productionTree": "71b1b14fde6b0bc3ec413b8024012060c404858b",
+  "baselineSha": "7218dd7e50577bc6fa94575aa476b2a436c71f61",
+  "candidateSourceSha": "5eecb476370f22e6474f8f54e3bbf5ee5c898363",
+  "priorBlockedSha": "2c1f1efa9660d0601ee1d6db65565694858b624d",
+  "status": "cloud-accepted-physical-retest-pending",
+  "releaseBlocked": false,
+  "originalCandidateRoundsUsed": 2,
+  "explicitlyAddedPageRoundsUsed": 1,
+  "extraRetryStarted": false,
+  "releaseRun": 40066315546,
+  "verifyRun": 40068292208,
+  "pageRun": 40062879915,
+  "unitCases": 473,
+  "viewportCases": 173,
+  "componentRectangles": 31,
+  "componentStreams": 6,
+  "fallbackTransitions": 10,
+  "page": {
+    "sourceSha": "212b93e04980b1087118007bd59da010a15435d8",
+    "runId": 40062879915,
+    "methods": 2,
+    "rectangles": 10,
+    "kernelReplies": 10,
+    "ongoingOutputOverlaps": 6,
+    "physicalRows": 25,
+    "physicalColumns": 80,
+    "sizeObservations": 24,
+    "byteWindows": 6,
+    "inputEchoes": 2,
+    "cleanupReceipts": 2,
+    "echoSamples": 36,
+    "settlements": 12,
+    "causalScope": "Both this run converge32->25 before keyboard; old failed run remains failed"
+  },
+  "physicalPerformanceVerified": false,
+  "localApkDownloaded": false,
+  "oldFailuresPreserved": true,
+  "changedProductionFiles": [
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalDisplayPolicy.kt",
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalRenderMode.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalRenderControls.kt",
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalTranscriptViewport.kt"
+  ],
+  "performance": {
+    "sourceSha": "5eecb476370f22e6474f8f54e3bbf5ee5c898363",
+    "runId": 39413082782,
+    "samples": 90,
+    "warmup": 18,
+    "formal": 72,
+    "resampled": false,
+    "decisionsPassed": 12,
+    "interpretation": "Component scopes, not phone FPS",
+    "completionMediansMs": [
+      {
+        "size": 1000,
+        "phase": "cold",
+        "mode": "chunkedLayers",
+        "completedMs": 128.0192935,
+        "commitMs": 12.490755
+      },
+      {
+        "size": 1000,
+        "phase": "cold",
+        "mode": "tuiChunkedEager",
+        "completedMs": 130.335985,
+        "commitMs": 11.9288615
+      },
+      {
+        "size": 1000,
+        "phase": "cold",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 109.835587,
+        "commitMs": 12.1365385
+      },
+      {
+        "size": 1000,
+        "phase": "streamIme3",
+        "mode": "chunkedLayers",
+        "completedMs": 389.95698,
+        "commitMs": 247.255962
+      },
+      {
+        "size": 1000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedEager",
+        "completedMs": 241.950531,
+        "commitMs": 64.4523485
+      },
+      {
+        "size": 1000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 222.5246595,
+        "commitMs": 70.775121
+      },
+      {
+        "size": 5000,
+        "phase": "cold",
+        "mode": "chunkedLayers",
+        "completedMs": 750.088459,
+        "commitMs": 133.1464095
+      },
+      {
+        "size": 5000,
+        "phase": "cold",
+        "mode": "tuiChunkedEager",
+        "completedMs": 736.1759485,
+        "commitMs": 137.513016
+      },
+      {
+        "size": 5000,
+        "phase": "cold",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 440.0718045,
+        "commitMs": 157.030567
+      },
+      {
+        "size": 5000,
+        "phase": "streamIme3",
+        "mode": "chunkedLayers",
+        "completedMs": 4801.0579955,
+        "commitMs": 4149.850622
+      },
+      {
+        "size": 5000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedEager",
+        "completedMs": 792.797819,
+        "commitMs": 189.5864695
+      },
+      {
+        "size": 5000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 358.337828,
+        "commitMs": 178.855936
+      },
+      {
+        "size": 10000,
+        "phase": "cold",
+        "mode": "chunkedLayers",
+        "completedMs": 2130.9998855,
+        "commitMs": 475.8389055
+      },
+      {
+        "size": 10000,
+        "phase": "cold",
+        "mode": "tuiChunkedEager",
+        "completedMs": 2191.866354,
+        "commitMs": 462.626666
+      },
+      {
+        "size": 10000,
+        "phase": "cold",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 969.9701075,
+        "commitMs": 457.3779085
+      },
+      {
+        "size": 10000,
+        "phase": "streamIme3",
+        "mode": "chunkedLayers",
+        "completedMs": 18198.5670465,
+        "commitMs": 16380.6652955
+      },
+      {
+        "size": 10000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedEager",
+        "completedMs": 1959.069022,
+        "commitMs": 306.435792
+      },
+      {
+        "size": 10000,
+        "phase": "streamIme3",
+        "mode": "tuiChunkedLayers",
+        "completedMs": 567.5700555,
+        "commitMs": 352.139872
+      }
+    ]
+  },
+  "release": {
+    "apk": {
+      "source_sha": "212b93e04980b1087118007bd59da010a15435d8",
+      "release_run_id": "40066315546",
+      "apk": "app-release.apk",
+      "bytes": 83733567,
+      "sha256": "7c5c3904ec355eb190b88ebbc4a2f2b260a76748661094658428b4f40a6700a1",
+      "package": "me.rerere.rikkahub.dev.next.mod",
+      "version_code": "151",
+      "version_name": "2.1.62",
+      "debuggable": false,
+      "native_abis": [
+        "arm64-v8a"
+      ],
+      "signer_certificate_sha256": [
+        "f136fff34c01d34edd2f625e77df5d408f6e09431b2e46e6d58cc5654a722265"
+      ],
+      "signature_verified": true,
+      "zip_verified": true
+    },
+    "artifact": {
+      "id": 12549283168,
+      "name": "rikkahub-release-212b93e04980b1087118007bd59da010a15435d8",
+      "size_in_bytes": 81473142,
+      "digest": "sha256:ef6087f98ce0d0ca2405530034ce2382adac9181e952cc67dca3c47500caa377",
+      "expired": false
+    },
+    "referenceRun": 39094656675,
+    "referenceSha": "bff4a51f762d33ac9164b4139f0a64d34a902283",
+    "allAndroidVersionMetadataEqual": true,
+    "nativeBitsEqual": true,
+    "webBuildSourceUnchanged": true,
+    "webArtifactsByteEqual": false,
+    "webReproducibilityCaveat": "Existing npm install does not consume bun.lock; actual npm dependency/build identity was not pinned by this terminal task",
+    "comparison": {
+      "same_signer": true,
+      "same_manifest_identity": true,
+      "dependency_version_changes": {},
+      "same_font_content_multiset": true,
+      "changed_entry_counts": {
+        "metadata": 1,
+        "assets": 2,
+        "dex": 2,
+        "web": 17
+      }
+    }
+  },
+  "report": "benchmarks/results/212b93e-terminal-long-history-acceptance.md",
+  "reportSha256": "8129ee38b62a9f2e9ea64d2b49d918d8432cc344611469dfc8354ad3af1f48db",
+  "verificationSha256": "2a0d9b574980c5ec007bd9d8a0b86249a7682ed3108a13796900f88be8a405c5",
+  "evidenceFile": "terminal-long-history-212b93e-evidence.tar.gz",
+  "sourceVersions": 313,
+  "previousCheckpointPreserved": "2c1f1ef-terminal-long-history-blocked",
+  "nextTestRoundAuthorized": false
+}

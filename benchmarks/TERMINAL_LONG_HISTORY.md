@@ -210,3 +210,18 @@ complete exact-byte windows and page/session/capture cleanup. `tuiHistoryComplet
 methods then the previously unreached36echo/12convergence page suite in the same APK/guest. Previous
 preflights and fixed performance samples remain their original evidence. Release remains blocked
 until this additional round completes; a failure is retained, not relaxed or silently retried.
+
+### Added round and Release completed
+
+`212b93e04980b1087118007bd59da010a15435d8`/40062879915 completed both V2 methods:
+10rectangles/10independent kernel replies/6output overlaps/6exact-byte windows/2RAW echoes/2cleanups,
+followed by36original page echoes and12convergence receipts. Both modes show initial request1:32rows
+to request2:25rows BEFORE baseline freeze; request2:25x80 remains through actual IME/reentry/input.
+Original V1 remains failed. Performance samples were not resampled; production tree unchanged.
+
+Formal Release40066315546 and independent verification40068292208 passed, with arm64-only,
+version2.1.62/151. Signer/manifest/fonts/Android version metadata/native bits matchbff4a51. DEX,
+baseline profiles and17Web generated entries differ. Existing npm install does not consumebun.lock;
+this task does not certify actual npm dependency resolution or Web reproducibility. No APK downloaded.
+Acceptance report/manifest:benchmarks/results/212b93e-terminal-long-history-acceptance.md and
+212b93e-terminal-long-history-acceptance.json. Cloud acceptance is complete, new phone retest pending.

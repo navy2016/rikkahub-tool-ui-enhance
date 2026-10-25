@@ -135,6 +135,16 @@ benchmarks/results/2c1f1ef-terminal-long-history-blocked.md，身份清单为同
 此前未到达的36回显页面套件；不重跑已通过性能／组件门禁，不自动再追加修正轮。只有
 追加页面验收通过才能继续既定Release；如指向生产问题，先说明因果和具体修复范围。
 
+该显式追加轮已完成：212b93e／40062879915通过2页面、10实际矩形／10内核查询／6持续
+输出重叠／6精确字节窗口／2输入与2清理、36回显／12收敛；两模式无IME32→25收敛后
+request2保持25×80。仅测试／报告／CI修正，生产树仍71b1b14fde6b0bc3ec413b8024012060c404858b。
+Release40066315546、独立校验40068292208成功，arm64／2.1.62／151，签名／native／字体／
+Android版本元数据同bff4a51。DEX／baseline profile及Web生成产物不同；原npm install构建
+不读取bun.lock，不能称Web可重复或全部依赖相同。本轮未下载APK，性能实机待验。报告及
+验收清单见benchmarks/results/212b93e-terminal-long-history-acceptance.md及对应acceptance.json。
+新RENDER选项只显式选择，默认及KEYS不变；推荐TUI分块图层优先实测。不再自动验收
+或扩展范围，原2c1f1ef阻塞报告／原失败保持；不重做被否定的行作用域方案。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
