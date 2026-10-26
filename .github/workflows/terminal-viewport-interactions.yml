@@ -6,7 +6,7 @@ on:
       suite:
         description: 'all, fresh default, publication regressions, or lint/Release type checking without tests'
         type: choice
-        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, tuiDisplay, bottomVisibility, bottomControl, tuiHistory, longHistoryDiagnostic, longHistoryProbe, longHistoryPerformance, staticChecks]
+        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, tuiDisplay, bottomVisibility, bottomControl, tuiHistory, fullVirtual, longHistoryDiagnostic, longHistoryProbe, longHistoryPerformance, staticChecks]
         default: all
       production_sha:
         description: 'Optional exact archived production SHA for defaultBottom only; tests remain from this ref'
@@ -64,7 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'tuiDisplay' && '["tuiDisplay"]' || inputs.suite == 'bottomVisibility' && '["bottomVisibility"]' || inputs.suite == 'bottomControl' && '["bottomControl"]' || inputs.suite == 'tuiHistory' && '["tuiHistory"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle","tuiDisplay","bottomVisibility","tuiHistory"]') }}
+        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'tuiDisplay' && '["tuiDisplay"]' || inputs.suite == 'bottomVisibility' && '["bottomVisibility"]' || inputs.suite == 'bottomControl' && '["bottomControl"]' || inputs.suite == 'tuiHistory' && '["tuiHistory"]' || inputs.suite == 'fullVirtual' && '["fullVirtual"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle","tuiDisplay","bottomVisibility","tuiHistory","fullVirtual"]') }}
     env:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
       TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
@@ -180,6 +180,13 @@ jobs:
       - name: Require every case assigned to this shard
         if: ${{ always() && matrix.group != 'staticChecks' }}
         run: |
+          if [ "$TERMINAL_VIEWPORT_GROUP" = fullVirtual ]; then
+            python3 .github/scripts/report-terminal-tests.py \
+              benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalFullVirtualInstrumentedTest \
+              --require-case-group 'fullVirtual:7'
+            exit $?
+          fi
           if [ "$TERMINAL_VIEWPORT_GROUP" = bottomControl ]; then
             python3 .github/scripts/report-terminal-tests.py \
               benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
@@ -365,7 +372,19 @@ jobs:
           fi
       - name: Require TUI grouping streams rectangles and fallback receipts
         if: ${{ always() && matrix.group == 'tuiHistory' }}
-        run: python3 -B .github/scripts/terminal-tui-history-reports.py viewport
+        run: python3 -B .github/scripts/terminal-full-virtual-reports.py oldViewport
+      - name: Require full virtual scenes clipboard disposal and fixed paired performance
+        if: ${{ always() && matrix.group == 'fullVirtual' }}
+        run: python3 -B .github/scripts/terminal-full-virtual-reports.py viewport
+      - name: Publish bounded full virtual original evidence part one
+        if: ${{ always() && matrix.group == 'fullVirtual' && hashFiles('artifacts/terminal-validation/full-virtual.json') != '' }}
+        run: python3 -B .github/scripts/terminal-full-virtual-reports.py evidence --page 1
+      - name: Publish bounded full virtual original evidence part two
+        if: ${{ always() && matrix.group == 'fullVirtual' && hashFiles('artifacts/terminal-validation/full-virtual.json') != '' }}
+        run: python3 -B .github/scripts/terminal-full-virtual-reports.py evidence --page 2
+      - name: Publish original old mode regression evidence
+        if: ${{ success() && matrix.group == 'tuiHistory' }}
+        run: python3 -B .github/scripts/terminal-full-virtual-reports.py evidence --report tui-history-regression --page 1
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4

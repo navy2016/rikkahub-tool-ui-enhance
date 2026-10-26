@@ -105,7 +105,7 @@ class TerminalUiSourceTest {
             File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt"),
             File("src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt"),
         ).first { it.isFile }.readText()
-        assertTrue(processSessionSource.contains("val wantsVirtualHistory = appliedTerminalRenderMode.isVirtualHistory"))
+        assertTrue(processSessionSource.contains("val wantsVirtualHistory = appliedTerminalRenderMode.isFullVirtual || (appliedTerminalRenderMode.isVirtualHistory"))
         assertTrue(processSessionSource.contains("virtualHistoryPolicy.allows(terminalHistoryChunkPlan.isNotEmpty(), terminalPanMode, selectionMode,"))
         assertTrue(processSessionSource.contains("currentUsesTuiViewport, imeVisible, shouldAvoidIme)"))
         assertTrue(processSessionSource.contains("TerminalLazyItemMeasurements"))
@@ -117,7 +117,8 @@ class TerminalUiSourceTest {
         assertTrue(processSessionSource.contains("val renderSnapshot = publishedRenderSnapshot"))
         assertTrue(processSessionSource.contains("rows = renderSnapshot.rows,"))
         assertTrue(lazyMeasurementsSource.contains("metricKey"))
-        assertTrue(lazyMeasurementsSource.contains("it.text == frame.rows[index].text"))
+        assertTrue(lazyMeasurementsSource.contains("if (displayed != null && index >= frame.historyCount) displayed[index].text else frame.rows[index].text"))
+        assertTrue(lazyMeasurementsSource.contains("it.metricKey == pass.metricKey && it.text == text && it.pixels > 0"))
         assertTrue(lazyMeasurementsSource.contains("heights[lineId]?.owner === owner"))
         assertTrue(lazyMeasurementsSource.contains("ModifierNodeElement<RowMeasurementNode>"))
         assertTrue(lazyMeasurementsSource.contains("override fun onDetach()"))

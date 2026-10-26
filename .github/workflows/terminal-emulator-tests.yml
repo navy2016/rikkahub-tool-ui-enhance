@@ -177,6 +177,7 @@ jobs:
             --tests me.rerere.rikkahub.data.container.TerminalConsistencyBundleTest \
             --tests me.rerere.rikkahub.data.container.TerminalDisplayPolicyTest \
             --tests me.rerere.rikkahub.data.container.TerminalTuiHistoryTest \
+            --tests me.rerere.rikkahub.data.container.TerminalFullVirtualTest \
             --tests me.rerere.rikkahub.data.container.TerminalBottomVisibilityTest \
             --stacktrace
 
@@ -335,6 +336,8 @@ jobs:
             --require-suite me.rerere.rikkahub.data.container.TerminalConsistencyBundleTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalDisplayPolicyTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalTuiHistoryTest \
+            --require-suite me.rerere.rikkahub.data.container.TerminalFullVirtualTest \
+            --require-case-group 'fullVirtual:10' \
             --require-case-group 'tuiHistory:6' \
             --require-suite me.rerere.rikkahub.data.container.TerminalBottomVisibilityTest
 

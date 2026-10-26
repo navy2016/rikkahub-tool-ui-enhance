@@ -117,7 +117,9 @@ class TuiPageConvergenceTest(unittest.TestCase):
         self.assertNotIn('manager.resizeInteractiveSession(',body)
         self.assertNotIn('uiautomator',body)
         self.assertEqual(set(gate.common.PAGE_METHODS), set(re.findall(r'@Test\s+fun\s+(\w+)\(',body)))
-        production=subprocess.check_output(['git','rev-parse','HEAD:app/src/main'],cwd=ROOT,text=True).strip()
+        # This contract is the frozen, already-completed page-only round. New production batches
+        # have independent guards; never silently rewrite its original production identity.
+        production=subprocess.check_output(['git','rev-parse','212b93e04980b1087118007bd59da010a15435d8:app/src/main'],cwd=ROOT,text=True).strip()
         self.assertEqual(gate.PRODUCTION_TREE, production)
         legacy_report=subprocess.check_output(['git','show','2c1f1efa9660d0601ee1d6db65565694858b624d:.github/scripts/terminal-tui-history-reports.py'],cwd=ROOT)
         self.assertEqual(hashlib.sha256(legacy_report).hexdigest(),hashlib.sha256((ROOT/'.github/scripts/terminal-tui-history-reports.py').read_bytes()).hexdigest())

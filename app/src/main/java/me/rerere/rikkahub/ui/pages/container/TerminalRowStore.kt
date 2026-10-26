@@ -14,8 +14,13 @@ import me.rerere.rikkahub.utils.ownedRows
 internal class TerminalSparseRows(
     val frame: TerminalEmulator.RenderFrame,
     val screen: List<TerminalRenderedRowState>,
+    allowUnowned: Boolean = false,
 ) : AbstractList<TerminalRenderedRowState>(), RandomAccess {
-    init { require(screen.size == frame.rows.size - frame.historyCount && frame.ownedRows() != null) }
+    init {
+        require(screen.size == frame.rows.size - frame.historyCount && (frame.ownedRows() != null || allowUnowned))
+        require(frame.historyCount in 0..frame.rows.size && frame.screenStartRow == frame.historyCount &&
+            frame.historyLineIds.size == frame.historyCount && frame.screenLineIds.size == screen.size)
+    }
     override val size: Int get() = frame.rows.size
     override fun get(index: Int): TerminalRenderedRowState {
         if (index !in indices) throw IndexOutOfBoundsException("terminal row $index/$size")
@@ -27,7 +32,8 @@ internal class TerminalSparseRows(
 }
 
 /** Called within the publisher's mutable Snapshot; disposed UI trees never remain in this store. */
-internal class TerminalRowStore(initial: TerminalEmulator.RenderFrame, sparse: Boolean = false) {
+internal class TerminalRowStore(initial: TerminalEmulator.RenderFrame, sparse: Boolean = false,
+    allowUnownedSparse: Boolean = false) {
     private data class State(
         val frame: TerminalEmulator.RenderFrame,
         val mutableRows: SnapshotStateList<TerminalRenderedRowState>,
@@ -43,16 +49,16 @@ internal class TerminalRowStore(initial: TerminalEmulator.RenderFrame, sparse: B
         historyStartId = 0, historyEndId = 0, historyStartSequence = null, historyLineIds = emptyList(),
     )
 
-    private fun initialState(frame: TerminalEmulator.RenderFrame, sparse: Boolean): State {
-        val useSparse = sparse && frame.ownedRows() != null
+    private fun initialState(frame: TerminalEmulator.RenderFrame, sparse: Boolean, allowUnowned: Boolean): State {
+        val useSparse = sparse && (frame.ownedRows() != null || allowUnowned)
         val content = if (useSparse) physical(frame) else frame
         val rows = createTerminalRenderedRows(content)
         val sync = createTerminalRenderedRowsSyncState(content, rows)
-        val view = if (useSparse) TerminalSparseRows(frame, rows.toList()) else rows.toList()
+        val view = if (useSparse) TerminalSparseRows(frame, rows.toList(), allowUnowned) else rows.toList()
         return State(frame, rows, sync, useSparse, view, cursorStates(frame, view, emptyMap()))
     }
 
-    private var state by mutableStateOf(initialState(initial, sparse), referentialEqualityPolicy())
+    private var state by mutableStateOf(initialState(initial, sparse, allowUnownedSparse), referentialEqualityPolicy())
     val isSparse: Boolean get() = state.sparse
     val retainedRowStates: Int get() = state.mutableRows.size
     val sync: TerminalRenderedRowsSyncState get() = state.sync
@@ -86,9 +92,10 @@ internal class TerminalRowStore(initial: TerminalEmulator.RenderFrame, sparse: B
 
     fun publish(
         frame: TerminalEmulator.RenderFrame, sparse: Boolean, tui: Boolean, force: Boolean, nowMs: Long,
+        allowUnownedSparse: Boolean = false,
     ): Boolean {
         val before = state
-        val useSparse = sparse && frame.ownedRows() != null
+        val useSparse = sparse && (frame.ownedRows() != null || allowUnownedSparse)
         val content = if (useSparse) physical(frame) else frame
         val selected = if (useSparse == before.sparse) before else {
             // A backend transition may reuse screen states (including deferred TUI blanks), never a dead history tree.
@@ -106,7 +113,7 @@ internal class TerminalRowStore(initial: TerminalEmulator.RenderFrame, sparse: B
         val deferred = synchronizeTerminalRenderedRows(selected.mutableRows, content, tui,
             forcePendingGridBlanks = force, nowMs = nowMs, syncState = selected.sync)
         val view = selected.mutableRows.toList()
-        val publishedView = if (useSparse) TerminalSparseRows(frame, view) else view
+        val publishedView = if (useSparse) TerminalSparseRows(frame, view, allowUnownedSparse) else view
         state = State(frame, selected.mutableRows, selected.sync, useSparse, publishedView,
             cursorStates(frame, publishedView, before.cursors))
         return deferred

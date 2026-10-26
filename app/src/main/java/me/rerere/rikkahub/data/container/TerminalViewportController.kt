@@ -28,6 +28,8 @@ internal data class TerminalViewportScrollEffect(
     val animated: Boolean = false,
     /** Non-null only for an explicitly attached measured/item backend; pixels are unused there. */
     val itemTarget: TerminalItemScrollTarget? = null,
+    /** One bounded selection-edge scroll, submitted only by the full virtual selection adapter. */
+    val selectionDeltaPx: Int? = null,
 )
 
 internal data class TerminalViewportControllerState(
@@ -92,6 +94,10 @@ internal class TerminalViewportController(
     private var eagerGeometry: TerminalEagerViewportGeometry? = null
     private var requireEagerGeometry = false
     private var pendingItemHandoff: TerminalItemScrollTarget.Anchor? = null
+    private var fullImeAnchor: TerminalItemScrollTarget.Anchor? = null
+    private var lastFullObservation: TerminalItemViewport? = null
+    private var fullImeScreenBottom: Int? = null
+    private var selectingVirtualText = false
 
     private data class MeasuredAnchorResolution(
         val frameRevision: Long,
@@ -113,7 +119,11 @@ internal class TerminalViewportController(
         measuredGeometry: TerminalEagerViewportGeometry? = null,
         requireMeasuredGeometry: Boolean = false,
     ) {
+        fullImeAnchor = null
+        lastFullObservation = null
+        fullImeScreenBottom = null
         if (usesItemViewport) pendingItemHandoff = itemViewport?.capture()
+        selectingVirtualText = false
         eagerGeometry = measuredGeometry?.takeIf { it.frame === frame }
         requireEagerGeometry = requireMeasuredGeometry
         if (usesItemViewport) {
@@ -195,12 +205,35 @@ internal class TerminalViewportController(
         usesItemViewport = true
         this.frame = frame
         renderedRows = frame.rows.size
-        itemViewport = observation?.takeIf { it.frame === frame && it.ready && !frame.isAlternateScreen }
+        itemViewport = observation?.takeIf { it.frame === frame && it.ready }
         if (itemViewport == null) {
             // Do not disturb an explicit in-flight jump for each output frame. Its executor must
             // re-read valid geometry before completion; the next completed layout reconciles it.
-            if (state.value.scrollEffect?.animated != true) mutableState.value = state.value.copy(scrollEffect = null)
+            if (state.value.scrollEffect?.animated != true && state.value.scrollEffect?.selectionDeltaPx == null) {
+                mutableState.value = state.value.copy(scrollEffect = null)
+            }
             return
+        }
+        val current = checkNotNull(itemViewport)
+        val full = current.fullVirtual
+        if (full != null) {
+            val old = lastFullObservation
+            if (!full.ime) {
+                fullImeAnchor = null
+                fullImeScreenBottom = null
+            } else if (old == null || old.fullVirtual?.ime != true || old.frame.screenGeneration != frame.screenGeneration) {
+                fullImeAnchor = (old?.takeIf { it.frame.screenGeneration == frame.screenGeneration } ?: current).capture()
+                fullImeScreenBottom = frame.terminalActiveBottomRow(full.preserveGrid)
+            } else {
+                fullImeScreenBottom = listOfNotNull(fullImeScreenBottom,
+                    frame.terminalActiveBottomRow(full.preserveGrid)).maxOrNull()
+            }
+            itemViewport = current.copy(fullVirtual = full.copy(retainedScreenBottom = fullImeScreenBottom))
+            lastFullObservation = itemViewport
+        } else {
+            fullImeAnchor = null
+            fullImeScreenBottom = null
+            lastFullObservation = null
         }
         val initial = !state.value.initialized
         if (initial) {
@@ -219,7 +252,35 @@ internal class TerminalViewportController(
 
     /** Live layout refresh for consumed input/completion, without publishing a new scroll effect. */
     fun observeItemViewport(observation: TerminalItemViewport?) {
-        if (usesItemViewport) itemViewport = observation?.takeIf { it.frame === frame && it.ready }
+        if (usesItemViewport) {
+            itemViewport = observation?.takeIf { it.frame === frame && it.ready }?.let {
+                if (it.fullVirtual == null) it else it.copy(fullVirtual = it.fullVirtual.copy(retainedScreenBottom = fullImeScreenBottom))
+            }
+            val current = itemViewport
+            val old = lastFullObservation
+            // Leave a new IME/generation transition for updateItemViewport to process first.
+            if (current?.fullVirtual != null && old != null && old.fullVirtual?.ime == current.fullVirtual.ime &&
+                old.frame.screenGeneration == current.frame.screenGeneration) lastFullObservation = current
+        }
+    }
+
+    fun withRetainedItemScreenBottom(observation: TerminalItemViewport): TerminalItemViewport {
+        val full = observation.fullVirtual ?: return observation
+        if (!full.ime || lastFullObservation?.frame?.screenGeneration != observation.frame.screenGeneration) return observation
+        return observation.copy(fullVirtual = full.copy(retainedScreenBottom = fullImeScreenBottom))
+    }
+
+    /** Temporary interaction ownership; AUTO/LOCK intent changes only if the selection actually scrolls. */
+    fun beginVirtualSelection() {
+        if (itemViewport?.fullVirtual == null) return
+        selectingVirtualText = true
+        mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
+    }
+
+    fun endVirtualSelection() {
+        if (!selectingVirtualText) return
+        selectingVirtualText = false
+        reconcile(ViewportScrollOrigin.REDUCER)
     }
 
     /** Refresh a just-consumed user layout without reconciling programmatic intent. */
@@ -270,6 +331,7 @@ internal class TerminalViewportController(
     /** Starts or continues real user input; called before the scrollable consumes its delta. */
     fun beginUserScroll(origin: ViewportScrollOrigin, currentScrollPx: Int): Long {
         require(origin.isUserInput)
+        fullImeAnchor = null
         scrollPx = currentScrollPx.coerceAtLeast(0)
         imeAnchor = null
         measuredAnchorResolution = null
@@ -308,6 +370,7 @@ internal class TerminalViewportController(
     }
 
     fun setFollow(enabled: Boolean, currentScrollPx: Int) {
+        fullImeAnchor = null
         scrollPx = currentScrollPx.coerceAtLeast(0)
         imeAnchor = null
         measuredAnchorResolution = null
@@ -332,6 +395,7 @@ internal class TerminalViewportController(
     fun jumpToTop(currentScrollPx: Int) = jump(toBottom = false, currentScrollPx = currentScrollPx)
 
     private fun jump(toBottom: Boolean, currentScrollPx: Int) {
+        fullImeAnchor = null
         scrollPx = currentScrollPx.coerceAtLeast(0)
         imeAnchor = null
         measuredAnchorResolution = null
@@ -340,7 +404,7 @@ internal class TerminalViewportController(
         mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
         if (usesItemViewport) {
             pendingItemTop = !toBottom
-            mutableState.value = state.value.copy(mode = if (toBottom) ViewportMode.TAIL else ViewportMode.LOCKED,
+            mutableState.value = state.value.copy(mode = if (toBottom) followMode() else ViewportMode.LOCKED,
                 anchor = null, anchorCellHeightPx = 0, anchorRowHeightPx = 0)
             reconcile(ViewportScrollOrigin.JUMP, animated = true)
             return
@@ -356,6 +420,9 @@ internal class TerminalViewportController(
 
     fun scrollFinished(effectId: Long, currentScrollPx: Int, completed: Boolean) {
         if (state.value.scrollEffect?.id != effectId) return
+        if (state.value.scrollEffect?.selectionDeltaPx != null) {
+            if (ready()) capture(0) else captureItemLock = true
+        }
         if (completed && pendingItemTop && state.value.scrollEffect?.itemTarget == TerminalItemScrollTarget.Top &&
             itemViewport?.atTop == true
         ) {
@@ -379,7 +446,23 @@ internal class TerminalViewportController(
         else currentScrollPx <= TERMINAL_EDGE_THRESHOLD_PX
 
     private fun followMode(): ViewportMode =
-        if (!usesItemViewport && metrics?.usesTuiViewport == true) ViewportMode.SCREEN else ViewportMode.TAIL
+        if (if (usesItemViewport) itemViewport?.fullVirtual?.tui == true else metrics?.usesTuiViewport == true)
+            ViewportMode.SCREEN else ViewportMode.TAIL
+
+    /** User selection drag asks the existing sole executor; never starts its own scroll mutation. */
+    fun scrollSelectionBy(pixels: Int): Boolean {
+        val observation = itemViewport ?: return false
+        if (pixels == 0 || observation.fullVirtual == null || !ready() || !state.value.initialized ||
+            state.value.gesture != null || state.value.scrollEffect != null) return false
+        if ((pixels < 0 && !observation.canScrollBackward) || (pixels > 0 && !observation.canScrollForward)) return false
+        val anchor = observation.capture() ?: return false
+        fullImeAnchor = null
+        mutableState.value = state.value.copy(mode = ViewportMode.LOCKED, anchor = anchor.anchor,
+            anchorRowHeightPx = anchor.capturedRowHeightPx, scrollEffect = TerminalViewportScrollEffect(
+                ++nextOperationId, 0, ViewportScrollOrigin.JUMP, itemTarget = anchor,
+                selectionDeltaPx = pixels.coerceIn(-observation.viewportHeightPx, observation.viewportHeightPx)))
+        return true
+    }
 
     private fun ready(): Boolean {
         if (usesItemViewport) return itemViewport?.let { it.frame === frame && it.ready } == true
@@ -425,8 +508,10 @@ internal class TerminalViewportController(
     }
 
     private fun reconcile(origin: ViewportScrollOrigin, animated: Boolean = false) {
+        if (selectingVirtualText) return
         if (!ready() || !state.value.initialized || state.value.gesture != null) return
         if (state.value.scrollEffect?.animated == true) return
+        if (state.value.scrollEffect?.selectionDeltaPx != null) return
         if (usesItemViewport) {
             reconcileItems(origin, animated)
             return
@@ -527,9 +612,11 @@ internal class TerminalViewportController(
         val resolved = previousAnchor?.let { resolveTerminalItemAnchor(observation.frame, it, anchorLookup) }
         val target = if (state.value.autoScroll || resolved == null) {
             mutableState.value = state.value.copy(
-                mode = ViewportMode.TAIL, anchor = null, anchorCellHeightPx = 0, anchorRowHeightPx = 0,
+                mode = followMode(), anchor = null, anchorCellHeightPx = 0, anchorRowHeightPx = 0,
             )
-            TerminalItemScrollTarget.Follow
+            val held = fullImeAnchor?.takeIf { observation.fullVirtual?.let { it.ime && !it.avoidIme } == true }
+            val heldAnchor = held?.let { resolveTerminalItemAnchor(observation.frame, it.anchor, anchorLookup) }
+            if (held != null && heldAnchor != null) held.copy(anchor = heldAnchor) else TerminalItemScrollTarget.Follow
         } else {
             // Legacy/restored IDs may have no measured capture scale. Bind it exactly once when
             // the requested row actually appears in a valid layout, not to the currently visible

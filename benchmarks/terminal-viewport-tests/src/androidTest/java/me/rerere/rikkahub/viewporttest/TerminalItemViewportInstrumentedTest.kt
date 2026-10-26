@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -584,7 +585,7 @@ class TerminalItemViewportInstrumentedTest {
             })
         }
         private val initialFrame = render()
-        val rowStore = TerminalRowStore(initialFrame, sparse)
+        val rowStore = TerminalRowStore(initialFrame, sparse || initialMode.isFullVirtual, initialMode.isFullVirtual)
         val rows get() = rowStore.view(frame)
         private var published by mutableStateOf(
             TerminalRenderSnapshot.capture(initialFrame, rowStore), referentialEqualityPolicy(),
@@ -597,6 +598,7 @@ class TerminalItemViewportInstrumentedTest {
         val horizontal = ScrollState(saved.horizontalOffsetPx)
         val measurements = TerminalLazyItemMeasurements()
         val eager = ScrollState(if (saved.autoScroll) Int.MAX_VALUE else saved.verticalOffsetPx)
+        val pointerMap = me.rerere.rikkahub.ui.pages.container.TerminalPointerMap()
         var fontSp by mutableIntStateOf(14)
         var fontFamily by mutableStateOf<FontFamily>(JetbrainsMono)
         var densityOverride by mutableStateOf<Density?>(null)
@@ -669,7 +671,8 @@ class TerminalItemViewportInstrumentedTest {
         fun publish() {
             val next = render()
             Snapshot.withMutableSnapshot {
-                rowStore.publish(next, sparse, tui, true, 1_000L)
+                rowStore.publish(next, sparse || mode.isFullVirtual, tui || next.isAlternateScreen || fullGrid, true, 1_000L,
+                    allowUnownedSparse = mode.isFullVirtual)
                 published = TerminalRenderSnapshot.capture(next, rowStore)
             }
         }
@@ -714,15 +717,16 @@ class TerminalItemViewportInstrumentedTest {
             historyChunksCount = chunks.size
             effectiveMode = effectiveTerminalRenderMode(mode, chunks.isNotEmpty(), tuiHistoryAllowed = allowed)
             policy = rememberTerminalVirtualHistoryPolicy(this, mode, ime)
-            val wants = mode.isVirtualHistory &&
+            val wants = mode.isFullVirtual || (mode.isVirtualHistory &&
                 policy.allows(chunks.isNotEmpty(), config.panEnabled, config.selectionMode,
-                    usesTui, ime, avoidIme)
+                    usesTui, ime, avoidIme))
             val currentBound = rememberTerminalBoundViewport(
                 this, controller, eager, lazy, measurements, frame, style, wants,
                 metrics = { TerminalViewportMetrics(eager.maxValue, viewportHeight, cellHeight, tailPadding,
-                    usesTuiViewport = usesTui, preservePhysicalGrid = fullGrid,
+                    usesTuiViewport = usesTui, preservePhysicalGrid = fullGrid || frame.isAlternateScreen,
                     imeVisible = ime, avoidIme = ime && avoidIme) },
-                gestureConfig = config, widthCheckpoint = widthCheckpoint)
+                gestureConfig = config, widthCheckpoint = widthCheckpoint,
+                fullVirtual = mode.isFullVirtual, renderedRows = source.rows)
             bound = currentBound
             SideEffect {
                 bound.binding.onEffectStarted = { effect ->
@@ -736,10 +740,12 @@ class TerminalItemViewportInstrumentedTest {
                 val output: @Composable (Modifier) -> Unit = { modifier ->
                     Box(modifier.testTag("item-output")
                         .onSizeChanged { viewportHeight = it.height; viewportWidth = it.width }
+                        .onGloballyPositioned { pointerMap.inputCoordinates = it }
                         .nestedScroll(currentBound.gestures.connection)) {
                         TerminalTranscriptViewport(frame, source.rows, style, chunks, mode, currentBound,
                             horizontal, config.panEnabled, config.selectionMode, Modifier.fillMaxSize(),
-                            rowSource = source, tuiHistoryAllowed = allowed)
+                            rowSource = source, tuiHistoryAllowed = allowed, pointerMap = pointerMap,
+                            cellWidthPx = textMeasurer.measure("W", style).size.width.coerceAtLeast(1))
                     }
                 }
                 if (systemIme) {

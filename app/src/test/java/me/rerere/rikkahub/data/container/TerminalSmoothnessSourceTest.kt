@@ -301,7 +301,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("rememberLazyListState()"))
         assertTrue(transcriptSource.contains("TerminalVirtualHistoryTranscript("))
         assertTrue(bindingSource.contains("executeTerminalLazyItemScroll("))
-        assertTrue(processSessionSource.contains("wantsVirtualHistory = appliedTerminalRenderMode.isVirtualHistory"))
+        assertTrue(processSessionSource.contains("wantsVirtualHistory = appliedTerminalRenderMode.isFullVirtual || (appliedTerminalRenderMode.isVirtualHistory"))
         assertTrue(policySource.contains("historyAvailable && panEnabled && !selection && !tui && !imeFallback"))
         assertTrue(policySource.contains("(!ime || (keepVirtualOnIme && avoidIme))"))
         assertFalse(processSessionSource.contains("TERMINAL_LAZY_HISTORY_MIN_ROWS"))

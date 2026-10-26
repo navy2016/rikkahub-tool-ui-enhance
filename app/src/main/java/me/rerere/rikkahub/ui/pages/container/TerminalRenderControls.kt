@@ -138,7 +138,7 @@ internal fun TerminalRenderModeDialog(
                 Text("已选：${value.label} · 实际：${effectiveTerminalRenderMode(appliedMode, hasHistoryChunks,
                     virtualHistoryAllowed, cursorOverlayAllowed, regularHistoryAllowed, tuiHistoryAllowed).label}",
                     modifier = Modifier.testTag("terminal-render-effective"), style = MaterialTheme.typography.bodySmall)
-                if ((usesTuiViewport || !hasHistoryChunks) && !cursorOverlayAllowed && !tuiHistoryAllowed) {
+                if (!appliedMode.isFullVirtual && (usesTuiViewport || !hasHistoryChunks) && !cursorOverlayAllowed && !tuiHistoryAllowed) {
                     Text(if (usesTuiViewport) "当前为 TUI／全网格，沿用逐行兼容绘制；返回普通历史后使用所选模式。"
                         else "当前没有可分块历史，沿用逐行兼容绘制；产生有效历史后使用所选模式。",
                         style = MaterialTheme.typography.bodySmall)
@@ -162,6 +162,7 @@ internal fun TerminalRenderModeDialog(
                                     TerminalRenderMode.CURSOR_OVERLAY -> "实验选项：竖线／下划线光标叠加在原文字上，不替换字符；块光标、SEL 和 MOUSE 保持原绘制。"
                                     TerminalRenderMode.TUI_CHUNKED -> "实验选项：仅主屏 TUI 的已归档历史分块，不增加独立图层；活动屏幕与跟随规则不变。SEL、MOUSE、全网格和备用屏幕保持兼容路径。"
                                     TerminalRenderMode.TUI_CHUNKED_LAYERS -> "实验选项：主屏 TUI 的已归档历史分块并复用绘制记录；使用额外图层。活动屏幕与跟随规则不变，兼容回退同 TUI 轻量分块。"
+                                    TerminalRenderMode.FULL_VIRTUAL -> "独立选项：普通历史、TUI、键盘、SEL、MOUSE及备用屏幕使用逐行虚拟视口，仅布局可见行；保留完整数据、选择复制和原输入操作。需在本机验证效果。"
                                 }, style = MaterialTheme.typography.bodySmall)
                             }
                         }
@@ -169,7 +170,7 @@ internal fun TerminalRenderModeDialog(
                 }
                 TextButton(onClick = { pending = TerminalRenderMode.DEFAULT }, enabled = !saving && !selectionActive,
                     modifier = Modifier.testTag("terminal-render-reset")) { Text("恢复默认") }
-                Text("所有模式均保留完整历史和自然行高。虚拟历史在 SEL、MOUSE、TUI／全网格场景自动回退，避免改变原有交互语义。",
+                Text("所有模式均保留完整历史和自然行高。原虚拟历史在 SEL、MOUSE、TUI／全网格场景自动回退；全量虚拟化使用独立的选择与物理屏幕适配。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("已有同机测试显示长历史受益于分块图层；模拟器数据不是本机帧率保证。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

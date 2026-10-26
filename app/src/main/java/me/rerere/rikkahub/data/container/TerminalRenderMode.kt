@@ -10,10 +10,12 @@ internal enum class TerminalRenderMode(val id: String, val label: String, val sh
     REGULAR_HISTORY("regularHistory", "Pi regular 历史分块", "常规历史"),
     CURSOR_OVERLAY("cursorOverlay", "TUI 光标叠加", "光标"),
     TUI_CHUNKED("tuiChunkedEager", "TUI 轻量分块", "TUI分块"),
-    TUI_CHUNKED_LAYERS("tuiChunkedLayers", "TUI 分块图层", "TUI图层");
+    TUI_CHUNKED_LAYERS("tuiChunkedLayers", "TUI 分块图层", "TUI图层"),
+    FULL_VIRTUAL("fullVirtual", "全量虚拟化", "全虚拟");
 
     val isVirtualHistory: Boolean get() = this == VIRTUAL_HISTORY || this == VIRTUAL_HISTORY_IME
     val isTuiHistory: Boolean get() = this == TUI_CHUNKED || this == TUI_CHUNKED_LAYERS
+    val isFullVirtual: Boolean get() = this == FULL_VIRTUAL
 
     companion object {
         val DEFAULT = CHUNKED_LAYERS
@@ -32,6 +34,7 @@ internal fun effectiveTerminalRenderMode(
     regularHistoryAllowed: Boolean = false,
     tuiHistoryAllowed: Boolean = false,
 ): TerminalRenderMode = when {
+    preferred.isFullVirtual -> preferred
     preferred.isTuiHistory -> if (hasHistoryChunks && tuiHistoryAllowed) preferred
         else if (hasHistoryChunks) TerminalRenderMode.DEFAULT else TerminalRenderMode.FLAT
     preferred == TerminalRenderMode.CURSOR_OVERLAY -> if (cursorOverlayAllowed) preferred

@@ -346,6 +346,7 @@ internal fun TerminalRenderedRow(
     state: TerminalRenderedRowState,
     style: TextStyle,
     modifier: Modifier = Modifier,
+    onTextLayout: ((androidx.compose.ui.text.TextLayoutResult) -> Unit)? = null,
 ) {
     // Emulator URLs are already styled spans + StringAnnotation, not Compose LinkAnnotation.
     // The hot path uses the same underlying text renderer without Material's per-row link-style
@@ -359,9 +360,11 @@ internal fun TerminalRenderedRow(
         return
     }
     if (terminalUsesBasicText(text, style)) {
-        BasicText(text = text, modifier = measuredModifier, style = style, softWrap = false, maxLines = 1)
+        if (onTextLayout == null) BasicText(text = text, modifier = measuredModifier, style = style, softWrap = false, maxLines = 1)
+        else BasicText(text = text, modifier = measuredModifier, style = style, softWrap = false, maxLines = 1, onTextLayout = onTextLayout)
     } else {
-        Text(text = text, modifier = measuredModifier, style = style, softWrap = false, maxLines = 1)
+        if (onTextLayout == null) Text(text = text, modifier = measuredModifier, style = style, softWrap = false, maxLines = 1)
+        else Text(text = text, modifier = measuredModifier, style = style, softWrap = false, maxLines = 1, onTextLayout = onTextLayout)
     }
 }
 

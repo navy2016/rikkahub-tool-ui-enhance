@@ -49,6 +49,10 @@ internal data class TerminalPipelineViewport(
     val geometryReady: Boolean,
     val widthReady: Boolean,
     val tailSatisfied: Boolean,
+    /** Opt-in new-renderer diagnostics only; absent capture creates no row-layout inventory. */
+    val fullVirtual: Boolean = false,
+    val retainedRowStates: Int = 0,
+    val measuredRows: Int = 0,
 ) {
     /** Read-only acceptance predicate. Never derives mode expectations from the observed backend. */
     fun satisfies(

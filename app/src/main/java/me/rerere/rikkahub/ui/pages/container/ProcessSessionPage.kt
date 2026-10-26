@@ -845,11 +845,12 @@ private fun TerminalInteractivePanel(
     var input by remember { mutableStateOf("") }
     val initialTerminalRenderFrame = remember(processId) { terminalEmulator.renderFrame() }
     val terminalRowStore = remember(processId) {
-        TerminalRowStore(initialTerminalRenderFrame, sparse = terminalRenderMode.isVirtualHistory &&
+        TerminalRowStore(initialTerminalRenderFrame, sparse = terminalRenderMode.isFullVirtual || (terminalRenderMode.isVirtualHistory &&
             !initialTerminalRenderFrame.isAlternateScreen &&
             !isTuiCommand(process.command, settings.terminalCustomTuiCommands) &&
             !process.ptyMode.equals("raw", ignoreCase = true) &&
-            !isConfiguredTerminalCommand(process.command, settings.terminalFullGridCommands))
+            !isConfiguredTerminalCommand(process.command, settings.terminalFullGridCommands)),
+            allowUnownedSparse = terminalRenderMode.isFullVirtual)
     }
     var terminalContentBounds by remember(processId) {
         mutableStateOf(initialTerminalRenderFrame.contentBounds)
@@ -1050,9 +1051,9 @@ private fun TerminalInteractivePanel(
         imeVisible = imeVisible,
         outputViewportHeightPx = outputViewportHeightPx,
     )
-    val wantsVirtualHistory = appliedTerminalRenderMode.isVirtualHistory &&
+    val wantsVirtualHistory = appliedTerminalRenderMode.isFullVirtual || (appliedTerminalRenderMode.isVirtualHistory &&
         virtualHistoryPolicy.allows(terminalHistoryChunkPlan.isNotEmpty(), terminalPanMode, selectionMode,
-            currentUsesTuiViewport, imeVisible, shouldAvoidIme)
+            currentUsesTuiViewport, imeVisible, shouldAvoidIme))
     // The status bar is a floating overlay (zIndex above the terminal). Reserve its full strip
     // whenever it is visible so terminal content is never hidden underneath it, for both short
     // transcript output and full-height TUI/physical-grid content. (Previously the strip was only
@@ -1096,6 +1097,8 @@ private fun TerminalInteractivePanel(
         metrics = { viewportMetrics() },
         gestureConfig = TerminalViewportGestureConfig(terminalPanMode, selectionMode, fastFlingRequiredCount),
         widthCheckpoint = remember(processId) { bgManager.terminalWidthCheckpoint(processId) },
+        fullVirtual = appliedTerminalRenderMode.isFullVirtual,
+        renderedRows = renderSnapshot.rows,
     )
     val viewportBinding = boundViewport.binding
     val virtualHistoryEnabled = boundViewport.virtualHistoryEnabled
@@ -1139,7 +1142,7 @@ private fun TerminalInteractivePanel(
     }
 
     fun renderTerminalFrame(forcePendingGridBlanks: Boolean = false, allowSynchronizedOutput: Boolean = false): Boolean {
-        val wantedSparse = appliedTerminalRenderMode.isVirtualHistory && !currentUsesTuiViewport
+        val wantedSparse = appliedTerminalRenderMode.isFullVirtual || (appliedTerminalRenderMode.isVirtualHistory && !currentUsesTuiViewport)
         val representationChanged = wantedSparse != terminalRowStore.isSparse ||
             wantsCursorOverlay != publishedRenderSnapshot.frame.cursorOverlayMode
         if (!forcePendingGridBlanks && !representationChanged &&
@@ -1156,11 +1159,12 @@ private fun TerminalInteractivePanel(
         val regular = terminalRegularHistoryAllowed(appliedTerminalRenderMode, process.command,
             frame.isAlternateScreen, currentPreserveFullTerminalGrid, terminalPanMode, selectionMode, frame.mouseTracking)
         val usesTuiViewport = (commandNeedsTuiCompatibility && !regular) || frame.isAlternateScreen || currentPreserveFullTerminalGrid
-        val sparse = appliedTerminalRenderMode.isVirtualHistory && !usesTuiViewport
+        val sparse = appliedTerminalRenderMode.isFullVirtual || (appliedTerminalRenderMode.isVirtualHistory && !usesTuiViewport)
         var hasDeferredGridBlank = false
         TerminalPipelineTrace.record(processId, TerminalPipelineStage.ROW_SYNC_STARTED, frameRevision = frame.revision)
         Snapshot.withMutableSnapshot {
-            hasDeferredGridBlank = terminalRowStore.publish(frame, sparse, usesTuiViewport, forcePendingGridBlanks, now)
+            hasDeferredGridBlank = terminalRowStore.publish(frame, sparse, usesTuiViewport, forcePendingGridBlanks, now,
+                allowUnownedSparse = appliedTerminalRenderMode.isFullVirtual)
             terminalContentBounds = bounds
             terminalScreenStartRow = frame.screenStartRow
             terminalHistoryStartSequence = frame.historyStartSequence
@@ -1950,6 +1954,9 @@ private fun TerminalInteractivePanel(
                                         widthReady = viewportBinding.widthIndex.readyFor(
                                             renderSnapshot.frame, pass.metricKey),
                                         tailSatisfied = tail,
+                                        fullVirtual = appliedTerminalRenderMode.isFullVirtual,
+                                        retainedRowStates = terminalRowStore.retainedRowStates,
+                                        measuredRows = lazyHistoryMeasurements.retainedRows,
                                     )
                                 }) {
                                 !virtualHistoryEnabled || (viewportBinding.widthIndex.readyFor(

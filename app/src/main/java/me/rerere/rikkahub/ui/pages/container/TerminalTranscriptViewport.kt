@@ -41,7 +41,10 @@ internal fun TerminalTranscriptViewport(
     if (rowSource != null) require(rowSource.frame === frame && rowSource.rows === rows) {
         "Terminal viewport row source mismatch"
     }
-    if (bound.virtualHistoryEnabled) {
+    if (mode.isFullVirtual) {
+        TerminalFullVirtualTranscript(frame, rows, style, bound, horizontalScroll, panEnabled, selectionMode,
+            modifier, pointerMap, cellWidthPx)
+    } else if (bound.virtualHistoryEnabled) {
         TerminalVirtualHistoryTranscript(frame, rows, style, bound.pass, bound.binding.measurements,
             bound.binding.lazy, horizontalScroll, panEnabled && !selectionMode,
             bound.gestures.flingBehavior, bound.binding.widthIndex, modifier,

@@ -91,7 +91,7 @@ class TerminalTuiHistoryTest {
         assertTrue(page.contains("usesTuiViewport = currentUsesTuiViewport,"))
         assertTrue(page.contains("val commandIsTui = commandNeedsTuiCompatibility && !regularHistory"))
         assertFalse(page.contains("commandNeedsTuiCompatibility && !tuiHistory"))
-        assertTrue(page.contains("val wantedSparse = appliedTerminalRenderMode.isVirtualHistory && !currentUsesTuiViewport"))
+        assertTrue(page.contains("val wantedSparse = appliedTerminalRenderMode.isFullVirtual || (appliedTerminalRenderMode.isVirtualHistory && !currentUsesTuiViewport)"))
         assertTrue(page.contains("terminalRowStore.publish(frame, sparse, usesTuiViewport"))
         assertEquals(3, page.split("tuiHistoryAllowed = tuiHistory").size - 1)
         val rows = source("ui/pages/container/TerminalRenderedRows.kt")

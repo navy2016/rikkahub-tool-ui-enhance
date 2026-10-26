@@ -47,6 +47,10 @@ _convergence_spec = importlib.util.spec_from_file_location('terminal_tui_page_co
     Path(__file__).with_name('terminal-tui-history-page-convergence.py'))
 convergence_reports = importlib.util.module_from_spec(_convergence_spec)
 _convergence_spec.loader.exec_module(convergence_reports)
+_full_spec = importlib.util.spec_from_file_location('terminal_full_virtual',
+    Path(__file__).with_name('terminal-full-virtual-reports.py'))
+full_reports = importlib.util.module_from_spec(_full_spec)
+_full_spec.loader.exec_module(full_reports)
 
 
 def notice(level, title, message):
@@ -68,6 +72,9 @@ def digest(path):
 
 def sources():
     paths = [
+        *full_reports.ALLOWED,
+        full_reports.PAGE_FILE,
+        '.github/scripts/terminal-full-virtual-reports.py',
         'app/src/main/java/me/rerere/rikkahub/data/container/BackgroundProcessManager.kt',
         'app/src/main/java/me/rerere/rikkahub/data/container/TerminalByteRingBuffer.kt',
         'app/src/main/java/me/rerere/rikkahub/data/container/NativePtyBridge.kt',
@@ -310,11 +317,15 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     tui = selected == 'tuiOnly'
     bottom = selected == 'bottomOnly'
     tui_history = selected == 'tuiHistoryOnly'
+    full_virtual = selected == 'fullVirtualOnly'
     methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
         'pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
         'pipelineStableVirtualPtyEchoKeyboardAndRemount')
     test_class = 'me.rerere.rikkahub.pipeline.TerminalPtyTransportInstrumentedTest' if transport else CLASS
     extra_arguments = []
+    if full_virtual:
+        test_class = 'me.rerere.rikkahub.pipeline.TerminalFullVirtualPageTest'
+        methods = full_reports.PAGE_METHODS
     if tui_history:
         test_class = 'me.rerere.rikkahub.pipeline.TerminalTuiHistoryPageTest'
         methods = history_reports.PAGE_METHODS
@@ -369,6 +380,14 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             if 'mCurrentFocus=' in line or 'mFocusedApp=' in line) + '\n')
     if failed:
         raise ValueError('; '.join(failed))
+    if full_virtual:
+        guard = full_reports.source_guard()
+        results = full_reports.validate_page('\n'.join(logs))
+        report = dict(suite='terminal-full-virtual-page-v1', sourceSha=manifest['sourceSha'], runId=manifest['runId'],
+            manifest=manifest, device=device, installedApkHashes=installed_hashes, sourceGuard=guard, **results,
+            note='Native PTY/real page/actual IME and per-scene virtual branch; synthetic peers, not phone FPS.')
+        history_reports.publish('Terminal full-virtual-page', report, OUT / 'full-virtual-page.json', emit_compact=False)
+        return report
     if tui_history:
         guard = convergence_reports.source_guard()
         results = convergence_reports.validate_page('\n'.join(logs))
@@ -544,6 +563,14 @@ def emulator(operation=None):
                 for name in ('instrumentation.log', 'pipeline-logcat.txt', 'device.json', 'window-focus.txt'):
                     shutil.copyfile(OUT / name, history_preflight / name)
                 run('pipeline')
+            elif os.environ.get('TERMINAL_PIPELINE_SUITE') == 'fullVirtual':
+                import shutil
+                for part in ('transport', 'service', 'byteBuffer', 'tuiOnly', 'bottomOnly', 'fullVirtualOnly', 'pipeline'):
+                    run(part)
+                    target = OUT / ('full-virtual-' + part)
+                    target.mkdir(exist_ok=False)
+                    for name in ('instrumentation.log','pipeline-logcat.txt','device.json','window-focus.txt'):
+                        shutil.copyfile(OUT/name, target/name)
             elif os.environ.get('TERMINAL_PIPELINE_SUITE') in ('all', 'tuiBundle', 'bottomVisibility', 'tuiHistory'):
                 run('transport')
                 # Keep the successful preflight's logs; the page run has independent lifecycle,

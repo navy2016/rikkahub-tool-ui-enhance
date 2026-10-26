@@ -21,6 +21,7 @@ internal class TerminalPointerMap {
         val rows: List<TerminalRenderedRowState>,
         val cellWidth: Int,
         val metrics: Any,
+        val physicalRows: me.rerere.rikkahub.data.container.TerminalPhysicalRowHeights? = null,
     ) {
         val ids = frame.screenLineIds.withIndex().associate { it.value to it.index }
     }
@@ -54,10 +55,12 @@ internal class TerminalPointerMap {
         if (!root.x.isFinite() || !root.y.isFinite() || !viewport.boundsInRoot().contains(root)) return null
         val frame = current.frame
         val columns = frame.ownedRows()?.columns ?: return null
-        val first = frame.screenLineIds.firstOrNull()?.let { entries[it] } ?: return null
-        if (!first.layout.isAttached || first.metrics != current.metrics) return null
-        if (first.text != current.rows[frame.historyCount].text) return null
-        val origin = first.layout.positionInRoot()
+        val first = if (current.physicalRows == null) {
+            val entry = frame.screenLineIds.firstOrNull()?.let { entries[it] } ?: return null
+            if (!entry.layout.isAttached || entry.metrics != current.metrics ||
+                entry.text != current.rows[frame.historyCount].text) return null
+            entry.layout.positionInRoot().y
+        } else null
         for ((id, row) in current.ids) {
             val entry = entries[id] ?: continue
             if (!entry.layout.isAttached || entry.metrics != current.metrics ||
@@ -66,7 +69,9 @@ internal class TerminalPointerMap {
             val height = entry.layout.size.height
             if (root.y < position.y || root.y >= position.y + height) continue
             val localX = root.x - position.x
-            val localY = root.y - origin.y
+            if (current.physicalRows != null && current.physicalRows.rowHeight(row) != height) continue
+            val localY = if (current.physicalRows != null) root.y - position.y + current.physicalRows.top(row)
+                else root.y - requireNotNull(first)
             // Reject negatives BEFORE integer truncation. History, status strips and padding
             // cannot be folded into row 0. Row comes from actual layout, never nominal history height.
             val column = terminalPointerColumn(localX, current.cellWidth, columns) ?: return null

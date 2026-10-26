@@ -24,6 +24,7 @@ import me.rerere.rikkahub.data.container.TerminalEagerGeometryCache
 import me.rerere.rikkahub.data.container.TerminalEagerHistoryBlockToken
 import me.rerere.rikkahub.data.container.TerminalEagerViewportGeometry
 import me.rerere.rikkahub.data.container.TerminalItemViewport
+import me.rerere.rikkahub.data.container.TerminalFullVirtualPolicy
 import me.rerere.rikkahub.data.container.TerminalVisibleRow
 import me.rerere.rikkahub.utils.TerminalEmulator
 
@@ -119,6 +120,14 @@ internal class TerminalLazyItemMeasurements {
         val text = row.text
         onRowComposed?.let { observer -> SideEffect { observer(row.lineId) } }
         TerminalRenderedRow(row, style, RowMeasurementElement(this, metricKey, row.lineId, text))
+    }
+
+    @Composable
+    fun VirtualRow(metricKey: Any, row: TerminalRenderedRowState, style: TextStyle, modifier: Modifier = Modifier,
+        onTextLayout: ((androidx.compose.ui.text.TextLayoutResult) -> Unit)? = null) {
+        val text = row.text
+        onRowComposed?.let { observer -> SideEffect { observer(row.lineId) } }
+        TerminalRenderedRow(row, style, modifier.then(RowMeasurementElement(this, metricKey, row.lineId, text)), onTextLayout)
     }
 
     private fun record(owner: Any, metricKey: Any, lineId: Long, text: AnnotatedString, pixels: Int) {
@@ -219,12 +228,13 @@ internal class TerminalLazyItemMeasurements {
             frame.historyLineIds.size == frame.historyCount &&
             frame.screenLineIds.size == frame.rows.size - frame.historyCount
 
-    private fun height(pass: TerminalLazyLayoutPass, index: Int): Int? {
+    private fun height(pass: TerminalLazyLayoutPass, index: Int, displayed: List<TerminalRenderedRowState>? = null): Int? {
         val frame = pass.frame
         val id = if (index < frame.historyCount) frame.historyLineIds[index]
             else frame.screenLineIds[index - frame.historyCount]
+        val text = if (displayed != null && index >= frame.historyCount) displayed[index].text else frame.rows[index].text
         return heights[id]?.takeIf {
-            it.metricKey == pass.metricKey && it.text == frame.rows[index].text && it.pixels > 0
+            it.metricKey == pass.metricKey && it.text == text && it.pixels > 0
         }?.pixels
     }
 
@@ -254,6 +264,28 @@ internal class TerminalLazyItemMeasurements {
         if (rows.isEmpty() || rows.zipWithNext().any { (a, b) -> a.index >= b.index || a.bottomPx > b.topPx }) return null
         return TerminalItemViewport(frame, pass.metricKey, rows, info.viewportSize.height,
             cellHeightPx, tailPaddingPx, state.canScrollBackward, state.canScrollForward)
+    }
+
+    /** One item per row: reject stale IDs, heights or screen geometry instead of guessing a history prefix. */
+    fun readFull(pass: TerminalLazyLayoutPass, state: LazyListState, cellHeightPx: Int, tailPaddingPx: Int,
+        policy: TerminalFullVirtualPolicy, displayed: List<TerminalRenderedRowState>? = null): TerminalItemViewport? {
+        val frame = pass.frame
+        if (!validFrame(frame) || cellHeightPx <= 0 || tailPaddingPx < 0 || policy.screen.size != frame.screenLineIds.size) return null
+        val info = state.layoutInfo
+        if (info.totalItemsCount != frame.rows.size + 1 || info.viewportSize.height <= 0) return null
+        val rows = ArrayList<TerminalVisibleRow>(info.visibleItemsInfo.size)
+        for (item in info.visibleItemsInfo) {
+            if (item.index == frame.rows.size && item.key == TERMINAL_LAZY_TAIL_KEY) continue
+            if (item.index !in frame.rows.indices) return null
+            val id = if (item.index < frame.historyCount) frame.historyLineIds[item.index]
+                else frame.screenLineIds[item.index - frame.historyCount]
+            if (item.key != id || height(pass, item.index, displayed) != item.size) return null
+            if (item.index >= frame.historyCount && policy.screen.rowHeight(item.index - frame.historyCount) != item.size) return null
+            rows.add(TerminalVisibleRow(item.index, item.offset - info.viewportStartOffset, item.size))
+        }
+        if (rows.isEmpty() || rows.zipWithNext().any { (a, b) -> a.index >= b.index || a.bottomPx > b.topPx }) return null
+        return TerminalItemViewport(frame, pass.metricKey, rows, info.viewportSize.height,
+            cellHeightPx, tailPaddingPx, state.canScrollBackward, state.canScrollForward, policy)
     }
 
     /** Stamp only measured history rows; unchanged trusted blocks retain their original tokens. */

@@ -98,7 +98,7 @@ class TerminalRenderModeInstrumentedTest {
             fixture.publish()
         }
         val tui = geometry(fixture)
-        for (mode in TerminalRenderMode.entries) {
+        for (mode in TerminalRenderMode.entries.filterNot { it.isFullVirtual }) {
             compose.runOnIdle { fixture.mode = mode }
             assertEquals("TUI fallback mode=$mode", tui, geometry(fixture))
             assertEquals(0, fixture.composedChunks)

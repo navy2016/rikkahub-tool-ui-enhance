@@ -20,11 +20,14 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import me.rerere.rikkahub.data.container.TerminalItemViewport
+import me.rerere.rikkahub.data.container.TerminalFullVirtualPolicy
+import me.rerere.rikkahub.data.container.TerminalPhysicalRowHeights
 import me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndex
 import me.rerere.rikkahub.data.container.TerminalWidthCheckpointStore
 import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalViewportScrollEffect
+import me.rerere.rikkahub.data.container.terminalActiveBottomRow
 import me.rerere.rikkahub.utils.TerminalEmulator
 
 internal data class TerminalViewportBindingInput(
@@ -32,7 +35,17 @@ internal data class TerminalViewportBindingInput(
     val virtual: Boolean,
     val measureEager: Boolean,
     val metrics: () -> TerminalViewportMetrics,
-)
+    val fullVirtual: Boolean = false,
+    val physicalRows: TerminalPhysicalRowHeights? = null,
+    val displayedRows: List<TerminalRenderedRowState>? = null,
+) {
+    // Never compare a sparse history list by elements when only selection/IME changes.
+    override fun equals(other: Any?): Boolean = other is TerminalViewportBindingInput && pass === other.pass &&
+        virtual == other.virtual && measureEager == other.measureEager && metrics === other.metrics &&
+        fullVirtual == other.fullVirtual && physicalRows == other.physicalRows && displayedRows === other.displayedRows
+
+    override fun hashCode(): Int = 31 * System.identityHashCode(pass) + System.identityHashCode(displayedRows)
+}
 
 /** The same synchronous input reads and completed-layout refresh in the app AND instrumented tests. */
 internal class TerminalViewportBinding(
@@ -61,6 +74,8 @@ internal class TerminalViewportBinding(
     val virtual: Boolean get() = input().virtual
     val pass: TerminalLazyLayoutPass get() = input().pass
     val measureEager: Boolean get() = input().measureEager
+    val fullVirtual: Boolean get() = input().fullVirtual
+    val physicalRows: TerminalPhysicalRowHeights? get() = input().physicalRows
     @Volatile var activeWriters = 0
         private set
     @Volatile var maximumWriters = 0
@@ -69,11 +84,14 @@ internal class TerminalViewportBinding(
         private set
     private var previousBackend: Boolean? = null
     private var attachedBackend: Boolean? = null
+    private var previousFullVirtual: Boolean? = null
+    private var attachedFullVirtual: Boolean? = null
     var onEffectStarted: ((TerminalViewportScrollEffect) -> Unit)? = null
 
     fun backendCommitted() {
-        if (previousBackend != null && previousBackend != virtual) controller.pauseScrollEffects()
+        if (previousBackend != null && (previousBackend != virtual || previousFullVirtual != fullVirtual)) controller.pauseScrollEffects()
         previousBackend = virtual
+        previousFullVirtual = fullVirtual
         if (!measureEager) measurements.clearEagerCache()
         if (!virtual) widthIndex.retainFor(pass.frame, pass.metricKey)
     }
@@ -82,6 +100,24 @@ internal class TerminalViewportBinding(
         val current = input()
         if (!current.virtual) return null
         val metrics = current.metrics()
+        if (current.fullVirtual) {
+            val screen = current.physicalRows ?: return null
+            val policy = TerminalFullVirtualPolicy(screen, metrics.usesTuiViewport, metrics.preservePhysicalGrid,
+                metrics.imeVisible, metrics.avoidIme)
+            val observation = measurements.readFull(current.pass, lazy, metrics.cellHeightPx, metrics.tailPaddingPx, policy,
+                current.displayedRows)
+                ?: return null
+            val exactAvoidance = if (!metrics.automaticImeAvoidance) metrics.avoidIme else if (metrics.usesTuiViewport) {
+                val last = current.pass.frame.terminalActiveBottomRow(metrics.preservePhysicalGrid)
+                metrics.imeVisible && last != null && screen.top(last + 1) + metrics.tailPaddingPx > observation.viewportHeightPx
+            } else {
+                val first = observation.rows.firstOrNull { it.index == 0 }
+                val last = observation.followRowIndex?.let(observation::measuredRow)
+                metrics.imeVisible && (first == null || last == null ||
+                    last.bottomPx - first.topPx + metrics.tailPaddingPx > observation.viewportHeightPx)
+            }
+            return controller.withRetainedItemScreenBottom(observation.copy(fullVirtual = policy.copy(avoidIme = exactAvoidance)))
+        }
         return measurements.read(current.pass, lazy, metrics.cellHeightPx, metrics.tailPaddingPx)
     }
 
@@ -104,7 +140,7 @@ internal class TerminalViewportBinding(
     /** Called before AND after consumed pointer deltas, for AUTO, and in the executor's finally. */
     fun currentScrollPx(): Int {
         val current = input()
-        if (attachedBackend != current.virtual) updateViewport()
+        if (attachedBackend != current.virtual || attachedFullVirtual != current.fullVirtual) updateViewport()
         if (current.virtual) {
             controller.observeItemViewport(current.pass.frame, observation())
             return 0 // Sentinel is never treated as a total or absolute lazy coordinate.
@@ -118,6 +154,7 @@ internal class TerminalViewportBinding(
         try {
             val current = input()
             attachedBackend = current.virtual
+            attachedFullVirtual = current.fullVirtual
             if (current.virtual) controller.updateItemViewport(current.pass.frame, observation()) else {
                 controller.updateViewport(current.pass.frame, current.pass.frame.rows.size, current.metrics(), eager.value,
                     measuredGeometry = eagerGeometry(), requireMeasuredGeometry = current.measureEager)
@@ -184,18 +221,23 @@ internal fun rememberTerminalBoundViewport(
     metrics: () -> TerminalViewportMetrics,
     gestureConfig: TerminalViewportGestureConfig,
     widthCheckpoint: TerminalWidthCheckpointStore? = null,
+    fullVirtual: Boolean = false,
+    renderedRows: List<TerminalRenderedRowState>? = null,
 ): TerminalBoundViewport {
     val pass = rememberTerminalLazyLayoutPass(frame, style)
+    val physicalRows = if (fullVirtual) rememberTerminalPhysicalMeasurements(frame,
+        requireNotNull(renderedRows), style, pass.metricKey) else null
     var armed by remember(sessionKey) {
         mutableStateOf(wantsVirtual && (controller.state.value.autoScroll || controller.state.value.anchor != null))
     }
     var visitedVirtual by remember(sessionKey) { mutableStateOf(armed || controller.state.value.anchorRowHeightPx > 0) }
-    val virtual = wantsVirtual && armed
+    val virtual = fullVirtual || (wantsVirtual && armed)
     // Text stays naturally measured in TUI too. HistoryCount*nominalHeight accumulates drift
     // above the physical screen; the complete measured prefix must gate EVERY eager target.
     // Do not call metrics() in composition: the frame collector still reads all live metrics.
     val measuredEager = !virtual
-    val latestInput by rememberUpdatedState(TerminalViewportBindingInput(pass, virtual, measuredEager, metrics))
+    val latestInput by rememberUpdatedState(TerminalViewportBindingInput(pass, virtual, measuredEager, metrics, fullVirtual,
+        physicalRows, renderedRows.takeIf { fullVirtual }))
     val latestWants by rememberUpdatedState(wantsVirtual)
     val binding = remember(sessionKey, controller, eager, lazy, measurements, widthCheckpoint) {
         TerminalViewportBinding(controller, eager, lazy, measurements, { latestInput }, widthCheckpoint)
@@ -215,7 +257,7 @@ internal fun rememberTerminalBoundViewport(
                 val current = latestInput
                 // Observe geometry and IME even without output. Frame identity comparisons are O(1).
                 listOf(TerminalFrameReference(current.pass.frame), current.pass.metricKey, current.virtual,
-                    current.measureEager, current.metrics(), latestWants,
+                    current.measureEager, current.metrics(), latestWants, current.fullVirtual, current.physicalRows,
                     if (current.virtual) lazy.layoutInfo else null, eager.isScrollInProgress)
             }.map { Unit },
             measurements.changes,

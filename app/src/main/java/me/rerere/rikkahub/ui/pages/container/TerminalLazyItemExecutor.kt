@@ -23,6 +23,15 @@ internal suspend fun executeTerminalLazyItemScroll(
     current: () -> TerminalItemViewport?,
     isCurrent: () -> Boolean,
 ): Boolean {
+    effect.selectionDeltaPx?.let { delta ->
+        if (!isCurrent()) return false
+        val before = current()?.takeIf { it.ready && it.fullVirtual != null } ?: return false
+        state.scrollBy(delta.toFloat())
+        if (!isCurrent()) return false
+        // A selection-edge delta is consumed user intent, not a semantic follow target. Capture
+        // a fresh layout after it, or let the controller capture the next one instead of snapping back.
+        return current()?.let { it.ready && it.layoutKey == before.layoutKey } == true
+    }
     val requested = requireNotNull(effect.itemTarget)
     val lookup = TerminalViewportLineLookup()
     var animated = effect.animated
@@ -48,16 +57,17 @@ internal suspend fun executeTerminalLazyItemScroll(
                 observation.frame, observation.frame.rows.size, target.anchor.lineId,
             ).takeIf { it >= 0 } ?: return true
         }
-        val row = observation.rows.firstOrNull { it.index == rowIndex }
+        val row = if (target == TerminalItemScrollTarget.Follow) observation.measuredRow(rowIndex)
+            else observation.rows.firstOrNull { it.index == rowIndex }
         if (row == null || target == TerminalItemScrollTarget.Top ||
             (target == TerminalItemScrollTarget.Follow && observation.followRowIndex == null)
         ) {
-            val itemIndex = minOf(rowIndex, observation.frame.historyCount)
+            val itemIndex = observation.itemIndex(rowIndex)
             if (animated) state.animateScrollToItem(itemIndex) else state.scrollToItem(itemIndex)
         } else {
             val delta = when (target) {
                 TerminalItemScrollTarget.Top -> row.topPx
-                TerminalItemScrollTarget.Follow -> row.bottomPx + observation.tailPaddingPx - observation.viewportHeightPx
+                TerminalItemScrollTarget.Follow -> observation.followDelta() ?: return false
                 is TerminalItemScrollTarget.Anchor -> row.topPx + terminalScaledItemClip(
                     target.anchor.clippedTopPx, target.capturedRowHeightPx, row.heightPx,
                 )
