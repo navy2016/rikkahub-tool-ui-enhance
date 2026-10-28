@@ -40,7 +40,7 @@ class ViewportShardTest(unittest.TestCase):
         full = workflow.split('- name: Require every case assigned to this shard', 1)[1]
         full = re.sub(r'          if \[ "\$TERMINAL_VIEWPORT_GROUP" = bottomControl \]; then.*?\n          fi', '', full, flags=re.S)
         # Focused suite entries overlap the all-suite inventory; omit only these explicit groups.
-        for suite in ('chunkViews', 'textMetrics', 'renderSnapshot', 'defaultBottom'):
+        for suite in ('chunkViews', 'textMetrics', 'renderSnapshot', 'defaultBottom', 'fullVirtualSelection'):
             start = full.find('          if [ "$TERMINAL_VIEWPORT_SUITE" = ' + suite + ' ]; then')
             if start >= 0:
                 end = full.index('\n          fi', start) + len('\n          fi')

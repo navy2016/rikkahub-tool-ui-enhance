@@ -2,15 +2,19 @@
 import argparse
 import base64
 import hashlib
+import io
 import importlib.util
 import json
 import math
 import os
 from pathlib import Path
+from pathlib import PurePosixPath
 import re
 import statistics
 import subprocess
+import urllib.request
 import xml.etree.ElementTree as ET
+import zipfile
 import zlib
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +47,12 @@ PAGE_METHODS = ('fullVirtualPageOrdinaryKeyboardSelectionMouseAndReentry',
                 'fullVirtualPageTuiKeyboardSelectionMouseAndReentry')
 PAGE_PHASES = ('initial','imeOpen','imeClosed','selection','reentry','mouse','alternate','main','input')
 BURSTS = ('imeOpen','imeClosed','selection','reentry')
+FIRST_SHA = 'c07100dfb9be25c42e502cb5e0a429fc08cc9006'
+FIRST_RUN = 40272608906
+FIRST_ARTIFACT = 12629136625
+SELECTION_METHODS = (VIEW_METHODS[2], VIEW_METHODS[3])
+FIRST_DIGEST = 'a48669cba4a9ca69fa856020fa4e611c8c43c1fef8dfb2a453cb279f6539d729'
+FIRST_BYTES = 10343406
 
 
 def load(name, filename):
@@ -266,12 +276,157 @@ def viewport(old=False):
     if not old:require(data['performanceAccepted'],'Fixed performance criteria failed; retain every sample')
 
 
+def correction_source_guard():
+    guard=source_guard()
+    require(git('rev-parse','HEAD:app/src/main')==git('rev-parse',FIRST_SHA+':app/src/main'),
+            'Selection driver correction changed production; cannot reuse prior gates')
+    permitted={VIEW_FILE,'.github/scripts/terminal-full-virtual-reports.py','.github/scripts/test_terminal_full_virtual.py',
+        '.github/scripts/test_terminal_viewport_shards.py','.github/workflows/terminal-viewport-interactions.yml',
+        'benchmarks/terminal-viewport-tests/run-ci.sh','benchmarks/TERMINAL_FULL_VIRTUAL.md','AGENTS.md'}
+    changed=set(git('diff','--name-only',FIRST_SHA,'HEAD').decode().splitlines())
+    require(changed<=permitted,'Selection driver correction changed another gate/build input')
+    current=(ROOT/VIEW_FILE).read_text();old=git('show',FIRST_SHA+':'+VIEW_FILE).decode()
+    for method in set(VIEW_METHODS)-set(SELECTION_METHODS):
+        start='    @Test fun '+method+'() {'
+        def body(source):
+            content=source.split(start,1)[1]
+            return content.split('\n    @Test ',1)[0].split('\n    private fun sha256',1)[0]
+        require(body(current)==body(old),'Frozen already-measured test method changed: '+method)
+    def fixture(source):
+        return source.split('    private fun terminal(',1)[1].split('\n    private fun done(',1)[0]
+    require(fixture(current)==fixture(old),'Frozen fixture/render/settle method changed')
+    return guard
+
+
+def prepare_first():
+    require(os.environ.get('GITHUB_ACTIONS')=='true' and
+            os.environ.get('GITHUB_REF')=='refs/heads/opt/terminal-verified-a79e7b6','Existing artifact retrieval is CI-only')
+    correction_source_guard()
+    base='repos/navy2016/rikkahub-tool-ui-enhance/'
+    def api(path):return json.loads(subprocess.check_output(['gh','api',base+path],timeout=30))
+    run=api(f'actions/runs/{FIRST_RUN}');artifact=api(f'actions/artifacts/{FIRST_ARTIFACT}')
+    require(run['head_sha']==FIRST_SHA and run['head_branch']=='opt/terminal-verified-a79e7b6' and
+            run['path']=='.github/workflows/terminal-viewport-interactions.yml' and
+            run['status']=='completed' and run['conclusion']=='failure' and run['run_attempt']==1,
+            'First run identity/conclusion changed')
+    require(artifact['workflow_run']['id']==FIRST_RUN and artifact['workflow_run']['head_sha']==FIRST_SHA and
+            artifact['digest']=='sha256:'+FIRST_DIGEST and artifact['size_in_bytes']==FIRST_BYTES and not artifact['expired'],
+            'First artifact identity/digest changed')
+    raw=subprocess.check_output(['gh','api',base+f'actions/artifacts/{FIRST_ARTIFACT}/zip'],timeout=180)
+    require(len(raw)==FIRST_BYTES and hashlib.sha256(raw).hexdigest()==FIRST_DIGEST,'First ZIP byte/hash mismatch')
+    target=ROOT/'artifacts/full-virtual-first';require(not target.exists(),'Refusing to replace first artifact evidence')
+    target.mkdir(parents=True)
+    selected={}
+    with zipfile.ZipFile(io.BytesIO(raw)) as bundle:
+        for m in bundle.infolist():
+            p=PurePosixPath(m.filename)
+            require(not p.is_absolute() and '..' not in p.parts,'Unsafe first artifact path')
+            keep=(m.filename=='artifacts/terminal-validation/full-virtual-logcat.txt' or
+                  m.filename.startswith('benchmarks/terminal-viewport-tests/build/outputs/androidTest-results/') and m.filename.endswith('.xml') or
+                  m.filename.startswith('benchmarks/terminal-viewport-tests/build/outputs/apk/') and m.filename.endswith('.apk'))
+            if not keep:continue
+            require(m.file_size<=64*1024*1024 and m.filename not in selected,'Unsafe duplicate/unbounded evidence')
+            data=bundle.read(m);file=target/m.filename;file.parent.mkdir(parents=True,exist_ok=True);file.write_bytes(data)
+            selected[m.filename]=dict(bytes=len(data),sha256=hashlib.sha256(data).hexdigest())
+    require(len(selected)==4,'Expected only first log/JUnit/two APKs in CI')
+    receipt=dict(run={k:run[k] for k in ('id','head_sha','head_branch','path','status','conclusion','run_attempt')},
+        artifact={k:artifact[k] for k in ('id','name','size_in_bytes','digest','workflow_run')},
+        archiveSha256=FIRST_DIGEST,files=selected,downloadLocation='cloud-runner-only')
+    (target/'source-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+    print('::notice title=Original failed checkpoint retained::'+json.dumps(dict(run=FIRST_RUN,artifact=FIRST_ARTIFACT,
+        sha256=FIRST_DIGEST,bytes=FIRST_BYTES,selectedMembers=len(selected),performanceResampled=False)))
+
+
+def merge_selection_correction(first_text,current_text):
+    cases=records(first_text,'FULL_VIRTUAL_CASE ')
+    require(len(cases)==5 and {c.get('case') for c in cases}=={'scenes','anchors','mouse','handoff','performance'} and
+            not records(first_text,'FULL_VIRTUAL_COPY ') and not records(first_text,'FULL_VIRTUAL_DRAG '),
+            'Original partial success inventory changed')
+    corrected=records(current_text,'FULL_VIRTUAL_CASE ')
+    require(len(corrected)==2 and {c.get('case') for c in corrected}=={'copy','drag'},'Correction must complete exactly two selection methods')
+    for marker in ('FULL_VIRTUAL_PERF ','FULL_VIRTUAL_RECT ','FULL_VIRTUAL_DISPOSE ','FULL_VIRTUAL_DEVICE '):
+        require(not records(current_text,marker),'Correction resampled or reran unrelated gate: '+marker)
+    frames=records(current_text,'FULL_VIRTUAL_HANDLE_FRAMES ')
+    require(len(frames)==1 and frames[0]==dict(moves=220,events=222,frames=222,screenCoordinates=True),
+            'Missing fixed platform gesture/frame contract')
+    touch=records(current_text,'FULL_VIRTUAL_HANDLE_INPUT ')
+    require(len(touch)==1 and all(type(touch[0].get(k)) in (int,float) and math.isfinite(touch[0][k])
+        for k in ('screenStartX','screenStartY','screenEndX','screenEndY','popupWindowX','popupWindowY')) and
+        touch[0]['screenEndY']>touch[0]['screenStartY'],'Missing screen-coordinate injection receipt')
+    devices=records(current_text,'FULL_VIRTUAL_SELECTION_DEVICE ')
+    require(len(devices)==2 and {r.get('case') for r in devices}=={'copy','drag'} and
+        all(integer(r,'pid',1)>0 and bool(r.get('fingerprint')) and all(re.fullmatch('[a-f0-9]{64}',r.get(k,''))
+            for k in ('targetApk','testApk')) for r in devices),'Missing installed selection APK identity')
+    data=validate_viewport(first_text+'\n'+current_text)
+    data.update(selectionDevices=devices,selectionTouch=touch,selectionFrames=frames)
+    return data
+
+
+def selection_correction():
+    guard=correction_source_guard()
+    original=ROOT/'artifacts/full-virtual-first'
+    first_text=(original/'artifacts/terminal-validation/full-virtual-logcat.txt').read_text()
+    current_text=(ROOT/'artifacts/terminal-validation/full-virtual-selection-logcat.txt').read_text()
+    first_cases={}
+    for p in (original/'benchmarks/terminal-viewport-tests/build/outputs/androidTest-results').rglob('TEST-*.xml'):
+        for c in ET.parse(p).getroot().iter('testcase'):
+            if c.get('classname')==VIEW_CLASS:
+                require(c.get('name') not in first_cases,'Duplicated original test')
+                first_cases[c.get('name')]=any(c.find(t) is not None for t in ('failure','error','skipped'))
+    require(set(first_cases)==set(VIEW_METHODS) and {k for k,v in first_cases.items() if v}==set(SELECTION_METHODS),
+            'Original failure inventory changed')
+    found=[]
+    for p in (ROOT/'benchmarks/terminal-viewport-tests/build/outputs/androidTest-results').rglob('TEST-*.xml'):
+        for c in ET.parse(p).getroot().iter('testcase'):
+            if c.get('classname')==VIEW_CLASS:
+                require(not any(c.find(t) is not None for t in ('failure','error','skipped')),'Corrected selection failed')
+                found.append(c.get('name'))
+    require(len(found)==2 and set(found)==set(SELECTION_METHODS),'Correction must run exactly the two selection methods')
+    data=merge_selection_correction(first_text,current_text)
+    require(data['performanceAccepted'],'Preserved first performance decisions failed')
+    # Read the actual source copied into both APKs, not a timing-based substitution.
+    function='    @Test fun fullVirtualPairedColdAndStreamingMeasurementsKeepEverySample() {'
+    current=(ROOT/VIEW_FILE).read_text();old=git('show',FIRST_SHA+':'+VIEW_FILE).decode()
+    timed=lambda s:s.split(function,1)[1].split('\n    private fun sha256',1)[0]
+    require(timed(current)==timed(old),'Frozen measured workload changed')
+    for role,folder in (('targetApk','release'),('testApk','androidTest/release')):
+        paths=list((original/'benchmarks/terminal-viewport-tests/build/outputs/apk'/folder).glob('*.apk'))
+        require(len(paths)==1 and hashlib.sha256(paths[0].read_bytes()).hexdigest()==data['devices'][0][role],
+                'Original measured APK identity differs')
+    hashes={name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in ALLOWED}
+    for p in (ROOT/'benchmarks/terminal-viewport-tests/build/generated/viewportSources').rglob('*.kt'):
+        name=MAIN+p.relative_to(ROOT/'benchmarks/terminal-viewport-tests/build/generated/viewportSources/me/rerere/rikkahub').as_posix()
+        require(p.read_bytes()==(ROOT/name).read_bytes(),'Copied current production input differs')
+        hashes[name]=hashlib.sha256(p.read_bytes()).hexdigest()
+    require(len(hashes)>=44,'Missing generated production source inventory')
+    current_apks={}
+    for role,folder in (('targetApk','release'),('testApk','androidTest/release')):
+        paths=list((ROOT/'benchmarks/terminal-viewport-tests/build/outputs/apk'/folder).glob('*.apk'))
+        require(len(paths)==1,'Missing corrected fixture APK pair')
+        current_apks[role]=hashlib.sha256(paths[0].read_bytes()).hexdigest()
+        require(all(r[role]==current_apks[role] for r in data['selectionDevices']),'Installed selection APK differs from corrected build')
+    receipt=json.loads((original/'source-receipt.json').read_text())
+    require(receipt['run']['id']==FIRST_RUN and receipt['run']['head_sha']==FIRST_SHA and
+            receipt['artifact']['id']==FIRST_ARTIFACT and receipt['artifact']['workflow_run']['id']==FIRST_RUN,
+            'Reused artifact ownership differs')
+    data.update(suite='terminal-full-virtual-selection-correction-v1',sourceSha=os.environ['GITHUB_SHA'],
+        runId=os.environ['GITHUB_RUN_ID'],sourceGuard=guard,originalSourceSha=FIRST_SHA,originalRun=FIRST_RUN,
+        originalArtifact=FIRST_ARTIFACT,originalFailures=sorted(SELECTION_METHODS),correctedMethods=sorted(found),
+        originalRawSha256=hashlib.sha256(first_text.encode()).hexdigest(),
+        correctedRawSha256=hashlib.sha256(current_text.encode()).hexdigest(),performanceResampled=False,
+        productionHashes=hashes,correctedApkHashes=current_apks,testSha256=hashlib.sha256((ROOT/VIEW_FILE).read_bytes()).hexdigest(),
+        originalArtifactSha256=receipt['archiveSha256'],
+        note='Original5methods/30performance samples preserved;2corrected selection methods from a different run. Production tree identical; not one all-success initial run.')
+    legacy.publish('Terminal full-virtual-selection-correction',data,
+        ROOT/'artifacts/terminal-validation/full-virtual-selection-correction.json',emit_compact=False)
+
+
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('action',choices=('guard','viewport','oldViewport','evidence'))
+    parser.add_argument('action',choices=('guard','viewport','oldViewport','prepareFirst','selectionCorrection','evidence'))
     parser.add_argument('--working',action='store_true')
     parser.add_argument('--page',type=int,choices=(1,2),default=1)
-    parser.add_argument('--report',choices=('full-virtual','tui-history-regression','full-virtual-page'),default='full-virtual')
+    parser.add_argument('--report',choices=('full-virtual','tui-history-regression','full-virtual-page','full-virtual-selection-correction'),default='full-virtual')
     args=parser.parse_args()
     try:
         if args.action=='guard':print(json.dumps(source_guard(args.working)))
@@ -280,6 +435,8 @@ if __name__=='__main__':
             path=ROOT/'artifacts'/folder/(args.report+'.json');raw=path.read_bytes();data=json.loads(raw)
             require(data['sourceSha']==os.environ['GITHUB_SHA'] and data['runId']==os.environ['GITHUB_RUN_ID'],'Wrong compact report identity')
             legacy.compact('Terminal '+args.report,raw,args.page)
+        elif args.action=='prepareFirst':prepare_first()
+        elif args.action=='selectionCorrection':selection_correction()
         else:viewport(args.action=='oldViewport')
     except (ValueError,OSError,subprocess.SubprocessError,KeyError,ET.ParseError) as e:
         print('::error title=Full virtual evidence rejected::'+str(e)[:2400].replace('%','%25').replace('\n','%0A'))

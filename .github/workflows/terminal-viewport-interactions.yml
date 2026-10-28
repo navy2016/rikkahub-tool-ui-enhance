@@ -6,7 +6,7 @@ on:
       suite:
         description: 'all, fresh default, publication regressions, or lint/Release type checking without tests'
         type: choice
-        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, tuiDisplay, bottomVisibility, bottomControl, tuiHistory, fullVirtual, longHistoryDiagnostic, longHistoryProbe, longHistoryPerformance, staticChecks]
+        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, tuiDisplay, bottomVisibility, bottomControl, tuiHistory, fullVirtual, fullVirtualSelection, longHistoryDiagnostic, longHistoryProbe, longHistoryPerformance, staticChecks]
         default: all
       production_sha:
         description: 'Optional exact archived production SHA for defaultBottom only; tests remain from this ref'
@@ -48,6 +48,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   long-history:
@@ -64,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'tuiDisplay' && '["tuiDisplay"]' || inputs.suite == 'bottomVisibility' && '["bottomVisibility"]' || inputs.suite == 'bottomControl' && '["bottomControl"]' || inputs.suite == 'tuiHistory' && '["tuiHistory"]' || inputs.suite == 'fullVirtual' && '["fullVirtual"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle","tuiDisplay","bottomVisibility","tuiHistory","fullVirtual"]') }}
+        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'tuiDisplay' && '["tuiDisplay"]' || inputs.suite == 'bottomVisibility' && '["bottomVisibility"]' || inputs.suite == 'bottomControl' && '["bottomControl"]' || inputs.suite == 'tuiHistory' && '["tuiHistory"]' || inputs.suite == 'fullVirtual' && '["fullVirtual"]' || inputs.suite == 'fullVirtualSelection' && '["fullVirtualSelection"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle","tuiDisplay","bottomVisibility","tuiHistory","fullVirtual"]') }}
     env:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
       TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
@@ -74,6 +75,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Bind selection correction to the exact failed checkpoint without resampling
+        if: ${{ matrix.group == 'fullVirtualSelection' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B .github/scripts/terminal-full-virtual-reports.py prepareFirst
       - name: Bind negative control to exact prior production without modifying the test oracle
         if: ${{ matrix.group == 'bottomControl' }}
         run: |
@@ -180,6 +186,14 @@ jobs:
       - name: Require every case assigned to this shard
         if: ${{ always() && matrix.group != 'staticChecks' }}
         run: |
+          if [ "$TERMINAL_VIEWPORT_SUITE" = fullVirtualSelection ]; then
+            python3 .github/scripts/report-terminal-tests.py \
+              benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
+              --require-suite me.rerere.rikkahub.viewporttest.TerminalFullVirtualInstrumentedTest \
+              --require-case-group 'fullVirtualSelectionSystemMenuCopiesAWordAndOffscreenSelectAll:1' \
+              --require-case-group 'fullVirtualSelectionHandleCrossesViewportWithoutLosingOffscreenText:1'
+            exit $?
+          fi
           if [ "$TERMINAL_VIEWPORT_GROUP" = fullVirtual ]; then
             python3 .github/scripts/report-terminal-tests.py \
               benchmarks/terminal-viewport-tests/build/outputs/androidTest-results \
@@ -376,6 +390,15 @@ jobs:
       - name: Require full virtual scenes clipboard disposal and fixed paired performance
         if: ${{ always() && matrix.group == 'fullVirtual' }}
         run: python3 -B .github/scripts/terminal-full-virtual-reports.py viewport
+      - name: Require both corrected selection methods and preserve first-run failures and timing
+        if: ${{ always() && matrix.group == 'fullVirtualSelection' }}
+        run: python3 -B .github/scripts/terminal-full-virtual-reports.py selectionCorrection
+      - name: Publish selection correction original evidence part one
+        if: ${{ always() && matrix.group == 'fullVirtualSelection' && hashFiles('artifacts/terminal-validation/full-virtual-selection-correction.json') != '' }}
+        run: python3 -B .github/scripts/terminal-full-virtual-reports.py evidence --report full-virtual-selection-correction --page 1
+      - name: Publish selection correction original evidence part two
+        if: ${{ always() && matrix.group == 'fullVirtualSelection' && hashFiles('artifacts/terminal-validation/full-virtual-selection-correction.json') != '' }}
+        run: python3 -B .github/scripts/terminal-full-virtual-reports.py evidence --report full-virtual-selection-correction --page 2
       - name: Publish bounded full virtual original evidence part one
         if: ${{ always() && matrix.group == 'fullVirtual' && hashFiles('artifacts/terminal-validation/full-virtual.json') != '' }}
         run: python3 -B .github/scripts/terminal-full-virtual-reports.py evidence --page 1
@@ -395,4 +418,5 @@ jobs:
             benchmarks/terminal-viewport-tests/build/reports/**
             artifacts/terminal-validation/**
             artifacts/terminal-tui/**
+            artifacts/full-virtual-first/source-receipt.json
           retention-days: 14

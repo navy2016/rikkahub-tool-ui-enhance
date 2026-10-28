@@ -3,7 +3,10 @@ package me.rerere.rikkahub.viewporttest
 import android.content.ClipboardManager
 import android.os.Build
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
+import android.view.InputDevice
+import android.view.MotionEvent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.referentialEqualityPolicy
@@ -91,6 +94,66 @@ class TerminalFullVirtualInstrumentedTest {
     }
     private fun done(name: String) = Log.i("TerminalFullVirtual","FULL_VIRTUAL_CASE "+JSONObject().put("case",name).put("passed",true))
 
+    private fun clickSystemAction(device: UiDevice, label: String) {
+        // Native UiAutomator waits do not advance the Compose test clock. Flush the completed
+        // gesture/selection state before asking Android's native floating action menu for an item.
+        compose.waitForIdle()
+        val item=device.wait(Until.findObject(By.text(label)),5000)
+        if(item==null) {
+            val out=java.io.ByteArrayOutputStream()
+            device.dumpWindowHierarchy(out)
+            Log.e("TerminalFullVirtual","FULL_VIRTUAL_MENU_FAILURE "+out.toString("UTF-8").take(12000))
+        }
+        assertNotNull("System action '$label' missing after completed Compose gesture",item)
+        checkNotNull(item).click()
+        compose.waitForIdle()
+    }
+
+    private fun selectionDevice(case: String) {
+        val instrumentation=InstrumentationRegistry.getInstrumentation()
+        Log.i("TerminalFullVirtual","FULL_VIRTUAL_SELECTION_DEVICE "+JSONObject().put("case",case)
+            .put("pid",Process.myPid()).put("fingerprint",Build.FINGERPRINT)
+            .put("targetApk",sha256(File(instrumentation.targetContext.applicationInfo.sourceDir).readBytes()))
+            .put("testApk",sha256(File(instrumentation.context.applicationInfo.sourceDir).readBytes())))
+    }
+
+    private fun dragWithFrames(from: Offset, to: Offset) {
+        val automation=InstrumentationRegistry.getInstrumentation().uiAutomation
+        val prior=compose.mainClock.autoAdvance
+        val downTime=SystemClock.uptimeMillis()
+        var current=from
+        var finished=false
+        var delivered=0
+        fun event(action: Int, point: Offset) {
+            val input=MotionEvent.obtain(downTime,SystemClock.uptimeMillis(),action,point.x,point.y,0)
+            input.source=InputDevice.SOURCE_TOUCHSCREEN
+            try { assertTrue("Platform selection touch rejected",automation.injectInputEvent(input,true));delivered++ }
+            finally { input.recycle() }
+        }
+        compose.mainClock.autoAdvance=false
+        try {
+            event(MotionEvent.ACTION_DOWN,from)
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle() // autoAdvance=false: wait for Android draw, not an endless held-drag loop.
+            repeat(220) { step ->
+                current=from+(to-from)*((step+1)/220f)
+                event(MotionEvent.ACTION_MOVE,current)
+                compose.mainClock.advanceTimeByFrame()
+                compose.waitForIdle()
+            }
+            event(MotionEvent.ACTION_UP,current)
+            finished=true
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+        } finally {
+            try { if(!finished) event(MotionEvent.ACTION_CANCEL,current) }
+            finally { compose.mainClock.autoAdvance=prior }
+        }
+        Log.i("TerminalFullVirtual","FULL_VIRTUAL_HANDLE_FRAMES "+JSONObject()
+            .put("moves",220).put("events",delivered).put("frames",222).put("screenCoordinates",true))
+        compose.waitForIdle()
+    }
+
     @Test fun fullVirtualAllScenesRemainVirtualWithRealGeometry() {
         var shown by mutableStateOf<Fixture?>(null,referentialEqualityPolicy())
         compose.setContent{shown?.Content()}
@@ -140,6 +203,7 @@ class TerminalFullVirtualInstrumentedTest {
     }
 
     @Test fun fullVirtualSelectionSystemMenuCopiesAWordAndOffscreenSelectAll() {
+        selectionDevice("copy")
         val f=fixture(10000,tui=false).apply{config=config.copy(selectionMode=true)}
         compose.setContent{f.Content()};settle(f)
         val clipboard=compose.activity.getSystemService(ClipboardManager::class.java)
@@ -154,11 +218,11 @@ class TerminalFullVirtualInstrumentedTest {
         row.performTouchInput{longClick(layouts.single().getBoundingBox(3).center)}
         val copy=compose.activity.getString(android.R.string.copy)
         val all=compose.activity.getString(android.R.string.selectAll)
-        checkNotNull(device.wait(Until.findObject(By.text(copy)),5000)).click()
+        clickSystemAction(device,copy)
         compose.waitUntil(5000){clipboard.primaryClip?.getItemAt(0)?.text?.toString()==text.text.substringBefore(' ')}
         row.performTouchInput{longClick(layouts.single().getBoundingBox(3).center)}
-        checkNotNull(device.wait(Until.findObject(By.text(all)),5000)).click()
-        checkNotNull(device.wait(Until.findObject(By.text(copy)),5000)).click()
+        clickSystemAction(device,all)
+        clickSystemAction(device,copy)
         compose.waitUntil(5000){clipboard.primaryClip?.getItemAt(0)?.text?.toString()==expected}
         assertTrue(f.isVirtual);assertTrue(f.measurements.retainedRows<=128)
         Log.i("TerminalFullVirtual","FULL_VIRTUAL_COPY "+JSONObject().put("allRows",f.frame.rows.size)
@@ -168,6 +232,7 @@ class TerminalFullVirtualInstrumentedTest {
     }
 
     @Test fun fullVirtualSelectionHandleCrossesViewportWithoutLosingOffscreenText() {
+        selectionDevice("drag")
         val terminal=terminal(10000);val frame=terminal.renderFrame()
         val saved=TerminalViewportState(autoScroll=false,anchorLineId=frame.historyLineIds[500],
             anchorClippedTopPx=0,anchorHistoryGeneration=frame.historyGeneration)
@@ -182,10 +247,16 @@ class TerminalFullVirtualInstrumentedTest {
         row.performTouchInput{longClick(results.single().getBoundingBox(3).center)}
         val device=UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         compose.waitForIdle()
-        val handle=compose.onNodeWithTag("terminal-selection-end").fetchSemanticsNode().boundsInWindow
-        val view=compose.onNodeWithTag("item-output").fetchSemanticsNode().boundsInWindow
-        assertTrue(device.drag(handle.center.x.toInt(),handle.center.y.toInt(),
-            (view.left+view.width/2).toInt(),(view.bottom+20).toInt(),220))
+        val handle=compose.onNodeWithTag("terminal-selection-end").fetchSemanticsNode()
+        val view=compose.onNodeWithTag("item-output").fetchSemanticsNode()
+        val from=handle.positionOnScreen+Offset(handle.size.width/2f,handle.size.height/2f)
+        val to=view.positionOnScreen+Offset(view.size.width/2f,view.size.height+20f)
+        Log.i("TerminalFullVirtual","FULL_VIRTUAL_HANDLE_INPUT "+JSONObject()
+            .put("screenStartX",from.x.toDouble()).put("screenStartY",from.y.toDouble())
+            .put("screenEndX",to.x.toDouble()).put("screenEndY",to.y.toDouble())
+            .put("popupWindowX",handle.boundsInWindow.center.x.toDouble())
+            .put("popupWindowY",handle.boundsInWindow.center.y.toDouble()))
+        dragWithFrames(from,to)
         compose.waitForIdle()
         compose.waitUntil(10_000){f.controller.state.value.scrollEffect==null && f.activeWriters==0}
         val last=f.observation()!!.rows.last{it.topPx<f.viewportHeight}
@@ -206,7 +277,7 @@ class TerminalFullVirtualInstrumentedTest {
             if(index==end.first)value.substring(0,end.second.max) else value
         }
         val copy=compose.activity.getString(android.R.string.copy)
-        checkNotNull(device.wait(Until.findObject(By.text(copy)),5000)).click()
+        clickSystemAction(device,copy)
         val clipboard=compose.activity.getSystemService(ClipboardManager::class.java)
         compose.waitUntil(5000){clipboard.primaryClip?.getItemAt(0)?.text?.toString()==expected}
         assertTrue(f.isVirtual);assertTrue(f.measurements.retainedRows<=128)

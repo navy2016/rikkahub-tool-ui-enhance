@@ -52,3 +52,23 @@ entry includes state creation and exact width preparation.5k/10k3tick stream mus
 pairs and median<=80%control. Other medians<=115%control+20ms. No post-result threshold changes.
 New viewport inventory7methods/45scene rectangles plus offscreen all-copy/handle-drag and30samples;
 all legacy173viewport methods remain. Frame/render/read byte contracts remain independent gates.
+
+## Initial result and one targeted correction
+
+Candidatec07100dfb9be25c42e502cb5e0a429fc08cc9006/productionc4da501312976a99776dc99fcd2d7db78bc1256a:
+483JVM40272600220 passed. Actual-page/PTY40272615096 passed; viewport40272608906 failed2/180,
+both new selection methods. Old173 and other new5 passed. Original2failures remain failed:
+system Copy menu required value null(line157);"Drag never recycled the start row"(line192).
+No production Release was built. First30performance samples and30disposals remain exact originals,
+fixed six criteria pass (component scope only). Original artifact12629136625/10343406B/SHA256
+a48669cba4a9ca69fa856020fa4e611c8c43c1fef8dfb2a453cb279f6539d729; raw log59e3a09f4ef6d758059c4eaa4cae03a70af0c63b75e1b27459f85b10ec3714eb.
+
+Driver inspection:Popup.boundsInWindow is local to its separate window, while UiDevice injects
+screen coordinates. Native waits/drag do not advance Compose's test frame clock. Corrected driver
+waits for Compose idle before native menus, injects222events in screen coordinates with222explicit
+frame advances(220fixed MOVE steps), restoring clock/cancelling touch in finally. Text/copy/recycling
+assertions are unchanged. This is an identified driver defect, not reconstructed events from the
+old failure. Production remains byte-identical; no first-performance resampling. Only these2methods
+run in fullVirtualSelection. Its reporter binds the original failed run/artifact/production hashes
+and labels prior/current evidence independently. If this one correction fails, stop without another
+automatic round or Release; retain the new diagnostic original.

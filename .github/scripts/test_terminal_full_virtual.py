@@ -81,7 +81,56 @@ def pages():
         ('FULL_VIRTUAL_PAGE_COPY',[dict(kind=k,source='unchanged-output-COPY',fullVirtual=True,bytes=100000,sha256='f'*64) for k in ('ordinary','tui')])]
 
 
+def correction():
+    first=viewport()
+    current=[('FULL_VIRTUAL_CASE',[c for c in first[0][1] if c['case'] in ('copy','drag')]), first[2], first[3]]
+    first[0]=(first[0][0],[c for c in first[0][1] if c['case'] not in ('copy','drag')])
+    first=[group for group in first if group[0] not in ('FULL_VIRTUAL_COPY','FULL_VIRTUAL_DRAG')]
+    current += [('FULL_VIRTUAL_HANDLE_FRAMES',[dict(moves=220,events=222,frames=222,screenCoordinates=True)]),
+                ('FULL_VIRTUAL_HANDLE_INPUT',[dict(screenStartX=40,screenStartY=100,screenEndX=90,screenEndY=340,popupWindowX=12,popupWindowY=12)]),
+                ('FULL_VIRTUAL_SELECTION_DEVICE',[dict(case=k,pid=10,fingerprint='host-contract-only',targetApk='e'*64,testApk='f'*64) for k in ('copy','drag')])]
+    return first,current
+
+
 class FullVirtualReportTest(unittest.TestCase):
+    def test_correction_uses_five_old_methods_two_new_and_original_samples(self):
+        first,current=correction()
+        data=gate.merge_selection_correction(encode(first),encode(current))
+        self.assertEqual(30,len(data['samples']))
+        self.assertEqual(2,len(data['selectionDevices']))
+        self.assertTrue(data['performanceAccepted'])
+        for group in range(len(current)):
+            a,b=correction(); b[group][1].pop()
+            with self.subTest(group=group), self.assertRaises(ValueError):gate.merge_selection_correction(encode(a),encode(b))
+
+    def test_correction_cannot_resample_or_hide_a_different_initial_failure(self):
+        first,current=correction()
+        current.append(('FULL_VIRTUAL_PERF',[viewport()[4][1][0]]))
+        with self.assertRaises(ValueError):gate.merge_selection_correction(encode(first),encode(current))
+        first,current=correction();first[0][1].pop()
+        with self.assertRaises(ValueError):gate.merge_selection_correction(encode(first),encode(current))
+        first,current=correction();current[3][1][0]['frames']=223
+        with self.assertRaises(ValueError):gate.merge_selection_correction(encode(first),encode(current))
+
+    def test_correction_keeps_frozen_production_and_has_exact_two_case_ci(self):
+        gate.correction_source_guard()
+        run=(ROOT/'benchmarks/terminal-viewport-tests/run-ci.sh').read_text()
+        body=run.split('" = fullVirtualSelection ]; then\n',1)[1].split('\nfi',1)[0]
+        self.assertEqual(set(gate.SELECTION_METHODS),set(re.findall(r'TerminalFullVirtualInstrumentedTest#(\w+)',body)))
+        self.assertEqual(2,len(re.findall(r'run_arm ',body)))
+        self.assertNotIn('PairedCold',body)
+        source=(ROOT/gate.VIEW_FILE).read_text()
+        self.assertIn('handle.positionOnScreen+Offset',source)
+        self.assertIn('automation.injectInputEvent(input,true)',source)
+        self.assertIn('compose.mainClock.advanceTimeByFrame()',source)
+        self.assertIn('compose.mainClock.autoAdvance=prior',source)
+        self.assertIn('Drag never recycled the start row',source)
+        self.assertIn('clipboard.primaryClip?.getItemAt(0)?.text?.toString()==expected',source)
+        workflow=(ROOT/'.github/workflows/terminal-viewport-interactions.yml').read_text()
+        self.assertIn('actions: read',workflow)
+        self.assertIn('terminal-full-virtual-reports.py prepareFirst',workflow)
+        self.assertIn('terminal-full-virtual-reports.py selectionCorrection',workflow)
+
     def test_complete_separate_scene_and_paired_evidence(self):
         result=gate.validate_viewport(encode(viewport()))
         self.assertEqual((7,45,30,30),(len(result['cases']),len(result['rectangles']),len(result['samples']),len(result['disposals'])))

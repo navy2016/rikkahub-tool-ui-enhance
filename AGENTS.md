@@ -155,6 +155,14 @@ Android版本元数据同bff4a51。DEX／baseline profile及Web生成产物不�
 Release必须在新模式、旧模式回归和同机证据通过后构建，实机仍待用户复测。不本地编译／
 升级依赖／下载APK／启子代理，保留既有artifacts/与历史失败。
 
+全量虚拟化首轮c07100d／生产树c4da501312976a99776dc99fcd2d7db78bc1256a：483JVM
+40272600220、真实页面／PTY40272615096通过；视口40272608906原173及新增5通过，新增
+两项选择用例失败。原菜单line157 Required value was null；拖动line192
+"Drag never recycled the start row"。首次30性能／30卸载及45场景原件已取回，六项性能
+判据均通过，但不是手机体感。正在使用原协议内唯一汇总修正：只修测试驱动的Popup窗口／
+屏幕坐标及Compose帧推进，生产源码不改，原性能不重采；fullVirtualSelection仅两项选择。
+不得将原失败抹去或把前后两个run说成同次全量通过。此定向轮仍失败时不自动第三轮／Release。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

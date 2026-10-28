@@ -98,6 +98,13 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
+if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = fullVirtualSelection ]; then
+  [ "$group" = fullVirtualSelection ]
+  run_arm selection-copy TerminalFullVirtualInstrumentedTest#fullVirtualSelectionSystemMenuCopiesAWordAndOffscreenSelectAll 240
+  run_arm selection-drag TerminalFullVirtualInstrumentedTest#fullVirtualSelectionHandleCrossesViewportWithoutLosingOffscreenText 240
+  adb logcat -d -v threadtime TerminalFullVirtual:I '*:S' > artifacts/terminal-validation/full-virtual-selection-logcat.txt
+  exit "$overall_status"
+fi
 if [ "$group" = bottomControl ]; then
   run_arm bottom-control-cursor TerminalBottomVisibilityInstrumentedTest#bottomVisibilityBlankCursorIsEntirelyVisible 180
   run_arm bottom-control-history TerminalBottomVisibilityInstrumentedTest#bottomVisibilityTuiHistoryGrowthNeverAccumulatesClipping 300
