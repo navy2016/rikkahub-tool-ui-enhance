@@ -12,6 +12,11 @@ errors = "\n".join(line for line in text.splitlines() if line.startswith("e:"))
 reason = text.split("* What went wrong:")[-1].split("* Try:")[0]
 message = (errors + "\n" + reason)[:3000]
 print("::error title=Terminal validation Gradle failure::" + message.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))
+causes = [line.strip()[:400] for line in text.splitlines() if any(marker in line for marker in
+    ('Could not GET', 'Could not HEAD', 'Received status code', 'Could not resolve ', 'Caused by:'))]
+if causes:
+    detail = "\n".join(causes[:10])[:2400]
+    print("::error title=Terminal Gradle focused resolution causes::" + detail.replace("%", "%25").replace("\n", "%0A").replace("\r", "%0D"))
 PY
 fi
 exit "$result"

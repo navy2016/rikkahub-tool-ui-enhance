@@ -39,3 +39,10 @@ V2usesFrameMetrics completion only as the readback/next-input gate;input→draw 
 trace timestamp. This changes closed-loop pacing,so failedv1default data is not an A/B performance
 control. Originalv1 did not persist the failing window,so the specific absentpredicate cannot be
 retroactively established beyond its exception; retain this limitation.
+
+Correctiondf90eed/run41110319203 stopped BEFOREcompilation/measurement at fixedKSP2.3.4plugin
+resolution. Nativefailure:`Plugin [id: 'com.google.devtools.ksp', version: '2.3.4', apply: false]
+was not found`;old193+hosted runs used this same unchanged dependency. Independent exactmarker
+andimplementationPOM requests returned200;Google's marker path404(expected fallback toCentral).
+CI's original underlying HTTP cause was not printed,so do not invent it. One recovery adds only
+build --info/focused error extraction,not dependency versions,repository mirrors or test changes.

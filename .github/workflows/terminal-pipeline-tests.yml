@@ -199,8 +199,10 @@ jobs:
             python3 -B .github/scripts/terminal-real-clock.py guard
           fi
           chmod +x gradlew
+          extra=()
+          if [ "$TERMINAL_PIPELINE_SUITE" = realClock ]; then extra+=(--info); fi
           bash .github/scripts/run-terminal-gradle.sh -PterminalPipelineTests=true -PincludeX86_64AbiForTests=true \
-            :app:assembleTerminaltest :app:assembleTerminaltestAndroidTest --stacktrace
+            :app:assembleTerminaltest :app:assembleTerminaltestAndroidTest --stacktrace "${extra[@]}"
           python3 .github/scripts/run-terminal-pipeline.py prepare
       - name: Validate only relevant real-page and bundle report contracts after type compilation
         if: ${{ !inputs.checks_only }}
