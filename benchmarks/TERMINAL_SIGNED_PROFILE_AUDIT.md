@@ -12,3 +12,10 @@ headerchecksum forrawDEXfiles. Corrected parser usesZIPCRCwhileindependentlychec
 Preserve initial audit as a parser-definition failure,not evidence of a corrupt APK. Rawprofile files
 and parsed diagnostics are saved beforevalidation to make future rejection independently inspectable.
 Reference:https://android.googlesource.com/platform/art/+/refs/heads/main/libdexfile/dex/dex_file_loader.cc
+
+Correctedaudit7743a18/run41075540623passed.BothoriginalAPKs profile010/metadata002 matchZIPCRC,
+DEXinternalAdler32/SHA1,method/type/classbounds. Referenceprofiledmethods10110+1462;candidate10094+1487.
+Counts changes alone do not show missing critical appcoverage. FulloriginalreportSHA256
+b5362a330fe9405156b1be2e281d8bed5943ad3f3ed309cc17b708e13db2ad32,121324B.
+APIstepkept10of11annotationfragments;thecompleteartifact12985729478/relay41076100412wasretrieved,
+notrerun. Rawprof/profm retained;noAPKdownloaded locally or installed onuserphone.

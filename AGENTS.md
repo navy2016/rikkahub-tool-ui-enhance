@@ -266,6 +266,14 @@ foreground-file24、foreground-buffer38、background-wait37完整帧。后台PID
 排除原正式包全局问题。新增只读正式APK profile与DEX一致性审计，固定已验证的两包SHA，
 仅云端读取原件，不安装/重建/清数据；profile文件改变不等于错误，匹配也不证明手机已AOT。
 
+跨版本A/B3ab0917/run41071712739成功：288测量+72预热+30transport，默认IMEvisible配对
+差值中位+13.197ms(3/4变慢)，imeHidden+2.326ms；这是键盘状态下回显，不是IME动画计时。
+波动/负值全部保留，不能据此证明全局同幅慢。正式profile审计7743a18/run41075540623通过，
+两包CRC/method/type均匹配；41075099086初版将APK位置CRC误当DEXheaderAdler32的脚本失败
+保留。全局问题根因仍未确认，生产仍55db111、无新Release。只读手机采集器已提供但未在
+用户设备运行，不清数据/安装/强制编译/改动画。下一步应取受影响手机ART与页面帧状态，
+而不是盲改解析器/虚拟化；现有两包版本号同为2.1.62/151，必须按APK SHA辨认。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

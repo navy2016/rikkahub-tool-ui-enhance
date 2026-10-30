@@ -378,7 +378,7 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
                 target = OUT/'latency-traces';target.mkdir(exist_ok=True)
                 # Perfetto drops privileges before reading named config files; adb push ownership
                 # is not a readability guarantee. Pass the existing config on stdin, not chmod/chown.
-                started = subprocess.run(['adb','shell','perfetto','--txt','--background','-c','-','-o',trace_remote],
+                started = subprocess.run(['adb','shell','perfetto','--txt','--background-wait','-c','-','-o',trace_remote],
                     input=(ROOT/'benchmarks/terminal-full-virtual-latency/perfetto.pbtxt').read_text(),capture_output=True,text=True,timeout=30)
                 (target/(method+'-perfetto-start.txt')).write_text(started.stdout+'\n'+started.stderr)
                 candidates = re.findall(r'^([0-9]+)$',started.stdout.strip(),re.M)
@@ -393,10 +393,19 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
                                              *extra_arguments, TEST_PACKAGE + '/androidx.test.runner.AndroidJUnitRunner'],
                                             stdout=stream, stderr=subprocess.STDOUT, timeout=seconds + 300 if soak else 520 if latency else 300)
             finally:
-                if trace_pid:
+                if latency:
                     try:
-                        output(['adb','shell','kill','-INT',trace_pid])
-                        output(['adb','shell',f'for n in $(seq 1 50); do if ! kill -0 {trace_pid} 2>/dev/null; then exit 0; fi; sleep 0.1; done; exit 1'],15)
+                        if trace_pid:
+                            stop = subprocess.run(['adb','shell','kill','-INT',trace_pid],capture_output=True,text=True,timeout=15)
+                            trace_state['stopResult'] = dict(exit=stop.returncode,stdout=stop.stdout,stderr=stop.stderr)
+                            if stop.returncode == 0:
+                                waited = subprocess.run(['adb','shell',f'for n in $(seq 1 50); do if ! kill -0 {trace_pid} 2>/dev/null; then exit 0; fi; sleep 0.1; done; exit 1'],
+                                    capture_output=True,text=True,timeout=15)
+                                trace_state['stopWait'] = dict(exit=waited.returncode,stdout=waited.stdout,stderr=waited.stderr)
+                    except (OSError,subprocess.SubprocessError) as stop_error:
+                        trace_state['stopError'] = str(stop_error)[:1000]
+                    try:
+                        # Even failed start/stop/wait is independent from original file retrieval.
                         output(['adb','pull',trace_remote,str(target/(method+'.pftrace'))],120)
                         trace_state.update(status='captured',rawTraceComplete=True)
                     except (OSError,subprocess.SubprocessError) as trace_error:

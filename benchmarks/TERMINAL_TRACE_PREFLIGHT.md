@@ -27,3 +27,10 @@ disappeared and collection was skipped afterkillfailure. UpstreamPerfettov40.0 e
 --background-wait for initialization readiness. Foreground invocation preserves post-start errors.
 No root permissions or SELinux policy changes; config passedstdin. User-facing application changes
 must wait for useful evidence and preserve all original render/input/history/selection contracts.
+
+Result:d166bfc/run41070952490 succeeded. foregroundfile/buffer/backgroundwait captured24/38/37
+completeSettingsSurfaceFrames,3unmatchedboundary starts retained. Allnativeoutputs/rawtraces
+independentlyreread;latePIDnotfound doesNOTmean missingfile. OldP0trace cannot be retroactively
+recovered. Collection code now usesbackground-wait and isolatesstart/stopstatus frompull;the fullP0
+matrix was not replayed. Transfer41071827540 failedpermissions;exactisolatedmetadatarecovery and
+relay41072192579 succeeded without rerunningpreflight. Source/traces under/workspace/terminal-review/trace-preflight/.
