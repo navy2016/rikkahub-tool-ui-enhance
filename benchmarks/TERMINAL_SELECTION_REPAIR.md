@@ -94,3 +94,34 @@ six methods and fixed220MOVE driver remain byte-identical. JVM report inventory 
 total cases, checked against source by a host test. Repeat fullReleaseJVM,old173+9affectedviewport and
 native page gates together. No new performance samples. This exhausts the one correction allowance;
 do not create an automatic further retry or relabel any original failed run.
+
+## Final checkpoint: selected copy fixed; handle interaction remains blocked
+
+Final9b718019bc582026d7f9139bfc507f399260e733/main3ccc04c2f05e4506b22ed2e897f6ee887785447c.
+490Release JVM41033789881 passed,including17fullVirtual tests. Native-page/PTY41033824934 passed;
+its original compressed page report was hash-checked and revalidated(18records/16cursor rectangles,
+12kernel queries/8windows,78200bytes each read/fed,2outputCOPY/2echo/2cleanup).
+Viewport41033807694 completed182cases:old173passed plus7/9affected cases passed. Two actual failures:
+
+- Original `fullVirtualSelectionHandleCrossesViewportWithoutLosingOffscreenText`,line263:
+  `Drag never recycled the start row`. Same fixed220MOVE/222events/222frames,screen128,73→213,339.
+  No per-event production trace from this candidate. Do not claim zero scroll or invent handler state.
+- Added `selectionRepairStationaryEdgesKeepExactWords`,line128→word:100→copy:73:
+  `Copy menu intercepts the actual grip center`. stationary-top completed; stationary-bottom failed
+  this new native-hit-box assertion. This identifies a bottom-menu/grip overlap, not proof that it
+  caused the separate original TOP-row drag failure. Measured-height exclusion did not solve every
+  native floating-menu placement. The original stationary word selection remains fixed.
+
+Original `fullVirtualSelectionSystemMenuCopiesAWordAndOffscreenSelectAll` now PASSED with exact
+10024rows/319650bytes/SHA2565c4acf6976bacf0d923251c00ec27932e4c04779966f2d1760f94b9a2c719e3f.
+This confirms the copy chain and repeated-style Binder repair, not the still-unreached dragged-range
+copy. ReverseLTR/RTL/graphemes/popup alignment,ordinary/TUI/IME/MOUSE/fullGrid/ALT/main/handoff/remount
+copies passed.12of13new ROW/MENU receipts exist; the missing bottom receipt remains a failure.
+
+Final raw artifact12967223260 from this failed run was relayed by41036095275 and only selected
+XML/log text was read locally. NoAPK download, no performance resample, no further acceptance or
+formalRelease. Original diagnostic/first-candidate failures are retained. The explicit allowance is
+exhausted: next targeted authorization must address actual native-menu geometry versus popup/window
+coordinate updates and touch ownership, retain all original assertions and verify only affected paths.
+Production is not reverted automatically and remains opt-in/unreleased. Latest formal app remains
+212b93e/run40066315546. Oldc07100d performance timings do not measure this final production tree.
