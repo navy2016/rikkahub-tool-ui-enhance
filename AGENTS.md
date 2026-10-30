@@ -163,6 +163,19 @@ Release必须在新模式、旧模式回归和同机证据通过后构建，实�
 屏幕坐标及Compose帧推进，生产源码不改，原性能不重采；fullVirtualSelection仅两项选择。
 不得将原失败抹去或把前后两个run说成同次全量通过。此定向轮仍失败时不自动第三轮／Release。
 
+上述唯一汇总修正已完成并仍受阻：测试提交fa16a20c9fa2c1387d5c7519bcb2826dae3bacfd，
+run40620489127两项均失败，生产树仍c4da501312976a99776dc99fcd2d7db78bc1256a。
+单词复制在TerminalFullVirtualInstrumentedTest.kt:222等待精确剪贴板内容5000ms超时；
+已找到并点击系统Copy菜单，但实际剪贴板值／选区端点未记录，SelectAll尚未到达。
+拖动在同文件:263仍为"Drag never recycled the start row"；原件确认屏幕坐标47,88→213,339，
+220次MOVE／222事件／222帧，不能再将失败归结为已证明的单一坐标或测试时钟问题。
+日志未记录每次handler命中／边缘请求／滚动消费，未离屏也不等于完全没有滚动。
+两轮预算已用完，无第三轮、生产修复／回滚或Release；须明确追加选择链路诊断／修复授权。
+两轮JUnit、局部日志、首轮30性能和页面原件已复核；页面通过的SEL切换及原COPY全文不
+覆盖系统选区复制。首轮45布局记录含36实际光标矩形；新页面18记录含16光标矩形、12内核
+查询及8精确字节窗口。性能实机待验。结案见TERMINAL_FULL_VIRTUAL.md末节，本地证据目录
+/workspace/terminal-review/full-virtual/；最新正式应用仍212b93e/run40066315546。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

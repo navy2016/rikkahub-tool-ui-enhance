@@ -72,3 +72,49 @@ old failure. Production remains byte-identical; no first-performance resampling.
 run in fullVirtualSelection. Its reporter binds the original failed run/artifact/production hashes
 and labels prior/current evidence independently. If this one correction fails, stop without another
 automatic round or Release; retain the new diagnostic original.
+
+## Blocked checkpoint after the correction
+
+Correctionfa16a20c9fa2c1387d5c7519bcb2826dae3bacfd/run40620489127 is completed with BOTH selection
+methods still failing; production remainsc4da501312976a99776dc99fcd2d7db78bc1256a. No successful
+combined acceptance report exists and no Release was dispatched. Latest formal application remains
+212b93e/run40066315546. Do not automatically start a third test round or change/roll back production.
+
+- `fullVirtualSelectionSystemMenuCopiesAWordAndOffscreenSelectAll`, testline222:
+  `androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`.
+  System Copy was found/clicked; the following exact WORD-content wait failed. Actual clipboard
+  content and endpoint state were not captured. SelectAll and complete selected-copy checks were
+  not reached. Original output COPY success is a DIFFERENT operation, not proof this works.
+- `fullVirtualSelectionHandleCrossesViewportWithoutLosingOffscreenText`, testline263:
+  `java.lang.AssertionError: Drag never recycled the start row`.
+  Original log confirms screen47,88→213,339 versus popup-window44,44 and fixed220moves/222events/
+  222frame advances. This proves driver progress, not that the production handler accepted every
+  event. No endpoint/edge request/consumed-scroll trace exists. The failure does not prove zero scroll.
+
+Original artifact12786429495 is10323536B, SHA256
+344290f041bccd009788f5da53bd600d27cb607036aebc497ea7521b4d69257d. Selected log1108B, SHA256
+f1dd63b93692e26c2d90ec2696546de5c263e81360ff59ed49d99b7a384d5c08. Two original XMLs and the
+first-source receipt were retrieved with bounded ranges from isolated relay40621245497. No APK
+was downloaded locally; transientDNS/TLS read errors did not cause re-dispatch or a test rerun.
+
+First results retain their original boundaries:483JVM passed; old173viewport plus5new methods passed,
+2new methods failed.45layout records contain36cursor-checked rectangles. Same-device first30timed
+observations/30disposals satisfy the six frozen component criteria;10k cold median1956.131→362.819ms,
+3tick stream583.496→145.720ms. First sampled10k new mode retained24screen states/11measuredUI rows.
+These are not phoneFPS, thermal acceptance, all-scene smoothness or a successful whole feature.
+The page report was decoded/hash-checked and independently revalidated:18records/16cursor rectangles,
+12kernel queries,8exact160tick windows(78200bytes each read/fed),twoRAW UI echoes/twooutputCOPYs and
+two cleanups. Ordinary/TUI kernel dimensions were25×80. No new performance samples were taken.
+
+Resume only with explicit targeted authorization. First add bounded diagnostics for WORD selection
+→endpoints→focus/menu callback→copied/clipboard length/hash, and pointer→hit→edge request→sole writer
+→consumed offset/visible IDs. Compare the same gestures with the unchanged original selection path;
+do not alter the expected word, delete offscreen-copy assertions, force-eager SEL or add another scroll
+writer. Decide the smallest production fix only after that evidence, then verify affected selection,
+TUI/IME/MOUSE/ALT/handoff paths. This is proposed next scope, not an executed or passed third round.
+
+User report and self-contained no-APK evidence capsule are prepared under
+`/workspace/terminal-review/full-virtual/blocked/` and `/delivery`. Its verifier checks original failed
+JUnit, compressed page receipts, sample identity/order and recalculates the frozen medians. Local
+hash consistency is not third-party digital attestation. Original full-page36echo/12settlement suite
+has a successful cloud run/driver receipt; its separate rawJSON was not retrieved for local recompute.
