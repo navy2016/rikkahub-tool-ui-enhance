@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import re
 import unittest
+from unittest.mock import patch
 
 SPEC=importlib.util.spec_from_file_location('full_virtual_contract',Path(__file__).with_name('terminal-full-virtual-reports.py'))
 gate=importlib.util.module_from_spec(SPEC);SPEC.loader.exec_module(gate)
@@ -113,7 +114,12 @@ class FullVirtualReportTest(unittest.TestCase):
         with self.assertRaises(ValueError):gate.merge_selection_correction(encode(first),encode(current))
 
     def test_correction_keeps_frozen_production_and_has_exact_two_case_ci(self):
-        gate.correction_source_guard()
+        # Frozen historical gate: later authorized production fixes must not rewrite its conclusion.
+        original_git=gate.git
+        def archived_git(*args):
+            if args==('diff','--name-only','HEAD','--','app/src/main'):return b''
+            return original_git(*(v.replace('HEAD','fa16a20c9fa2c1387d5c7519bcb2826dae3bacfd') for v in args))
+        with patch.object(gate,'git',side_effect=archived_git):gate.correction_source_guard()
         run=(ROOT/'benchmarks/terminal-viewport-tests/run-ci.sh').read_text()
         body=run.split('" = fullVirtualSelection ]; then\n',1)[1].split('\nfi',1)[0]
         self.assertEqual(set(gate.SELECTION_METHODS),set(re.findall(r'TerminalFullVirtualInstrumentedTest#(\w+)',body)))

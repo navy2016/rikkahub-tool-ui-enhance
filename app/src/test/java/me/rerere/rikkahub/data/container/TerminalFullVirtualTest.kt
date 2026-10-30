@@ -1,14 +1,57 @@
 package me.rerere.rikkahub.data.container
 
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
 import me.rerere.rikkahub.ui.pages.container.TerminalRowStore
 import me.rerere.rikkahub.ui.pages.container.TerminalSparseRows
+import me.rerere.rikkahub.ui.pages.container.TerminalSelectionDragMotion
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.junit.Assert.*
 import org.junit.Test
 
 class TerminalFullVirtualTest {
+    @Test fun fullVirtualStationaryLongPressAndHandleDownNeverAutoscroll() {
+        val motion = TerminalSelectionDragMotion()
+        for (point in listOf(Offset(42f,14.5f), Offset(42f,300f))) {
+            motion.begin(point)
+            repeat(222) { assertEquals(0,motion.edgeDelta(point,319f)) }
+            motion.move(point)
+            assertEquals(0,motion.edgeDelta(point,319f))
+            motion.end()
+        }
+    }
+
+    @Test fun fullVirtualSelectionOnlyScrollsTowardTheDraggedEdge() {
+        val motion = TerminalSelectionDragMotion()
+        motion.begin(Offset(42f,14.5f))
+        motion.move(Offset(44f,20f))
+        assertEquals(0,motion.edgeDelta(Offset(44f,20f),319f))
+        motion.move(Offset(44f,300f))
+        assertTrue(motion.edgeDelta(Offset(44f,300f),319f)>0)
+        motion.move(Offset(44f,290f))
+        assertEquals(0,motion.edgeDelta(Offset(44f,290f),319f))
+        motion.move(Offset(44f,10f))
+        assertTrue(motion.edgeDelta(Offset(44f,10f),319f)<0)
+    }
+
+    @Test fun fullVirtualSelectionHoldingAfterRealDragRetainsIntentUntilRelease() {
+        val motion = TerminalSelectionDragMotion()
+        motion.begin(Offset(0f,160f));motion.move(Offset(4f,310f))
+        val expected = motion.edgeDelta(Offset(4f,310f),319f)
+        assertTrue(expected>0)
+        repeat(30) { motion.move(Offset(4f,310f));assertEquals(expected,motion.edgeDelta(Offset(4f,310f),319f)) }
+        motion.end();assertEquals(0,motion.edgeDelta(Offset(4f,310f),319f))
+        motion.begin(Offset(4f,310f));assertEquals(0,motion.edgeDelta(Offset(4f,310f),319f))
+    }
+
+    @Test fun fullVirtualHorizontalOnlySelectionDoesNotInventVerticalMotion() {
+        val motion = TerminalSelectionDragMotion()
+        motion.begin(Offset(0f,15f));motion.move(Offset(200f,15f))
+        assertEquals(0,motion.edgeDelta(Offset(200f,15f),319f))
+        assertEquals(0,motion.edgeDelta(Offset(200f,15f),0f))
+    }
+
     private fun terminal(size: Int = 1000) = TerminalEmulator(80, 24, size).apply {
         feed((0 until size + 23).joinToString("\r\n") { "row-$it 中文 e\u0301 👩‍💻" } + "\r\n")
     }

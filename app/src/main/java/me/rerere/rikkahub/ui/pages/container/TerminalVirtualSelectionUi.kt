@@ -51,7 +51,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.testTag
@@ -81,6 +80,34 @@ import me.rerere.rikkahub.utils.TerminalEmulator
 import kotlin.math.roundToInt
 import java.security.MessageDigest
 
+/** Motion intent, separate from long-press/handle ownership. No movement means no edge scrolling. */
+internal class TerminalSelectionDragMotion {
+    private var previous: Offset? = null
+    var verticalDirection: Int = 0
+        private set
+
+    fun begin(position: Offset) { previous = position; verticalDirection = 0 }
+    fun move(position: Offset) {
+        val old = previous ?: return
+        val delta = position.y - old.y
+        if (delta != 0f) verticalDirection = if (delta > 0f) 1 else -1
+        previous = position
+    }
+    fun end() { previous = null; verticalDirection = 0 }
+
+    fun edgeDelta(position: Offset, viewportHeight: Float): Int {
+        if (previous == null || viewportHeight <= 0f) return 0
+        val edge = minOf(48f, viewportHeight / 4)
+        return when {
+            verticalDirection < 0 && position.y < edge ->
+                -((edge-position.y).coerceAtMost(edge) / 2).roundToInt().coerceAtLeast(1)
+            verticalDirection > 0 && position.y > viewportHeight-edge ->
+                ((position.y-viewportHeight+edge).coerceAtMost(edge) / 2).roundToInt().coerceAtLeast(1)
+            else -> 0
+        }
+    }
+}
+
 /** Only currently attached rows own coordinates/TextLayoutResult. Stable endpoint data lives separately. */
 internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) {
     val selection = TerminalVirtualSelection()
@@ -102,11 +129,16 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
     var dragPosition by mutableStateOf<Offset?>(null)
         private set
     private var draggedHandle: Handle? = null
+    private val dragMotion = TerminalSelectionDragMotion()
     var showToolbar by mutableStateOf(false)
     var focused by mutableStateOf(false)
     var copyAction: () -> Boolean = { false }
     val focusRequester = FocusRequester()
     val retainedLayouts: Int get() = rows.size
+
+    fun trace(stage: String) {
+        if (binding.onSelectionTrace != null) trace(stage, *emptyArray<Pair<String, Any?>>())
+    }
 
     /** No-op without a diagnostic observer; only bounded scalar state and SHA256 text proofs. */
     fun trace(stage: String, vararg fields: Pair<String, Any?>) {
@@ -147,7 +179,7 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
             selection.clear()
             showToolbar = false
             finishDrag(false)
-            trace("bind-clear", "active" to active, "revision" to next.revision)
+            if (binding.onSelectionTrace != null) trace("bind-clear", "active" to active, "revision" to next.revision)
         }
     }
 
@@ -170,6 +202,7 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         binding.controller.beginVirtualSelection()
         dragging = false
         dragPosition = position
+        dragMotion.begin(position)
         showToolbar = false
         trace("mouse-start")
     }
@@ -257,6 +290,7 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         binding.controller.beginVirtualSelection()
         dragging = false
         dragPosition = position
+        dragMotion.begin(position)
         draggedHandle = handle(false)
         showToolbar = false
         trace("word-selected")
@@ -270,6 +304,7 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         binding.controller.beginVirtualSelection()
         dragging = start
         dragPosition = position
+        dragMotion.begin(position)
         draggedHandle = handle(start)
         showToolbar = false
         trace("handle-start", "startHandle" to start)
@@ -277,6 +312,7 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
 
     fun extend(position: Offset) {
         val start = dragging ?: return
+        dragMotion.move(position)
         dragPosition = position
         val (row, offset) = hit(position, true) ?: return
         selection.move(start, row.index, offset)
@@ -284,9 +320,10 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
     }
 
     fun finishDrag(toolbar: Boolean = true) {
-        trace("drag-finish-before", "requestToolbar" to toolbar)
+        if (binding.onSelectionTrace != null) trace("drag-finish-before", "requestToolbar" to toolbar)
         val wasDragging = dragging != null
         dragging = null
+        dragMotion.end()
         dragPosition = null
         draggedHandle = null
         if (wasDragging) binding.controller.endVirtualSelection()
@@ -294,7 +331,10 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         trace("drag-finish-after")
     }
 
-    fun clear(reason: String = "clear") { trace("clear", "reason" to reason); selection.clear(); finishDrag(false); showToolbar = false }
+    fun clear(reason: String = "clear") {
+        if (binding.onSelectionTrace != null) trace("clear", "reason" to reason)
+        selection.clear(); finishDrag(false); showToolbar = false
+    }
 
     fun selectAll() {
         if (!enabled) return
@@ -346,12 +386,7 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         val point = dragPosition ?: return
         val view = bounds ?: return
         if (dragging == null) return
-        val edge = minOf(48f, view.height / 4)
-        val delta = when {
-            point.y < edge -> -((edge-point.y).coerceAtMost(edge) / 2).roundToInt().coerceAtLeast(1)
-            point.y > view.height-edge -> ((point.y-view.height+edge).coerceAtMost(edge) / 2).roundToInt().coerceAtLeast(1)
-            else -> 0
-        }
+        val delta = dragMotion.edgeDelta(point, view.height)
         if (delta != 0) {
             binding.currentScrollPx()
             val accepted = binding.controller.scrollSelectionBy(delta)
@@ -482,13 +517,12 @@ internal fun TerminalVirtualSelectionContainer(ui: TerminalVirtualSelectionUi, e
 private fun TerminalVirtualSelectionHandle(ui: TerminalVirtualSelectionUi, start: Boolean,
     handle: TerminalVirtualSelectionUi.Handle) {
     val latest by rememberUpdatedState(handle)
-    val width = with(LocalDensity.current) { 25.dp.roundToPx() }
-    val provider = remember(ui,start,width) {
+    val provider = remember(ui,start) {
         object : PopupPositionProvider {
             override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize,
                 layoutDirection: LayoutDirection, popupContentSize: IntSize): IntOffset {
                 val point = latest.point
-                return anchorBounds.topLeft + IntOffset(point.x.roundToInt() - if (latest.left) width else 0,
+                return anchorBounds.topLeft + IntOffset(point.x.roundToInt() - if (latest.left) popupContentSize.width else 0,
                     point.y.roundToInt())
             }
         }

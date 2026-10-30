@@ -98,6 +98,20 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
+if [ "$group" = selectionRepair ]; then
+  mkdir -p artifacts/terminal-selection-repair
+  adb logcat -G 8M
+  # Original correctness methods, byte-for-byte unchanged; never invoke its performance method.
+  run_arm repair-scenes TerminalFullVirtualInstrumentedTest#fullVirtualAllScenesRemainVirtualWithRealGeometry 240
+  run_arm repair-anchors TerminalFullVirtualInstrumentedTest#fullVirtualLockedFontsRtlImeAndReentryPreserveTheStableAnchor 180
+  run_arm repair-copy TerminalFullVirtualInstrumentedTest#fullVirtualSelectionSystemMenuCopiesAWordAndOffscreenSelectAll 240
+  run_arm repair-drag TerminalFullVirtualInstrumentedTest#fullVirtualSelectionHandleCrossesViewportWithoutLosingOffscreenText 240
+  run_arm repair-mouse TerminalFullVirtualInstrumentedTest#fullVirtualMouseMappingIncludesOffscreenPhysicalOrigin 120
+  run_arm repair-handoff TerminalFullVirtualInstrumentedTest#fullVirtualModeSwitchKeepsOldChoicesAndMeasuredReadPosition 180
+  run_arm repair-selection-regressions TerminalSelectionAcceptanceTest 360
+  adb logcat -d -v threadtime TerminalFullVirtual:I TerminalSelectionAcceptance:I '*:S' > artifacts/terminal-selection-repair/repair-logcat.txt
+  exit "$overall_status"
+fi
 if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = selectionDiagnostic ]; then
   [ "$group" = selectionDiagnostic ]
   mkdir -p artifacts/terminal-selection-repair
