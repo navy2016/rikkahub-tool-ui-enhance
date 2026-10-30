@@ -42,7 +42,7 @@ def repair_fixture():
         historyRows=0 if p=='alternate' else 10000,rowStates=24,measuredRows=12,writers=1,length=9,sha256='e'*64,
         top=0,bottom=29,rowHeight=29,viewport=319) for p in phases]
     groups.append(('SELECTION_REPAIR_ROW',rows))
-    groups.append(('SELECTION_REPAIR_MENU',[dict(avoidsHandles=True,handles=2,expectedLength=9) for _ in phases]))
+    groups.append(('SELECTION_REPAIR_MENU',[dict(avoidsHandles=True,insideSafeWindow=True,handles=2,expectedLength=9) for _ in phases]))
     return groups
 
 
@@ -116,13 +116,14 @@ class SelectionDiagnosticContracts(unittest.TestCase):
     def test_motion_guard_has_no_stationary_or_opposite_edge_scroll(self):
         text=(gate.ROOT/(gate.PREFIX+'TerminalVirtualSelectionUi.kt')).read_text()
         self.assertIn('dragMotion.begin(position)',text)
-        self.assertIn('dragMotion.move(position)',text)
-        self.assertIn('dragMotion.edgeDelta(point, view.height)',text)
+        self.assertIn('dragMotion.move(pointer)',text)
+        self.assertIn('dragMotion.edgeDelta(pointer, view.height)',text)
         self.assertIn('verticalDirection < 0 && position.y < edge',text)
         self.assertIn('verticalDirection > 0 && position.y > viewportHeight-edge',text)
         self.assertIn('fun end() { previous = null; verticalDirection = 0 }',text)
         self.assertIn('popupContentSize.width',text)
-        self.assertIn('points.maxOf { it.y } + handleHeight + 1',text)
+        self.assertIn('grips.maxOf { it.bottom }',text)
+        self.assertIn('owner.rootView.startActionMode(callback,ActionMode.TYPE_FLOATING)',text)
 
     def test_jvm_inventory_matches_the_actual_added_methods(self):
         source=(gate.ROOT/'app/src/test/java/me/rerere/rikkahub/data/container/TerminalFullVirtualTest.kt').read_text()
@@ -130,7 +131,7 @@ class SelectionDiagnosticContracts(unittest.TestCase):
         workflow=(gate.ROOT/'.github/workflows/terminal-emulator-tests.yml').read_text()
         values=re.findall(r"--require-case-group 'fullVirtual:(\d+)'",workflow)
         self.assertEqual([str(len(methods))],values)
-        self.assertEqual(17,len(methods))
+        self.assertEqual(19,len(methods))
 
 
 if __name__=='__main__':unittest.main()

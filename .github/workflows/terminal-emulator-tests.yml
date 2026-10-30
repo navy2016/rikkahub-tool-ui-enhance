@@ -337,7 +337,7 @@ jobs:
             --require-suite me.rerere.rikkahub.data.container.TerminalDisplayPolicyTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalTuiHistoryTest \
             --require-suite me.rerere.rikkahub.data.container.TerminalFullVirtualTest \
-            --require-case-group 'fullVirtual:17' \
+            --require-case-group 'fullVirtual:19' \
             --require-case-group 'tuiHistory:6' \
             --require-suite me.rerere.rikkahub.data.container.TerminalBottomVisibilityTest
 

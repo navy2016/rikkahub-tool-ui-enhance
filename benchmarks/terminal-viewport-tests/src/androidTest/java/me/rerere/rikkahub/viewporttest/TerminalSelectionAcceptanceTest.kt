@@ -67,13 +67,17 @@ class TerminalSelectionAcceptanceTest {
             node.config.getOrElse(SemanticsProperties.TestTag) { "" }.startsWith("terminal-selection-")
         },true).fetchSemanticsNodes()
         assertTrue(handles.isNotEmpty())
+        val screen=android.graphics.Rect()
+        compose.activity.window.decorView.getWindowVisibleDisplayFrame(screen)
         for(handle in handles) {
             val x=(handle.positionOnScreen.x+handle.size.width/2f).toInt()
             val y=(handle.positionOnScreen.y+handle.size.height/2f).toInt()
+            assertTrue("Selection grip hidden behind system window",screen.contains(x,y))
             assertFalse("Copy menu intercepts the actual grip center",copy.visibleBounds.contains(x,y))
             assertFalse("Select-all menu intercepts the actual grip center",all?.visibleBounds?.contains(x,y)==true)
         }
         Log.i("TerminalSelectionAcceptance","SELECTION_REPAIR_MENU "+JSONObject().put("avoidsHandles",true)
+            .put("insideSafeWindow",true)
             .put("handles",handles.size).put("expectedLength",expected.length))
         copy.click()
         compose.waitForIdle()

@@ -6,15 +6,34 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
 import me.rerere.rikkahub.ui.pages.container.TerminalRowStore
 import me.rerere.rikkahub.ui.pages.container.TerminalSparseRows
 import me.rerere.rikkahub.ui.pages.container.TerminalSelectionDragMotion
 import me.rerere.rikkahub.ui.pages.container.terminalSelectionClipboardText
+import me.rerere.rikkahub.ui.pages.container.terminalSelectionHandlePosition
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.junit.Assert.*
 import org.junit.Test
 
 class TerminalFullVirtualTest {
+    @Test fun fullVirtualHandleTouchBoxAvoidsStatusAndNavigationBars() {
+        val safe=IntRect(0,84,1440,2392);val size=IntSize(88,88)
+        assertEquals(IntOffset(84,84),terminalSelectionHandlePosition(IntOffset(84,29),size,safe))
+        assertEquals(IntOffset(0,84),terminalSelectionHandlePosition(IntOffset(-88,29),size,safe))
+        assertEquals(IntOffset(1352,2304),terminalSelectionHandlePosition(IntOffset(1430,2400),size,safe))
+    }
+
+    @Test fun fullVirtualHandleSafeWindowPreservesInteriorAndFloatingOrigins() {
+        val safe=IntRect(20,40,420,340);val size=IntSize(40,40)
+        assertEquals(IntOffset(120,160),terminalSelectionHandlePosition(IntOffset(120,160),size,safe))
+        assertEquals(IntOffset(20,40),terminalSelectionHandlePosition(IntOffset(-10,-30),size,safe))
+        assertEquals(IntOffset(380,300),terminalSelectionHandlePosition(IntOffset(500,800),size,safe))
+        assertEquals(IntOffset(20,40),terminalSelectionHandlePosition(IntOffset(100,100),IntSize(800,800),safe))
+    }
+
     @Test fun fullVirtualClipboardCoalescesRepeatedRowsWithoutLosingTextOrAnnotations() {
         val source=buildAnnotatedString {
             repeat(10000) { row ->

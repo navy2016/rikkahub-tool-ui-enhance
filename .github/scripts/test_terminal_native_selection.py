@@ -46,5 +46,15 @@ class NativeContracts(unittest.TestCase):
         old='benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/TerminalFullVirtualInstrumentedTest.kt'
         self.assertEqual(gate.git('show',gate.BASE+':'+old),(gate.ROOT/old).read_bytes())
 
+    def test_window_host_and_pointer_separation_are_real_not_extra_scrollers(self):
+        s=(gate.ROOT/gate.SOURCE).read_text()
+        self.assertIn('owner.rootView.startActionMode(callback,ActionMode.TYPE_FLOATING)',s)
+        self.assertIn('view.getWindowVisibleDisplayFrame(visible)',s)
+        self.assertIn('terminalSelectionHandlePosition(proposed,popupContentSize,safe)',s)
+        self.assertIn('ui.beginHandle(start, anchor, initial)',s)
+        self.assertIn('ui.extend(it + adjustment,it)',s)
+        self.assertIn('dragMotion.edgeDelta(pointer, view.height)',s)
+        self.assertNotIn('lazy.scrollBy(',s)
+
 
 if __name__=='__main__':unittest.main()

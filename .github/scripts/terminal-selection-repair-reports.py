@@ -184,7 +184,7 @@ def validate_repair(text):
     devices=legacy.records(text,'FULL_VIRTUAL_SELECTION_DEVICE ')
     require(len(devices)==2 and {r.get('case') for r in devices}=={'copy','drag'},'Original installed APK identity absent')
     menus=legacy.records(text,'SELECTION_REPAIR_MENU ')
-    require(len(menus)==13 and all(r.get('avoidsHandles') is True and 1<=r.get('handles',0)<=2 and
+    require(len(menus)==13 and all(r.get('avoidsHandles') is True and r.get('insideSafeWindow') is True and 1<=r.get('handles',0)<=2 and
             r.get('expectedLength',0)>0 for r in menus),'Missing actual menu/grip exclusion proof')
     return dict(cases=cases,rectangles=rects,copies=copies,drags=drags,regression=regression,selectionRows=rows,
                 frames=frames,selectionDevices=devices,menus=menus,performanceResampled=False)
@@ -220,6 +220,7 @@ def repair_report():
         originalTestSha256=hashlib.sha256((ROOT/original).read_bytes()).hexdigest(),
         addedTestSha256=hashlib.sha256((ROOT/ACCEPT_FILE).read_bytes()).hexdigest(),
         diagnosticRun=41025419455,priorFailedRuns=[40272608906,40620489127],
+        nativeDiagnosticRun=41041104334,priorSelectionRepairRuns=[41028506352,41033807694],
         note='Original six correctness cases plus three targeted regressions; no rerun of first performance. Prior failures remain failed.')
     legacy.publish('Terminal selection repair',data,OUT/'repair-report.json',emit_compact=False)
 
