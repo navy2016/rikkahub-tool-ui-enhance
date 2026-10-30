@@ -147,13 +147,19 @@ def report(text,manifest,device,installed):
     evidence=validate(text);scope=guard()
     traces=[]
     for method,case in zip(METHODS,CASES):
+        status_path=OUT/'latency-traces'/(method+'-trace-status.json')
+        status=json.loads(status_path.read_bytes())
+        if status['status']!='captured':
+            traces.append(dict(case=case,status=status['status'],rawTraceComplete=False,diagnostic=status,
+                note='System trace unavailable; no SurfaceFlinger presentation claim. Window FrameMetrics is independent.'))
+            continue
         path=OUT/'latency-traces'/(method+'.pftrace');raw=path.read_bytes()
         require(0<len(raw)<67108864,'Trace missing or size cap reached')
         pid=next(r['pid'] for r in evidence['cases'] if r['case']==case)
         decoded=frame_timeline(raw,pid);details=OUT/'latency-traces'/(method+'-frames.json')
         details.write_text(json.dumps(decoded,separators=(',',':')))
         traces.append(dict(case=case,bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest(),
-            **{k:v for k,v in decoded.items() if k!='frames'},decodedSha256=hashlib.sha256(details.read_bytes()).hexdigest()))
+            **{k:v for k,v in decoded.items() if k!='frames'},rawTraceComplete=True,decodedSha256=hashlib.sha256(details.read_bytes()).hexdigest()))
     result=dict(suite='terminal-full-virtual-latency-v1',sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],
         sourceGuard=scope,manifest=manifest,device=device,installedApkHashes=installed,**evidence,summary=summary(evidence),
         surfaceFrameEvidence=traces,

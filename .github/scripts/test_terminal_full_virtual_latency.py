@@ -66,4 +66,10 @@ class LatencyContracts(unittest.TestCase):
         self.assertEqual(1,gate.frame_timeline(message(1,first),123)['unmatchedStarts'])
         with self.assertRaises(ValueError):gate.frame_timeline(raw[:-1],123)
 
+    def test_system_trace_failure_must_be_retained_not_used_as_fake_presentation(self):
+        text=(gate.ROOT/'.github/scripts/run-terminal-pipeline.py').read_text()
+        self.assertIn("'-perfetto-start.txt'",text)
+        self.assertIn("rawTraceComplete=False",text)
+        self.assertIn("'stop-or-retrieval-failed'",text)
+
 if __name__=='__main__':unittest.main()

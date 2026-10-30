@@ -373,13 +373,19 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             log = OUT / (method + '.log')
             trace_pid = None
             trace_remote = '/data/misc/perfetto-traces/fv-' + method + '.pftrace'
+            trace_state = None
             if latency:
                 output(['adb','push',str(ROOT/'benchmarks/terminal-full-virtual-latency/perfetto.pbtxt'),'/data/local/tmp/fv-latency.pbtxt'])
-                started = output(['adb','shell','perfetto','--txt','--background','-c','/data/local/tmp/fv-latency.pbtxt','-o',trace_remote]).strip()
-                candidates = re.findall(r'^([0-9]+)$',started,re.M)
-                if len(candidates)!=1:
-                    raise ValueError('Perfetto did not return an owned trace PID: '+started[:400])
-                trace_pid = candidates[0]
+                target = OUT/'latency-traces';target.mkdir(exist_ok=True)
+                started = subprocess.run(['adb','shell','perfetto','--txt','--background','-c','/data/local/tmp/fv-latency.pbtxt','-o',trace_remote],
+                    capture_output=True,text=True,timeout=30)
+                (target/(method+'-perfetto-start.txt')).write_text(started.stdout+'\n'+started.stderr)
+                candidates = re.findall(r'^([0-9]+)$',started.stdout.strip(),re.M)
+                trace_state = dict(method=method,startExit=started.returncode,startOutput=started.stdout,startError=started.stderr,
+                    status='started' if started.returncode==0 and len(candidates)==1 else 'start-failed',rawTraceComplete=False)
+                if trace_state['status']=='started':trace_pid=candidates[0]
+                else:notice('warning','Perfetto startup unavailable; FrameMetrics remain independent',(started.stdout+'\n'+started.stderr)[:1600])
+                (target/(method+'-trace-status.json')).write_text(json.dumps(trace_state,indent=2)+'\n')
             try:
                 with log.open('w') as stream:
                     result = subprocess.run(['adb', 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class', test_class + '#' + method,
@@ -387,10 +393,15 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
                                             stdout=stream, stderr=subprocess.STDOUT, timeout=seconds + 300 if soak else 520 if latency else 300)
             finally:
                 if trace_pid:
-                    output(['adb','shell','kill','-INT',trace_pid])
-                    output(['adb','shell',f'for n in $(seq 1 50); do if ! kill -0 {trace_pid} 2>/dev/null; then exit 0; fi; sleep 0.1; done; exit 1'],15)
-                    target = OUT/'latency-traces';target.mkdir(exist_ok=True)
-                    output(['adb','pull',trace_remote,str(target/(method+'.pftrace'))],120)
+                    try:
+                        output(['adb','shell','kill','-INT',trace_pid])
+                        output(['adb','shell',f'for n in $(seq 1 50); do if ! kill -0 {trace_pid} 2>/dev/null; then exit 0; fi; sleep 0.1; done; exit 1'],15)
+                        output(['adb','pull',trace_remote,str(target/(method+'.pftrace'))],120)
+                        trace_state.update(status='captured',rawTraceComplete=True)
+                    except (OSError,subprocess.SubprocessError) as trace_error:
+                        trace_state.update(status='stop-or-retrieval-failed',error=str(trace_error)[:1000],
+                            output=getattr(trace_error,'output','') or '')
+                    (target/(method+'-trace-status.json')).write_text(json.dumps(trace_state,indent=2)+'\n')
             text = log.read_text()
             logs.append(text)
             try:

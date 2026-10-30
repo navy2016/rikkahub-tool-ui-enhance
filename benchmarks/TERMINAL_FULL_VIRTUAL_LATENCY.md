@@ -35,3 +35,10 @@ Harness compile correction:source6d4da2397f01cf214152b941f1f9ce73d397b7fa/run410
 failed compileTerminaltestAndroidTestKotlin with`Unresolved reference 'cursorColumn'` at testline233.
 RenderFrame carries cursorRow but not cursorColumn; use the existing synchronized model getter
 (1-based). No instrumentation/performance sample ran. Preserve this failure; production is unchanged.
+
+Perfetto bootstrap:source0debc6b6bf27cf2d7bc0ea6af315e796abdf7e5f/run41059663096 compiled,then
+the very first `adb shell perfetto --txt --background ...` exited1 before starting instrumentation.
+Its wrapper omitted the captured output; exact reason is NOT established. Preserve the failed run.
+Now always retain startup stdout/stderr/exit and stop/retrieval results. Unavailable system tracing is
+an explicit separate outcome,not fabricated presentation evidence; all528terminal/WindowFrameMetrics
+samples remain required. No prior runtime samples exist, so this is not favorable resampling.
