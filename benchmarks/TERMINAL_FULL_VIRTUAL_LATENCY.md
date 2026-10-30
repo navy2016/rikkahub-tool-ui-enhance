@@ -42,3 +42,20 @@ Its wrapper omitted the captured output; exact reason is NOT established. Preser
 Now always retain startup stdout/stderr/exit and stop/retrieval results. Unavailable system tracing is
 an explicit separate outcome,not fabricated presentation evidence; all528terminal/WindowFrameMetrics
 samples remain required. No prior runtime samples exist, so this is not favorable resampling.
+
+## Runtime harness v2 correction; previous396samples remain separate failed-run evidence
+
+Run41061360774/source3e7eb05f382cc5250d89bffb72439bbafb3fd120:ordinary1k captured transitory32rows,
+then failed its FIRST echo with32!=25. Other3cases completed132samples each and emittedtheir case
+records,then failed because the FrameMetrics listener was removed twice:
+`attempt to remove OnFrameMetricsAvailableListener that was never added`. Keep all396original
+samples as a failed/partial baseline,not acceptance. No timings are selected or overwritten.
+Perfetto startup original now proves`Could not open /data/local/tmp/fv-latency.pbtxt (errno:13,Permission denied)`.
+
+V2 changes only harness:single-owner idempotent listener removal;before measurement require actual
+grid acknowledgement/model/output bounds stable for700ms and>=2distinct draws (cover160ms+160ms
+resize,120msIME guard,180msfallback),recordevery grid transition;passPerfetto config onstdin.
+All per-sample grid equality/byte/renderer assertions stay. Add24no-output layout snapshot controls:
+GetTextLayoutResult may create wrappers,so identity changes alone must NOT be called actual shaping.
+The new run is a separately identified v2 baseline under corrected measurement conditions,not a
+replacement of favorable old samples. Production and workloads remain frozen; no optimization yet.

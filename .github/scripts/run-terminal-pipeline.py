@@ -375,10 +375,11 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             trace_remote = '/data/misc/perfetto-traces/fv-' + method + '.pftrace'
             trace_state = None
             if latency:
-                output(['adb','push',str(ROOT/'benchmarks/terminal-full-virtual-latency/perfetto.pbtxt'),'/data/local/tmp/fv-latency.pbtxt'])
                 target = OUT/'latency-traces';target.mkdir(exist_ok=True)
-                started = subprocess.run(['adb','shell','perfetto','--txt','--background','-c','/data/local/tmp/fv-latency.pbtxt','-o',trace_remote],
-                    capture_output=True,text=True,timeout=30)
+                # Perfetto drops privileges before reading named config files; adb push ownership
+                # is not a readability guarantee. Pass the existing config on stdin, not chmod/chown.
+                started = subprocess.run(['adb','shell','perfetto','--txt','--background','-c','-','-o',trace_remote],
+                    input=(ROOT/'benchmarks/terminal-full-virtual-latency/perfetto.pbtxt').read_text(),capture_output=True,text=True,timeout=30)
                 (target/(method+'-perfetto-start.txt')).write_text(started.stdout+'\n'+started.stderr)
                 candidates = re.findall(r'^([0-9]+)$',started.stdout.strip(),re.M)
                 trace_state = dict(method=method,startExit=started.returncode,startOutput=started.stdout,startError=started.stderr,

@@ -148,6 +148,10 @@ class TerminalFullVirtualLatencyTest : KoinComponent {
         var id: String?=null;var capture: TerminalPipelineTrace.Capture?=null
         val frames=Frames();val frameThread=HandlerThread("terminal-baseline-frames");frameThread.start()
         val frameHandler=Handler(frameThread.looper)
+        var listenerAttached=false
+        fun detachFrames() {
+            if(listenerAttached){compose.activity.window.removeOnFrameMetricsAvailableListener(frames);listenerAttached=false}
+        }
         try {
             runBlocking {
                 settings.update{it.copy(terminalCommandPreferences=JSONArray().put(JSONObject()
@@ -164,7 +168,7 @@ class TerminalFullVirtualLatencyTest : KoinComponent {
             val trace=TerminalPipelineTrace.start(process,4096);capture=trace
             val terminal=requireNotNull(manager.getInteractiveTerminalEmulator(process))
             val nav=Navigator(mutableListOf())
-            compose.runOnUiThread{compose.activity.window.addOnFrameMetricsAvailableListener(frames,frameHandler)}
+            compose.runOnUiThread{compose.activity.window.addOnFrameMetricsAvailableListener(frames,frameHandler);listenerAttached=true}
             compose.setContent {
                 val values by settings.settingsFlow.collectAsState()
                 RikkahubTheme { CompositionLocalProvider(LocalSettings provides values,LocalNavController provides nav) {
@@ -185,25 +189,51 @@ class TerminalFullVirtualLatencyTest : KoinComponent {
                     ok
                 };compose.waitForIdle()
             }
+            fun stableGrid(ime: Boolean,phase: String) {
+                var signature: List<Any?>?=null;var unchangedSince=now();var lastDraw=0L;var confirmations=0
+                // Cover the page's two160ms resize stages,120ms IME guard and180ms TUI fallback.
+                // Actual acknowledgement/model/layout and distinct draws must also agree.
+                compose.waitUntil(30_000) {
+                    val sample=trace.viewport();val ack=manager.interactiveSessionSize(process)
+                    val geometry=compose.onNodeWithTag("terminal-trace-output",true).fetchSemanticsNode().size
+                    val next=listOf(ack?.request,ack?.columns,ack?.rows,terminal.columns,terminal.rows,geometry.width,geometry.height,ime)
+                    if(next!=signature || !ready(ime)) {
+                        if(next!=signature)emit("FV_LATENCY_GRID",JSONObject().put("case",case).put("launch",launch).put("phase",phase)
+                            .put("timeNs",now()).put("request",ack?.request).put("columns",terminal.columns).put("rows",terminal.rows)
+                            .put("width",geometry.width).put("height",geometry.height))
+                        signature=next;unchangedSince=now();confirmations=0
+                    }
+                    if(sample!=null && sample.draw>lastDraw){confirmations++;lastDraw=sample.draw}
+                    val accepted=ready(ime) && ack!=null && ack.columns==terminal.columns && ack.rows==terminal.rows &&
+                        confirmations>=2 && now()-unchangedSince>=700_000_000L
+                    if(!accepted)compose.runOnUiThread{trace.requestViewportDraw()}
+                    accepted
+                }
+            }
             compose.waitUntil(15_000){manager.readInteractiveBuffer(process)?.contains("READY\r\n")==true}
             val mountStart=now();compose.runOnUiThread{mounted=true};Espresso.closeSoftKeyboard()
             compose.waitUntil(30_000){terminal.maxScrollbackLines()==size && trace.viewport()?.viewport?.initialized==true && !manager.hasPendingTerminalResize(process)}
             runBlocking{manager.sendInput(process,"SEED").getOrThrow()}
             compose.waitUntil(30_000){manager.readInteractiveBuffer(process)?.contains("SEEDED\r\n")==true}
-            settle(false);assertEquals(size,terminal.renderFrame().historyCount)
+            settle(false);stableGrid(false,"seed");assertEquals(size,terminal.renderFrame().historyCount)
             val physicalRows=terminal.rows
             emit("FV_LATENCY_MOUNT",JSONObject().put("case",case).put("launch",launch).put("seedIncluded",true)
                 .put("elapsedNs",now()-mountStart).put("historyRows",size).put("columns",terminal.columns).put("rows",physicalRows))
             emit("FV_LATENCY_MEMORY",memory().put("case",case).put("launch",launch).put("phase","ready"))
             for(phase in listOf("echo","cursor","row","burst","imeEcho","remountEcho")) {
-                if(phase=="imeEcho") { openIme();settle(true) }
+                if(phase=="imeEcho") { openIme();settle(true);stableGrid(true,"ime") }
                 if(phase=="remountEcho") {
-                    Espresso.closeSoftKeyboard();settle(false)
+                    Espresso.closeSoftKeyboard();settle(false);stableGrid(false,"ime-hidden")
                     compose.runOnUiThread{mounted=false};compose.waitForIdle()
-                    val began=now();compose.runOnUiThread{mounted=true};settle(false)
+                    val began=now();compose.runOnUiThread{mounted=true};settle(false);stableGrid(false,"remount")
                     emit("FV_LATENCY_MOUNT",JSONObject().put("case",case).put("launch",launch).put("seedIncluded",false)
                         .put("elapsedNs",now()-began).put("historyRows",size).put("columns",terminal.columns).put("rows",terminal.rows))
                 }
+                val noopBefore=layouts();val noopAfter=layouts();val noopCommon=noopBefore.keys.intersect(noopAfter.keys)
+                emit("FV_LATENCY_LAYOUT_PROBE",JSONObject().put("case",case).put("launch",launch).put("phase",phase)
+                    .put("common",noopCommon.size).put("resultReplaced",noopCommon.count{noopBefore[it]!==noopAfter[it]})
+                    .put("paragraphReplaced",noopCommon.count{noopBefore[it]!!.multiParagraph!==noopAfter[it]!!.multiParagraph})
+                    .put("outputInjected",false))
                 repeat(22) { iteration ->
                     val ime=phase=="imeEcho";settle(ime)
                     val previous=layouts();val preFrame=terminal.renderFrame()
@@ -244,6 +274,7 @@ class TerminalFullVirtualLatencyTest : KoinComponent {
                         .put("inputBytes",input.toByteArray().size).put("outputBytes",output.toByteArray().size).put("outputSha256",hash(output))
                         .put("beforeRevision",preFrame.revision).put("fedRevision",last.frameRevision).put("publishedRevision",publication.frameRevision).put("drawnRevision",drawn.frameRevision)
                         .put("visibleBefore",previous.size).put("visibleAfter",next.size).put("commonLayouts",common.size).put("replacedLayouts",replaced).put("changedTexts",changed)
+                        .put("paragraphReplacedLayouts",common.count{previous[it]!!.multiParagraph!==next[it]!!.multiParagraph})
                         .put("retainedRows",state.retainedRowStates).put("measuredRows",state.measuredRows).put("writers",state.writers)
                         .put("panelCompositions",events.count{it.stage==TerminalPipelineStage.PANEL_COMPOSED})
                         .put("captures",events.count{it.stage==TerminalPipelineStage.FRAME_CAPTURED}).put("publications",events.count{it.stage==TerminalPipelineStage.FRAME_PUBLISHED})
@@ -267,7 +298,7 @@ class TerminalFullVirtualLatencyTest : KoinComponent {
                 emit("FV_LATENCY_MEMORY",memory().put("case",case).put("launch",launch).put("phase",phase))
             }
             compose.waitForIdle()
-            compose.runOnUiThread{compose.activity.window.removeOnFrameMetricsAvailableListener(frames)}
+            compose.runOnUiThread{detachFrames()}
             val drained=CountDownLatch(1);frameHandler.post{drained.countDown()}
             assertTrue("Frame metrics listener did not drain",drained.await(5,TimeUnit.SECONDS))
             val nativeFrames=frames.snapshot()
@@ -278,7 +309,7 @@ class TerminalFullVirtualLatencyTest : KoinComponent {
                 .put("frames",nativeFrames.size).put("frameReportsDropped",nativeFrames.sumOf{it.getInt("dropped")}).put("frameBufferOverflow",frames.overflow)
                 .put("refreshRate",compose.activity.display?.refreshRate ?: 0f).put("fingerprint",Build.FINGERPRINT))
         } finally {
-            try{compose.runOnUiThread{mounted=false;compose.activity.window.removeOnFrameMetricsAvailableListener(frames)};compose.waitForIdle()}
+            try{compose.runOnUiThread{mounted=false;detachFrames()};compose.waitForIdle()}
             finally {
                 capture?.close();frameThread.quitSafely();frameThread.join(5000)
                 try{id?.let{runBlocking{manager.closeInteractiveSession(it)};manager.removeProcessRecord(it)}}

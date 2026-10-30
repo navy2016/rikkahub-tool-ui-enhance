@@ -9,7 +9,7 @@ spec=importlib.util.spec_from_file_location('latency_contract',Path(__file__).wi
 gate=importlib.util.module_from_spec(spec);spec.loader.exec_module(gate)
 
 def fixture():
-    groups={k:[] for k in ('CASE','SAMPLE','FRAME','MOUNT','MEMORY','CLEANUP')}
+    groups={k:[] for k in ('CASE','SAMPLE','FRAME','MOUNT','MEMORY','CLEANUP','LAYOUT_PROBE','GRID')}
     for number,c in enumerate(gate.CASES):
         launch=f'00000000-0000-4000-8000-{number:012d}'
         groups['CASE'].append(dict(case=c,launch=launch,passed=True,samples=132,frames=1,frameBufferOverflow=0,frameReportsDropped=0))
@@ -17,6 +17,8 @@ def fixture():
         for seeded in (True,False):groups['MOUNT'].append(dict(case=c,launch=launch,seedIncluded=seeded,rows=25,columns=80,elapsedNs=100))
         for phase in ('ready',*gate.PHASES):groups['MEMORY'].append(dict(case=c,launch=launch,phase=phase))
         groups['CLEANUP'].append(dict(case=c,launch=launch,closed=True,frameThreadStopped=True))
+        for phase in gate.PHASES:groups['LAYOUT_PROBE'].append(dict(case=c,launch=launch,phase=phase,common=10,resultReplaced=10,paragraphReplaced=10,outputInjected=False))
+        for phase in ('seed','ime','ime-hidden','remount'):groups['GRID'].append(dict(case=c,launch=launch,phase=phase,rows=25))
         for phase in gate.PHASES:
             for i in range(22):
                 raw=gate.output_for(c,phase,i,25).encode()
@@ -25,7 +27,7 @@ def fixture():
                 groups['SAMPLE'].append(dict(case=c,launch=launch,phase=phase,iteration=i,warmup=i<2,virtual=True,tui=c.startswith('tui-'),
                     historyRows=int(c.rsplit('-',1)[1]),ime=phase=='imeEcho',outputBytes=len(raw),outputSha256=hashlib.sha256(raw).hexdigest(),
                     startedNs=1,uiNs=2,drawNs=5,checkedNs=6,inputToDrawNs=3,inputToCheckNs=4,beforeRevision=1,fedRevision=2,publishedRevision=2,drawnRevision=2,
-                    retainedRows=25,measuredRows=10,writers=0,visibleBefore=10,visibleAfter=10,commonLayouts=10,replacedLayouts=1,changedTexts=1,panelCompositions=1,
+                    retainedRows=25,measuredRows=10,writers=0,visibleBefore=10,visibleAfter=10,commonLayouts=10,replacedLayouts=1,paragraphReplacedLayouts=1,changedTexts=1,panelCompositions=1,
                     spans={k:1 for k in ('readToLockNs','captureNs','rowSyncNs','parseWindowNs','uiToNativeReadNs','feedToPublishNs','publishToDrawNs')},events=es))
     return groups
 def encode(g):return '\n'.join('FV_LATENCY_'+k+' '+json.dumps(r) for k,rows in g.items() for r in rows)
@@ -49,6 +51,10 @@ class LatencyContracts(unittest.TestCase):
         self.assertNotIn('System.gc()',text)
         self.assertNotIn('after.cursorColumn',text)
         self.assertIn('synchronized(terminal){terminal.cursorColumn()}',text)
+        self.assertEqual(1,text.count('removeOnFrameMetricsAvailableListener(frames)'))
+        self.assertIn('listenerAttached=false',text)
+        self.assertIn('stableGrid(false,"seed")',text)
+        self.assertIn('FV_LATENCY_LAYOUT_PROBE',text)
 
     def test_protobuf_frame_reader_requires_complete_target_pid_pair(self):
         def var(n):

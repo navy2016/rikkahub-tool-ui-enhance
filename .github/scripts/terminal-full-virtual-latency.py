@@ -42,20 +42,21 @@ def finite(value):return type(value) in (int,float) and math.isfinite(value) and
 def validate(text):
     cases=records(text,'FV_LATENCY_CASE');samples=records(text,'FV_LATENCY_SAMPLE');frames=records(text,'FV_LATENCY_FRAME')
     mounts=records(text,'FV_LATENCY_MOUNT');memory=records(text,'FV_LATENCY_MEMORY');cleanups=records(text,'FV_LATENCY_CLEANUP')
+    probes=records(text,'FV_LATENCY_LAYOUT_PROBE');grid=records(text,'FV_LATENCY_GRID')
     require(len(cases)==4 and {r.get('case') for r in cases}==set(CASES),'Missing baseline cases')
     ids={r['case']:r['launch'] for r in cases}
     require(len(set(ids.values()))==4 and all(re.fullmatch('[a-f0-9-]{36}',v) for v in ids.values()),'Mixed launch identities')
     require(all(r.get('passed') is True and r.get('samples')==132 and r.get('frameBufferOverflow')==0 and r.get('frames',0)>0 for r in cases),'Incomplete baseline case')
     require(len(mounts)==8 and {(r.get('case'),r.get('seedIncluded')) for r in mounts}=={(c,v) for c in CASES for v in (True,False)},'Missing mount observations')
-    grid={r['case']:r['rows'] for r in mounts if r['seedIncluded']}
+    grid_rows={r['case']:r['rows'] for r in mounts if r['seedIncluded']}
     for r in mounts:
-        require(r.get('launch')==ids[r['case']] and r.get('columns')==80 and r.get('rows')==grid[r['case']] and finite(r.get('elapsedNs')),
+        require(r.get('launch')==ids[r['case']] and r.get('columns')==80 and r.get('rows')==grid_rows[r['case']] and finite(r.get('elapsedNs')),
                 'Mount/native grid changed')
     expected={(c,p,i) for c in CASES for p in PHASES for i in range(22)};seen=set()
     for r in samples:
         key=(r.get('case'),r.get('phase'),r.get('iteration'))
         require(key in expected and key not in seen,'Duplicate/unknown baseline sample');seen.add(key)
-        c,p,i=key;payload=output_for(c,p,i,grid[c]).encode()
+        c,p,i=key;payload=output_for(c,p,i,grid_rows[c]).encode()
         require(r.get('launch')==ids[c] and r.get('warmup') is (i<2) and r.get('virtual') is True and r.get('tui') is c.startswith('tui-') and
                 r.get('historyRows')==int(c.rsplit('-',1)[1]) and r.get('ime') is (p=='imeEcho'),'Wrong baseline scene/backend')
         require(r.get('outputBytes')==len(payload) and r.get('outputSha256')==hashlib.sha256(payload).hexdigest(),'Finite peer bytes differ')
@@ -66,7 +67,8 @@ def validate(text):
                 6<=r.get('retainedRows',0)<=80 and 1<=r.get('measuredRows',0)<=128 and r.get('writers')==0,'Unsettled/nonvirtual sample')
         require(all((type(v) in (int,float) and math.isfinite(v)) if k=='feedToPublishNs' else finite(v) for k,v in r.get('spans',{}).items()) and set(r['spans'])=={'readToLockNs','captureNs','rowSyncNs','parseWindowNs',
                 'uiToNativeReadNs','feedToPublishNs','publishToDrawNs'},'Missing stage spans')
-        require(0<=r['changedTexts']<=r['commonLayouts'] and 0<=r['replacedLayouts']<=r['commonLayouts']<=min(r['visibleBefore'],r['visibleAfter']),
+        require(0<=r['changedTexts']<=r['commonLayouts'] and 0<=r['paragraphReplacedLayouts']<=r['commonLayouts'] and
+                0<=r['replacedLayouts']<=r['commonLayouts']<=min(r['visibleBefore'],r['visibleAfter']),
                 'Invalid visible layout identity inventory')
         es=r.get('events',[])
         require(es and all(a['sequence']<b['sequence'] and a['timeNs']<=b['timeNs'] for a,b in zip(es,es[1:])),'Invalid trace ordering')
@@ -76,6 +78,10 @@ def validate(text):
                 'No matching actual draw')
     require(seen==expected,'Baseline must retain all528samples including48warmups')
     require(len(memory)==28 and {(r.get('case'),r.get('phase')) for r in memory}=={(c,p) for c in CASES for p in ('ready',*PHASES)},'Missing memory windows')
+    require(len(probes)==24 and {(r.get('case'),r.get('phase')) for r in probes}=={(c,p) for c in CASES for p in PHASES} and
+        all(r.get('outputInjected') is False and 0<=r['resultReplaced']<=r['common'] and 0<=r['paragraphReplaced']<=r['common'] for r in probes),
+        'Missing no-output calibration; result identity alone is not a re-layout count')
+    require({(r.get('case'),r.get('phase')) for r in grid}=={(c,p) for c in CASES for p in ('seed','ime','ime-hidden','remount')},'Missing actual grid observations')
     for c in cases:
         fs=[r for r in frames if r['case']==c['case']]
         require(len(fs)==c['frames'] and [r['index'] for r in fs]==list(range(len(fs))) and
@@ -83,7 +89,7 @@ def validate(text):
                 sum(r['dropped'] for r in fs)==c['frameReportsDropped'],'FrameMetrics records missing or relabelled')
     require(len(cleanups)==4 and {r['case'] for r in cleanups}==set(CASES) and all(r.get('closed') is True and r.get('frameThreadStopped') is True
             and r.get('launch')==ids[r['case']] for r in cleanups),'Cleanup incomplete')
-    return dict(cases=cases,samples=samples,frames=frames,mounts=mounts,memory=memory,cleanups=cleanups)
+    return dict(cases=cases,samples=samples,frames=frames,mounts=mounts,memory=memory,cleanups=cleanups,layoutProbeCalibration=probes,gridObservations=grid)
 
 def summary(data):
     values=[]
@@ -91,7 +97,7 @@ def summary(data):
         for phase in PHASES:
             rows=[r for r in data['samples'] if r['case']==case and r['phase']==phase and not r['warmup']]
             d=dict(case=case,phase=phase,n=len(rows),p99NotEstimated=True)
-            for key in ('inputToDrawNs','inputToCheckNs','panelCompositions','replacedLayouts','changedTexts'):
+            for key in ('inputToDrawNs','inputToCheckNs','panelCompositions','replacedLayouts','paragraphReplacedLayouts','changedTexts'):
                 ordered=sorted(r[key] for r in rows)
                 d[key]=dict(median=statistics.median(ordered),p95=ordered[math.ceil(len(ordered)*.95)-1],maximum=max(ordered))
             d['spans']={k:statistics.median(r['spans'][k] for r in rows) for k in rows[0]['spans']}
@@ -160,10 +166,11 @@ def report(text,manifest,device,installed):
         details.write_text(json.dumps(decoded,separators=(',',':')))
         traces.append(dict(case=case,bytes=len(raw),sha256=hashlib.sha256(raw).hexdigest(),
             **{k:v for k,v in decoded.items() if k!='frames'},rawTraceComplete=True,decodedSha256=hashlib.sha256(details.read_bytes()).hexdigest()))
-    result=dict(suite='terminal-full-virtual-latency-v1',sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],
+    result=dict(suite='terminal-full-virtual-latency-v2',sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],
         sourceGuard=scope,manifest=manifest,device=device,installedApkHashes=installed,**evidence,summary=summary(evidence),
         surfaceFrameEvidence=traces,
-        note='Single frozen-source baseline;test-driven nativePTY,not phone FPS,no speedup claim,n=20/workload,no trusted P99.')
+        note='Single frozen-source baseline;test-driven nativePTY,not phone FPS,no speedup claim,n=20/workload,no trusted P99. '
+             'replacedLayouts counts returned-object identity changes,NOT proven paragraph shaping; see no-output calibration.')
     legacy.publish('Full virtual latency baseline',result,OUT/'full-virtual-latency.json',emit_compact=False)
     compact={k:v for k,v in result.items() if k not in ('manifest','samples','frames','memory')}
     compact['fullReportSha256']=hashlib.sha256((OUT/'full-virtual-latency.json').read_bytes()).hexdigest()
