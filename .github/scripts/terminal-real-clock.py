@@ -109,13 +109,14 @@ def correlate(case,trace):
     for s in case['samples']:
         out=dict(phase=s['phase'],index=s['index'],warmup=s['warmup'],inputToDrawNs=s['drawNs']-s['uiNs'],publishToDrawNs=s['drawNs']-s['publishedNs'])
         fed=max(e['ns'] for e in s['events'] if e['stage']=='EMULATOR_FED');out.update(fedToPublishNs=s['publishedNs']-fed,inputToFedNs=fed-s['uiNs'])
-        candidates=[r for r in case['draws'] if r['ns']<=s['drawNs']]
-        if not candidates:out['match']='no-window-draw';rows.append(out);continue
-        draw=max(candidates,key=lambda r:r['ns']);native=[m for m in case['metrics'] if m[2]//1_000_000==draw['drawingTimeMs']]
+        # OnDraw.drawingTime is stamped only later by ViewRoot; it may belong to the PRIOR frame.
+        # Match the terminal callback INSIDE the one recorded UI draw interval, never nearest time.
+        gfx=[g for g in gfx_frames(phases[s['phase']]['gfxinfo']) if g.get('Flags')==0 and
+             g.get('DrawStart',0)<=s['drawNs']<=g.get('SyncQueued',-1)]
+        if len(gfx)!=1:out['match']='missing-or-ambiguous-gfxinfo';rows.append(out);continue
+        native=[m for m in case['metrics'] if m[2]==gfx[0]['Vsync']]
         if len(native)!=1:out['match']='ambiguous-window-vsync';rows.append(out);continue
         f=native[0];out.update(windowVsyncNs=f[2],windowTotalNs=f[3],windowDrawNs=f[5],windowGpuNs=f[7])
-        gfx=[g for g in gfx_frames(phases[s['phase']]['gfxinfo']) if g.get('Vsync')==f[2] and g.get('Flags')==0]
-        if len(gfx)!=1:out['match']='missing-or-ambiguous-gfxinfo';rows.append(out);continue
         token=gfx[0]['FrameTimelineVsyncId'];sf=[f for f in trace['surfaces'] if f['pid']==case['pid'] and f['token']==token]
         if len(sf)!=1:out['match']='missing-or-ambiguous-SurfaceFrame';rows.append(out);continue
         sf=sf[0];display=[d for d in trace['displays'] if d['token']==sf['displayToken']]
@@ -148,9 +149,9 @@ def report(text,manifest,device,installed):
             for k in ('inputToDrawNs','publishToDrawNs','fedToPublishNs','inputToFedNs','inputToDisplayEndNs','drawToDisplayEndNs','mainRunningPublishToDrawNs'):
                 vs=[r[k] for r in rows if k in r];entry[k]=dict(n=len(vs),median=statistics.median(vs),maximum=max(vs)) if vs else None
             summaries.append(entry)
-    result=dict(suite='terminal-real-clock-diagnostic-v2',sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],sourceGuard=scope,
+    result=dict(suite='terminal-real-clock-diagnostic-v3',sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],sourceGuard=scope,
         manifest=manifest,device=device,installedApkHashes=installed,**data,traces=traces,summary=summaries,
-        note='Real-clock accessibility actions/nativePTY. Unique window-vsync→gfxinfo token→Surface/DisplayFrame only; unmatched retained. '
+        note='Real-clock accessibility actions/nativePTY. Unique gfxinfo DrawStart/SyncQueued containment→vsync token→Surface/DisplayFrame; unmatched retained. '
              'DisplayFrame end is an OS-present observation,not physical photons/phoneFPS. No speedup or old-baseline comparison.')
     wire.legacy.publish('Real clock terminal diagnosis',result,OUT/'real-clock.json',emit_compact=False)
     compact=dict(suite=result['suite'],sourceSha=result['sourceSha'],runId=result['runId'],sourceGuard=scope,summary=summaries,

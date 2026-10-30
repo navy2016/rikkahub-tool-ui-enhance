@@ -14,6 +14,7 @@ import android.view.Window
 import android.view.accessibility.AccessibilityNodeInfo
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -103,21 +104,19 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
     private data class Draw(val timeNs: Long,val drawingTimeMs: Long)
     private class Observers : Window.OnFrameMetricsAvailableListener {
         val metrics=ArrayList<LongArray>();val draws=ArrayList<Draw>();var overflow=0
-        private val completedWindows=HashSet<Long>()
+        private val traversals=ArrayList<LongArray>()
         @Synchronized override fun onFrameMetricsAvailable(window: Window,frame: FrameMetrics,dropped: Int) {
             if(metrics.size>=8192){overflow++;return}
             metrics.add(longArrayOf(System.nanoTime(),frame.getMetric(FrameMetrics.INTENDED_VSYNC_TIMESTAMP),frame.getMetric(FrameMetrics.VSYNC_TIMESTAMP),
                 frame.getMetric(FrameMetrics.TOTAL_DURATION),frame.getMetric(FrameMetrics.LAYOUT_MEASURE_DURATION),frame.getMetric(FrameMetrics.DRAW_DURATION),
                 frame.getMetric(FrameMetrics.SYNC_DURATION),frame.getMetric(FrameMetrics.GPU_DURATION),frame.getMetric(FrameMetrics.DEADLINE),dropped.toLong()))
-            completedWindows.add(frame.getMetric(FrameMetrics.VSYNC_TIMESTAMP)/1_000_000L)
         }
         @Synchronized fun draw(timeMs: Long){if(draws.size>=8192)overflow++ else draws.add(Draw(System.nanoTime(),timeMs))}
         @Synchronized fun readDraws()=draws.toList()
         @Synchronized fun readMetrics()=metrics.map{it.copyOf()}
-        @Synchronized fun windowFinishedAfter(viewportNs: Long): Boolean {
-            val draw=draws.lastOrNull{it.timeNs<=viewportNs} ?: return false
-            return draw.drawingTimeMs in completedWindows
-        }
+        @Synchronized fun traversalFinished(began: Long){if(traversals.size<8192)traversals.add(longArrayOf(began,System.nanoTime())) else overflow++}
+        @Synchronized fun windowFinishedAfter(viewportNs: Long)=traversals.any{it[0]<=viewportNs && viewportNs<=it[1]}
+        @Synchronized fun readTraversals()=traversals.map{it.copyOf()}
     }
     @Test fun realClockDefaultOrdinary()=exercise(TerminalRenderMode.DEFAULT,false)
     @Test fun realClockFullOrdinary()=exercise(TerminalRenderMode.FULL_VIRTUAL,false)
@@ -160,7 +159,11 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
             val nav=Navigator(mutableListOf())
             val owner=ActivityScenario.launch<TerminalPipelineTestActivity>(Intent(instrumentation.targetContext,TerminalPipelineTestActivity::class.java));scenario=owner
             owner.onActivity { activity ->
-                val draw=ViewTreeObserver.OnDrawListener{observer.draw(activity.window.decorView.drawingTime)};listener=draw
+                val main=Handler(Looper.getMainLooper())
+                val draw=ViewTreeObserver.OnDrawListener{
+                    val began=System.nanoTime();observer.draw(activity.window.decorView.drawingTime)
+                    main.post{observer.traversalFinished(began)}
+                };listener=draw
                 activity.window.decorView.viewTreeObserver.addOnDrawListener(draw)
                 activity.window.addOnFrameMetricsAvailableListener(observer,handler);attached=true
                 activity.setContent {
@@ -246,6 +249,7 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
             val metrics=JSONArray().apply{observer.readMetrics().forEach{put(JSONArray(it.toList()))}}
             emitCase(JSONObject().put("case",case).put("mode",mode.id).put("tui",tui).put("launch",launch).put("pid",android.os.Process.myPid())
                 .put("samples",JSONArray(samples)).put("gates",JSONArray(gates)).put("draws",draws).put("metrics",metrics).put("phaseDumps",JSONArray(dumps))
+                .put("completedTraversals",JSONArray().apply{observer.readTraversals().forEach{put(JSONArray(it.toList()))}})
                 .put("clock", "real-android-no-compose-test-clock").put("droppedFrameMetrics",observer.readMetrics().sumOf{it[9]}).put("passed",true))
         } catch(error: Throwable) {
             emitCase(JSONObject().put("case",case).put("passed",false).put("error",error.toString()).put("samples",JSONArray(samples))

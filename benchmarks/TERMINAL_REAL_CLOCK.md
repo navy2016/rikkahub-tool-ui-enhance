@@ -46,3 +46,11 @@ was not found`;old193+hosted runs used this same unchanged dependency. Independe
 andimplementationPOM requests returned200;Google's marker path404(expected fallback toCentral).
 CI's original underlying HTTP cause was not printed,so do not invent it. One recovery adds only
 build --info/focused error extraction,not dependency versions,repository mirrors or test changes.
+
+Recoveryddf2d3c/run41110964385 resolved unchangedKSP andran;3cases hit thebadFrameMetricswait,
+fullTUIcompleted. Rootmeasurementfinding:OnDraw.drawingTime can still point tothePRIORframe.
+Originalfirst-run72defaultcallbacks all match UNIQUEcurrentgfxinfo[DrawStart,SyncQueued]intervals;
+theoldmskey matched alreadyfinished frames,including impossibleend-before-draw results. Preserve
+failed/rejectedmapping,notapplicationregression. V3usesUI-traversalpostedcompletion(no testclock)
+asreadbackgate andEXACTdraw-intervalcontainment→vsyncId→Surface/Displaytoken forofflineassociation.
+No timestamp substitution or nearest-neighbor. Oldv1/v2samples remainseparate;newpacingnot an A/Bgain.

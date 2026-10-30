@@ -38,7 +38,8 @@ class RealClockContracts(unittest.TestCase):
         case=dict(pid=1,phaseDumps=[dict(phase='hidden')],samples=[dict(phase='hidden',index=0,warmup=False,drawNs=3000000,uiNs=1000000,publishedNs=2000000,
             events=[dict(stage='EMULATOR_FED',ns=1500000)])],draws=[dict(ns=2100000,drawingTimeMs=2)],metrics=[[0,0,2000000,1,1,1,1],[0,0,2100000,1,1,1,1]])
         trace=dict(switches=[])
-        row=m.correlate(case,trace)[0];self.assertEqual('ambiguous-window-vsync',row['match']);self.assertNotIn('inputToDisplayEndNs',row)
+        case['phaseDumps'][0]['gfxinfo']='Flags,Vsync,FrameTimelineVsyncId,DrawStart,SyncQueued,\n0,2000000,42,2000000,4000000,\n0,2100000,43,2000000,4000000,'
+        row=m.correlate(case,trace)[0];self.assertEqual('missing-or-ambiguous-gfxinfo',row['match']);self.assertNotIn('inputToDisplayEndNs',row)
     def test_driver_has_no_compose_clock_or_idle(self):
         self.assertEqual(m.TREE,m.guard()['productionTree'])
         source=(m.ROOT/m.TEST).read_text();self.assertIn('ActivityScenario.launch',source)
@@ -49,7 +50,7 @@ class RealClockContracts(unittest.TestCase):
     def test_exact_token_join_and_cpu_interval_then_reject_duplicate_surface(self):
         s=dict(phase='hidden',index=0,warmup=False,drawNs=3_000_000,uiNs=1_000_000,publishedNs=2_000_000,events=[dict(stage='EMULATOR_FED',ns=1_500_000)])
         case=dict(pid=1,samples=[s],draws=[dict(ns=2_100_000,drawingTimeMs=2)],metrics=[[0,0,2_000_000,1,1,1,1,1,1,0]],
-            phaseDumps=[dict(phase='hidden',gfxinfo='Flags,Vsync,FrameTimelineVsyncId,FrameCompleted,\n0,2000000,42,5000000,',
+            phaseDumps=[dict(phase='hidden',gfxinfo='Flags,Vsync,FrameTimelineVsyncId,FrameCompleted,DrawStart,SyncQueued,\n0,2000000,42,5000000,2100000,3100000,',
                 clockBefore=dict(monoNs=0,bootNs=500_000_000),clockAfter=dict(monoNs=1_000_000_000,bootNs=1_500_000_000))])
         sf=dict(pid=1,token=42,displayToken=99,clock=6,present=2)
         trace=dict(switches=[(0,502_000_000,0,1,0,'main'),(0,503_000_000,1,0,0,'idle')],surfaces=[sf],
