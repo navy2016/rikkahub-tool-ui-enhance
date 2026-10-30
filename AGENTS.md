@@ -294,6 +294,13 @@ foreground-file24、foreground-buffer38、background-wait37完整帧。后台PID
 测量区间无ComposeTestRule/mainClock/waitForIdle/语义遍历/JSON，先定位等待再改生产。
 协议benchmarks/TERMINAL_REAL_CLOCK.md，工作流terminal-pipeline-tests.yml/realClock；生产仍55db111。
 
+RealClock各次测试准备问题和失败详见benchmarks/TERMINAL_REAL_CLOCK.md。关键已证事实：
+OnDraw.drawingTime可指前一帧；应按gfxinfo的DrawStart<=真实drawNs<=SyncQueued唯一匹配，
+再关联VsyncId/Surface/Display；原72默认样本的同次轨迹已离线验证此关联，不重采它们。
+2e2a48a/run41124715935仅启动诊断4/4就绪并可见，无性能样本；无障碍连接提前初始化。
+接下来v5只读exact FRAME_DRAWN+完整字节，计时后等待原生可见性（异步缓存），不再用
+viewport.geometryReady/window缓存当绘制完成事件。生产仍55db111，未采用任何调度优化。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

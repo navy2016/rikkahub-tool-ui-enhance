@@ -46,7 +46,8 @@ class RealClockContracts(unittest.TestCase):
         self.assertIn('ACTION_IME_ENTER',source);self.assertIn('OnDrawListener',source)
         self.assertIn('snapshot.any{it.stage==TerminalPipelineStage.FRAME_DRAWN',source)
         self.assertIn('visibleText(expected)',source)
-        self.assertGreater(source.index('Expected terminal output is not visible after setup'),source.index('fun settle(ime: Boolean,phase: String)'))
+        self.assertGreater(source.index('post-setup native visibility: $phase'),source.index('fun settle(ime: Boolean,phase: String)'))
+        self.assertGreater(source.index('post-draw native visibility'),source.index('val observed=System.nanoTime()'))
         self.assertIn('No eligible FRAME_DRAWN for completed response',source)
         self.assertNotIn('Thread.sleep',source)
     def test_exact_token_join_and_cpu_interval_then_reject_duplicate_surface(self):

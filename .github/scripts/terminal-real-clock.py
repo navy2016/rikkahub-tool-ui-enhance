@@ -160,7 +160,7 @@ def report(text,manifest,device,installed):
             for k in ('inputToDrawNs','publishToDrawNs','fedToPublishNs','inputToFedNs','inputToDisplayEndNs','drawToDisplayEndNs','mainRunningPublishToDrawNs'):
                 vs=[r[k] for r in rows if k in r];entry[k]=dict(n=len(vs),median=statistics.median(vs),maximum=max(vs)) if vs else None
             summaries.append(entry)
-    result=dict(suite='terminal-real-clock-diagnostic-v4',sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],sourceGuard=scope,
+    result=dict(suite='terminal-real-clock-diagnostic-v5',sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],sourceGuard=scope,
         manifest=manifest,device=device,installedApkHashes=installed,**data,traces=traces,summary=summaries,
         note='Real-clock accessibility actions/nativePTY. Unique gfxinfo DrawStart/SyncQueued containment→vsync token→Surface/DisplayFrame; unmatched retained. '
              'DisplayFrame end is an OS-present observation,not physical photons/phoneFPS. No speedup or old-baseline comparison.')

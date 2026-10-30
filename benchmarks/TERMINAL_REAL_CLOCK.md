@@ -75,3 +75,13 @@ NewrealClockSetup is an observationalsetup-only round:connectaccessibilitybefore
 allviewport/model/resizeconditions and error. Returns observedpass/fail withacceptance=false,
 no echo measurement loops. It mustnot be promoted to correctness acceptance. First resolve the
 specific startup/visibility state before resuming any performance measurement.
+
+Setup2e2a48a/run41124715935:allfourobservedstatesready,1000history/25physicalrows,correctmode,
+IMEhidden,following,zeroactivewriters andvisibleseed. No performance samples inthisround.
+Accessibilityconnectionnowinitializes BEFOREappstartup;native textcacheevents remain asynchronous.
+V5 keeps visibility as a required check but waits up to3s OUTSIDE themeasured draw interval;do not
+use that wait-return as draw/presenttime. Restore onefixed144-windowdiagnosis,not a speedup
+comparison with priorchangedgates. Oldsetup failures not retrospectively explainedasproductionbugs.
+The matched frame is the first eligible RESPONSE-REVISIONdraw,not a proven firstvisibleecho:
+accessibilityvisibility is checked later. Report this distinction explicitly instead of claiming
+the later visual confirmation occurred at that firstdraw/display time.

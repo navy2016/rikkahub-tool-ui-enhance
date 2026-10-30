@@ -210,7 +210,7 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
                     if(!ready(ime) && System.nanoTime()-lastPulse>100_000_000L){owner.onActivity{trace.requestViewportDraw()};lastPulse=System.nanoTime()}
                     ready(ime) && ack!=null && ack.rows==terminal.rows && ack.columns==terminal.columns && System.nanoTime()-stableSince>=700_000_000L
                 }
-                assertTrue("Expected terminal output is not visible after setup: $phase",visibleText(lastMarker))
+                await("post-setup native visibility: $phase",3000){visibleText(lastMarker)}
                 gates.add(JSONObject().put("phase",phase).put("rows",terminal.rows).put("columns",terminal.columns).put("ime",ime).put("virtual",mode.isFullVirtual))
             }
             settle(false,"hidden");val rows=terminal.rows
@@ -256,7 +256,8 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
                         val published=checkNotNull(events.firstOrNull{it.stage==TerminalPipelineStage.FRAME_PUBLISHED && it.frameRevision>=revision}){"No FRAME_PUBLISHED for completed response"}
                         val draw=checkNotNull(events.firstOrNull{it.stage==TerminalPipelineStage.FRAME_DRAWN && it.frameRevision>=published.frameRevision}){"No eligible FRAME_DRAWN for completed response"}
                         assertTrue(draw.virtual==mode.isFullVirtual);assertEquals(rows,terminal.rows)
-                        assertTrue("Response not actually visible after first draw",visibleText(expected));lastMarker=expected
+                        // Accessibility events are asynchronous; confirmation is OUTSIDE draw timing.
+                        await("post-draw native visibility",3000){visibleText(expected)};lastMarker=expected
                         samples.add(JSONObject().put("phase",phase).put("index",index).put("warmup",index<2).put("beganNs",began)
                             .put("actionReturnedNs",actionReturned).put("observedNs",observed).put("uiNs",ui.timeNanos).put("publishedNs",published.timeNanos)
                             .put("drawNs",draw.timeNanos).put("fedRevision",revision).put("publishedRevision",published.frameRevision).put("drawRevision",draw.frameRevision)
