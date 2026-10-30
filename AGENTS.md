@@ -210,6 +210,21 @@ Release／独立校验，不再逐轮索取授权；此前逐次配额已结束�
 先分别追踪顶部原drag与底部native菜单覆盖，再据证据修复。全部门禁通过才构建正式Release，
 只交报告／证据不交APK。必要的范围扩展或对真实用户数据／外部系统的高风险操作仍先确认。
 
+最终已通过并正式构建：生产55db111129c662067345aa99540b506de305da37，main树
+8caf50d5c40e228f1d5bcc09d3db505757568b68。492Release JVM41043335339、182/182视口
+41043354068（旧173+针对性9）、实际页面/PTY41043363910全部成功。原220MOVE/222事件/222帧
+未改，拖动500→545行、首可见538，1414B逐字复制通过；10024行全选319650B与13安全菜单
+检查全部通过。诊断6d365de/run41041104334分别证明顶部状态栏抢走DOWN、底部ComposeView
+裁剪菜单矩形。修复只在VirtualSelectionUi：触摸框避系统区域、实际pointer与逻辑端点分离、
+原生TYPE_FLOATING菜单挂完整根窗口并避让实测柄矩形；没有第二滚动执行器或全历史eager。
+Release41045773895、独立校验41047320055成功，arm64/non-debuggable，2.1.62/151，SHA256
+5fdaceacfbfaff5d378f9b2ac23070f009c6bf347be42d1561fb53e6080c6f4c。对比212b93e签名/manifest身份/
+字体/native一致，版本元数据无依赖变化；Web生成物11项不同，不声称完全可重复。旧c07100d
+30性能样本未重采，不代表新树或手机FPS。手机体感仍待验。所有历史失败保留；两次诊断
+中转权限失败仅为取证，不是诊断重跑，最终relay41049879739成功原件已取回。不要再派发测试
+或Release。证据工作目录/workspace/terminal-review/native-selection/，final-capsule/由make_final.py
+生成，verify_final.py离线复核；交付名terminal-full-virtual-55db111-{report.md,acceptance.json,evidence.tar.gz}。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
