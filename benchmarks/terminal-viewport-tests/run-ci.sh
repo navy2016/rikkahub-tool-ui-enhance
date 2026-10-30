@@ -98,6 +98,13 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
+if [ "$group" = nativeSelectionDiagnostic ]; then
+  mkdir -p artifacts/terminal-native-selection
+  adb logcat -G 8M
+  run_arm native-selection-diagnostic TerminalNativeSelectionTest 850
+  adb logcat -d -v threadtime TerminalNativeSelection:I '*:S' > artifacts/terminal-native-selection/diagnostic-logcat.txt
+  exit "$overall_status"
+fi
 if [ "$group" = selectionRepair ]; then
   mkdir -p artifacts/terminal-selection-repair
   adb logcat -G 8M

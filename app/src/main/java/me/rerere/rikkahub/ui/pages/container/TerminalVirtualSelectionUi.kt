@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.copyText
@@ -106,6 +107,7 @@ internal fun terminalSelectionClipboardText(value: AnnotatedString): AnnotatedSt
             pending = next
         }
     }
+
     if (combined == 0) return value
     replacements[first] = pending
     var index = 0
@@ -256,6 +258,15 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
     fun handleMeasured(start: Boolean, height: Int) {
         val index = if (start) 0 else 1
         if (handleHeights[index] != height) { handleHeights[index] = height; version++ }
+    }
+
+    fun handlePositioned(start: Boolean, value: LayoutCoordinates) {
+        handleMeasured(start,value.size.height)
+        if (binding.onSelectionTrace != null) {
+            val screen=value.localToScreen(Offset.Zero)
+            trace("handle-geometry", "startHandle" to start, "screenLeft" to screen.x, "screenTop" to screen.y,
+                "width" to value.size.width, "height" to value.size.height)
+        }
     }
 
     fun position(value: LayoutCoordinates) {
@@ -483,6 +494,7 @@ internal fun TerminalVirtualSelectionContainer(ui: TerminalVirtualSelectionUi, e
     modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     val clipboard = LocalClipboardManager.current
     val toolbar = LocalTextToolbar.current
+    val view = LocalView.current
     val haptic = LocalHapticFeedback.current
     val range = ui.selection.range
     val version = ui.version
@@ -507,8 +519,19 @@ internal fun TerminalVirtualSelectionContainer(ui: TerminalVirtualSelectionUi, e
     }
     LaunchedEffect(ui, range, version, ui.showToolbar, ui.focused, enabled) {
         if (enabled && ui.focused && ui.showToolbar && range?.collapsed == false) {
-            ui.menuBounds()?.let { rect -> toolbar.showMenu(rect, onCopyRequested = { copy() },
-                onSelectAllRequested = { ui.selectAll() }) }
+            ui.menuBounds()?.let { rect ->
+                if (ui.binding.onSelectionTrace != null) {
+                    val screen=IntArray(2);val window=IntArray(2);val visible=android.graphics.Rect()
+                    view.getLocationOnScreen(screen);view.getLocationInWindow(window);view.getGlobalVisibleRect(visible)
+                    ui.trace("native-menu-request", "left" to rect.left, "top" to rect.top,
+                        "right" to rect.right, "bottom" to rect.bottom, "viewWidth" to view.width, "viewHeight" to view.height,
+                        "viewScreenX" to screen[0], "viewScreenY" to screen[1], "viewWindowX" to window[0], "viewWindowY" to window[1],
+                        "viewVisible" to listOf(visible.left,visible.top,visible.right,visible.bottom),
+                        "rootWidth" to view.rootView.width, "rootHeight" to view.rootView.height,
+                        "toolbarStatus" to toolbar.status.toString(), "toolbarType" to toolbar.javaClass.name)
+                }
+                toolbar.showMenu(rect, onCopyRequested = { copy() }, onSelectAllRequested = { ui.selectAll() })
+            }
             ui.trace("menu-show")
         } else { toolbar.hide(); ui.trace("menu-hide") }
     }
@@ -577,7 +600,7 @@ private fun TerminalVirtualSelectionHandle(ui: TerminalVirtualSelectionUi, start
     val handleCoordinates = remember(ui, start) { arrayOfNulls<LayoutCoordinates>(1) }
     Popup(popupPositionProvider=provider,properties=PopupProperties(clippingEnabled=false,excludeFromSystemGesture=true)) {
         Canvas(Modifier.size(25.dp).testTag(if (start) "terminal-selection-start" else "terminal-selection-end")
-            .onGloballyPositioned { handleCoordinates[0] = it; ui.handleMeasured(start, it.size.height) }
+            .onGloballyPositioned { handleCoordinates[0] = it; ui.handlePositioned(start, it) }
             .pointerInput(ui,start) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -590,10 +613,13 @@ private fun TerminalVirtualSelectionHandle(ui: TerminalVirtualSelectionUi, start
                     ui.beginHandle(start, anchor)
                     down.consume()
                     try {
-                        drag(down.id) { change ->
+                        val ended = drag(down.id) { change ->
                             handleCoordinates[0]?.let { ui.handlePointer(it, change.position) }?.let { ui.extend(it + adjustment) }
                             change.consume()
                         }
+                        if (ui.binding.onSelectionTrace != null) ui.trace("handle-ended", "normal" to ended,
+                            "eventType" to currentEvent.type.toString(), "pressed" to currentEvent.changes.any { it.pressed },
+                            "consumed" to currentEvent.changes.any { it.isConsumed })
                     } finally { ui.finishDrag() }
                 }
             }) {
