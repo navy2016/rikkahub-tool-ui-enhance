@@ -288,6 +288,12 @@ foreground-file24、foreground-buffer38、background-wait37完整帧。后台PID
 无新Release。后续优先排查输入/发布/首帧等待链路；用户实机缓慢感已消退但根因未证明。
 完整本轮原件/workspace/terminal-review/cursor-virtual-experiment/，40窗口与16诊断分开保留。
 
+最新“继续”启动新的realClock诊断：ActivityScenario原生时钟+无障碍SetText/IME_ENTER，
+默认/全虚拟×普通/TUI、1k、键盘隐藏/显示/再隐藏，共144(24预热)；不重采旧窗口。
+关联窗口OnDraw与FrameMetrics、gfxinfo真实vsyncId、Surface/DisplayFrame；歧义/缺失显式保留。
+测量区间无ComposeTestRule/mainClock/waitForIdle/语义遍历/JSON，先定位等待再改生产。
+协议benchmarks/TERMINAL_REAL_CLOCK.md，工作流terminal-pipeline-tests.yml/realClock；生产仍55db111。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

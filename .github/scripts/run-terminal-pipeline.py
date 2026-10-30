@@ -55,6 +55,10 @@ _latency_spec = importlib.util.spec_from_file_location('terminal_full_virtual_la
     Path(__file__).with_name('terminal-full-virtual-latency.py'))
 latency_reports = importlib.util.module_from_spec(_latency_spec)
 _latency_spec.loader.exec_module(latency_reports)
+_real_spec = importlib.util.spec_from_file_location('terminal_real_clock',
+    Path(__file__).with_name('terminal-real-clock.py'))
+real_clock = importlib.util.module_from_spec(_real_spec)
+_real_spec.loader.exec_module(real_clock)
 
 
 def notice(level, title, message):
@@ -76,6 +80,9 @@ def digest(path):
 
 def sources():
     paths = [
+        real_clock.TEST,
+        '.github/scripts/terminal-real-clock.py',
+        'benchmarks/terminal-real-clock/trace.pbtxt',
         latency_reports.TEST,
         '.github/scripts/terminal-full-virtual-latency.py',
         'benchmarks/terminal-full-virtual-latency/perfetto.pbtxt',
@@ -327,11 +334,16 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     tui_history = selected == 'tuiHistoryOnly'
     full_virtual = selected == 'fullVirtualOnly'
     latency = selected == 'fullVirtualLatency'
+    real = selected == 'realClock'
     methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
         'pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
         'pipelineStableVirtualPtyEchoKeyboardAndRemount')
     test_class = 'me.rerere.rikkahub.pipeline.TerminalPtyTransportInstrumentedTest' if transport else CLASS
     extra_arguments = []
+    if real:
+        real_clock.guard()
+        test_class = real_clock.CLASS
+        methods = real_clock.METHODS
     if latency:
         latency_reports.guard()
         test_class = latency_reports.CLASS
@@ -374,12 +386,12 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             trace_pid = None
             trace_remote = '/data/misc/perfetto-traces/fv-' + method + '.pftrace'
             trace_state = None
-            if latency:
+            if latency or real:
                 target = OUT/'latency-traces';target.mkdir(exist_ok=True)
                 # Perfetto drops privileges before reading named config files; adb push ownership
                 # is not a readability guarantee. Pass the existing config on stdin, not chmod/chown.
                 started = subprocess.run(['adb','shell','perfetto','--txt','--background-wait','-c','-','-o',trace_remote],
-                    input=(ROOT/'benchmarks/terminal-full-virtual-latency/perfetto.pbtxt').read_text(),capture_output=True,text=True,timeout=30)
+                    input=(ROOT/('benchmarks/terminal-real-clock/trace.pbtxt' if real else 'benchmarks/terminal-full-virtual-latency/perfetto.pbtxt')).read_text(),capture_output=True,text=True,timeout=30)
                 (target/(method+'-perfetto-start.txt')).write_text(started.stdout+'\n'+started.stderr)
                 candidates = re.findall(r'^([0-9]+)$',started.stdout.strip(),re.M)
                 trace_state = dict(method=method,startExit=started.returncode,startOutput=started.stdout,startError=started.stderr,
@@ -391,9 +403,9 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
                 with log.open('w') as stream:
                     result = subprocess.run(['adb', 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class', test_class + '#' + method,
                                              *extra_arguments, TEST_PACKAGE + '/androidx.test.runner.AndroidJUnitRunner'],
-                                            stdout=stream, stderr=subprocess.STDOUT, timeout=seconds + 300 if soak else 520 if latency else 300)
+                                            stdout=stream, stderr=subprocess.STDOUT, timeout=seconds + 300 if soak else 520 if latency or real else 300)
             finally:
-                if latency:
+                if latency or real:
                     try:
                         if trace_pid:
                             stop = subprocess.run(['adb','shell','kill','-INT',trace_pid],capture_output=True,text=True,timeout=15)
@@ -430,6 +442,8 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             if 'mCurrentFocus=' in line or 'mFocusedApp=' in line) + '\n')
     if failed:
         raise ValueError('; '.join(failed))
+    if real:
+        return real_clock.report('\n'.join(logs),manifest,device,installed_hashes)
     if latency:
         return latency_reports.report('\n'.join(logs),manifest,device,installed_hashes)
     if full_virtual:
