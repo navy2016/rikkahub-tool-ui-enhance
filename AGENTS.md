@@ -261,6 +261,11 @@ foreground-file24、foreground-buffer38、background-wait37完整帧。后台PID
 三个共有模式、4组AB/BA，288测量+72预热。非原正式APK二进制/手机/全局UI对比，不重采528；
 成绩变慢也如实保留。协议benchmarks/TERMINAL_VERSION_REGRESSION.md，生产仍55db111。
 
+用户进一步确认：略慢涉及聊天/设置等所有交互页；两版终端都默认渲染，IME开/关也可感知。
+因此优先考虑全局UI/RenderThread及正式APK/ART安装优化状态；共有终端源码A/B仍保留但不能
+排除原正式包全局问题。新增只读正式APK profile与DEX一致性审计，固定已验证的两包SHA，
+仅云端读取原件，不安装/重建/清数据；profile文件改变不等于错误，匹配也不证明手机已AOT。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
