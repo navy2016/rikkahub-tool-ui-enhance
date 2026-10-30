@@ -176,6 +176,14 @@ run40620489127两项均失败，生产树仍c4da501312976a99776dc99fcd2d7db78bc1
 查询及8精确字节窗口。性能实机待验。结案见TERMINAL_FULL_VIRTUAL.md末节，本地证据目录
 /workspace/terminal-review/full-virtual/；最新正式应用仍212b93e/run40066315546。
 
+用户在上述结案后明确回答“好的，继续”，追加授权仅诊断／修复SEL单词复制和选择柄跨屏
+拖动两条链路及相关回归；基线62d00ca2cda005b87d1ca92fe505bd0c14f5ce20。允许一次显式
+非验收诊断（新旧选择路径对照、有界标量／哈希探针），据实作最小生产修复，再集中验证
+两项原断言及受影响IME／TUI／MOUSE／ALT／切换。原失败保留，不重采性能来筛好成绩；
+不得改变预期单词、删除离屏复制／回收断言、SEL转全历史eager或增加滚动执行器。协议见
+benchmarks/TERMINAL_SELECTION_REPAIR.md。最终全功能门禁满足后才续接原Release／独立校验，
+不本地编译／Debug／升级依赖／下载APK／启子代理。此授权不重标旧两轮，也不允许无限验收。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

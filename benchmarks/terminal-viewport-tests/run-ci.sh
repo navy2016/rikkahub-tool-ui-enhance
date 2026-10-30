@@ -98,6 +98,14 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
+if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = selectionDiagnostic ]; then
+  [ "$group" = selectionDiagnostic ]
+  mkdir -p artifacts/terminal-selection-repair
+  adb logcat -G 8M
+  run_arm selection-diagnostic TerminalSelectionRepairTest 850
+  adb logcat -d -v threadtime TerminalSelectionTrace:I '*:S' > artifacts/terminal-selection-repair/diagnostic-logcat.txt
+  exit "$overall_status"
+fi
 if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = fullVirtualSelection ]; then
   [ "$group" = fullVirtualSelection ]
   run_arm selection-copy TerminalFullVirtualInstrumentedTest#fullVirtualSelectionSystemMenuCopiesAWordAndOffscreenSelectAll 240

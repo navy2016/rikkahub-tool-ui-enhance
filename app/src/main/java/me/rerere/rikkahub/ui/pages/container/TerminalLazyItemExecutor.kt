@@ -22,11 +22,16 @@ internal suspend fun executeTerminalLazyItemScroll(
     state: LazyListState,
     current: () -> TerminalItemViewport?,
     isCurrent: () -> Boolean,
+    onSelectionConsumed: ((Int, Float, Int, Int, Int, Int) -> Unit)? = null,
 ): Boolean {
     effect.selectionDeltaPx?.let { delta ->
         if (!isCurrent()) return false
         val before = current()?.takeIf { it.ready && it.fullVirtual != null } ?: return false
-        state.scrollBy(delta.toFloat())
+        val beforeIndex = state.firstVisibleItemIndex
+        val beforeOffset = state.firstVisibleItemScrollOffset
+        val consumed = state.scrollBy(delta.toFloat())
+        onSelectionConsumed?.invoke(delta, consumed, beforeIndex, beforeOffset,
+            state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset)
         if (!isCurrent()) return false
         // A selection-edge delta is consumed user intent, not a semantic follow target. Capture
         // a fresh layout after it, or let the controller capture the next one instead of snapping back.

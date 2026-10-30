@@ -79,6 +79,7 @@ import me.rerere.rikkahub.data.container.TerminalSelectionPoint
 import me.rerere.rikkahub.data.container.TerminalVirtualSelection
 import me.rerere.rikkahub.utils.TerminalEmulator
 import kotlin.math.roundToInt
+import java.security.MessageDigest
 
 /** Only currently attached rows own coordinates/TextLayoutResult. Stable endpoint data lives separately. */
 internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) {
@@ -107,6 +108,36 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
     val focusRequester = FocusRequester()
     val retainedLayouts: Int get() = rows.size
 
+    /** No-op without a diagnostic observer; only bounded scalar state and SHA256 text proofs. */
+    fun trace(stage: String, vararg fields: Pair<String, Any?>) {
+        val observer = binding.onSelectionTrace ?: return
+        val range = selection.range
+        observer(stage, linkedMapOf<String, Any?>(
+            "enabled" to enabled, "focused" to focused, "toolbar" to showToolbar, "dragging" to dragging,
+            "startId" to range?.start?.id, "startIndex" to range?.start?.index, "startOffset" to range?.start?.offset,
+            "endId" to range?.end?.id, "endIndex" to range?.end?.index, "endOffset" to range?.end?.offset,
+            "reversed" to range?.reversed, "collapsed" to range?.collapsed, "layouts" to rows.size,
+            "dragX" to dragPosition?.x, "dragY" to dragPosition?.y,
+            "viewLeft" to bounds?.left, "viewTop" to bounds?.top,
+            "viewWidth" to bounds?.width, "viewHeight" to bounds?.height,
+            "firstIndex" to binding.lazy.firstVisibleItemIndex, "firstOffset" to binding.lazy.firstVisibleItemScrollOffset,
+            "effect" to binding.controller.state.value.scrollEffect?.id,
+            "gesture" to binding.controller.state.value.gesture?.id, "writers" to binding.activeWriters,
+        ).apply { putAll(fields) })
+    }
+
+    fun textProof(value: String?): Map<String, Any?> = if (binding.onSelectionTrace == null) emptyMap() else mapOf(
+        "length" to value?.length, "sha256" to value?.let {
+            MessageDigest.getInstance("SHA-256").digest(it.toByteArray()).joinToString("") { byte -> "%02x".format(byte) }
+        })
+
+    fun focusChanged(isFocused: Boolean, hasFocus: Boolean) {
+        trace("focus-before", "isFocused" to isFocused, "hasFocus" to hasFocus)
+        focused = isFocused
+        if (!hasFocus) clear("focus-lost")
+        trace("focus-after", "isFocused" to isFocused, "hasFocus" to hasFocus)
+    }
+
     fun bind(next: TerminalEmulator.RenderFrame, screen: List<TerminalRenderedRowState>, active: Boolean) {
         frame = next
         physical = screen
@@ -116,6 +147,7 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
             selection.clear()
             showToolbar = false
             finishDrag(false)
+            trace("bind-clear", "active" to active, "revision" to next.revision)
         }
     }
 
@@ -124,7 +156,10 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         if (!source.isAttached) return null
         val screen = source.localToScreen(position)
         if (!screen.isSpecified) return null
-        return target.screenToLocal(screen).takeIf { it.isSpecified && it.x.isFinite() && it.y.isFinite() }
+        val local = target.screenToLocal(screen).takeIf { it.isSpecified && it.x.isFinite() && it.y.isFinite() }
+        trace("handle-coordinate", "sourceX" to position.x, "sourceY" to position.y,
+            "screenX" to screen.x, "screenY" to screen.y, "localX" to local?.x, "localY" to local?.y)
+        return local
     }
 
     fun beginMouse(position: Offset, wholeWord: Boolean = false) {
@@ -136,6 +171,7 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         dragging = false
         dragPosition = position
         showToolbar = false
+        trace("mouse-start")
     }
 
     fun selectedRange(index: Int, id: Long, text: AnnotatedString): TextRange? {
@@ -201,13 +237,21 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         val box = checkNotNull(row.bounds)
         val layout = checkNotNull(row.layout)
         val position = Offset(root.x - box.left, (root.y - box.top).coerceIn(0f, (box.height - 1).coerceAtLeast(0f)))
-        return row to layout.getOffsetForPosition(position).coerceIn(0, row.text.length)
+        val offset = layout.getOffsetForPosition(position).coerceIn(0, row.text.length)
+        trace("hit", "localX" to local.x, "localY" to local.y, "nearest" to nearest,
+            "rowId" to row.id, "rowIndex" to row.index, "rowLeft" to box.left, "rowTop" to box.top,
+            "textX" to position.x, "textY" to position.y, "offset" to offset,
+            "layoutWidth" to layout.size.width, "layoutHeight" to layout.size.height)
+        return row to offset
     }
 
     fun selectWord(position: Offset): Boolean {
         if (!enabled) return false
         val (row, offset) = hit(position, false) ?: return false
         val word = if (row.text.isEmpty()) TextRange.Zero else checkNotNull(row.layout).getWordBoundary(offset.coerceAtMost(row.text.lastIndex))
+        trace("word-boundary", "inputX" to position.x, "inputY" to position.y, "rowId" to row.id,
+            "rowIndex" to row.index, "offset" to offset, "from" to word.min, "to" to word.max,
+            "rowText" to textProof(row.text.text), "wordText" to textProof(row.text.text.substring(word.min, word.max)))
         selection.select(row.index, word.min, word.max)
         focusRequester.requestFocus()
         binding.controller.beginVirtualSelection()
@@ -215,10 +259,12 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         dragPosition = position
         draggedHandle = handle(false)
         showToolbar = false
+        trace("word-selected")
         return true
     }
 
     fun beginHandle(start: Boolean, position: Offset) {
+        trace("handle-down", "startHandle" to start, "inputX" to position.x, "inputY" to position.y)
         if (selection.range == null || !enabled) return
         focusRequester.requestFocus()
         binding.controller.beginVirtualSelection()
@@ -226,6 +272,7 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         dragPosition = position
         draggedHandle = handle(start)
         showToolbar = false
+        trace("handle-start", "startHandle" to start)
     }
 
     fun extend(position: Offset) {
@@ -233,24 +280,28 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         dragPosition = position
         val (row, offset) = hit(position, true) ?: return
         selection.move(start, row.index, offset)
+        trace("extended", "startHandle" to start, "targetIndex" to row.index, "targetOffset" to offset)
     }
 
     fun finishDrag(toolbar: Boolean = true) {
+        trace("drag-finish-before", "requestToolbar" to toolbar)
         val wasDragging = dragging != null
         dragging = null
         dragPosition = null
         draggedHandle = null
         if (wasDragging) binding.controller.endVirtualSelection()
         if (toolbar) showToolbar = selection.range?.collapsed == false
+        trace("drag-finish-after")
     }
 
-    fun clear() { selection.clear(); finishDrag(false); showToolbar = false }
+    fun clear(reason: String = "clear") { trace("clear", "reason" to reason); selection.clear(); finishDrag(false); showToolbar = false }
 
     fun selectAll() {
         if (!enabled) return
         selection.selectAll()
         focusRequester.requestFocus()
         showToolbar = selection.range?.collapsed == false
+        trace("all-selected")
     }
 
     fun selectOffsets(index: Int, from: Int, to: Int): Boolean {
@@ -303,7 +354,9 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         }
         if (delta != 0) {
             binding.currentScrollPx()
-            binding.controller.scrollSelectionBy(delta)
+            val accepted = binding.controller.scrollSelectionBy(delta)
+            trace("edge-request", "delta" to delta, "accepted" to accepted,
+                "canBackward" to binding.lazy.canScrollBackward, "canForward" to binding.lazy.canScrollForward)
             extend(point)
         }
     }
@@ -355,7 +408,14 @@ internal fun TerminalVirtualSelectionContainer(ui: TerminalVirtualSelectionUi, e
     val range = ui.selection.range
     val version = ui.version
     val copy: () -> Boolean = {
-        ui.selection.copy()?.let { clipboard.setText(it); ui.clear(); true } ?: false
+        ui.trace("copy-request")
+        ui.selection.copy()?.let {
+            ui.trace("copy-value", "text" to ui.textProof(it.text))
+            clipboard.setText(it)
+            if (ui.binding.onSelectionTrace != null) ui.trace("clipboard-set", "text" to ui.textProof(clipboard.getText()?.text))
+            ui.clear("copied")
+            true
+        } ?: false.also { ui.trace("copy-null") }
     }
     SideEffect { ui.copyAction = copy }
     DisposableEffect(ui, toolbar) { onDispose { toolbar.hide(); ui.copyAction = { false } } }
@@ -368,7 +428,8 @@ internal fun TerminalVirtualSelectionContainer(ui: TerminalVirtualSelectionUi, e
         if (enabled && ui.focused && ui.showToolbar && range?.collapsed == false) {
             ui.menuBounds()?.let { rect -> toolbar.showMenu(rect, onCopyRequested = { copy() },
                 onSelectAllRequested = { ui.selectAll() }) }
-        } else toolbar.hide()
+            ui.trace("menu-show")
+        } else { toolbar.hide(); ui.trace("menu-hide") }
     }
     val gestures = if (!enabled) Modifier else Modifier
         .onPreviewKeyEvent {
@@ -380,10 +441,10 @@ internal fun TerminalVirtualSelectionContainer(ui: TerminalVirtualSelectionUi, e
             }
         }
         .focusRequester(ui.focusRequester)
-        .onFocusChanged { ui.focused = it.isFocused; if (!it.hasFocus) ui.clear() }
+        .onFocusChanged { ui.focusChanged(it.isFocused, it.hasFocus) }
         .focusable()
         .magnifier(sourceCenter = { ui.dragPosition ?: Offset.Unspecified })
-        .pointerInput(ui) { detectTapGestures(onTap = { ui.clear() }, onDoubleTap = {
+        .pointerInput(ui) { detectTapGestures(onTap = { ui.clear("tap") }, onDoubleTap = {
             if (ui.selectWord(it)) ui.finishDrag()
         }) }
         .pointerInput(ui) {
@@ -440,6 +501,8 @@ private fun TerminalVirtualSelectionHandle(ui: TerminalVirtualSelectionUi, start
             .pointerInput(ui,start) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    ui.trace("handle-platform-down", "inputX" to down.position.x, "inputY" to down.position.y,
+                        "startHandle" to start)
                     val initial = handleCoordinates[0]?.let { ui.handlePointer(it, down.position) }
                         ?: return@awaitEachGesture
                     val anchor = latest.point.copy(y = latest.point.y - 1)

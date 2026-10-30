@@ -87,6 +87,8 @@ internal class TerminalViewportBinding(
     private var previousFullVirtual: Boolean? = null
     private var attachedFullVirtual: Boolean? = null
     var onEffectStarted: ((TerminalViewportScrollEffect) -> Unit)? = null
+    /** Optional bounded diagnostic sink, never installed by ProcessSessionPage. No text/UI ownership. */
+    var onSelectionTrace: ((String, Map<String, Any?>) -> Unit)? = null
 
     fun backendCommitted() {
         if (previousBackend != null && (previousBackend != virtual || previousFullVirtual != fullVirtual)) controller.pauseScrollEffects()
@@ -173,12 +175,26 @@ internal class TerminalViewportBinding(
                     Trace.beginAsyncSection("Terminal.productionScrollEffect", effect.id.toInt())
                     try {
                         onEffectStarted?.invoke(effect)
+                        if (effect.selectionDeltaPx != null) onSelectionTrace?.invoke("scroll-start", mapOf(
+                            "effect" to effect.id, "requested" to effect.selectionDeltaPx,
+                            "firstIndex" to lazy.firstVisibleItemIndex, "firstOffset" to lazy.firstVisibleItemScrollOffset,
+                            "writers" to activeWriters, "gesture" to controller.state.value.gesture?.id))
                         executeTerminalLazyItemScroll(effect, lazy, { observation() },
-                            { virtual && controller.isCurrent(effect) })
+                            { virtual && controller.isCurrent(effect) }, onSelectionConsumed =
+                                if (onSelectionTrace == null) null else { requested, consumed, beforeIndex, beforeOffset, afterIndex, afterOffset ->
+                                    onSelectionTrace?.invoke("scroll-consumed", mapOf("effect" to effect.id,
+                                        "requested" to requested, "consumed" to consumed,
+                                        "beforeIndex" to beforeIndex, "beforeOffset" to beforeOffset,
+                                        "afterIndex" to afterIndex, "afterOffset" to afterOffset, "writers" to activeWriters))
+                                })
                     } finally {
                         Trace.endAsyncSection("Terminal.productionScrollEffect", effect.id.toInt())
                         currentScrollPx()
                         activeWriters--
+                        if (effect.selectionDeltaPx != null) onSelectionTrace?.invoke("scroll-finish", mapOf(
+                            "effect" to effect.id, "firstIndex" to lazy.firstVisibleItemIndex,
+                            "firstOffset" to lazy.firstVisibleItemScrollOffset, "writers" to activeWriters,
+                            "gesture" to controller.state.value.gesture?.id))
                     }
                 }
             }) { effect, target ->
