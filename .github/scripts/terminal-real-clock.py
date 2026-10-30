@@ -49,6 +49,7 @@ def validate(text):
             require(s['warmup'] is (s['index']<2) and s['virtual'] is (c['mode']=='fullVirtual'),'Warmup/backend changed')
             require(s['beganNs']<=s['uiNs']<=s['drawNs']<=s['observedNs'] and s['fedRevision']<=s['publishedRevision']<=s['drawRevision'],'Invalid event/revision order')
             require(s['outputBytes']==len(raw) and s['outputSha256']==hashlib.sha256(raw).hexdigest(),'Echo content differs')
+            require(s.get('visibleAfterMeasurement') is True and s.get('tracePolls',0)>0,'Missing postmeasurement visibility/poll provenance')
             es=s['events'];require(all(a['seq']<b['seq'] and a['ns']<=b['ns'] for a,b in zip(es,es[1:])),'Trace order differs')
             require(sum(e['bytes'] for e in es if e['stage']=='OUTPUT_READ')==len(raw) and sum(e['bytes'] for e in es if e['stage']=='EMULATOR_FED')==len(raw),'Finite bytes incomplete')
             require(sum(e['stage']=='UI_INPUT' for e in es)==1 and any(e['stage']=='FRAME_DRAWN' and e['ns']==s['drawNs'] and e['revision']==s['drawRevision'] for e in es),'Missing actual draw')
@@ -149,7 +150,7 @@ def report(text,manifest,device,installed):
             for k in ('inputToDrawNs','publishToDrawNs','fedToPublishNs','inputToFedNs','inputToDisplayEndNs','drawToDisplayEndNs','mainRunningPublishToDrawNs'):
                 vs=[r[k] for r in rows if k in r];entry[k]=dict(n=len(vs),median=statistics.median(vs),maximum=max(vs)) if vs else None
             summaries.append(entry)
-    result=dict(suite='terminal-real-clock-diagnostic-v3',sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],sourceGuard=scope,
+    result=dict(suite='terminal-real-clock-diagnostic-v4',sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],sourceGuard=scope,
         manifest=manifest,device=device,installedApkHashes=installed,**data,traces=traces,summary=summaries,
         note='Real-clock accessibility actions/nativePTY. Unique gfxinfo DrawStart/SyncQueued containment→vsync token→Surface/DisplayFrame; unmatched retained. '
              'DisplayFrame end is an OS-present observation,not physical photons/phoneFPS. No speedup or old-baseline comparison.')

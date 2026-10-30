@@ -11,7 +11,7 @@ def fixture():
             for i in range(12):
                 output=f'ECHO:{c}:{p}:{i:02d}\r\n'.encode()
                 samples.append(dict(phase=p,index=i,warmup=i<2,virtual=c.startswith('fullVirtual'),beganNs=1,uiNs=2,drawNs=5,observedNs=6,
-                    fedRevision=1,publishedRevision=1,drawRevision=1,outputBytes=len(output),outputSha256=hashlib.sha256(output).hexdigest(),
+                    fedRevision=1,publishedRevision=1,drawRevision=1,outputBytes=len(output),outputSha256=hashlib.sha256(output).hexdigest(),tracePolls=2,visibleAfterMeasurement=True,
                     events=[dict(seq=1,stage='UI_INPUT',ns=2,bytes=0),dict(seq=2,stage='OUTPUT_READ',ns=3,bytes=len(output)),
                             dict(seq=3,stage='EMULATOR_FED',ns=4,bytes=len(output)),dict(seq=4,stage='FRAME_DRAWN',ns=5,bytes=0,revision=1)]))
         cases.append(dict(case=c,mode=c.split('-')[0],tui=c.endswith('-tui'),clock='real-android-no-compose-test-clock',passed=True,pid=123,
@@ -44,7 +44,8 @@ class RealClockContracts(unittest.TestCase):
         self.assertEqual(m.TREE,m.guard()['productionTree'])
         source=(m.ROOT/m.TEST).read_text();self.assertIn('ActivityScenario.launch',source)
         self.assertIn('ACTION_IME_ENTER',source);self.assertIn('OnDrawListener',source)
-        self.assertIn('observer.windowFinishedAfter(view.timeNanos)',source)
+        self.assertIn('snapshot.any{it.stage==TerminalPipelineStage.FRAME_DRAWN',source)
+        self.assertIn('visibleText(expected)',source)
         self.assertIn('No eligible FRAME_DRAWN for completed response',source)
         self.assertNotIn('Thread.sleep',source)
     def test_exact_token_join_and_cpu_interval_then_reject_duplicate_surface(self):

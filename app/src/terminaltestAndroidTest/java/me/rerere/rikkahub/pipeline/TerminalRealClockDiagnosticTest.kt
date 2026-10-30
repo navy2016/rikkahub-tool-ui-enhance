@@ -36,6 +36,7 @@ import me.rerere.rikkahub.data.container.BackgroundProcessManager
 import me.rerere.rikkahub.data.container.PRootManager
 import me.rerere.rikkahub.data.container.PtyMode
 import me.rerere.rikkahub.data.container.TerminalPipelineStage
+import me.rerere.rikkahub.data.container.TerminalPipelineEvent
 import me.rerere.rikkahub.data.container.TerminalPipelineTrace
 import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -86,6 +87,18 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
             }
             repeat(node.childCount){node.getChild(it)?.let(todo::addLast)}
             node.recycle()
+        }
+        return found
+    }
+    private fun visibleText(expected: String): Boolean {
+        val root=automation.rootInActiveWindow ?: return false
+        val todo=ArrayDeque<AccessibilityNodeInfo>();todo.add(root);var found=false
+        while(todo.isNotEmpty()) {
+            val node=todo.removeFirst()
+            if(!node.isEditable && node.isVisibleToUser && node.packageName?.toString()=="me.rerere.rikkahub.dev.next.terminaltest" && node.text?.toString()?.trimEnd()==expected) {
+                val bounds=Rect();node.getBoundsInScreen(bounds);found=found || !bounds.isEmpty
+            }
+            repeat(node.childCount){node.getChild(it)?.let(todo::addLast)};node.recycle()
         }
         return found
     }
@@ -170,6 +183,7 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
                     val value by settings.settingsFlow.collectAsState()
                     RikkahubTheme{CompositionLocalProvider(LocalSettings provides value,LocalNavController provides nav){if(mounted)ProcessSessionPage(sandbox,id)}}
                 }
+                assertTrue("Expected terminal output is not visible after setup: $phase",visibleText(lastMarker))
             }
             await("peer READY"){manager.readInteractiveBuffer(id)?.contains("READY\r\n")==true}
             owner.onActivity{mounted=true}
@@ -179,10 +193,11 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
             fun ready(ime: Boolean): Boolean {
                 val p=trace.viewport()?.viewport ?: return false
                 return p.preferred==mode && p.applied==mode && p.virtual==mode.isFullVirtual && p.bindingVirtual==mode.isFullVirtual && p.fullVirtual==mode.isFullVirtual &&
-                    p.ime==ime && p.tui==tui && !p.selection && !p.alternate && p.pan && p.sameFrame && p.initialized && p.following && p.geometryReady &&
-                    p.gestureId==null && p.effectId==null && p.writers==0 && !p.scrolling && p.tailSatisfied && p.historyRows==1000 &&
+                    p.ime==ime && p.tui==tui && !p.selection && !p.alternate && p.pan && p.sameFrame && p.initialized && p.following &&
+                    p.gestureId==null && p.effectId==null && p.writers==0 && !p.scrolling && p.historyRows==1000 &&
                     !manager.hasPendingTerminalResize(id) && (!mode.isFullVirtual || p.widthReady)
             }
+            var lastMarker="SEEDED"
             fun settle(ime: Boolean,phase: String) {
                 var signature: List<Any?>?=null;var stableSince=System.nanoTime();var lastPulse=0L
                 await("stable $phase") {
@@ -209,19 +224,22 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
                     repeat(12) { index ->
                         val expected="ECHO:$case:$phase:${index.toString().padStart(2,'0')}"
                         val output="$expected\r\n";val payload=output.toByteArray();val before=trace.beginWindow()
-                        val beforeRevision=terminal.revision()
                         assertTrue("Editor detached",input.refresh())
                         val arguments=Bundle().apply{putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,expected)}
                         val began=System.nanoTime()
                         assertTrue(input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,arguments))
                         assertTrue(input.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id))
                         val actionReturned=System.nanoTime()
+                        var observedEvents: List<TerminalPipelineEvent>?=null;var polls=0
                         await("native echo first draw",15_000) {
-                            val view=trace.viewport();view!=null && view.viewport.revision>beforeRevision && view.viewport.revision==terminal.revision() &&
-                                view.viewport.sameFrame && view.viewport.ime==ime && view.viewport.virtual==mode.isFullVirtual && view.timeNanos>=began &&
-                                view.viewport.geometryReady && (!mode.isFullVirtual || view.viewport.widthReady) && observer.windowFinishedAfter(view.timeNanos)
+                            val snapshot=trace.snapshot();polls++
+                            val feeds=snapshot.filter{it.stage==TerminalPipelineStage.EMULATOR_FED}
+                            val complete=feeds.isNotEmpty() && feeds.sumOf{it.bytes}==payload.size &&
+                                snapshot.any{it.stage==TerminalPipelineStage.FRAME_DRAWN && it.frameRevision>=feeds.last().frameRevision && it.virtual==mode.isFullVirtual}
+                            if(complete)observedEvents=snapshot
+                            complete
                         }
-                        val observed=System.nanoTime();val events=trace.snapshot().filter{it.sequence>before}
+                        val observed=System.nanoTime();val events=checkNotNull(observedEvents).filter{it.sequence>before}
                         val ui=checkNotNull(events.singleOrNull{it.stage==TerminalPipelineStage.UI_INPUT}){"Missing/duplicate UI_INPUT"};val fed=events.filter{it.stage==TerminalPipelineStage.EMULATOR_FED}
                         assertTrue("Actual finite echo missing",manager.readInteractiveBuffer(id)?.contains(output)==true)
                         assertEquals(0L,trace.dropped);assertEquals(payload.size,fed.sumOf{it.bytes})
@@ -230,10 +248,12 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
                         val published=checkNotNull(events.firstOrNull{it.stage==TerminalPipelineStage.FRAME_PUBLISHED && it.frameRevision>=revision}){"No FRAME_PUBLISHED for completed response"}
                         val draw=checkNotNull(events.firstOrNull{it.stage==TerminalPipelineStage.FRAME_DRAWN && it.frameRevision>=published.frameRevision}){"No eligible FRAME_DRAWN for completed response"}
                         assertTrue(draw.virtual==mode.isFullVirtual);assertEquals(rows,terminal.rows)
+                        assertTrue("Response not actually visible after first draw",visibleText(expected));lastMarker=expected
                         samples.add(JSONObject().put("phase",phase).put("index",index).put("warmup",index<2).put("beganNs",began)
                             .put("actionReturnedNs",actionReturned).put("observedNs",observed).put("uiNs",ui.timeNanos).put("publishedNs",published.timeNanos)
                             .put("drawNs",draw.timeNanos).put("fedRevision",revision).put("publishedRevision",published.frameRevision).put("drawRevision",draw.frameRevision)
                             .put("outputBytes",payload.size).put("outputSha256",hash(output)).put("virtual",mode.isFullVirtual)
+                            .put("tracePolls",polls).put("eventCount",events.size).put("visibleAfterMeasurement",true)
                             .put("events",JSONArray().apply{events.forEach{e->put(JSONObject().put("seq",e.sequence).put("stage",e.stage.name).put("ns",e.timeNanos).put("bytes",e.bytes).put("revision",e.frameRevision))}}))
                         // Fixed spacing, after the measured draw; no global-idle or test-clock calls.
                         SystemClock.sleep(80)

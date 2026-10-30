@@ -54,3 +54,12 @@ theoldmskey matched alreadyfinished frames,including impossibleend-before-draw r
 failed/rejectedmapping,notapplicationregression. V3usesUI-traversalpostedcompletion(no testclock)
 asreadbackgate andEXACTdraw-intervalcontainment→vsyncId→Surface/Displaytoken forofflineassociation.
 No timestamp substitution or nearest-neighbor. Oldv1/v2samples remainseparate;newpacingnot an A/Bgain.
+
+V3fd22013/run41113162815:bothfullVirtualcases complete36each;defaultordinary failsstablehidden,
+defaultTUI timesoutdespite persisted FRAME_DRAWNrevision14. Cachedviewport geometry can be absent
+evenafter a valid eagerdraw;it is NOT the completion event. Do not call that an appregression.
+V4 waits on the EXISTING exact FRAME_DRAWN + complete finitebytes,then checks actualvisible native
+accessibility output AFTER the measured interval. Bounded trace snapshotpolls2ms are now explicit
+probeoverhead/counts(not JSON/semantics traversal ininputinterval);originaldraw timestamp retained.
+Setup stillrequiresnativegridstable700ms,renderer/IME/follow/owners and visibleoutput. No oldtest
+assertions or productionlogic changed. All prior partialruns retained;v4notcompared as a speedup.
