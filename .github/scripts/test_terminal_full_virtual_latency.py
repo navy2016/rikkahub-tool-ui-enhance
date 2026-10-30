@@ -47,6 +47,8 @@ class LatencyContracts(unittest.TestCase):
         self.assertIn('repeat(22)',text);self.assertIn('removeOnFrameMetricsAvailableListener',text)
         self.assertIn('frameThread.quitSafely()',text);self.assertIn('ready(ime)',text)
         self.assertNotIn('System.gc()',text)
+        self.assertNotIn('after.cursorColumn',text)
+        self.assertIn('synchronized(terminal){terminal.cursorColumn()}',text)
 
     def test_protobuf_frame_reader_requires_complete_target_pid_pair(self):
         def var(n):

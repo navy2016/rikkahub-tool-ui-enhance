@@ -30,3 +30,8 @@ This single-source baseline cannot prove speedup. Future candidates reuse this e
 need same-device interleaved baseline/candidate comparison,all samples retained and gates fixed
 before running. Sample failure/trace limitation must be preserved; no blind retries to get green.
 Existing492JVM/182viewport/page gates remain immutable for a later production change.
+
+Harness compile correction:source6d4da2397f01cf214152b941f1f9ce73d397b7fa/run41058225696
+failed compileTerminaltestAndroidTestKotlin with`Unresolved reference 'cursorColumn'` at testline233.
+RenderFrame carries cursorRow but not cursorColumn; use the existing synchronized model getter
+(1-based). No instrumentation/performance sample ran. Preserve this failure; production is unchanged.

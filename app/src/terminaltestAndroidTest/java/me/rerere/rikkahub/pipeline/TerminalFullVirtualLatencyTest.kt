@@ -230,7 +230,7 @@ class TerminalFullVirtualLatencyTest : KoinComponent {
                     val drawn=events.first{it.stage==TerminalPipelineStage.FRAME_DRAWN && it.frameRevision>=publication.frameRevision}
                     val after=terminal.renderFrame();assertEquals(size,after.historyCount);assertEquals(physicalRows,terminal.rows)
                     assertTrue(drawn.virtual==true && drawn.timeNanos>=ui.timeNanos)
-                    if(phase=="cursor"){assertEquals(row-1,after.cursorRow);assertEquals(column-1,after.cursorColumn)}
+                    if(phase=="cursor"){assertEquals(row-1,after.cursorRow);assertEquals(column,synchronized(terminal){terminal.cursorColumn()})}
                     else if(phase=="row")assertTrue(after.rows[after.historyCount+after.cursorRow].text.text.contains(input))
                     else assertTrue(manager.readInteractiveBuffer(process)?.contains(output)==true)
                     val next=layouts();val common=previous.keys.intersect(next.keys)
