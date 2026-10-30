@@ -63,3 +63,8 @@ accessibility output AFTER the measured interval. Bounded trace snapshotpolls2ms
 probeoverhead/counts(not JSON/semantics traversal ininputinterval);originaldraw timestamp retained.
 Setup stillrequiresnativegridstable700ms,renderer/IME/follow/owners and visibleoutput. No oldtest
 assertions or productionlogic changed. All prior partialruns retained;v4notcompared as a speedup.
+
+V4firstbuild582cffc/run41116146276 failedbeforetests:`Unresolved reference 'phase'` and
+`Unresolved reference 'lastMarker'` at line186. A patch placed visibilitycheck inonActivity instead
+oflocalsettle(). Moved to its intendedscope,addedhostsourceplacementcheck;no assertionremoval,
+performance samples orproduction change. Keep the failedbuild ratherthan claim its tests ran.

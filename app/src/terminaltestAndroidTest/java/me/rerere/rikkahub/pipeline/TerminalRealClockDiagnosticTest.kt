@@ -183,7 +183,6 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
                     val value by settings.settingsFlow.collectAsState()
                     RikkahubTheme{CompositionLocalProvider(LocalSettings provides value,LocalNavController provides nav){if(mounted)ProcessSessionPage(sandbox,id)}}
                 }
-                assertTrue("Expected terminal output is not visible after setup: $phase",visibleText(lastMarker))
             }
             await("peer READY"){manager.readInteractiveBuffer(id)?.contains("READY\r\n")==true}
             owner.onActivity{mounted=true}
@@ -208,6 +207,7 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
                     if(!ready(ime) && System.nanoTime()-lastPulse>100_000_000L){owner.onActivity{trace.requestViewportDraw()};lastPulse=System.nanoTime()}
                     ready(ime) && ack!=null && ack.rows==terminal.rows && ack.columns==terminal.columns && System.nanoTime()-stableSince>=700_000_000L
                 }
+                assertTrue("Expected terminal output is not visible after setup: $phase",visibleText(lastMarker))
                 gates.add(JSONObject().put("phase",phase).put("rows",terminal.rows).put("columns",terminal.columns).put("ime",ime).put("virtual",mode.isFullVirtual))
             }
             settle(false,"hidden");val rows=terminal.rows
