@@ -301,6 +301,14 @@ OnDraw.drawingTime可指前一帧；应按gfxinfo的DrawStart<=真实drawNs<=Syn
 接下来v5只读exact FRAME_DRAWN+完整字节，计时后等待原生可见性（异步缓存），不再用
 viewport.geometryReady/window缓存当绘制完成事件。生产仍55db111，未采用任何调度优化。
 
+RealClockv5完成：2fdaf0e/run41126703241成功，144窗口(24预热/120正式)，144均唯一匹配
+实际gfxinfo绘制区间及Surface/Display token；725FrameMetrics/0丢回调/4原始轨迹/750目标
+SurfaceFrame/0丢调度bundle。完整JSON哈希113d25ae718edc947f242c0b81e529ee6ce180a8a74360674955f72af6c01447。
+离线同次atrace×sched显示默认TUI发布→draw的93%–95%为主线程运行，applyChanges约132–145ms；
+不是单纯等帧。不急删withFrameNanos，下一项先以现有TUI_CHUNKED做单因素对照，定位长历史
+UI结构更新；不据不同模式单次数据宣称手机提速。生产仍55db111。所有准备失败单独保留，
+本轮工作目录/workspace/terminal-review/real-clock/；无手机采集要求，无新正式Release。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

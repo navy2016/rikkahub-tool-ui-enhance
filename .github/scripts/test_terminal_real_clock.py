@@ -62,4 +62,9 @@ class RealClockContracts(unittest.TestCase):
         self.assertEqual(1_000_000,row['mainRunningPublishToDrawNs'])
         trace['surfaces'].append(dict(sf));row=m.correlate(case,trace)[0]
         self.assertEqual('missing-or-ambiguous-SurfaceFrame',row['match']);self.assertNotIn('inputToDisplayEndNs',row)
+    def test_summary_publisher_is_in_the_actual_pipeline_job(self):
+        text=(m.ROOT/'.github/workflows/terminal-pipeline-tests.yml').read_text()
+        pipeline=text.split('\n  pipeline:\n',1)[1]
+        self.assertIn('terminal-real-clock.py evidence',pipeline)
+        self.assertNotIn('terminal-real-clock.py evidence',text.split('\n  pipeline:\n',1)[0])
 if __name__=='__main__':unittest.main()

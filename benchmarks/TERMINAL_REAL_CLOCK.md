@@ -85,3 +85,21 @@ comparison with priorchangedgates. Oldsetup failures not retrospectively explain
 The matched frame is the first eligible RESPONSE-REVISIONdraw,not a proven firstvisibleecho:
 accessibilityvisibility is checked later. Report this distinction explicitly instead of claiming
 the later visual confirmation occurred at that firstdraw/display time.
+
+## Completed v5 evidence; no production optimization
+
+2fdaf0e13f66174c2779fcd766d84a94ab3af22b/run41126703241passedallfourcases:144windows,
+24warmups/120measured,all144uniquelymatchedtoSurface/DisplayFrame tokens;4nativevisibility/kernel
+casescomplete. Rawreport873698B SHA256113d25ae718edc947f242c0b81e529ee6ce180a8a74360674955f72af6c01447.
+FrameMetrics725records,0dropped;750appSurfaceFrames,0lostsched bundles,BOOTclock,noncompact.
+Sources/nativeevents/rawtraces/offlinematching independentlyrevalidated. Summarypublisher was
+misplaced undertracePreflight job,notrun;fullreportdigest still appeared in API. Originalartifact
+13012250904/relay41128807531retrieved,not rerun. Placementcorrected forfuture runs only.
+
+Same-runofflineatrace×schedattribution:DEFAULTTUIpublish→drawmedian188–206ms,mainrunning178–189ms,
+median per-sample runningfraction93.4–94.7%;Compose:applyChanges running132–145ms. FULL_VIRTUAL TUI
+publish→draw30–40ms/applyChanges1.2–1.9ms. Not an interleavedmode speeduptrial orphoneFPS. Native
+accessibilitydriver/probe/softwareGPU effects remain. Nestedtrace sections mustnotbeadded.
+These data disfavor deletingwithFrameNanos as thefirstoptimization. Nextsinglefactor comparison
+should isolateeagerTUIlong-historyUIstructure costs,firstusingexistingTUI_CHUNKED mode as acontrol;
+do not alterdefault/KEYS/selection or promotea newrenderer. Priorfailedruns stay separate.

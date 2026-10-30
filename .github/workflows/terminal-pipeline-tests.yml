@@ -79,9 +79,6 @@ jobs:
           path: artifacts/terminal-trace-preflight/
           if-no-files-found: error
           retention-days: 14
-      - name: Publish bounded real-clock observations without resampling
-        if: ${{ always() && hashFiles('artifacts/terminal-pipeline/real-clock-summary.json') != '' }}
-        run: python3 -B .github/scripts/terminal-real-clock.py evidence
   paired:
     if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'paired' }}
     uses: ./.github/workflows/terminal-pipeline-paired.yml
@@ -229,6 +226,9 @@ jobs:
             artifacts/pipeline-proot-build/build.log
           if-no-files-found: error
           retention-days: 14
+      - name: Publish bounded real-clock observations without resampling
+        if: ${{ always() && hashFiles('artifacts/terminal-pipeline/real-clock-summary.json') != '' }}
+        run: python3 -B .github/scripts/terminal-real-clock.py evidence
       - name: Publish bounded full-virtual latency baseline summary part one
         if: ${{ always() && hashFiles('artifacts/terminal-pipeline/full-virtual-latency-summary.json') != '' }}
         run: python3 -B .github/scripts/terminal-full-virtual-latency.py evidence --page 1
