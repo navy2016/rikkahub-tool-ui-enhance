@@ -51,6 +51,10 @@ _full_spec = importlib.util.spec_from_file_location('terminal_full_virtual',
     Path(__file__).with_name('terminal-full-virtual-reports.py'))
 full_reports = importlib.util.module_from_spec(_full_spec)
 _full_spec.loader.exec_module(full_reports)
+_latency_spec = importlib.util.spec_from_file_location('terminal_full_virtual_latency',
+    Path(__file__).with_name('terminal-full-virtual-latency.py'))
+latency_reports = importlib.util.module_from_spec(_latency_spec)
+_latency_spec.loader.exec_module(latency_reports)
 
 
 def notice(level, title, message):
@@ -72,6 +76,10 @@ def digest(path):
 
 def sources():
     paths = [
+        latency_reports.TEST,
+        '.github/scripts/terminal-full-virtual-latency.py',
+        'benchmarks/terminal-full-virtual-latency/perfetto.pbtxt',
+        'benchmarks/terminal-full-virtual-latency/schema/frame_timeline_event.proto',
         *full_reports.ALLOWED,
         full_reports.PAGE_FILE,
         '.github/scripts/terminal-full-virtual-reports.py',
@@ -318,11 +326,16 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     bottom = selected == 'bottomOnly'
     tui_history = selected == 'tuiHistoryOnly'
     full_virtual = selected == 'fullVirtualOnly'
+    latency = selected == 'fullVirtualLatency'
     methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
         'pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
         'pipelineStableVirtualPtyEchoKeyboardAndRemount')
     test_class = 'me.rerere.rikkahub.pipeline.TerminalPtyTransportInstrumentedTest' if transport else CLASS
     extra_arguments = []
+    if latency:
+        latency_reports.guard()
+        test_class = latency_reports.CLASS
+        methods = latency_reports.METHODS
     if full_virtual:
         test_class = 'me.rerere.rikkahub.pipeline.TerminalFullVirtualPageTest'
         methods = full_reports.PAGE_METHODS
@@ -358,10 +371,26 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             output(['adb', 'shell', 'am', 'force-stop', PACKAGE])
             output(['adb', 'shell', 'am', 'force-stop', TEST_PACKAGE])
             log = OUT / (method + '.log')
-            with log.open('w') as stream:
-                result = subprocess.run(['adb', 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class', test_class + '#' + method,
-                                         *extra_arguments, TEST_PACKAGE + '/androidx.test.runner.AndroidJUnitRunner'],
-                                        stdout=stream, stderr=subprocess.STDOUT, timeout=seconds + 300 if soak else 300)
+            trace_pid = None
+            trace_remote = '/data/misc/perfetto-traces/fv-' + method + '.pftrace'
+            if latency:
+                output(['adb','push',str(ROOT/'benchmarks/terminal-full-virtual-latency/perfetto.pbtxt'),'/data/local/tmp/fv-latency.pbtxt'])
+                started = output(['adb','shell','perfetto','--txt','--background','-c','/data/local/tmp/fv-latency.pbtxt','-o',trace_remote]).strip()
+                candidates = re.findall(r'^([0-9]+)$',started,re.M)
+                if len(candidates)!=1:
+                    raise ValueError('Perfetto did not return an owned trace PID: '+started[:400])
+                trace_pid = candidates[0]
+            try:
+                with log.open('w') as stream:
+                    result = subprocess.run(['adb', 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class', test_class + '#' + method,
+                                             *extra_arguments, TEST_PACKAGE + '/androidx.test.runner.AndroidJUnitRunner'],
+                                            stdout=stream, stderr=subprocess.STDOUT, timeout=seconds + 300 if soak else 520 if latency else 300)
+            finally:
+                if trace_pid:
+                    output(['adb','shell','kill','-INT',trace_pid])
+                    output(['adb','shell',f'for n in $(seq 1 50); do if ! kill -0 {trace_pid} 2>/dev/null; then exit 0; fi; sleep 0.1; done; exit 1'],15)
+                    target = OUT/'latency-traces';target.mkdir(exist_ok=True)
+                    output(['adb','pull',trace_remote,str(target/(method+'.pftrace'))],120)
             text = log.read_text()
             logs.append(text)
             try:
@@ -380,6 +409,8 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
             if 'mCurrentFocus=' in line or 'mFocusedApp=' in line) + '\n')
     if failed:
         raise ValueError('; '.join(failed))
+    if latency:
+        return latency_reports.report('\n'.join(logs),manifest,device,installed_hashes)
     if full_virtual:
         guard = full_reports.source_guard()
         results = full_reports.validate_page('\n'.join(logs))

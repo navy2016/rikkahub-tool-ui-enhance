@@ -225,6 +225,14 @@ Release41045773895、独立校验41047320055成功，arm64/non-debuggable，2.1.
 或Release。证据工作目录/workspace/terminal-review/native-selection/，final-capsule/由make_final.py
 生成，verify_final.py离线复核；交付名terminal-full-virtual-55db111-{report.md,acceptance.json,evidence.tar.gz}。
 
+用户随后询问后续优化方案并回答“继续”：新P0性能专项获授权，不是继续修复已结案问题。
+冻结55db111/main8caf50d5c40e228f1d5bcc09d3db505757568b68为新基线。先仅加测试/CI报告，
+真实页面全虚拟ordinary/TUI×1k/10k，每case六工作负载×(2预热+20正式)，共528保留样本，
+含实际FrameMetrics与Perfetto；不得用旧c07100d或旧路径36回显冒充新全虚拟数据。
+此新基线不宣称优化收益/P99/实机FPS；报告包含所有失败、丢帧回调和探针边界。
+先据数据判断P1光标/局部更新是否值得改；不提前改生产或重新构建正式Release。
+协议benchmarks/TERMINAL_FULL_VIRTUAL_LATENCY.md，工作流terminal-pipeline-tests.yml/fullVirtualLatency。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
