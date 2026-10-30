@@ -137,6 +137,7 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
     @Test fun realClockFullTui()=exercise(TerminalRenderMode.FULL_VIRTUAL,true)
 
     private fun exercise(mode: TerminalRenderMode,tui: Boolean) {
+        val setupOnly=InstrumentationRegistry.getArguments().getString("realClockSetupOnly")=="true"
         val case="${mode.id}-${if(tui)"tui" else "ordinary"}";val launch=UUID.randomUUID().toString();val sandbox="real-clock-$launch"
         val saved=runBlocking{settings.settingsFlow.first{!it.init}}
         val script="""
@@ -159,6 +160,8 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
         val observer=Observers();val thread=HandlerThread("real-clock-metrics").apply{start()};val handler=Handler(thread.looper)
         val samples=ArrayList<JSONObject>();val dumps=ArrayList<JSONObject>();val gates=ArrayList<JSONObject>();var attached=false
         try {
+            // Establish the native accessibility connection BEFORE app startup/measurement.
+            automation.serviceInfo
             runBlocking {
                 settings.update{it.copy(terminalCommandPreferences=JSONArray().put(JSONObject().put("key",hash(peer)).put("command",peer).put("updatedAt",1L)
                     .put("rawInputMode",false).put("terminalPanMode",true).put("showFullInputBar",true).put("showStatusBar",true).put("showExtraKeys",true)
@@ -211,6 +214,11 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
                 gates.add(JSONObject().put("phase",phase).put("rows",terminal.rows).put("columns",terminal.columns).put("ime",ime).put("virtual",mode.isFullVirtual))
             }
             settle(false,"hidden");val rows=terminal.rows
+            if(setupOnly) {
+                emitCase(JSONObject().put("case",case).put("setupOnly",true).put("acceptance",false).put("passed",true)
+                    .put("viewport",trace.viewport()?.viewport.toString()).put("modelRows",terminal.rows).put("modelHistory",terminal.renderFrame().historyCount))
+                return
+            }
             for(phase in listOf("hidden","shown","hiddenAgain")) {
                 if(phase=="shown"){val field=requireNotNull(editor());try{tap(field)}finally{field.recycle()};settle(true,phase)}
                 if(phase=="hiddenAgain"){back();settle(false,phase)}
@@ -272,8 +280,14 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
                 .put("completedTraversals",JSONArray().apply{observer.readTraversals().forEach{put(JSONArray(it.toList()))}})
                 .put("clock", "real-android-no-compose-test-clock").put("droppedFrameMetrics",observer.readMetrics().sumOf{it[9]}).put("passed",true))
         } catch(error: Throwable) {
-            emitCase(JSONObject().put("case",case).put("passed",false).put("error",error.toString()).put("samples",JSONArray(samples))
+            val model=process?.let{manager.getInteractiveTerminalEmulator(it)}
+            val info=model?.renderFrame()
+            emitCase(JSONObject().put("case",case).put("setupOnly",setupOnly).put("acceptance",false).put("passed",false).put("error",error.toString()).put("samples",JSONArray(samples))
+                .put("viewport",capture?.viewport()?.viewport.toString()).put("modelRows",model?.rows).put("modelColumns",model?.columns)
+                .put("modelRevision",info?.revision).put("modelHistory",info?.historyCount)
+                .put("resizePending",process?.let{manager.hasPendingTerminalResize(it)})
                 .put("lastEvents",JSONArray().apply{capture?.snapshot()?.takeLast(96)?.forEach{e->put(JSONObject().put("seq",e.sequence).put("stage",e.stage.name).put("ns",e.timeNanos).put("bytes",e.bytes).put("revision",e.frameRevision))}}))
+            if(setupOnly)return
             throw error
         } finally {
             try {

@@ -35,6 +35,16 @@ def case_records(text):
         require(len(raw)<=8*1024*1024 and hashlib.sha256(raw).hexdigest()==entry['sha256'],'Case content hash/size differs')
         value=json.loads(raw);require(value['case']==name,'Mislabeled case payload');result.append(value)
     return result
+def setup_report(text,manifest,device,installed):
+    cases=case_records(text)
+    require(len(cases)==4 and all(c.get('setupOnly') is True and c.get('acceptance') is False for c in cases),'Not an observational setup inventory')
+    value=dict(suite='real-clock-setup-observation-v1',sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],
+        productionTree=TREE,performanceSampled=False,cases=cases,device=device,manifest=manifest,installedApkHashes=installed)
+    wire.legacy.publish('Real clock setup observation',value,OUT/'real-clock-setup.json',emit_compact=False)
+    compact={k:v for k,v in value.items() if k!='manifest'}
+    for c in compact['cases']:c.pop('lastEvents',None)
+    wire.legacy.compact('Real clock setup observation',json.dumps(compact,separators=(',',':')).encode())
+    return value
 def validate(text):
     cases=case_records(text);cleanup=records(text,'REAL_CLOCK_CLEANUP')
     require(len(cases)==4 and {r.get('case') for r in cases}==set(CASES),'Missing four real page cases')

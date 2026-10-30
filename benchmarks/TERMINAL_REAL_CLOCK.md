@@ -68,3 +68,10 @@ V4firstbuild582cffc/run41116146276 failedbeforetests:`Unresolved reference 'phas
 `Unresolved reference 'lastMarker'` at line186. A patch placed visibilitycheck inonActivity instead
 oflocalsettle(). Moved to its intendedscope,addedhostsourceplacementcheck;no assertionremoval,
 performance samples orproduction change. Keep the failedbuild ratherthan claim its tests ran.
+
+V4scope-corrected91c09d0/run41117686483 stillfailed:defaultordinarystablehidden timeout;other
+casesnativevisibility failures(onefullTUIsample completed). STOP further performance attempts.
+NewrealClockSetup is an observationalsetup-only round:connectaccessibilitybeforestartup,retain
+allviewport/model/resizeconditions and error. Returns observedpass/fail withacceptance=false,
+no echo measurement loops. It mustnot be promoted to correctness acceptance. First resolve the
+specific startup/visibility state before resuming any performance measurement.

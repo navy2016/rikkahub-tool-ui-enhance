@@ -334,7 +334,7 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     tui_history = selected == 'tuiHistoryOnly'
     full_virtual = selected == 'fullVirtualOnly'
     latency = selected == 'fullVirtualLatency'
-    real = selected == 'realClock'
+    real = selected in ('realClock','realClockSetup')
     methods = ('transportNativeAndProotProduceExactFixedBytes',) if transport else (
         'pipelineDefaultPtyEchoKeyboardAndRemount', 'pipelineVirtualPtyEchoKeyboardAndRemount',
         'pipelineStableVirtualPtyEchoKeyboardAndRemount')
@@ -344,6 +344,7 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
         real_clock.guard()
         test_class = real_clock.CLASS
         methods = real_clock.METHODS
+        if selected == 'realClockSetup':extra_arguments=['-e','realClockSetupOnly','true']
     if latency:
         latency_reports.guard()
         test_class = latency_reports.CLASS
@@ -443,6 +444,7 @@ def run_verified_bundle(manifest, suite=None, emit_evidence=True):
     if failed:
         raise ValueError('; '.join(failed))
     if real:
+        if selected == 'realClockSetup':return real_clock.setup_report('\n'.join(logs),manifest,device,installed_hashes)
         return real_clock.report('\n'.join(logs),manifest,device,installed_hashes)
     if latency:
         return latency_reports.report('\n'.join(logs),manifest,device,installed_hashes)
