@@ -64,6 +64,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -79,6 +80,40 @@ import me.rerere.rikkahub.data.container.TerminalVirtualSelection
 import me.rerere.rikkahub.utils.TerminalEmulator
 import kotlin.math.roundToInt
 import java.security.MessageDigest
+
+/** Collapse redundant adjacent terminal style runs before Android serializes clipboard spans.
+ * Text and non-style annotations are untouched. Identical runs may bridge ONLY a separating LF;
+ * no differing/overlapping style is reordered or discarded. This is copy-time, never frame work.
+ */
+internal fun terminalSelectionClipboardText(value: AnnotatedString): AnnotatedString {
+    val styles = value.spanStyles
+    if (styles.size < 2) return value
+    val replacements = arrayOfNulls<AnnotatedString.Range<SpanStyle>>(styles.size)
+    var first = 0
+    var pending = styles[0]
+    var combined = 0
+    for (index in 1 until styles.size) {
+        val next = styles[index]
+        val adjoining = pending.end == next.start ||
+            (pending.end + 1 == next.start && pending.end < value.length && value.text[pending.end] == '\n')
+        if (adjoining && pending.start < pending.end && next.start < next.end &&
+            pending.item == next.item && pending.tag == next.tag) {
+            pending = pending.copy(end = next.end)
+            combined++
+        } else {
+            replacements[first] = pending
+            first = index
+            pending = next
+        }
+    }
+    if (combined == 0) return value
+    replacements[first] = pending
+    var index = 0
+    return value.flatMapAnnotations { annotation ->
+        if (annotation.item !is SpanStyle) listOf(annotation)
+        else replacements[index++]?.let { listOf(it) } ?: emptyList()
+    }
+}
 
 /** Motion intent, separate from long-press/handle ownership. No movement means no edge scrolling. */
 internal class TerminalSelectionDragMotion {
@@ -130,6 +165,7 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         private set
     private var draggedHandle: Handle? = null
     private val dragMotion = TerminalSelectionDragMotion()
+    private val handleHeights = IntArray(2)
     var showToolbar by mutableStateOf(false)
     var focused by mutableStateOf(false)
     var copyAction: () -> Boolean = { false }
@@ -215,6 +251,11 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         val currentText = if (index < current.historyCount) current.rows[index].text else physical[index-current.historyCount].text
         if (currentId != id || currentText != text) return null
         return selection.rowRange(index)?.takeIf { it.min >= 0 && it.max <= text.length }
+    }
+
+    fun handleMeasured(start: Boolean, height: Int) {
+        val index = if (start) 0 else 1
+        if (handleHeights[index] != height) { handleHeights[index] = height; version++ }
     }
 
     fun position(value: LayoutCoordinates) {
@@ -377,9 +418,12 @@ internal class TerminalVirtualSelectionUi(val binding: TerminalViewportBinding) 
         val a = handle(true)?.point
         val b = handle(false)?.point
         val points = listOfNotNull(a,b)
+        // Android's floating menu may choose BELOW a near-top selection. Its exclusion rectangle
+        // must include the real handle touch targets, not merely the text baseline (1px below it).
+        val handleHeight = handleHeights.maxOrNull() ?: 0
         return if (points.isEmpty()) view else Rect(view.left + points.minOf { it.x },
             view.top + (points.minOf { it.y } - 24).coerceAtLeast(0f),
-            view.left + points.maxOf { it.x } + 1, view.top + points.maxOf { it.y } + 1)
+            view.left + points.maxOf { it.x } + 1, view.top + points.maxOf { it.y } + handleHeight + 1)
     }
 
     fun edgeStep() {
@@ -445,8 +489,10 @@ internal fun TerminalVirtualSelectionContainer(ui: TerminalVirtualSelectionUi, e
     val copy: () -> Boolean = {
         ui.trace("copy-request")
         ui.selection.copy()?.let {
-            ui.trace("copy-value", "text" to ui.textProof(it.text))
-            clipboard.setText(it)
+            val compact = terminalSelectionClipboardText(it)
+            ui.trace("copy-value", "text" to ui.textProof(compact.text), "spansBefore" to it.spanStyles.size,
+                "spansAfter" to compact.spanStyles.size)
+            clipboard.setText(compact)
             if (ui.binding.onSelectionTrace != null) ui.trace("clipboard-set", "text" to ui.textProof(clipboard.getText()?.text))
             ui.clear("copied")
             true
@@ -531,7 +577,7 @@ private fun TerminalVirtualSelectionHandle(ui: TerminalVirtualSelectionUi, start
     val handleCoordinates = remember(ui, start) { arrayOfNulls<LayoutCoordinates>(1) }
     Popup(popupPositionProvider=provider,properties=PopupProperties(clippingEnabled=false,excludeFromSystemGesture=true)) {
         Canvas(Modifier.size(25.dp).testTag(if (start) "terminal-selection-start" else "terminal-selection-end")
-            .onGloballyPositioned { handleCoordinates[0] = it }
+            .onGloballyPositioned { handleCoordinates[0] = it; ui.handleMeasured(start, it.size.height) }
             .pointerInput(ui,start) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)

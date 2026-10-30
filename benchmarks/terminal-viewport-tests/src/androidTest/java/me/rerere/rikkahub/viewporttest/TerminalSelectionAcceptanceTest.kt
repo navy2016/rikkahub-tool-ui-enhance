@@ -61,7 +61,21 @@ class TerminalSelectionAcceptanceTest {
     }
     private fun copy(expected: String) {
         compose.waitForIdle()
-        checkNotNull(device.wait(Until.findObject(By.text(compose.activity.getString(android.R.string.copy))),5000)).click()
+        val copy=checkNotNull(device.wait(Until.findObject(By.text(compose.activity.getString(android.R.string.copy))),5000))
+        val all=device.findObject(By.text(compose.activity.getString(android.R.string.selectAll)))
+        val handles=compose.onAllNodes(SemanticsMatcher("selection grip") { node ->
+            node.config.getOrElse(SemanticsProperties.TestTag) { "" }.startsWith("terminal-selection-")
+        },true).fetchSemanticsNodes()
+        assertTrue(handles.isNotEmpty())
+        for(handle in handles) {
+            val x=(handle.positionOnScreen.x+handle.size.width/2f).toInt()
+            val y=(handle.positionOnScreen.y+handle.size.height/2f).toInt()
+            assertFalse("Copy menu intercepts the actual grip center",copy.visibleBounds.contains(x,y))
+            assertFalse("Select-all menu intercepts the actual grip center",all?.visibleBounds?.contains(x,y)==true)
+        }
+        Log.i("TerminalSelectionAcceptance","SELECTION_REPAIR_MENU "+JSONObject().put("avoidsHandles",true)
+            .put("handles",handles.size).put("expectedLength",expected.length))
+        copy.click()
         compose.waitForIdle()
         compose.waitUntil(5000) { clipboard.primaryClip?.getItemAt(0)?.text?.toString()==expected }
     }

@@ -3,14 +3,55 @@ package me.rerere.rikkahub.data.container
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.graphics.Color
 import me.rerere.rikkahub.ui.pages.container.TerminalRowStore
 import me.rerere.rikkahub.ui.pages.container.TerminalSparseRows
 import me.rerere.rikkahub.ui.pages.container.TerminalSelectionDragMotion
+import me.rerere.rikkahub.ui.pages.container.terminalSelectionClipboardText
 import me.rerere.rikkahub.utils.TerminalEmulator
 import org.junit.Assert.*
 import org.junit.Test
 
 class TerminalFullVirtualTest {
+    @Test fun fullVirtualClipboardCoalescesRepeatedRowsWithoutLosingTextOrAnnotations() {
+        val source=buildAnnotatedString {
+            repeat(10000) { row ->
+                val first=length;append("word$row 中文 e\u0301 👩‍💻")
+                addStyle(SpanStyle(color=Color.Green),first,length)
+                if(row==123)addStringAnnotation("URL","https://example.org",first,length)
+                append('\n')
+            }
+        }
+        val copy=terminalSelectionClipboardText(source)
+        assertEquals(source.text,copy.text)
+        assertEquals(1,copy.spanStyles.size)
+        assertEquals(source.getStringAnnotations(0,source.length),copy.getStringAnnotations(0,copy.length))
+        assertEquals(source.spanStyles.first().start,copy.spanStyles.single().start)
+        assertEquals(source.spanStyles.last().end,copy.spanStyles.single().end)
+    }
+
+    @Test fun fullVirtualClipboardDoesNotMergeConflictingOrOverlappingStyles() {
+        val red=SpanStyle(color=Color.Red);val blue=SpanStyle(color=Color.Blue)
+        val source=buildAnnotatedString {
+            append("red\nblue\nred")
+            addStyle(red,0,3);addStyle(blue,4,8);addStyle(red,9,length)
+            addStyle(blue,0,length)
+        }
+        assertSame(source,terminalSelectionClipboardText(source))
+        val overlap=AnnotatedString("abcd",listOf(AnnotatedString.Range(red,0,3),AnnotatedString.Range(red,2,4)))
+        assertSame(overlap,terminalSelectionClipboardText(overlap))
+    }
+
+    @Test fun fullVirtualClipboardPreservesUnstyledAndSeparatedText() {
+        val plain=AnnotatedString("plain e\u0301 👩‍💻")
+        assertSame(plain,terminalSelectionClipboardText(plain))
+        val style=SpanStyle(color=Color.Red)
+        val gap=AnnotatedString("ab cd",listOf(AnnotatedString.Range(style,0,2),AnnotatedString.Range(style,3,5)))
+        assertSame(gap,terminalSelectionClipboardText(gap))
+    }
+
     @Test fun fullVirtualStationaryLongPressAndHandleDownNeverAutoscroll() {
         val motion = TerminalSelectionDragMotion()
         for (point in listOf(Offset(42f,14.5f), Offset(42f,300f))) {

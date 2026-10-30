@@ -42,6 +42,7 @@ def repair_fixture():
         historyRows=0 if p=='alternate' else 10000,rowStates=24,measuredRows=12,writers=1,length=9,sha256='e'*64,
         top=0,bottom=29,rowHeight=29,viewport=319) for p in phases]
     groups.append(('SELECTION_REPAIR_ROW',rows))
+    groups.append(('SELECTION_REPAIR_MENU',[dict(avoidsHandles=True,handles=2,expectedLength=9) for _ in phases]))
     return groups
 
 
@@ -64,7 +65,7 @@ class SelectionDiagnosticContracts(unittest.TestCase):
         with self.assertRaises(ValueError):gate.validate_repair(repair_encode(groups))
         groups=repair_fixture();groups.append(('FULL_VIRTUAL_PERF',[dict(fake=True)]))
         with self.assertRaises(ValueError):gate.validate_repair(repair_encode(groups))
-        groups=repair_fixture();groups[-1][1][0]['virtual']=False
+        groups=repair_fixture();groups[-2][1][0]['virtual']=False
         with self.assertRaises(ValueError):gate.validate_repair(repair_encode(groups))
 
     def test_repair_nine_method_ci_inventory_and_old_assertions_remain(self):
@@ -121,6 +122,15 @@ class SelectionDiagnosticContracts(unittest.TestCase):
         self.assertIn('verticalDirection > 0 && position.y > viewportHeight-edge',text)
         self.assertIn('fun end() { previous = null; verticalDirection = 0 }',text)
         self.assertIn('popupContentSize.width',text)
+        self.assertIn('points.maxOf { it.y } + handleHeight + 1',text)
+
+    def test_jvm_inventory_matches_the_actual_added_methods(self):
+        source=(gate.ROOT/'app/src/test/java/me/rerere/rikkahub/data/container/TerminalFullVirtualTest.kt').read_text()
+        methods=re.findall(r'@Test fun (fullVirtual\w+)\(',source)
+        workflow=(gate.ROOT/'.github/workflows/terminal-emulator-tests.yml').read_text()
+        values=re.findall(r"--require-case-group 'fullVirtual:(\d+)'",workflow)
+        self.assertEqual([str(len(methods))],values)
+        self.assertEqual(17,len(methods))
 
 
 if __name__=='__main__':unittest.main()

@@ -183,8 +183,11 @@ def validate_repair(text):
     require(frames==[dict(moves=220,events=222,frames=222,screenCoordinates=True)],'Original fixed gesture changed')
     devices=legacy.records(text,'FULL_VIRTUAL_SELECTION_DEVICE ')
     require(len(devices)==2 and {r.get('case') for r in devices}=={'copy','drag'},'Original installed APK identity absent')
+    menus=legacy.records(text,'SELECTION_REPAIR_MENU ')
+    require(len(menus)==13 and all(r.get('avoidsHandles') is True and 1<=r.get('handles',0)<=2 and
+            r.get('expectedLength',0)>0 for r in menus),'Missing actual menu/grip exclusion proof')
     return dict(cases=cases,rectangles=rects,copies=copies,drags=drags,regression=regression,selectionRows=rows,
-                frames=frames,selectionDevices=devices,performanceResampled=False)
+                frames=frames,selectionDevices=devices,menus=menus,performanceResampled=False)
 
 
 def repair_report():

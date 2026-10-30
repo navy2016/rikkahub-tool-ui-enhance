@@ -71,3 +71,26 @@ Run old173viewport regression plus these9correctness methods(182total),completeR
 native full-page/PTY gates. This is candidate acceptance1 under the added authority, not the old
 failed correction. Prior30performance samples remain source-bound toc07100d and are NOT new-tree
 timings; no post-failure resampling. Only after correctness/source gates pass may formalRelease resume.
+
+## Candidate1 result and the single consolidated correction
+
+Candidate347d17aa5676530f805f05ae3bd424f7c7cc4730, mainb7edc837d11f84e24f1619c4ab8d116b494930ad:
+native-page/PTY41028517457 passed. JVM41028489789 executed487cases without test failures, but its
+report still expected10fullVirtual cases rather than14; preserve the failed reporting run.
+Viewport41028506352:old173passed,4original new-mode geometry/handoff methods and3new selection
+regressions passed. Word now copied correctly and SelectAll was reached, then Android rejected
+`TransactionTooLargeException: data parcel size 2525220 bytes` while serializing the repeated row
+SpanStyle annotations. Original drag still failedline263. Same-run XML/log artifact12965176766 was
+retrieved via relay41030395370, not a test rerun. Original drag started atscreen128,73 with a88px
+popup; native menu avoidance used a content rectangle ending only1px below the29px text baseline.
+The first candidate did not record a native-menu hit box; do not call overlap a captured old event.
+
+One consolidated correction:copy-time coalescing of equal contiguous style ranges (including a sole
+inter-rowLF) preserves all text, hyperlinks/other annotations, order and differing/overlapping styles.
+No truncation or plain-text-only fallback; threeJVM tests cover10krows and annotation preservation.
+Native floating-menu exclusion rectangle includes measured handle height; new actual UI assertions
+require Copy/SelectAll hit boxes NOT cover handle centers in all13regression copies. Existing original
+six methods and fixed220MOVE driver remain byte-identical. JVM report inventory is17fullVirtual/490
+total cases, checked against source by a host test. Repeat fullReleaseJVM,old173+9affectedviewport and
+native page gates together. No new performance samples. This exhausts the one correction allowance;
+do not create an automatic further retry or relabel any original failed run.
