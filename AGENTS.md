@@ -274,6 +274,13 @@ foreground-file24、foreground-buffer38、background-wait37完整帧。后台PID
 用户设备运行，不清数据/安装/强制编译/改动画。下一步应取受影响手机ART与页面帧状态，
 而不是盲改解析器/虚拟化；现有两包版本号同为2.1.62/151，必须按APK SHA辨认。
 
+最新用户反馈：“使用一段时间后，好像没有之前那种缓慢感觉了！”并要求继续终端优化。
+记为实机感知改善，不认定ART/预热根因已证实；暂停持续全局回退修复，不再要求手机采集。
+下一项为全虚拟BAR/UNDERLINE光标的隔离对照：仅testFixture默认false适配现有光标叠加，
+生产仍55db111/main8caf50d5c40e228f1d5bcc09d3db505757568b68。40像素case+40AB/BA窗口，
+直接验证Paragraph/文字/宽度工作量，不把包装对象变化算重排；旧528/396/30样本不重采。
+协议benchmarks/TERMINAL_FULL_VIRTUAL_CURSOR_EXPERIMENT.md；cursorExperiment工作流入口。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

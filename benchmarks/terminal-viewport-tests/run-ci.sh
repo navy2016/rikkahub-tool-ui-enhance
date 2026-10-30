@@ -98,6 +98,13 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
+if [ "$group" = cursorExperiment ]; then
+  mkdir -p artifacts/terminal-cursor-experiment
+  adb logcat -G 8M
+  run_arm full-virtual-cursor TerminalFullVirtualCursorExperimentTest 850
+  adb logcat -d -v threadtime TerminalCursorExperiment:I '*:S' > artifacts/terminal-cursor-experiment/cursor-logcat.txt
+  exit "$overall_status"
+fi
 if [ "$group" = nativeSelectionDiagnostic ]; then
   mkdir -p artifacts/terminal-native-selection
   adb logcat -G 8M

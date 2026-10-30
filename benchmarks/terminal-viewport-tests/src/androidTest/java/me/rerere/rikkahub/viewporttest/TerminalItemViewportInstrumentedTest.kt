@@ -567,6 +567,7 @@ class TerminalItemViewportInstrumentedTest {
         private val sparse: Boolean = false,
         val widthCheckpoint: TerminalWidthCheckpointStore? = null,
         private val mountStreamFrames: Int = 0,
+        private val cursorOverlayExperiment: Boolean = false,
     ) {
         val terminal = terminalOverride ?: TerminalEmulator(initialColumns = 80, initialRows = 24,
             maxScrollbackLines = historyRows).apply {
@@ -575,7 +576,7 @@ class TerminalItemViewportInstrumentedTest {
             })
         }
         private fun render(): TerminalEmulator.RenderFrame {
-            val raw = terminal.renderFrame()
+            val raw = if (cursorOverlayExperiment) terminal.renderFrameForCursorOverlay() else terminal.renderFrame()
             if (!stressSpans) return raw
             val ids = raw.historyLineIds + raw.screenLineIds
             return raw.copy(rows = raw.rows.mapIndexed { i, row ->
@@ -689,7 +690,11 @@ class TerminalItemViewportInstrumentedTest {
                 LocalLayoutDirection provides if (rtl) LayoutDirection.Rtl else LayoutDirection.Ltr,
                 LocalDensity provides (densityOverride ?: LocalDensity.current),
             ) {
-                Output()
+                if (cursorOverlayExperiment) {
+                    CompositionLocalProvider(me.rerere.rikkahub.ui.pages.container.LocalTerminalCursorOverlays provides published.cursors) {
+                        Output()
+                    }
+                } else Output()
             }
         }
 

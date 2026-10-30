@@ -6,7 +6,7 @@ on:
       suite:
         description: 'all, fresh default, publication regressions, or lint/Release type checking without tests'
         type: choice
-        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, tuiDisplay, bottomVisibility, bottomControl, tuiHistory, fullVirtual, fullVirtualSelection, selectionDiagnostic, selectionRepair, nativeSelectionDiagnostic, longHistoryDiagnostic, longHistoryProbe, longHistoryPerformance, staticChecks]
+        options: [all, defaultBottom, renderSnapshot, textMetrics, chunkViews, stableMount, tuiDisplay, bottomVisibility, bottomControl, tuiHistory, fullVirtual, fullVirtualSelection, selectionDiagnostic, selectionRepair, nativeSelectionDiagnostic, cursorExperiment, longHistoryDiagnostic, longHistoryProbe, longHistoryPerformance, staticChecks]
         default: all
       production_sha:
         description: 'Optional exact archived production SHA for defaultBottom only; tests remain from this ref'
@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: ${{ fromJSON(inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'tuiDisplay' && '["tuiDisplay"]' || inputs.suite == 'bottomVisibility' && '["bottomVisibility"]' || inputs.suite == 'bottomControl' && '["bottomControl"]' || inputs.suite == 'tuiHistory' && '["tuiHistory"]' || inputs.suite == 'fullVirtual' && '["fullVirtual"]' || inputs.suite == 'fullVirtualSelection' && '["fullVirtualSelection"]' || inputs.suite == 'selectionDiagnostic' && '["selectionDiagnostic"]' || inputs.suite == 'nativeSelectionDiagnostic' && '["nativeSelectionDiagnostic"]' || inputs.suite == 'selectionRepair' && '["geometry","interaction","bundle","tuiDisplay","bottomVisibility","tuiHistory","selectionRepair"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle","tuiDisplay","bottomVisibility","tuiHistory","fullVirtual"]') }}
+        group: ${{ fromJSON(inputs.suite == 'cursorExperiment' && '["cursorExperiment"]' || inputs.suite == 'defaultBottom' && '["defaultBottom"]' || inputs.suite == 'renderSnapshot' && '["renderSnapshot"]' || inputs.suite == 'textMetrics' && '["textMetrics"]' || inputs.suite == 'chunkViews' && '["chunksRender","chunksViewport"]' || inputs.suite == 'stableMount' && '["bundle"]' || inputs.suite == 'tuiDisplay' && '["tuiDisplay"]' || inputs.suite == 'bottomVisibility' && '["bottomVisibility"]' || inputs.suite == 'bottomControl' && '["bottomControl"]' || inputs.suite == 'tuiHistory' && '["tuiHistory"]' || inputs.suite == 'fullVirtual' && '["fullVirtual"]' || inputs.suite == 'fullVirtualSelection' && '["fullVirtualSelection"]' || inputs.suite == 'selectionDiagnostic' && '["selectionDiagnostic"]' || inputs.suite == 'nativeSelectionDiagnostic' && '["nativeSelectionDiagnostic"]' || inputs.suite == 'selectionRepair' && '["geometry","interaction","bundle","tuiDisplay","bottomVisibility","tuiHistory","selectionRepair"]' || inputs.suite == 'staticChecks' && '["staticChecks"]' || '["geometry","interaction","bundle","tuiDisplay","bottomVisibility","tuiHistory","fullVirtual"]') }}
     env:
       TERMINAL_VIEWPORT_SUITE: ${{ inputs.suite || 'all' }}
       TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
@@ -164,6 +164,9 @@ jobs:
           PY
       - name: Build isolated gesture fixture and instrumented tests
         run: |
+          if [ "$TERMINAL_VIEWPORT_GROUP" = cursorExperiment ]; then
+            python3 -B .github/scripts/test_terminal_cursor_experiment.py
+          fi
           chmod +x gradlew
           bash .github/scripts/run-terminal-gradle.sh -PterminalViewportTests=true \
             :benchmarks:terminal-viewport-tests:assembleRelease \
@@ -194,6 +197,10 @@ jobs:
       - name: Require every case assigned to this shard
         if: ${{ always() && matrix.group != 'staticChecks' }}
         run: |
+          if [ "$TERMINAL_VIEWPORT_GROUP" = cursorExperiment ]; then
+            python3 -B .github/scripts/terminal-full-virtual-cursor-experiment.py report
+            exit $?
+          fi
           if [ "$TERMINAL_VIEWPORT_GROUP" = nativeSelectionDiagnostic ]; then
             python3 -B .github/scripts/terminal-native-selection-reports.py diagnostic
             exit $?
@@ -451,6 +458,10 @@ jobs:
       - name: Publish native bottom menu causal excerpt
         if: ${{ always() && matrix.group == 'nativeSelectionDiagnostic' && hashFiles('artifacts/terminal-native-selection/diagnostic-report.json') != '' }}
         run: python3 -B .github/scripts/terminal-native-selection-reports.py evidence --case bottom-word-fullVirtual --page 1
+      - name: Publish exact thin cursor experiment summary
+        # Exact existing experiment summary only; no previous performance rerun.
+        if: ${{ always() && matrix.group == 'cursorExperiment' && hashFiles('artifacts/terminal-cursor-experiment/summary.json') != '' }}
+        run: python3 -B .github/scripts/terminal-full-virtual-cursor-experiment.py evidence
       - name: Upload fixture APKs, JUnit and logcat
         if: always()
         uses: actions/upload-artifact@v4
@@ -464,4 +475,5 @@ jobs:
             artifacts/full-virtual-first/source-receipt.json
             artifacts/terminal-selection-repair/**
             artifacts/terminal-native-selection/**
+            artifacts/terminal-cursor-experiment/**
           retention-days: 14
