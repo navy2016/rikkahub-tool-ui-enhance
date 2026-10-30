@@ -43,6 +43,8 @@ class RealClockContracts(unittest.TestCase):
         self.assertEqual(m.TREE,m.guard()['productionTree'])
         source=(m.ROOT/m.TEST).read_text();self.assertIn('ActivityScenario.launch',source)
         self.assertIn('ACTION_IME_ENTER',source);self.assertIn('OnDrawListener',source)
+        self.assertIn('observer.windowFinishedAfter(view.timeNanos)',source)
+        self.assertIn('No eligible FRAME_DRAWN for completed response',source)
         self.assertNotIn('Thread.sleep',source)
     def test_exact_token_join_and_cpu_interval_then_reject_duplicate_surface(self):
         s=dict(phase='hidden',index=0,warmup=False,drawNs=3_000_000,uiNs=1_000_000,publishedNs=2_000_000,events=[dict(stage='EMULATOR_FED',ns=1_500_000)])

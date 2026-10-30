@@ -103,15 +103,21 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
     private data class Draw(val timeNs: Long,val drawingTimeMs: Long)
     private class Observers : Window.OnFrameMetricsAvailableListener {
         val metrics=ArrayList<LongArray>();val draws=ArrayList<Draw>();var overflow=0
+        private val completedWindows=HashSet<Long>()
         @Synchronized override fun onFrameMetricsAvailable(window: Window,frame: FrameMetrics,dropped: Int) {
             if(metrics.size>=8192){overflow++;return}
             metrics.add(longArrayOf(System.nanoTime(),frame.getMetric(FrameMetrics.INTENDED_VSYNC_TIMESTAMP),frame.getMetric(FrameMetrics.VSYNC_TIMESTAMP),
                 frame.getMetric(FrameMetrics.TOTAL_DURATION),frame.getMetric(FrameMetrics.LAYOUT_MEASURE_DURATION),frame.getMetric(FrameMetrics.DRAW_DURATION),
                 frame.getMetric(FrameMetrics.SYNC_DURATION),frame.getMetric(FrameMetrics.GPU_DURATION),frame.getMetric(FrameMetrics.DEADLINE),dropped.toLong()))
+            completedWindows.add(frame.getMetric(FrameMetrics.VSYNC_TIMESTAMP)/1_000_000L)
         }
         @Synchronized fun draw(timeMs: Long){if(draws.size>=8192)overflow++ else draws.add(Draw(System.nanoTime(),timeMs))}
         @Synchronized fun readDraws()=draws.toList()
         @Synchronized fun readMetrics()=metrics.map{it.copyOf()}
+        @Synchronized fun windowFinishedAfter(viewportNs: Long): Boolean {
+            val draw=draws.lastOrNull{it.timeNs<=viewportNs} ?: return false
+            return draw.drawingTimeMs in completedWindows
+        }
     }
     @Test fun realClockDefaultOrdinary()=exercise(TerminalRenderMode.DEFAULT,false)
     @Test fun realClockFullOrdinary()=exercise(TerminalRenderMode.FULL_VIRTUAL,false)
@@ -209,16 +215,17 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
                         val actionReturned=System.nanoTime()
                         await("native echo first draw",15_000) {
                             val view=trace.viewport();view!=null && view.viewport.revision>beforeRevision && view.viewport.revision==terminal.revision() &&
-                                view.viewport.sameFrame && view.viewport.ime==ime && view.viewport.virtual==mode.isFullVirtual && view.timeNanos>=began
+                                view.viewport.sameFrame && view.viewport.ime==ime && view.viewport.virtual==mode.isFullVirtual && view.timeNanos>=began &&
+                                view.viewport.geometryReady && (!mode.isFullVirtual || view.viewport.widthReady) && observer.windowFinishedAfter(view.timeNanos)
                         }
                         val observed=System.nanoTime();val events=trace.snapshot().filter{it.sequence>before}
-                        val ui=events.single{it.stage==TerminalPipelineStage.UI_INPUT};val fed=events.filter{it.stage==TerminalPipelineStage.EMULATOR_FED}
+                        val ui=checkNotNull(events.singleOrNull{it.stage==TerminalPipelineStage.UI_INPUT}){"Missing/duplicate UI_INPUT"};val fed=events.filter{it.stage==TerminalPipelineStage.EMULATOR_FED}
                         assertTrue("Actual finite echo missing",manager.readInteractiveBuffer(id)?.contains(output)==true)
                         assertEquals(0L,trace.dropped);assertEquals(payload.size,fed.sumOf{it.bytes})
                         assertEquals(payload.size,events.filter{it.stage==TerminalPipelineStage.OUTPUT_READ}.sumOf{it.bytes})
                         val revision=fed.last().frameRevision
-                        val published=events.first{it.stage==TerminalPipelineStage.FRAME_PUBLISHED && it.frameRevision>=revision}
-                        val draw=events.first{it.stage==TerminalPipelineStage.FRAME_DRAWN && it.frameRevision>=published.frameRevision}
+                        val published=checkNotNull(events.firstOrNull{it.stage==TerminalPipelineStage.FRAME_PUBLISHED && it.frameRevision>=revision}){"No FRAME_PUBLISHED for completed response"}
+                        val draw=checkNotNull(events.firstOrNull{it.stage==TerminalPipelineStage.FRAME_DRAWN && it.frameRevision>=published.frameRevision}){"No eligible FRAME_DRAWN for completed response"}
                         assertTrue(draw.virtual==mode.isFullVirtual);assertEquals(rows,terminal.rows)
                         samples.add(JSONObject().put("phase",phase).put("index",index).put("warmup",index<2).put("beganNs",began)
                             .put("actionReturnedNs",actionReturned).put("observedNs",observed).put("uiNs",ui.timeNanos).put("publishedNs",published.timeNanos)
@@ -240,6 +247,10 @@ class TerminalRealClockDiagnosticTest : KoinComponent {
             emitCase(JSONObject().put("case",case).put("mode",mode.id).put("tui",tui).put("launch",launch).put("pid",android.os.Process.myPid())
                 .put("samples",JSONArray(samples)).put("gates",JSONArray(gates)).put("draws",draws).put("metrics",metrics).put("phaseDumps",JSONArray(dumps))
                 .put("clock", "real-android-no-compose-test-clock").put("droppedFrameMetrics",observer.readMetrics().sumOf{it[9]}).put("passed",true))
+        } catch(error: Throwable) {
+            emitCase(JSONObject().put("case",case).put("passed",false).put("error",error.toString()).put("samples",JSONArray(samples))
+                .put("lastEvents",JSONArray().apply{capture?.snapshot()?.takeLast(96)?.forEach{e->put(JSONObject().put("seq",e.sequence).put("stage",e.stage.name).put("ns",e.timeNanos).put("bytes",e.bytes).put("revision",e.frameRevision))}}))
+            throw error
         } finally {
             try {
                 scenario?.onActivity{activity->mounted=false;if(attached){listener?.let{activity.window.decorView.viewTreeObserver.removeOnDrawListener(it)};activity.window.removeOnFrameMetricsAvailableListener(observer);attached=false}}

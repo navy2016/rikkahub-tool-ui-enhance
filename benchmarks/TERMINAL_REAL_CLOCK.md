@@ -26,3 +26,16 @@ TestAPKis Release-derived,nonminified/speedcompiled inemulator,not phone or orig
 
 Only if data isolates avoidable publication/queue waiting will a single production candidate be
 proposed/measured. PreserveFIFO,fullhistory,atomicframe/rows,sync-output,50msblankgrace,onewriter.
+
+Firstharness ec10457/run41107214848:bothdefaultcases completed36samples each;bothfullVirtual
+cases failed `NoSuchElementException: Collection contains no element matching the predicate`.
+The viewport observer is recorded BEFORE the conditional FRAME_DRAWN event; a test-thread poll
+can see a newviewport without an eligible completed draw. Keep72complete default samples and
+failedlogs as an incomplete run,not acceptance. Correct the completion observation by requiring
+ready width/geometry and SAMEwindowFrameMetrics completion,then read the ORIGINAL firstdraw
+timestamp(not the later GPU/callback/wait timestamp). No fakeclock or altered byte/draw assertion.
+Missing UI_INPUT/publication/draw now has specific errors and partial failed-case records persist.
+V2usesFrameMetrics completion only as the readback/next-input gate;input→draw remains the original
+trace timestamp. This changes closed-loop pacing,so failedv1default data is not an A/B performance
+control. Originalv1 did not persist the failing window,so the specific absentpredicate cannot be
+retroactively established beyond its exception; retain this limitation.
