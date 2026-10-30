@@ -233,6 +233,16 @@ Release41045773895、独立校验41047320055成功，arm64/non-debuggable，2.1.
 先据数据判断P1光标/局部更新是否值得改；不提前改生产或重新构建正式Release。
 协议benchmarks/TERMINAL_FULL_VIRTUAL_LATENCY.md，工作流terminal-pipeline-tests.yml/fullVirtualLatency。
 
+P0v2已完成：测试源码beaf5ab752a671600a7d039e9224ae0109853987/run41064244386通过；生产仍
+55db111/main8caf50d5c40e228f1d5bcc09d3db505757568b68。528样本/24无输出对照/2888FrameMetrics
+全部保留，源/原日志/摘要已复核。旧396样本所属41061360774运行因初始32→25网格与重复注销
+监听器失败；另41058225696编译失败、41059663096采样前Perfetto失败均保留。
+关键校准：无输出GetTextLayoutResult会换wrapper但Paragraph全复用；光标/单行只换1Paragraph，
+不要误报全屏重新排版。下一步优先分解发布/渲染队列等待，不盲改脏行/解析器；没有生产优化。
+Perfetto启动有PID但结束No such process，采集器未取回文件，故无SurfaceFlinger呈现证据；不要
+宣称设备不支持。修通轨迹通路应用独立短预检，不为了取轨迹重采528样本。内存含探针，冷入
+数据含seed/700ms稳定门禁，SwiftShader指标不代表手机GPU。工作目录/workspace/terminal-review/full-virtual-latency/。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

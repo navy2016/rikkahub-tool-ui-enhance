@@ -59,3 +59,27 @@ All per-sample grid equality/byte/renderer assertions stay. Add24no-output layou
 GetTextLayoutResult may create wrappers,so identity changes alone must NOT be called actual shaping.
 The new run is a separately identified v2 baseline under corrected measurement conditions,not a
 replacement of favorable old samples. Production and workloads remain frozen; no optimization yet.
+
+## P0 v2 result and revised next priority
+
+Harnessbeaf5ab752a671600a7d039e9224ae0109853987/run41064244386 succeeded. Production remains
+55db111/main8caf50d5c40e228f1d5bcc09d3db505757568b68. All528samples(48warmup+480main),24no-output
+controls,2888WindowFrameMetrics(no dropped reports/overflow),28memory,16grid,8mount,4cleanup receipts
+complete. Originalartifact12983310029 relayed by41066570523; selected text reread and source/byte/
+summary hashes revalidated. FullreportSHA2560b5f2f837383eaddba4d07caa28f0fca37153c1e2df135ab875d09d57a7c16ea.
+
+Calibration:all24no-outputcontrols create newTextLayoutResult wrappers but reuse EVERYMultiParagraph.
+Cursor/row workloads have medianONE changedParagraph,not24;do not infer all-visible-row reshaping
+fromwrapperidentity. TUI10k cursor/row median66.503/60.384ms input→draw,while capture/rowSync/parse
+each<1ms. In that row group,feed→publish median12.597ms,publish→draw34.274ms; separate medians
+are not additive/exclusiveCPUtime. Prioritize scheduling/render-queue attribution before a blind
+dirty-row or parser rewrite. Cursoroverlay remains a possible small bounded experiment,not a proven
+solution to the observedlatency. No source optimization or newformalRelease performed.
+
+Perfetto start returnedPIDs,then all stopcommands failed`No such process`; current collector skipped
+pull onstopfailure. NoSurfaceFlingertrace obtained,so no presentation/phoneFPSclaim and no assertion
+the OS lacks support. WindowFrameMetrics independently valid. Next trace-only bootstrap must always
+preserve logs/tryoutput retrieval evenifPID ended; do not rerun528samples just to repair collection.
+FrameMetricswholewindow includesstartup/IME;SwiftShader gpuNs is not phoneGPU. Memoryincludes the
+test/probes;mount elapsed includesseeding/700msstability. These cannot be relabeled intrinsic UIcold
+time or productionallocation/leak. Old396failed-run samples remain separate,not used to pickfast results.
