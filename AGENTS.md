@@ -281,6 +281,13 @@ foreground-file24、foreground-buffer38、background-wait37完整帧。后台PID
 直接验证Paragraph/文字/宽度工作量，不把包装对象变化算重排；旧528/396/30样本不重采。
 协议benchmarks/TERMINAL_FULL_VIRTUAL_CURSOR_EXPERIMENT.md；cursorExperiment工作流入口。
 
+薄光标隔离实验1e5f20a/run41085513057完成：40像素case/40窗口通过，24moves工作量48→0，
+但16正式配对全部更慢，原2.80s→叠加3.27–3.31s。追加定点诊断c74286e/run41087209082仅
+16publication、手动测试时钟，不重采40窗口；两组均1帧，发布到绘制中位23.506→41.197ms。
+决定不接入生产，不能靠工作计数减少宣称提速。生产仍55db111/main8caf50d5c40e228f1d5bcc09d3db505757568b68，
+无新Release。后续优先排查输入/发布/首帧等待链路；用户实机缓慢感已消退但根因未证明。
+完整本轮原件/workspace/terminal-review/cursor-virtual-experiment/，40窗口与16诊断分开保留。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

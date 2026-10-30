@@ -25,3 +25,12 @@ overlaytakesroughly3.27–3.31s versuscontrol2.80s/window. Do NOT promote toprod
 workcount. No oldsamplediscard/resample. NewcursorTiming diagnosis runs16isolated publications
 withmanualComposeclock andtest-onlyactualdrawobserver,recordingpublish/draw/idle-return timings.
 This is causal diagnosis,not a replacementperformancewindow orphone/PTYtest.
+
+Timingdiagnosticc74286e/run41087209082passed16points:botharmsrequireONEexplicit16mstestframe.
+Medianpublish→actualdraw(control/overlay)=23.506/41.197ms. Hence the original slowdown cannot be
+explained away as merely an extra manually advanced Composeframe. Small,ordered diagnosticnot
+phoneproof;exact queue/renderer cause still unresolved. Keep the experiment as NOTADOPTED:work
+counts48→0 do not outweigh all16worse elapsedpairs. No productioncursorpolicy changes/newRelease.
+Original40windows/40pixelcases plus16diagnosticpoints andJUnit/log/APIhashes independentlyreread.
+Nextpriority remains input/publication/firstdraw waiting;no requirement to collectphone state now
+that the user reports the earlier globalsluggishness has subsided. No claim of havingfixedit.
