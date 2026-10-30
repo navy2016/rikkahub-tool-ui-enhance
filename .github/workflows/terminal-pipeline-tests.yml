@@ -6,7 +6,7 @@ on:
       suite:
         description: 'Full page samples, transport preflight, or same-device AB/BA experiment'
         type: choice
-        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, tuiHistory, tuiHistoryOnly, tuiHistoryCompletion, fullVirtual, fullVirtualOnly, fullVirtualLatency, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
+        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, tuiHistory, tuiHistoryOnly, tuiHistoryCompletion, fullVirtual, fullVirtualOnly, fullVirtualLatency, tracePreflight, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
         default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'
@@ -56,6 +56,26 @@ permissions:
   actions: read
 
 jobs:
+  trace-preflight:
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'tracePreflight' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate trace-only contracts without build or APK
+        run: python3 -B -m unittest discover -s .github/scripts -p test_terminal_trace_preflight.py
+      - name: Diagnose three fixed short trace transports on disposable non-root KVM guest
+        run: python3 -B .github/scripts/terminal-trace-preflight.py
+      - name: Preserve original native diagnostics, raw traces and exact identities
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-trace-preflight-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/terminal-trace-preflight/
+          if-no-files-found: error
+          retention-days: 14
   paired:
     if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'paired' }}
     uses: ./.github/workflows/terminal-pipeline-paired.yml
@@ -138,7 +158,7 @@ jobs:
           note('Original pipeline failure callers', callers)
           PY
   pipeline:
-    if: ${{ inputs.evidence_run_id == '' && inputs.suite != 'paired' && inputs.suite != 'bundlePaired' }}
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite != 'paired' && inputs.suite != 'bundlePaired' && inputs.suite != 'tracePreflight' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     env:

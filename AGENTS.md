@@ -243,6 +243,17 @@ Perfetto启动有PID但结束No such process，采集器未取回文件，故无
 宣称设备不支持。修通轨迹通路应用独立短预检，不为了取轨迹重采528样本。内存含探针，冷入
 数据含seed/700ms稳定门禁，SwiftShader指标不代表手机GPU。工作目录/workspace/terminal-review/full-virtual-latency/。
 
+用户新增实机反馈：“55db111版APK运行时整体有一点点缓慢的感觉”，并要求继续。记录为有效
+定性反馈；未指定渲染模式/页面/设备/对比版本，不能归因于全虚拟或用模拟器成绩否定它。
+默认仍CHUNKED_LAYERS。下一步tracePreflight只在一次性Android14的Settings窗口测试3种固定
+2秒采集通路，完整保留启动错误并无条件尝试取回文件，不改生产/构建APK/重采528基线。
+协议benchmarks/TERMINAL_TRACE_PREFLIGHT.md，工作目录/workspace/terminal-review/trace-preflight/。
+
+用户又明确对照：“感觉55db111版本是在212b93e版本上加了一个轻微减速器”。后续应按
+212b93e04980b1087118007bd59da010a15435d8→55db111的实机性能回退排查，不仅做新模式优化。
+先审两版18个终端生产文件差异与共用路径；解析器/进程管理/native/依赖源码未变不等于
+排除了共享UI、编译产物或运行环境因素。未指定模式/具体页面，不能虚构量化回退幅度。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
