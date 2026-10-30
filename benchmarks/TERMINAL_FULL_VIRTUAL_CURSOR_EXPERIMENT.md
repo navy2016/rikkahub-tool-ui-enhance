@@ -18,3 +18,10 @@ corpus/realheight/onewriter/rowbounds/disposal/pixels stay exact. Timing include
 overhead and is secondary,not phoneFPS or end-to-endPTY. Keepallslower/failing samples and no rerun
 forgreen metrics. Integration into production and fullselection/mouse/IME/ALT/nativePTY gates are
 separate follow-up steps only if this experiment justifies them. No formalRelease yet.
+
+Firstexperiment1e5f20a/run41085513057passed40pixelcases/all40windows. Every24moves:paragraph,
+text,width,rowmeasurement medians48→0. BUT all16nonwarmuppairs have positiveelapsedDelta:
+overlaytakesroughly3.27–3.31s versuscontrol2.80s/window. Do NOT promote toproduction based onlyon
+workcount. No oldsamplediscard/resample. NewcursorTiming diagnosis runs16isolated publications
+withmanualComposeclock andtest-onlyactualdrawobserver,recordingpublish/draw/idle-return timings.
+This is causal diagnosis,not a replacementperformancewindow orphone/PTYtest.

@@ -62,10 +62,28 @@ def report():
     compact={k:v for k,v in value.items() if k not in ('samples','disposals','pixels','productionHashes')}
     compact['reportSha256']=hashlib.sha256((OUT/'experiment.json').read_bytes()).hexdigest()
     (OUT/'summary.json').write_text(json.dumps(compact,separators=(',',':')))
+def timing_diagnostic():
+    require(subprocess.check_output(['git','rev-parse','HEAD:app/src/main'],cwd=ROOT,text=True).strip()==TREE,'Diagnostic changed production')
+    rows=legacy.records((OUT/'timing-logcat.txt').read_text(),'CURSOR_DRAW_DIAGNOSTIC ')
+    require(len(rows)==16 and {(r['overlay'],r['step']) for r in rows}=={(a,i) for a in (False,True) for i in range(8)},'Missing16diagnosticpublications')
+    for r in rows:
+        require(r['beganNs']<=r['publishedNs']<=r['drawnNs']<=r['returnedNs'] and 0<=r['explicitFrames']<=8 and
+            r['targetDraws']>0 and r['writers']<=1 and r['virtual'] is True,'Incomplete diagnostic draw')
+    found=[]
+    for p in (ROOT/'benchmarks/terminal-viewport-tests/build/outputs/androidTest-results').rglob('TEST-*.xml'):
+        for c in ET.parse(p).getroot().iter('testcase'):
+            require(not any(c.find(k) is not None for k in ('error','failure','skipped')),'Timing diagnostic failed')
+            found.append(c.get('name'))
+    require(found==['cursorDiagnosticPublicationToActualDrawWithoutAutoAdvance'],'Different diagnosticmethod inventory')
+    value=dict(suite='thin-cursor-draw-diagnostic-v1',sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],
+        productionTree=TREE,productionChanged=False,previousExperimentRun=41085513057,performanceResampled=False,rows=rows,
+        note='Explicit test-clock publication-to-draw diagnostic only. Not phone/PTy/presentation or replay of40performancewindows.')
+    legacy.publish('Thin cursor draw diagnostic',value,OUT/'timing-diagnostic.json',emit_compact=True)
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('action',choices=('report','evidence'));a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('action',choices=('report','evidence','timing'));a=p.parse_args()
     try:
         if a.action=='report':report()
+        elif a.action=='timing':timing_diagnostic()
         else:legacy.compact('Full virtual thin cursor',(OUT/'summary.json').read_bytes())
     except (ValueError,KeyError,OSError,subprocess.SubprocessError) as e:
         print('::error title=Thin cursor experiment rejected::'+str(e).replace('%','%25').replace('\n','%0A'));raise SystemExit(1)

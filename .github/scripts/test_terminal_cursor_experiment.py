@@ -44,4 +44,5 @@ class CursorExperimentTest(unittest.TestCase):
         report=text.split('- name: Require every case assigned to this shard',1)[1].split('- name:',1)[0]
         self.assertIn('cursorExperiment',report)
         self.assertIn('artifacts/terminal-cursor-experiment/**',text)
+        self.assertIn('cursorTiming',report)
 if __name__=='__main__':unittest.main()

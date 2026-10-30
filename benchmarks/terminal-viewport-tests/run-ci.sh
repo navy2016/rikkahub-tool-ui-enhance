@@ -98,6 +98,12 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
+if [ "$group" = cursorTiming ]; then
+  mkdir -p artifacts/terminal-cursor-experiment
+  run_arm cursor-draw-diagnostic TerminalFullVirtualCursorTimingDiagnosticTest 240
+  adb logcat -d -v threadtime TerminalCursorDiagnostic:I '*:S' > artifacts/terminal-cursor-experiment/timing-logcat.txt
+  exit "$overall_status"
+fi
 if [ "$group" = cursorExperiment ]; then
   mkdir -p artifacts/terminal-cursor-experiment
   adb logcat -G 8M

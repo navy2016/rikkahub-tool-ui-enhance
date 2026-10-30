@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
@@ -629,6 +630,7 @@ class TerminalItemViewportInstrumentedTest {
         val activeWriters get() = if (::bound.isInitialized) bound.binding.activeWriters else 0
         val maximumWriters get() = bound.binding.maximumWriters
         var outputDuringJump = false
+        var diagnosticDrawObserver: ((Long) -> Unit)? = null
         @Volatile var appendCount = 0
         var mountStreamJob: Job? = null
             private set
@@ -743,7 +745,10 @@ class TerminalItemViewportInstrumentedTest {
             }
             MaterialTheme {
                 val output: @Composable (Modifier) -> Unit = { modifier ->
-                    Box(modifier.testTag("item-output")
+                    val observed = if (diagnosticDrawObserver == null) modifier else modifier.drawWithContent {
+                        drawContent(); diagnosticDrawObserver?.invoke(frame.revision)
+                    }
+                    Box(observed.testTag("item-output")
                         .onSizeChanged { viewportHeight = it.height; viewportWidth = it.width }
                         .onGloballyPositioned { pointerMap.inputCoordinates = it }
                         .nestedScroll(currentBound.gestures.connection)) {
