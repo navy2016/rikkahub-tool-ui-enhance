@@ -79,7 +79,13 @@ def audit(path,arm,out):
         require({r['dex'] for r in entries}=={r['dex'] for r in meta},'Profile/metadata DEX keys differ')
         for p in entries:
             h=dex_header(z.read(p['dex']));m=next(v for v in meta if v['dex']==p['dex'])
-            require(p['checksum']==h['checksum'] and p['numMethodIds']==h['methodIds'],'Profile does not match installed DEX checksum/method count')
+            # ART uses the ZIP entry CRC as the DEX *location* checksum for APK containers.
+            # The Adler32 header checksum remains independently validated by dex_header().
+            location_checksum=z.getinfo(p['dex']).CRC
+            p['apkLocationChecksum']=location_checksum
+            p['dexHeader']=h
+            (out/(arm+'-profile-parse.json')).write_text(json.dumps(entries,indent=2)+'\n')
+            require(p['checksum']==location_checksum and p['numMethodIds']==h['methodIds'],'Profile does not match APK DEX location CRC/method count')
             require(m['typeIdCount']==h['typeIds'] and all(i<h['typeIds'] for i in p['classTypeIds']) and
                 all(i<h['classDefs'] for i in m['classDefIds']),'Profile class/type indices do not match DEX')
             p['dexHeader']=h;p['metadataClassCount']=len(m['classDefIds']);p['matchesDex']=True

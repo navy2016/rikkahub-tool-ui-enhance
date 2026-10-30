@@ -152,7 +152,7 @@ jobs:
           python3 diagnostic-source/.github/scripts/compare-release-apks.py \
             --reference reference-apk --reference-sha "$REFERENCE_SHA" \
             --candidate apk --candidate-sha "$SOURCE_SHA" --output verification/apk-comparison.json
-      - name: Publish verification evidence
+      - name: Audit profile-to-DEX consistency in the exact existing signed APKs
         # Keep the original APK verification and a requested profile audit in the same source-bound receipt.
         if: ${{ inputs.profile_audit && inputs.reference_run_id != '' }}
         run: python3 -B diagnostic-source/.github/scripts/audit-release-profiles.py --reference reference-apk --candidate apk --out verification/profile-audit

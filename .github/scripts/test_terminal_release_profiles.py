@@ -28,4 +28,9 @@ class ReleaseProfileTests(unittest.TestCase):
         raw[12:32]=hashlib.sha1(raw[32:]).digest();struct.pack_into('<I',raw,8,zlib.adler32(raw[12:])&0xffffffff)
         self.assertEqual(10,gate.dex_header(bytes(raw))['methodIds']);raw[-1]^=1
         with self.assertRaises(ValueError):gate.dex_header(bytes(raw))
+    def test_apk_profile_uses_location_crc_not_header_adler(self):
+        text=(Path(__file__).with_name('audit-release-profiles.py')).read_text()
+        self.assertIn("location_checksum=z.getinfo(p['dex']).CRC",text)
+        self.assertIn("p['checksum']==location_checksum",text)
+        self.assertNotIn("p['checksum']==h['checksum']",text)
 if __name__=='__main__':unittest.main()
