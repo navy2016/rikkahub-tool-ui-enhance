@@ -254,6 +254,13 @@ Perfetto启动有PID但结束No such process，采集器未取回文件，故无
 先审两版18个终端生产文件差异与共用路径；解析器/进程管理/native/依赖源码未变不等于
 排除了共享UI、编译产物或运行环境因素。未指定模式/具体页面，不能虚构量化回退幅度。
 
+Trace预检d166bfc/run41070952490已通过：3种固定2秒通路均取得Settings的SurfaceFrame，
+foreground-file24、foreground-buffer38、background-wait37完整帧。后台PID已结束也能取回
+4745351B轨迹，证明旧采集器不能用kill失败跳过pull；不等于取得了旧P0的应用轨迹。
+接下来versionRegression固定212b93e/55db111、同一212驱动APK和同次构建环境，普通1k历史
+三个共有模式、4组AB/BA，288测量+72预热。非原正式APK二进制/手机/全局UI对比，不重采528；
+成绩变慢也如实保留。协议benchmarks/TERMINAL_VERSION_REGRESSION.md，生产仍55db111。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

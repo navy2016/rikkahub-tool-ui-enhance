@@ -1,0 +1,45 @@
+name: Terminal Exact Version Regression Comparison
+on:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  version-regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Validate exact version identities and fixed AB-BA protocol
+        run: python3 -B -m unittest discover -s .github/scripts -p test_terminal_version_regression.py
+      - name: Prepare one test-only native compatibility overlay shared by both versions
+        run: python3 -B .github/scripts/build-terminal-proot.py
+      - name: Build two Release-derived targets with one frozen212b93edriver
+        run: python3 -B .github/scripts/terminal-version-regression.py build
+      - name: Run one fixed same-boot comparison without retries or sample filtering
+        run: python3 -B .github/scripts/terminal-version-regression.py emulator
+      - name: Publish all regression or improvement outcomes with exact provenance
+        run: python3 -B .github/scripts/terminal-version-regression.py report
+      - name: Preserve complete receipts and evidence including any partial failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-version-regression-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-version-regression/
+            artifacts/terminal-pipeline/
+            artifacts/terminal-validation/
+            artifacts/pipeline-proot-build/build.log
+          if-no-files-found: error
+          retention-days: 14

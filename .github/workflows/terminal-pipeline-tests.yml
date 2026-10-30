@@ -6,7 +6,7 @@ on:
       suite:
         description: 'Full page samples, transport preflight, or same-device AB/BA experiment'
         type: choice
-        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, tuiHistory, tuiHistoryOnly, tuiHistoryCompletion, fullVirtual, fullVirtualOnly, fullVirtualLatency, tracePreflight, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
+        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, tuiHistory, tuiHistoryOnly, tuiHistoryCompletion, fullVirtual, fullVirtualOnly, fullVirtualLatency, tracePreflight, versionRegression, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
         default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'
@@ -56,6 +56,9 @@ permissions:
   actions: read
 
 jobs:
+  version-regression:
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'versionRegression' }}
+    uses: ./.github/workflows/terminal-version-regression.yml
   trace-preflight:
     if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'tracePreflight' }}
     runs-on: ubuntu-24.04
@@ -158,7 +161,7 @@ jobs:
           note('Original pipeline failure callers', callers)
           PY
   pipeline:
-    if: ${{ inputs.evidence_run_id == '' && inputs.suite != 'paired' && inputs.suite != 'bundlePaired' && inputs.suite != 'tracePreflight' }}
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite != 'paired' && inputs.suite != 'bundlePaired' && inputs.suite != 'tracePreflight' && inputs.suite != 'versionRegression' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     env:
