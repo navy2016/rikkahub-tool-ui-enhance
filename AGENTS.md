@@ -411,6 +411,12 @@ v2全部原件在full-virtual-width-recovery/paired-v2-all-original，230窗口4
 is_buffer=1，但FrameMetrics缺失，前一帧回调不可替代。TX名称不等于无buffer。仍不采用P2、不重跑第三轮。
 当前无CI在运行。下一步先解决完整系统关联采集；或单独请求处理生产启动设置竞态，不混入P2补丁。
 
+系统帧缺失调查继续：AOSP14参考commit299fe6...的HWUI在swap完成后登记待完成FrameInfo，
+SurfaceStats回调查4元素ring，查不到不发Java FrameMetrics，Java dropCount不计此前缺口；
+上游6ba5125...扩大4→6解决迟到淘汰，但旧两处轨迹反而有BLAST回调早于swap结束，不能断言同bug。
+正准备独立FrameMetricsAudit：未改生产+自定义View，96 paced/96 vsync请求，原始23long数组+
+publicVsync+commit回调+gfx/SF采集，缺失照留不补帧，不是新P2性能轮次。协议TERMINAL_FRAME_METRICS_AUDIT.md。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

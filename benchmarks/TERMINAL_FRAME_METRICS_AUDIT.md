@@ -1,0 +1,30 @@
+# Independent raw window FrameMetrics collector audit
+
+P2 v2 has230windows/228exactmatches,notcompleteadoptionevidence. The2missingcases haveunique
+gfxDrawStart/SyncQueued andSurface/Displaytokens,is_buffer=1,butnoexactVsyncFrameMetrics.
+Nearbycallback belongs topriorVsync;don'tborrowit. Originalmissingclassifications remain.
+
+OfflineAOSP14 reference:aosp-mirror/platform_frameworks_base commit299fe6f5d6fc6f1af7c3411dcf4e5efdf7217368.
+PublicFrameMetricsObserver useswaitForPresentTime=false;JNIcounts onlyqueuefull drops. Before
+JNI,CanvasContext.onSurfaceStatsAvailable onlyreports whengetFrameInfoFromLast4 finds(frame,
+surface). Record insertedafter swap completion;missing record producesnoJava notification.
+Upstream6ba5125b9d5b88a4e9292f842f401827c0ad55f2 enlarged4→6 dueevictionbeforecallback.
+Oldtrace showsBLASTcallbacks beforecurrentSwapBuffersCompleted,not4subsequentdraws inthat
+interval. Exactcallbackframeargument/internal lookup notlogged,so donotclaimtheupstreamfix
+orparticularrace isproved forours. Referencecode isNOTbinaryverification ofsystemimage11228894.
+Sources/hashes andboundedrawwindows saved in /workspace/terminal-review/full-virtual-width-recovery/frame-audit/.
+
+This newtest isNOTa terminal orP2performance run. UnmodifiedRelease-derivedapp hostsonecustom
+hardwareacceleratedView.192requests/draws:96at40ms requestspacing then96onpostOnAnimation.
+Visible768rectangles changecolor eachrequest. UnexpectedextraWindowdraw cannotadvance schedule.
+Eachrequest registersonepublicFrameCommitCallback andretainsphase/index association;commits
+areNOTphysicalpresentation. WithinWindow.OnFrameMetricsAvailableListener synchronouslyclone
+the23longrawmTimingData array pluspublicVsync fields. Hiddenfieldaccess isdiagnostic-only,
+targetSDK28-compatible;failure isexplicit,no fabricatedfallback.
+
+Atendofeachphase waitfixed250ms,savegfxinfo. Finalremove/drain timestamps retained;latebeyond
+listenerremoval isnot claimedimpossible. Noextra frames for missingmetrics, no resampling.
+Reportexact-IDcategories:bothsame,rawtoken-only,publicVsync-only,neither,ambiguous. JoinSurface
+bytargetPID/token,notnearesttime. No expectationthatplainView mustreproduceCompose/PTyfailure.
+Workflow success meansdiagnostic inventory completed,NOTthatpreviousmissingframesnowexist or
+P2performancepasses. Nomodification ofglobalgraphicsflags/systemimage/production/candidate.
