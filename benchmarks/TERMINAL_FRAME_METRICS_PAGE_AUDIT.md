@@ -23,3 +23,26 @@ complete80samplecapture stillwouldnotdisprove priorrarergaps orprovephone perfor
 
 CurrentP2v1/v2 remainfailed andcandidateunadopted. Missingreproduction isnot a reason to
 repeatthiscollectorworkload untila desiredoutcome. Reportbothpositiveandnegative observations.
+
+## Result28f14c2/run41196956546: collector inventory complete, not P2 acceptance
+
+80fixedpagewindows completed. Hidden40both-observers-exact;shown39both-exact/1gfx-not-unique.
+Bothlistenerdropcounts0/public-vs-rawdisagreements0. Startupcompletionfence andallinitialsettings
+checks passed. OriginalreportSHA256c99032849e6bc2bb2fc283ac8878b92a650ed91cd31004339ed67f8bda752857.
+
+Exacttraceproofforshown/r7-refresh:responseFRAME_DRAWN151236483941ns inside UIChoreographerframe
+12092(151221388980..151245196509). RenderThreadDrawFrames12092(151245007068..151245108048)
+contains syncFrameState butNO Drawing/setFrameTimelineInfo/eglSwapBuffers. NoSurfaceFrame12092.
+LaterRTanimation submitsbuffer frame199/token12114;doNOTassignitto12092 orclaimfirst-pixelvisibility.
+
+OfflineexactUI-frame→RTtask→setFrameTimelineInfo→SFbuffer-token classifier onoriginals found:
+P2v2all230savedwindows haverealbuffer-submission chains,includingthe2thatlackFrameMetrics;
+thisaudit79buffer chains+1sync-only/non-submittedUIattempt. Differentfailureclasses.
+OldP2FrameMetrics gate remainsfailed; no thirdP2trial. Pipeline isnotfixedbyborrowingnearest
+callback,waitinglonger,orregisteringpubliccommitcallback aftertheonDraw.
+
+AOSP14ViewRootImpl.addFrameCommitCallbackIfNeeded capturespubliccallbacksBEFOREviewdraw;
+its wrapperdiscardsinternaldidProduceBufferflag. ThereforepublicRunnablealone isnot a rigorous
+frame-specific proof for this renderer. Futuremeasurementmustseparate UIdrawattempt/submission/
+presentation withexactIDs andpreserveunsubmittedattempts. Anynewprotocol isindependent,not
+retroactive acceptance ofv1/v2 oranupgrade ofthe currentpartialP2results.

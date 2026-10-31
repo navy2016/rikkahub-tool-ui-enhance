@@ -423,6 +423,15 @@ FrameMetricsAudit ee236bf/run41195130931成功192draw/192commit，全部rawtoken
 先等待本PID启动计数写回执再配置，保留原3层首挂载门槛。若两边同缺失再定位通知前路径。
 新驱动TerminalFrameMetricsPageAuditTest，协议TERMINAL_FRAME_METRICS_PAGE_AUDIT.md；不反复补样。
 
+双队列28f14c2/run41196956546完成80窗口：hidden40双精确，shown39双精确+1无gfx区间，0drop/0raw分歧。
+异常shown/r7-refresh的UI回调151236483941属于Choreographer帧12092；RT DrawFrames12092只有同步，
+没有Drawing/setFrameTimelineInfo/eglSwapBuffers或SurfaceFrame；后来RT动画12114才提交，不可替代。
+离线按精确帧ID/RT任务/Buffertoken复核P2v2全部230都有提交链(两缺FrameMetrics仍缺)，双队列79提交+1同步未提交。
+脚本full-virtual-width-recovery/frame-audit/classify_submissions.py及submission-classification.json保存证明。
+公开registerFrameCommitCallback在View绘制前被捕获，且AOSP14 wrapper丢didProduceBuffer，不能绘后注册作同帧提交证据。
+当前没有CI在运行，P2仍未合入/无新APK。下一步应先冻结独立的draw/submission/presentation分层协议，
+不能修改旧v2的FrameMetrics门禁或用相邻帧补齐；也不反复诊断到想要的成绩。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
