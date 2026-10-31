@@ -40,3 +40,22 @@ experiment.4AB/BApairs/288windows48warmups fixed inadvance. System association m
 trigger replacement samples:finishonlythefixedmatrix,preserve missingmetrics asnull,incomplete
 phase medians staynull andfinalCI/acceptance MUSTfail. Native correctnessfailure stillstops.
 Thus allrawplannedresults survive withoutrelaxing mandatorycomplete-system evidencegate.
+
+## P1 uninstrumented results — held, not promoted
+
+f494b0748f77b3856ba746ca1342a30ccdaee1c0/run41168627198 completed4AB/BApairs,288windows/48warmups,
+all288uniquesystemframe matches,932FrameMetrics/no droppedcallbacks,8rawtraces. Same testAPK,
+one-filesourcedelta andresources verified. FullJSON SHA256113a5050dce6e656f7669dfaeb68d82905ce255e4be4f148613bbe91305fa737.
+No replacement samples. OriginalCPU attribution independentlyrecomputed fromsame traces.
+
+Input→draw pairedmedianratios: hidden0.8371866(4/4wins),shown0.9736189(3/4),hiddenAgain0.8894211
+(4/4). Systemdisplayend ratios0.9621871/0.9536535/1.0269994 respectively. Shownfailsfrozen<=.90,
+sopassesFrozenPerformanceScreen=false even though workflow completedcorrectly. Do NOTpromote,
+weaken gate,claimuniformspeedup orrerun forbetter scores. HiddenCPU/outerwork reduction isreal
+evidence,not proof ofphone improvement orall-IME gains.
+
+Only mechanismcandidate andtest infrastructure remaininrepo. Production55db111 unchanged,
+no full492/182productionregression run/newformalRelease because adoption gate notmet.
+NextplannedindependentP2 isMAIN→ALT→MAIN scalarwidth-checkpoint recovery,using unchangedbase;
+do not silentlycombine this heldP1 orrejectedwidth/cursor patches. AnylaterP1 refinement must
+state a newcausal hypothesis andpreserve these original4pairs,not relabel themas accepted.
