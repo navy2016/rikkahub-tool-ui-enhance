@@ -439,6 +439,13 @@ benchmarks/terminal-frame-identity/protocol.json 固定32窗口(1k/10k×IME，4�
 旧P2保持失败。先冻结协议/解析状态机+确定性测试，再一次未改生产的CI资格验证；不构建候选。
 工作目录/workspace/terminal-review/frame-identity-v1/；旧375文件P2证据包及检查点不改写。
 
+帧身份协议先于设备采集冻结于65c42cae1292ef4bcd16b83ba5159650c071a495，JSON SHA256
+8205b614f689ceaa0553aefa1323a56ca1bcd939ec8ffefe66726095e02c43b9。资格driver为
+TerminalFrameIdentityQualificationTest，pipeline suite=frameIdentityQualification；只运行32未改生产窗口。
+使用existing Trace.start(clock=SystemClock::elapsedRealtimeNanos)并记录每次完整事件；500ms截止是预定tailEnd，
+不是线程晚醒的现在时间。公开FrameMetrics仍MONOTONIC，只用raw token旁证。22新增主机契约(累计271)通过。
+产物artifacts/terminal-frame-identity-qualification；资格通过也不代表P2采用，未来性能须独立冻结。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

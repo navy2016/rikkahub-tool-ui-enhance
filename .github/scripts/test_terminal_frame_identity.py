@@ -93,7 +93,7 @@ class IdentityContractTest(unittest.TestCase):
         t=trace_fixture();t['displays'][0]['endNs']=600000000
         r=m.classify_window(window(),m.FrameIndex(t),[[],[]]);self.assertIsNone(r['inputToDisplayEndNs']);self.assertFalse(r['noSubmittedAttempt'])
     def test_clock_and_tail_contracts_not_guessed(self):
-        for change in (dict(clock='MONOTONIC'),dict(closedBootNs=499999999)):
+        for change in (dict(clock='MONOTONIC'),dict(closedBootNs=499999999),dict(closedBootNs=500000021)):
             w=window();w.update(change)
             with self.assertRaises(ValueError):m.classify_window(w,m.FrameIndex(trace_fixture()),[[],[]])
     def test_pb_nested_frame_spans_on_own_tid(self):

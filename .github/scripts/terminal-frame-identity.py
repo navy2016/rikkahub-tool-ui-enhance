@@ -202,7 +202,7 @@ def classify_window(window,index,observers):
         require(e['ns']>=window['publishedNs']>=ui[0]['ns'],'Attempt precedes response publication')
         rows.append(attempt(index,e,observers))
     eligible=[r for r in rows if r['attempt']=='QUALIFIED'];require(eligible,'No finite response attempt')
-    require(cutoff>=eligible[0]['uiAttemptBootNs']+p['matrix']['naturalObservationTailNs'],'Natural observation truncated')
+    require(cutoff==eligible[0]['uiAttemptBootNs']+p['matrix']['naturalObservationTailNs'],'Natural observation cutoff changed')
     candidates=[r for r in eligible if r['submission']=='SUBMITTED' and r['bufferEvidenceBootNs']<=cutoff]
     submitted=min(candidates,key=lambda r:r['bufferEvidenceBootNs']) if candidates else None
     presented=[r for r in candidates if r['presentation']=='PRESENTED' and r['displayEndBootNs']<=cutoff]
