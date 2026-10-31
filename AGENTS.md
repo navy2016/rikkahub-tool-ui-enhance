@@ -474,6 +474,14 @@ driver TerminalP2IdentityPerformanceTest，suite=p2IdentityPerformance。共享d
 同次stage-attribution.json：回退较大部分在fed→publish(1k显+6.670ms/10k隐+4.657ms)，刷新widthCPU仅+.030–.043ms；
 未证明根因，不能归咎噪声或简单width重复；下一独立假设应追踪发布前等待，不叠加已拒绝P2。当前无CI运行，生产55不变。
 
+用户继续后启动独立发布等待调查，工作目录/workspace/terminal-review/full-virtual-publication-wait/。
+只读旧实验原版侧64正式普通刷新：fed→receive~.08–.10ms，receive→capture~10.4–11.7ms，model锁/构帧~.12–.14ms；
+每段之间1次Choreographer起点、capture在frame区间外；这不是withFrameNanos耗时的直接测量。
+新protocol terminal-publication-wait/protocol.json：H1注册帧时钟等待主导；H2callback/continuation晚于该frame，均待证。
+计划32诊断窗口(1k/10k×IME，4轮refresh/sync)，sync固定60ms作为控制；不运行任何优化候选。
+仅CI临时三文件trace overlay(Page/Manager/PipelineTrace)，原条件/延时/原子发布剥除探针后逐字节还原。
+新增frame-wait-start/callback/end、job/coalescing、sync/resize、模型锁、通知发布标记；BOOT诊断、生产MONO时间不改。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

@@ -1,0 +1,60 @@
+{
+  "id": "terminal-publication-wait-v1",
+  "stage": "diagnosis-not-optimization",
+  "baseProductionSha": "55db111129c662067345aa99540b506de305da37",
+  "baseTree": "8caf50d5c40e228f1d5bcc09d3db505757568b68",
+  "sourceScope": "55 base plus trace-only overlay on ProcessSessionPage, BackgroundProcessManager and TerminalPipelineTrace; restore checkout after CI build",
+  "hypotheses": {
+    "H1": "For ordinary MAIN refresh, receive-to-capture wait is principally the registered frame-clock wait, not task launch or sync/resize guards.",
+    "H2": "If the frame-clock continuation resumes only after the display frame's callbacks/traversal, the publication belongs outside that Choreographer frame and cannot update its already drawn content.",
+    "doNotConclude": "This diagnosis alone cannot prove an optimization would improve latency or explain the rejected P2 arm's regression."
+  },
+  "matrix": {
+    "cases": ["publication-1000-hidden", "publication-1000-shown", "publication-10000-hidden", "publication-10000-shown"],
+    "rounds": 4,
+    "conditions": ["refresh", "sync"],
+    "order": "even refresh-sync, odd sync-refresh",
+    "windows": 32,
+    "ordinaryWindows": 16,
+    "syncControlWindows": 16,
+    "syncPeerHoldMs": 60,
+    "naturalObservationTailNs": 500000000,
+    "responseDeadlineMs": 25000,
+    "performanceWarmups": 0
+  },
+  "clock": {
+    "diagnosticEvents": "injected CLOCK_BOOTTIME through existing TerminalPipelineTrace capture",
+    "productionResizeAndNotificationTime": "unchanged System.nanoTime semantics; never compared with diagnostic BOOTTIME",
+    "frameClockArgument": "MONOTONIC vsync time, not a callback execution timestamp; not used as BOOTTIME"
+  },
+  "markers": [
+    "PUBLICATION_REQUEST", "PUBLICATION_COALESCED", "PUBLICATION_ENQUEUED", "PUBLICATION_JOB_START",
+    "PUBLICATION_CYCLE_START", "PUBLICATION_FRAME_WAIT_START", "PUBLICATION_FRAME_CALLBACK", "PUBLICATION_FRAME_WAIT_END",
+    "PUBLICATION_SYNC_CHECK", "PUBLICATION_SYNC_DONE", "PUBLICATION_RESIZE_CHECK", "PUBLICATION_RESIZE_DONE",
+    "PUBLICATION_CALL", "PUBLICATION_RETURN", "PUBLICATION_BLANK_WAIT_START", "PUBLICATION_BLANK_WAIT_END",
+    "PUBLICATION_JOB_END", "PUBLICATION_MODEL_LOCK_ACQUIRED", "OUTPUT_NOTIFY_START", "OUTPUT_NOTIFY_END"
+  ],
+  "attribution": {
+    "requestToJob": "diagnostic request/enqueue to actual coroutine entry",
+    "frameWait": "registration start, execution of existing withFrameNanos callback, and continuation after it returns are separate markers",
+    "syncWait": "start/end of original synchronization guard; original completion Boolean retained",
+    "resizeWait": "start/end of original resize branch; original flag retained",
+    "capture": "existing FRAME_CAPTURE_STARTED, inserted marker after acquiring the original emulator monitor, FRAME_CAPTURED and ROW_SYNC events",
+    "presentation": "optional same-row exact frame-identity evidence, not a gate for this scheduling diagnosis",
+    "cpu": "same BOOTTIME scheduler intervals; nested sections cannot be added",
+    "flags": "added marker Boolean uses existing optional virtual field and is also exported as flag; it is stage-specific, never a renderer claim"
+  },
+  "integrity": {
+    "identicalBaseLogicAfterRemovingProbeStatements": true,
+    "sameConditionsDelaysAndAtomicPublication": true,
+    "allRawBytesAndHistoryIdentityPreserved": true,
+    "samePidStartupCompletionBeforeConfigure": true,
+    "singleWriterNaturalGeometryAndImeChecks": true,
+    "requireFullOrderedMarkerChain": true,
+    "recordCoalescingRatherThanAssumeNewJob": true,
+    "retainEveryFixedWindow": true,
+    "noRetriesOrReplacementSamples": true,
+    "noPerformanceAcceptance": true,
+    "noRejectedCandidateOverlay": true
+  }
+}
