@@ -108,4 +108,16 @@ class IdentityContractTest(unittest.TestCase):
         a=field(1,field(8,10)+field(10,1)+field(76,field(4,start)))
         end=field(1,field(8,50)+field(10,1)+field(76,field(5,field(1,9))))
         t=m.parse_trace(a+a+end,11);self.assertEqual(2,len(t['surfaces']));self.assertTrue(all(x['error']=='duplicate-cookie' for x in t['surfaces']))
+    def test_producer_first_packet_bare_loss_marker_is_not_preceding_loss(self):
+        raw=field(1,field(10,2)+field(42,1)+field(87,1)+field(1,field(1,0)+pe(10,11,'B|11|DrawFrames 7')+pe(20,11,'E')))
+        t=m.parse_trace(raw,11);self.assertEqual([],t['faults']);self.assertEqual(1,len(t['sequenceInitialMarkers']))
+    def test_mid_sequence_or_unproven_loss_is_never_ignored(self):
+        first=field(1,field(10,2)+field(87,1)+field(1,field(1,0)))
+        for ending in (field(42,1),field(42,1)+field(87,1),field(42,3)+field(87,1)):
+            t=m.parse_trace(first+field(1,field(10,2)+ending),11);self.assertIn('packet-loss',t['faults'])
+        for marker in (field(42,1),field(42,3)+field(87,1)):
+            t=m.parse_trace(field(1,field(10,2)+marker),11);self.assertIn('packet-loss',t['faults'])
+    def test_first_packet_marker_does_not_hide_kernel_ring_loss(self):
+        raw=field(1,field(10,2)+field(42,1)+field(87,1)+field(1,field(1,0)+field(3,1)))
+        self.assertIn('lost-ftrace-bundle',m.parse_trace(raw,11)['faults'])
 if __name__=='__main__':unittest.main()

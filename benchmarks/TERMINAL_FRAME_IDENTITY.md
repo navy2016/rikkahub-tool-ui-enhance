@@ -36,3 +36,19 @@ ftrace必须使用默认boot时钟，FrameTimeline必须为clock6；其他时钟
 
 未来优化试验必须另行冻结终点、配对、未提交／删失值处理和采用门槛；不得用本次资格结果给旧230窗口追认通过。
 实现先用确定性的解析单元测试覆盖跳过、统计缺失、重复token、无关动画、时钟错误、丢包和多次合格尝试，再运行一次上述CI资格验证。
+
+## 首次资格运行与解析修正（未重跑）
+
+冻结提交`65c42cae1292ef4bcd16b83ba5159650c071a495`；机器协议SHA256
+`8205b614f689ceaa0553aefa1323a56ca1bcd939ec8ffefe66726095e02c43b9`，内容未改。
+设备源`280a77650fbe9ac21cdf4f79382163e1675e4645`／run`41206196746`：四个JUnit方法、32窗口全部采集完成，
+但原汇总把所有`previous_packet_dropped`都当作损失，导致CI failure。原报告与失败回执保留。
+
+四条轨迹各3个标志，全部是该sequence首个观测包、`first_packet_on_sequence=1`和bare loss bit=1同时出现。
+Perfetto的TracePacket协议明确该首包标志表示不存在前置数据丢失。修正只识别这个精确组合并保存标记；
+序列中途loss、重复first标记、无first证明的loss、其他cause bits和内核lost_events仍拒绝。
+原协议、观察尾部和输入序列不变，没有再次运行Android。引用的TracePacket源码及hash在reference目录。
+
+同次原件离线复核：32窗口共64个合格UI尝试，全部有精确提交及系统呈现链；两套FrameMetrics token旁证一致。
+资格状态单独记为`offline-recovered`，**原workflow仍failure**，不是新CI success，也不是P2性能采用。
+任何后续优化试验须另行冻结完整配对、三个终点、未提交／未观测值的处理及采用条件；不混入旧30／230窗口。

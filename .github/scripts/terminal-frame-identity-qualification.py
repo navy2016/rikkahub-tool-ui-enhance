@@ -97,7 +97,7 @@ def report(text,manifest,device,installed):
         tr=identity.parse_trace(raw,c['pid']);index=identity.FrameIndex(tr);obs=observers(c)
         rows=[dict(phase=w['phase'],index=w['index'],condition=w['condition'],**identity.classify_window(w,index,obs)) for w in c['samples']]
         info=dict(case=c['case'],rows=rows,traceSha256=tr['traceSha256'],traceBytes=tr['traceBytes'],traceFaults=tr['faults'],
-            openSpans=tr['openSpans'],callbackDropped=[sum(x['dropped'] for x in queue) for queue in obs])
+            openSpans=tr['openSpans'],sequenceInitialMarkers=tr['sequenceInitialMarkers'],callbackDropped=[sum(x['dropped'] for x in queue) for queue in obs])
         classified.append(info)
         attempts=[a for r in rows for a in r['attempts'] if a['attempt']=='QUALIFIED']
         summary.append(dict(case=c['case'],windows=len(rows),attempts=len(attempts),

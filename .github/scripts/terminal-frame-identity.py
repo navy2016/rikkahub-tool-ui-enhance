@@ -28,12 +28,21 @@ def parse_trace(raw,pid):
     """Keep errors and duplicates; never make a dict overwrite look like a unique identity."""
     require(type(pid) is int and pid>0 and 0<len(raw)<100663296,'Invalid bounded trace/PID')
     events=collections.defaultdict(list);starts=collections.defaultdict(list);ends=collections.defaultdict(list)
-    faults=[];clocks=set();ordinal=0
+    faults=[];clocks=set();ordinal=0;seen_sequences=collections.Counter();initial_markers=[]
     for tag,typ,packet in wire.pb(raw):
         if tag!=1 or typ!=2:continue
         entries=list(wire.pb(packet));scalars={f:v for f,w,v in entries if w==0}
         sequence=scalars.get(10,0);clock=scalars.get(58,6);ts=scalars.get(8)
-        if scalars.get(42,0):faults.append('packet-loss')
+        first=scalars.get(87,0);loss=scalars.get(42,0)
+        if first and (sequence==0 or seen_sequences[sequence]):faults.append('invalid-sequence-first-marker')
+        if loss:
+            # Perfetto's producer first-packet marker explicitly proves no preceding data loss.
+            # Some service versions also set the bare dropped bit on this first packet. Keep
+            # this evidence; accept ONLY the first observed packet, a real sequence and bit1.
+            if loss==1 and first==1 and sequence>0 and seen_sequences[sequence]==0:
+                initial_markers.append(dict(sequence=sequence,timestamp=ts,previousPacketDropped=loss,firstPacketOnSequence=first))
+            else:faults.append('packet-loss')
+        seen_sequences[sequence]+=1
         for field,w,value in entries:
             if field==76 and w==2:
                 for kind,z,record in wire.pb(value):
@@ -83,7 +92,7 @@ def parse_trace(raw,pid):
             else:record.update(complete=True,endNs=endpoint[0]['ns'])
             if record['clock']!=6:faults.append('timeline-clock-not-boot')
             (surfaces if record['kind']==4 else displays).append(record)
-    return dict(pid=pid,spans=spans,surfaces=surfaces,displays=displays,faults=sorted(set(faults)),openSpans=open_spans,
+    return dict(pid=pid,spans=spans,surfaces=surfaces,displays=displays,faults=sorted(set(faults)),openSpans=open_spans,sequenceInitialMarkers=initial_markers,
         clock='CLOCK_BOOTTIME',traceSha256=hashlib.sha256(raw).hexdigest(),traceBytes=len(raw))
 
 def inside(child,parent):

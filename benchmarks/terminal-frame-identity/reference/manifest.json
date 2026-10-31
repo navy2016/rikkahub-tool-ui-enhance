@@ -16,5 +16,11 @@
     "commit": "4995f83afb3545bc1b94a27c15329529d32ed21b",
     "path": "protos/perfetto/common/builtin_clock.proto",
     "sha256": "ae1d1542bc0a1f1fbd29d9351f19e2a86bd8add28c8e06ef662a7beadb8226fe"
+  },
+  {
+    "repo": "google/perfetto",
+    "commit": "4995f83afb3545bc1b94a27c15329529d32ed21b",
+    "path": "protos/perfetto/trace/trace_packet.proto",
+    "sha256": "cd51b7340fe5ad92f38f4216ca687c3c3a8c8238a3d68035a2478544bdb78e02"
   }
 ]

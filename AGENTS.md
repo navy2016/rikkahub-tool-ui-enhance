@@ -446,6 +446,13 @@ TerminalFrameIdentityQualificationTest，pipeline suite=frameIdentityQualificati
 不是线程晚醒的现在时间。公开FrameMetrics仍MONOTONIC，只用raw token旁证。22新增主机契约(累计271)通过。
 产物artifacts/terminal-frame-identity-qualification；资格通过也不代表P2采用，未来性能须独立冻结。
 
+帧身份资格280a776/run41206196746四设备方法/32窗口采集完成，但CI原汇总failure：将序列首包的
+previous_packet_dropped=1 + first_packet_on_sequence=1误判为损失。四trace共12处均为各sequence首包。
+Perfetto协议明确首包flag证明无前置loss；解析修正仅此精确bare-bit组合，真中途loss/重复first/内核loss仍拒绝。
+不重跑Android、不改冻结protocol JSON。原CI失败保留，离线恢复32窗口64合格尝试全提交/全呈现、两旁证一致。
+原件/workspace/terminal-review/frame-identity-v1/original，恢复offline-recovery.json，原报告SHA
+70d13539d99b2384738d403bbe6fdbdab86d848d549508dc603a936ef5ba33fd。后续须新性能协议，P2未采用/生产55未变。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
