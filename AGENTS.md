@@ -381,6 +381,15 @@ P2候选32c07c8/run41180293887正确性成功：45JVM、32状态、原6交互(7�
 冻结返回比<=.80且>=3/4改善；MAIN刷新与系统呈现比<=1.05；证据缺失仍失败不补样。
 协议benchmarks/TERMINAL_WIDTH_RECOVERY_PAIRED.md。新驱动先稳定隐藏网格再开IME；生产仍55db111。
 
+P2配对首次33efb2e/run41181696048在pair0原版最后场景(10k/shown)准备失败：
+`Real clock deadline: initial page`，记录initialized/geometryReady/widthReady已true，但PANfalse、
+55列30行，预期80列/PAN/10k未生效。前三原版场景共30窗口，失败场景0，候选未运行，不能算配对。
+SettingsStore在PreferencesStore.kt：update乐观写flow、DataStore重发，另setRenderer复制flow；
+控制设置由首次remember(processId)锁存。旧准确竞态未被记录，不宣称根因已证明。
+测试准备v2仅改driver：命令偏好+renderer单次写，生产解码器反射验证持久/flow及首次LocalSettings；
+不改生产/候选/阈值/超时。先suite=widthRecoverySetup四场景无性能预检，通过才重新固定矩阵。
+首次失败原件目录full-virtual-width-recovery/failed-pair-original，old30不混入新结果。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

@@ -17,6 +17,7 @@ import android.os.HandlerThread
 import android.os.Looper
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +33,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import me.rerere.rikkahub.data.container.BackgroundProcessManager
 import me.rerere.rikkahub.data.container.PRootManager
 import me.rerere.rikkahub.data.container.PtyMode
@@ -39,6 +41,8 @@ import me.rerere.rikkahub.data.container.TerminalPipelineStage
 import me.rerere.rikkahub.data.container.TerminalPipelineEvent
 import me.rerere.rikkahub.data.container.TerminalPipelineTrace
 import me.rerere.rikkahub.data.container.TerminalRenderMode
+import me.rerere.rikkahub.data.container.terminalRendererForCommand
+import me.rerere.rikkahub.data.container.updatedTerminalRenderPreferences
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -115,6 +119,17 @@ class TerminalWidthRecoveryPairedTest : KoinComponent {
         val now=SystemClock.uptimeMillis()
         for(action in listOf(KeyEvent.ACTION_DOWN,KeyEvent.ACTION_UP))assertTrue(automation.injectInputEvent(KeyEvent(now,SystemClock.uptimeMillis(),action,KeyEvent.KEYCODE_BACK,0),true))
     }
+    /** Use the production command-key/decoder, not a second JSON oracle. Setup only, never timed. */
+    private fun decodedPreference(raw: String, peer: String): Map<String, Any?> {
+        val method=Class.forName("me.rerere.rikkahub.ui.pages.container.ProcessSessionPageKt")
+            .getDeclaredMethod("terminalCommandPreference",String::class.java,String::class.java).apply{isAccessible=true}
+        val value=method.invoke(null,raw,peer) ?: return emptyMap()
+        val names=listOf("key","rawInputMode","terminalPanMode","showFullInputBar","showExtraKeys",
+            "forcedTerminalColumns","maxScrollbackLines","terminalFontSizeSp")
+        return names.associateWith { name ->
+            value.javaClass.getMethod("get"+name.replaceFirstChar{it.uppercaseChar()}).apply{isAccessible=true}.invoke(value)
+        }
+    }
     private data class Draw(val timeNs: Long,val drawingTimeMs: Long)
     private class Observers : Window.OnFrameMetricsAvailableListener {
         val metrics=ArrayList<LongArray>();val draws=ArrayList<Draw>();var overflow=0
@@ -166,6 +181,27 @@ class TerminalWidthRecoveryPairedTest : KoinComponent {
             done
         """.trimIndent()
         val peer="sh -c '"+script.replace("'","'\"'\"'")+"'"
+        val intendedPreference=JSONArray().put(JSONObject().put("key",hash(peer)).put("command",peer).put("updatedAt",1L)
+            .put("rawInputMode",false).put("terminalPanMode",true).put("showFullInputBar",true).put("showStatusBar",true).put("showExtraKeys",true)
+            .put("autoScroll",true).put("forcedTerminalColumns",80).put("terminalFontSizeSp",12).put("maxScrollbackLines",size)).toString()
+        fun configured(raw: String, render: String, custom: String, fullGrid: String): Boolean {
+            val preference=decodedPreference(raw,peer)
+            return preference["key"]==hash(peer) && preference["rawInputMode"]==false && preference["terminalPanMode"]==true &&
+                preference["showFullInputBar"]==true && preference["showExtraKeys"]==true && preference["forcedTerminalColumns"]==80 &&
+                preference["maxScrollbackLines"]==size && preference["terminalFontSizeSp"]==12f &&
+                terminalRendererForCommand(render,peer)==mode && custom=="sh" && fullGrid.isEmpty()
+        }
+        val preparation=ArrayList<JSONObject>()
+        fun snapshotSetup(stage: String) {
+            val current=settings.settingsFlow.value
+            preparation.add(JSONObject().put("stage",stage).put("ns",System.nanoTime()).put("init",current.init)
+                .put("rawSha256",hash(current.terminalCommandPreferences)).put("expectedRawSha256",hash(intendedPreference))
+                .put("commandSha256",hash(peer)).put("decoded",JSONObject(decodedPreference(current.terminalCommandPreferences,peer)))
+                .put("configured",configured(current.terminalCommandPreferences,current.terminalRenderPreferences,
+                    current.terminalCustomTuiCommands,current.terminalFullGridCommands)))
+        }
+        val localSettingsReady=CountDownLatch(1)
+        var firstPanelCommitted by mutableStateOf(false)
         var mounted by mutableStateOf(false);var process: String?=null;var capture: TerminalPipelineTrace.Capture?=null
         var scenario: ActivityScenario<TerminalPipelineTestActivity>?=null;var listener: ViewTreeObserver.OnDrawListener?=null
         val observer=Observers();val thread=HandlerThread("real-clock-metrics").apply{start()};val handler=Handler(thread.looper)
@@ -174,11 +210,20 @@ class TerminalWidthRecoveryPairedTest : KoinComponent {
             // Establish the native accessibility connection BEFORE app startup/measurement.
             automation.serviceInfo
             runBlocking {
-                settings.update{it.copy(terminalCommandPreferences=JSONArray().put(JSONObject().put("key",hash(peer)).put("command",peer).put("updatedAt",1L)
-                    .put("rawInputMode",false).put("terminalPanMode",true).put("showFullInputBar",true).put("showStatusBar",true).put("showExtraKeys",true)
-                    .put("autoScroll",true).put("forcedTerminalColumns",80).put("terminalFontSizeSp",12).put("maxScrollbackLines",size)).toString(),
-                    terminalFullGridCommands="",terminalCustomTuiCommands=if(tui)"sh" else "")}
-                settings.setTerminalRenderer(peer,mode);proot.start().getOrThrow()
+                snapshotSetup("before-write")
+                // One atomic test preparation write; avoid a second setter copying an older flow emission.
+                settings.update{it.copy(terminalCommandPreferences=intendedPreference,
+                    terminalRenderPreferences=updatedTerminalRenderPreferences(it.terminalRenderPreferences,peer,mode),
+                    terminalFullGridCommands="",terminalCustomTuiCommands="sh")}
+                snapshotSetup("after-write")
+                withTimeout(30_000) { settings.settingsFlowRaw.first {
+                    !it.init && configured(it.terminalCommandPreferences,it.terminalRenderPreferences,it.terminalCustomTuiCommands,it.terminalFullGridCommands)
+                } }
+                withTimeout(30_000) { settings.settingsFlow.first {
+                    !it.init && configured(it.terminalCommandPreferences,it.terminalRenderPreferences,it.terminalCustomTuiCommands,it.terminalFullGridCommands)
+                } }
+                snapshotSetup("persisted-and-flow-confirmed")
+                proot.start().getOrThrow()
             }
             val start=runBlocking{manager.startInteractiveSession(sandbox,peer,columns=80,rows=24,ptyMode=if(tui)PtyMode.RAW else PtyMode.COOKED)}
             assertTrue(start.message,start.success);assertEquals("native-pty",start.terminalBackend);val id=start.processId;process=id
@@ -195,11 +240,30 @@ class TerminalWidthRecoveryPairedTest : KoinComponent {
                 activity.window.addOnFrameMetricsAvailableListener(observer,handler);attached=true
                 activity.setContent {
                     val value by settings.settingsFlow.collectAsState()
-                    RikkahubTheme{CompositionLocalProvider(LocalSettings provides value,LocalNavController provides nav){if(mounted)ProcessSessionPage(sandbox,id)}}
+                    // Observe the LocalSettings value BEFORE mounting stateful terminal controls.
+                    if(!mounted && !value.init && configured(value.terminalCommandPreferences,value.terminalRenderPreferences,
+                        value.terminalCustomTuiCommands,value.terminalFullGridCommands)) SideEffect { localSettingsReady.countDown() }
+                    RikkahubTheme {
+                        CompositionLocalProvider(LocalSettings provides value,LocalNavController provides nav) {
+                            // Validate the exact value passed to the FIRST panel, not just a prior flow poll.
+                            // After first commit this guard is bypassed; it cannot unmount a measured page.
+                            if(mounted && (firstPanelCommitted || (!value.init && configured(value.terminalCommandPreferences,
+                                value.terminalRenderPreferences,value.terminalCustomTuiCommands,value.terminalFullGridCommands)))) {
+                                if(!firstPanelCommitted) SideEffect { firstPanelCommitted=true }
+                                ProcessSessionPage(sandbox,id)
+                            }
+                        }
+                    }
                 }
             }
             await("peer READY"){manager.readInteractiveBuffer(id)?.contains("READY\r\n")==true}
-            owner.onActivity{mounted=true}
+            assertTrue("Configured LocalSettings never reached the test host",localSettingsReady.await(30,TimeUnit.SECONDS))
+            owner.onActivity{
+                val current=settings.settingsFlow.value
+                assertTrue("Configuration changed before first mount",configured(current.terminalCommandPreferences,
+                    current.terminalRenderPreferences,current.terminalCustomTuiCommands,current.terminalFullGridCommands))
+                snapshotSetup("before-mount");mounted=true
+            }
             await("initial page"){trace.viewport()?.viewport?.initialized==true && terminal.maxScrollbackLines()==size}
             runBlocking{manager.sendInput(id,"SEED").getOrThrow()}
             await("seeded"){manager.readInteractiveBuffer(id)?.contains("SEEDED\r")==true}
@@ -253,7 +317,9 @@ class TerminalWidthRecoveryPairedTest : KoinComponent {
             assertEquals(size,initialHistory.size)
             if(setupOnly) {
                 emitCase(JSONObject().put("case",case).put("setupOnly",true).put("acceptance",false).put("passed",true)
-                    .put("viewport",trace.viewport()?.viewport.toString()).put("modelRows",terminal.rows).put("modelHistory",terminal.renderFrame().historyCount))
+                    .put("viewport",trace.viewport()?.viewport.toString()).put("modelRows",terminal.rows).put("modelColumns",terminal.columns)
+                    .put("modelHistory",terminal.renderFrame().historyCount).put("expectedIme",expectedIme).put("preparation",JSONArray(preparation))
+                    .put("samples",JSONArray()).put("gates",JSONArray(gates)))
                 return
             }
             for(round in 0..4) {
@@ -325,12 +391,17 @@ class TerminalWidthRecoveryPairedTest : KoinComponent {
             val metrics=JSONArray().apply{observer.readMetrics().forEach{put(JSONArray(it.toList()))}}
             emitCase(JSONObject().put("case",case).put("mode",mode.id).put("tui",tui).put("launch",launch).put("pid",android.os.Process.myPid())
                 .put("samples",JSONArray(samples)).put("gates",JSONArray(gates)).put("draws",draws).put("metrics",metrics).put("phaseDumps",JSONArray(dumps))
+                .put("preparation",JSONArray(preparation))
                 .put("completedTraversals",JSONArray().apply{observer.readTraversals().forEach{put(JSONArray(it.toList()))}})
                 .put("clock", "real-android-no-compose-test-clock").put("historySize",size).put("baselineOnly",false).put("expectedIme",expectedIme).put("droppedFrameMetrics",observer.readMetrics().sumOf{it[9]}).put("passed",true))
         } catch(error: Throwable) {
+            runCatching{snapshotSetup("failure")}.onFailure {
+                preparation.add(JSONObject().put("stage","failure-diagnostic").put("error",it.toString()))
+            }
             val model=process?.let{manager.getInteractiveTerminalEmulator(it)}
             val info=model?.renderFrame()
             emitCase(JSONObject().put("case",case).put("setupOnly",setupOnly).put("acceptance",false).put("passed",false).put("error",error.toString()).put("samples",JSONArray(samples))
+                .put("preparation",JSONArray(preparation)).put("maxScrollbackLines",model?.maxScrollbackLines())
                 .put("viewport",capture?.viewport()?.viewport.toString()).put("modelRows",model?.rows).put("modelColumns",model?.columns)
                 .put("modelRevision",info?.revision).put("modelHistory",info?.historyCount)
                 .put("resizePending",process?.let{manager.hasPendingTerminalResize(it)})
