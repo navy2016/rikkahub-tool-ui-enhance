@@ -34,3 +34,22 @@ candidate forfull492JVM/182viewport/nativePTY regressions,not an automatic relea
 Never change archivedreport guards to accept the overlay. Buildscript patches only3allowedfiles
 onGitHub runner,records hashes andrestorescheckout in finally. Local compilation forbidden.
 Workflowterminal-alt-width.yml is dispatch-only anddoes not deliverAPK. Explicit branch required.
+
+## Result: NOT ADOPTED (source f1211a5 / run41152305179)
+
+43JVM tests passed(18originalwidth+19fullvirtual+6new),42realfontwidth checks passed. Threecomplete
+AB/BA pairs(216windows),then fourthpair candidate36windows passednativepage tests but1hadno
+matchingFrameMetrics callback;GFXFrameCompleted/GpuCompleted also0. Failclosed at251/252full
+matches;fourthcontrol NOT run. Originalfailure andallraw7invocations kept. No inventedcallback,
+completion,discardedoutlier orrerun for a better score.
+
+Frozenhiddenphase input→draw ratios(candidate/base) of first3pairs:1.065,0.908,1.134. Twoalready
+regress,soevena winningfourthpair cannotmeet >=3/4lower. Do NOTresume/resample orpromotethispatch.
+Sameoriginaltrace attribution:width CPUmedians1.11–1.82ms→0.30–0.40ms,not enough for stabletotal
+latency improvement. Widthcorrectness/work reduction is real;appspeedbenefitnotaccepted.
+Productionremains55db111;nofull492/182productiongate orformalRelease runforthisrejectedcandidate.
+
+Next independentfullvirtual hypothesis:ALT LazyColumncontent capturesentirefreshframe despite
+immutablephysicalrowlist beingunchanged ontext-only edits. Inspect retainedcontent/rowrecomposition
+first;donotcombinewithrejectedwidthcache orchangeSEL/MOUSE/rowheight/frameatomics. DefaultTUI
+grouping remainsoutofscope perlatestuserrequest.

@@ -317,6 +317,14 @@ candidate.patch三文件实验补丁，不改live生产。显式fullVirtualWidth
 协议benchmarks/TERMINAL_FULL_VIRTUAL_ALT_WIDTH.md；workflow terminal-alt-width.yml，仅云端Release。
 工作目录/workspace/terminal-review/full-virtual-alt-width/，生产仍55db111。不要重跑旧薄光标/默认TUI实验。
 
+ALT宽度候选结论不采用：f1211a5/run41152305179，43JVM+42字体oracle通过，3完整对照+
+第4组候选完成252个页面窗口，但1个缺FrameMetrics回调导致唯一系统帧关联门禁失败，
+第4组原版未运行。键盘隐藏前三组延迟比1.065/0.908/1.134，已有两组更慢，数学上无法
+满足预设>=3/4改善，不补跑不放宽。原轨迹测宽CPU约1.1–1.8→0.3–0.4ms，整体收益未成立。
+所有源补丁/数据/7原始轨迹保留在full-virtual-alt-width，live生产仍55db111，无新正式包。
+下一独立假设是全虚拟ALT列表内容捕获新frame导致重复子组合；先验证内容身份/重组，
+不叠加已拒绝宽度缓存、不改默认模式或选择/鼠标行为。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
