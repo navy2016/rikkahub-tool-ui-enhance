@@ -487,6 +487,15 @@ driver TerminalPublicationWaitTest，suite=publicationWait。每窗口保存256�
 297主机契约通过；全量源码剥除探针逆变换相同。build后还原live，manifest.environmentSources记录还原环境，sources记录实际probe APK。
 此诊断32窗口仅refresh/sync60ms，首次完整响应后500ms自然尾部；不改变同步输出100ms保护、resize/blank等待或Snapshot事务。
 
+发布等待诊断deb8806/run41221492776成功32窗口，16普通+16sync控制全覆盖active；原件离线复核通过。
+普通16/16 callback在Choreographer帧内、continuation/capture在帧外；job排队中位.087–.285ms，
+注册到callback3.999–8.472ms，callback到继续6.045–9.648ms，其间有重组/apply/测量/绘制。
+普通sync/resize均未激活、model锁等待约.001–.003ms；sync控制守卫中位45.9–56.2ms且合并后续通知。
+H1“只是帧信号等待主导”不完整，H2本矩阵成立。未改生产、未实现候选、未跑优化性能。
+下一候选方向只研究安全FULL_VIRTUAL在既有frame callback同步发布，原SYNC/resize/blank/失败路径须保留。
+工作目录full-virtual-publication-wait，report原SHA31fba331ba8ef6912aa08c07dda6dbd4efadfa323968dd731cff7cec6aa965af。
+原urllib CDN TLS reset时已用该目录read_members_curl.py保持严格206/Content-Range取同一artifact，不是重采样。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
