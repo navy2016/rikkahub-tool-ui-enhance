@@ -367,6 +367,14 @@ P1真实时钟f494b07/run41168627198已完整通过执行/数据完整性，4AB/
 lastMeasuredHistoryRows。协议benchmarks/TERMINAL_WIDTH_RECOVERY.md，pipeline suite=widthRecovery。
 工作目录/workspace/terminal-review/full-virtual-width-recovery/；live生产仍55db111。
 
+P2基线97b0ef2/run41177096610成功：32计数状态+20原生窗口(4预热)，20系统帧精确关联。
+历史对象完全未变仍每次重测1k/10k；返回input→draw中位239.461/530.900ms，后台测宽CPU
+61.725/383.364ms，MAIN刷新61.641/62.159ms且后台测宽0。原件SHA993b66ba2a32c7305cf779a20278428729a2014e7bbffc8bfe3b039baac467b3。
+已写独立3文件P2候选补丁benchmarks/terminal-width-recovery-candidate/candidate.patch，不改live。
+仅FULL_VIRTUAL opt-in当前挂载MAIN标量checkpoint，验证来源/font/FIFO，旧width/ALT缓存不变。
+第一门禁45JVM(8new+18oldwidth+19full)+32候选状态/ALT释放+原6交互，suite=widthRecoveryCandidate；
+之后才新的真实PTY候选对照，不能把基线差值当优化收益。全量492/182与正式Release尚未运行。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

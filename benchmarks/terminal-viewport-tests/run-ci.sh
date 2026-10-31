@@ -29,6 +29,9 @@ run_arm() {
   if [ "${TERMINAL_VIEWPORT_GROUP:-}" = fullVirtualContent ]; then
     extra+=(-PterminalFullVirtualContent=true -PterminalPipelineTests=true)
   fi
+  if [ "${TERMINAL_VIEWPORT_GROUP:-}" = widthRecoveryCandidate ]; then
+    extra+=(-PterminalWidthRecoveryCandidate=true -PterminalPipelineTests=true)
+  fi
 
   # Keep each renderer's result tree independent. A stuck lazy arm must not erase the
   # completed eager arm or prevent the reporting step from seeing its 12 cases.
@@ -106,6 +109,19 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
+if [ "$group" = widthRecoveryCandidate ]; then
+  mkdir -p artifacts/terminal-width-recovery-candidate
+  adb logcat -G 8M
+  run_arm recovery-candidate TerminalWidthRecoveryCandidateViewTest 420
+  run_arm recovery-scenes TerminalFullVirtualInstrumentedTest#fullVirtualAllScenesRemainVirtualWithRealGeometry 240
+  run_arm recovery-anchors TerminalFullVirtualInstrumentedTest#fullVirtualLockedFontsRtlImeAndReentryPreserveTheStableAnchor 180
+  run_arm recovery-copy TerminalFullVirtualInstrumentedTest#fullVirtualSelectionSystemMenuCopiesAWordAndOffscreenSelectAll 240
+  run_arm recovery-drag TerminalFullVirtualInstrumentedTest#fullVirtualSelectionHandleCrossesViewportWithoutLosingOffscreenText 240
+  run_arm recovery-mouse TerminalFullVirtualInstrumentedTest#fullVirtualMouseMappingIncludesOffscreenPhysicalOrigin 120
+  run_arm recovery-handoff TerminalFullVirtualInstrumentedTest#fullVirtualModeSwitchKeepsOldChoicesAndMeasuredReadPosition 180
+  adb logcat -d -v threadtime TerminalWidthRecovery:I TerminalFullVirtual:I '*:S' > artifacts/terminal-width-recovery-candidate/mechanism-logcat.txt
+  exit "$overall_status"
+fi
 if [ "$group" = widthRecovery ]; then
   mkdir -p artifacts/terminal-width-recovery
   adb logcat -G 8M

@@ -82,9 +82,12 @@ val syncViewportSources by tasks.registering(SyncViewportSources::class) {
     outputDirectory.set(layout.buildDirectory.dir("generated/viewportSources"))
     val mechanismProbe = providers.gradleProperty("terminalFullVirtualMechanism").orNull == "true"
     val contentCandidate = providers.gradleProperty("terminalFullVirtualContent").orNull == "true"
+    val recoveryCandidate = providers.gradleProperty("terminalWidthRecoveryCandidate").orNull == "true"
+    check(!recoveryCandidate || (!mechanismProbe && !contentCandidate)) { "P2 recovery never combines P0/P1 overlays" }
     check(!mechanismProbe || !contentCandidate) { "Select P0 or P1 instrumentation, never both" }
     inputs.property("terminalFullVirtualMechanism", mechanismProbe)
     inputs.property("terminalFullVirtualContent", contentCandidate)
+    inputs.property("terminalWidthRecoveryCandidate", recoveryCandidate)
     if (mechanismProbe) doLast {
         val result = ProcessBuilder("python3", "-B", rootProject.file(".github/scripts/terminal-full-virtual-mechanism.py").absolutePath,
             "instrument", "--directory", outputDirectory.get().asFile.absolutePath)
@@ -96,6 +99,12 @@ val syncViewportSources by tasks.registering(SyncViewportSources::class) {
             "instrument", "--directory", outputDirectory.get().asFile.absolutePath)
             .directory(rootProject.projectDir).inheritIO().start().waitFor()
         check(result == 0) { "Full virtual content candidate instrumentation failed" }
+    }
+    if (recoveryCandidate) doLast {
+        val result = ProcessBuilder("python3", "-B", rootProject.file(".github/scripts/terminal-width-recovery-candidate.py").absolutePath,
+            "instrument", "--directory", outputDirectory.get().asFile.absolutePath)
+            .directory(rootProject.projectDir).inheritIO().start().waitFor()
+        check(result == 0) { "P2 scalar-checkpoint candidate overlay failed" }
     }
 }
 val syncViewportResources by tasks.registering(SyncViewportSources::class) {

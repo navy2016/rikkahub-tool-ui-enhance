@@ -1,0 +1,127 @@
+--- a/app/src/main/java/me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndex.kt
++++ b/app/src/main/java/me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndex.kt
+@@ -58,6 +58,37 @@
+     private var metrics: Any? = null
+     private var screenGeneration: Long? = null
+     private var screenWidths: Map<Long, ScreenWidth> = emptyMap()
++    // UI-index lifetime only. Never copied into a worker, never contains frame/Text/layout/fonts.
++    private var parkedMainHistory: Checkpoint? = null
++    val retainedParkedHistoryCandidates: Int get() = parkedMainHistory?.retainedRows ?: 0
++    var fullVirtualRestoreVersion = 0L
++        private set
++
++    /** Full-virtual caller only, BEFORE cold-work selection or ALT's ordinary width() clears history. */
++    fun prepareFullVirtualHistory(frame: TerminalEmulator.RenderFrame, metricKey: Any, proof: Any?): Boolean {
++        val owned = frame.ownedRows()
++        if (proof == null || owned == null) {
++            parkedMainHistory = null
++            return false
++        }
++        if (frame.isAlternateScreen && !owned.includesHistory && frame.historyCount == 0) {
++            val saved = parkedMainHistory ?: checkpoint(proof, metricKey)
++            // Changes made while MAIN is hidden cannot be mistaken for a valid old font/source.
++            parkedMainHistory = saved?.takeIf {
++                it.proof == proof && it.source.owner === owned.history.owner &&
++                    it.source.generation == owned.history.generation &&
++                    it.source.renderRevision == owned.history.renderRevision && it.source.columns == owned.columns
++            }
++            return false
++        }
++        val saved = parkedMainHistory
++        parkedMainHistory = null // At most one restore per visit; failures cannot create a stale chain.
++        if (frame.isAlternateScreen || !owned.includesHistory || frame.historyCount == 0 ||
++            saved == null || saved.proof != proof || !sameHistorySource(saved.source, sourceOf(frame))) return false
++        return restore(saved, proof, metricKey) // clear()/epoch revoke any earlier speculative worker.
++    }
++
++    fun discardFullVirtualHistory() { parkedMainHistory = null; epoch++; fullVirtualRestoreVersion++ }
+     var lastMeasuredHistoryRows = 0
+         private set
+     var lastMeasuredScreenRows = 0
+@@ -72,7 +103,7 @@
+         private set
+     val retainedCandidates: Int get() = widest.size
+     val retainedScreenRows: Int get() = screenWidths.size
+-    val hasRetainedState: Boolean get() = source != null || metrics != null || widest.isNotEmpty() || screenWidths.isNotEmpty()
++    val hasRetainedState: Boolean get() = source != null || metrics != null || widest.isNotEmpty() || screenWidths.isNotEmpty() || parkedMainHistory != null
+     private var measuredFrame = java.lang.ref.WeakReference<TerminalEmulator.RenderFrame>(null)
+     var epoch = 0L
+         private set
+@@ -124,6 +155,8 @@
+     /** Release fonts/owner tokens as well as scalar candidates; work counters remain cumulative. */
+     fun clear() {
+         epoch++
++        fullVirtualRestoreVersion++
++        parkedMainHistory = null
+         measuredFrame.clear()
+         widest.clear()
+         source = null
+@@ -141,7 +174,10 @@
+         }
+ 
+     private fun canReuse(previous: Source?, next: Source?, metricKey: Any): Boolean =
+-        previous != null && next != null && metrics == metricKey &&
++        previous != null && next != null && metrics == metricKey && sameHistorySource(previous, next)
++
++    private fun sameHistorySource(previous: Source?, next: Source?): Boolean =
++        previous != null && next != null &&
+             previous.owner === next.owner && previous.generation == next.generation &&
+             previous.renderRevision == next.renderRevision && previous.columns == next.columns &&
+             previous.first >= 0 && next.first >= previous.first && next.end >= previous.end &&
+@@ -156,6 +192,7 @@
+      */
+     fun retainFor(frame: TerminalEmulator.RenderFrame, metricKey: Any) {
+         epoch++
++        parkedMainHistory = null
+         measuredFrame.clear()
+         clearScreen()
+         val previous = source
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalFullVirtualTranscript.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalFullVirtualTranscript.kt
+@@ -43,7 +43,8 @@
+     require(bound.virtualHistoryEnabled)
+     requireTerminalRenderPair(bound.pass, frame, rows)
+     val binding = bound.binding
+-    val preparedWidth = rememberTerminalPreparedWidth(frame, style, binding.widthIndex, binding.widthCheckpoint)
++    val preparedWidth = rememberTerminalPreparedWidth(frame, style, binding.widthIndex, binding.widthCheckpoint,
++        preserveMainAcrossAlternate = true)
+     val selection = remember(binding) { TerminalVirtualSelectionUi(binding) }
+     // Never retain the transient complete sparse list inside the endpoint provider.
+     val screen = if (rows is TerminalSparseRows) rows.screen else rows.subList(frame.historyCount, rows.size)
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalPreparedWidth.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalPreparedWidth.kt
+@@ -2,6 +2,7 @@
+ 
+ import android.os.Trace
+ import androidx.compose.runtime.Composable
++import androidx.compose.runtime.DisposableEffect
+ import androidx.compose.runtime.LaunchedEffect
+ import androidx.compose.runtime.SideEffect
+ import androidx.compose.runtime.getValue
+@@ -76,9 +77,15 @@
+     style: TextStyle,
+     index: TerminalTranscriptWidthIndex,
+     checkpoint: TerminalWidthCheckpointStore?,
++    preserveMainAcrossAlternate: Boolean = false,
+ ): Int? {
+     val metrics = terminalTextMetrics(style)
+     val proof = remember(metrics) { metrics.checkpointProof() }
++    if (preserveMainAcrossAlternate) {
++        // Scalar history only; ALT still uses the unchanged synchronous per-row width calculation.
++        index.prepareFullVirtualHistory(frame, metrics, proof)
++        DisposableEffect(index) { onDispose { index.discardFullVirtualHistory() } }
++    }
+     // Reading uses the binding's lease; a new mount cannot be overwritten by an old disposal.
+     val saved = remember(index, checkpoint) { checkpoint?.peek() }
+     var restored by remember(index, metrics) { mutableStateOf(false) }
+@@ -134,7 +141,9 @@
+         return null
+     }
+     // This path is bounded incremental work, or the untouched compatibility resolver path.
+-    val width = remember(index, TerminalFrameReference(frame), metrics, completed) {
++    // A restore/clear may revoke a width even when Compose revisits a previously seen frame.
++    val recoveryVersion = if (preserveMainAcrossAlternate) index.fullVirtualRestoreVersion else 0L
++    val width = remember(index, TerminalFrameReference(frame), metrics, completed, recoveryVersion) {
+         Trace.beginSection("Terminal.productionWidth")
+         try {
+             val measurer = TerminalRowWidthMeasurer(frame, resolveDefaults(style, metrics.direction),

@@ -54,3 +54,13 @@ CI-only Releasebuilds,existingnon-rootKVMharness;no hostpolicychanges/no localAn
 Mechanismguest startsfrom an explicitlymarked bootstrap manifest(noAPKproof),then realci.prepare
 replaces it afterrealappbuild. Native execution rejects bootstrap-only data. Five resolved
 runtimegraphs saved asbefore;drivers canuseFoundationprovidedbytargetAPK.
+
+## Baseline observed (97b0ef2 / run41177096610): COMPLETE
+
+32mechanismrecords/oneJUnit passed;exactunchangedhistory returnsrescan1000/10000rows. Native
+20windows(4warmup) passedall20system-frameassociations,withoriginalMAINhistoryidentity preserved.
+Input→draw medians refresh61.641/62.159ms vsreturn239.461/530.900ms (1k/10k);workerwidthCPU
+61.725/383.364ms onreturn,0onrefresh. RawJSON SHA256993b66ba2a32c7305cf779a20278428729a2014e7bbffc8bfe3b039baac467b3.
+Allraw2traces anddata independentlyrecomputed. Numbers quantifycurrentpathcost,NOTa proven
+optimizationsaving orphone claim. Next independentcandidate isdocumentedseparately in
+TERMINAL_WIDTH_RECOVERY_CANDIDATE.md;baseline files/assertions remainunchanged.

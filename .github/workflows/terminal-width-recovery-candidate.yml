@@ -1,0 +1,44 @@
+name: Full Virtual P2 Scalar Checkpoint Correctness
+on:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Validate isolated candidate contracts
+        run: python3 -B -m unittest discover -s .github/scripts -p test_terminal_width_recovery_candidate.py
+      - name: Run original and candidate Release JVM contracts on temporary overlay
+        run: |
+          chmod +x gradlew
+          python3 -B .github/scripts/terminal-width-recovery-candidate.py units
+      - name: Build generated-only Release fixture candidate
+        run: python3 -B .github/scripts/terminal-width-recovery-candidate.py fixtures
+      - name: Verify reuse invalidation disposal and six original interactions
+        run: python3 -B .github/scripts/terminal-width-recovery-candidate.py emulator
+      - name: Preserve original evidence without APK delivery
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-width-recovery-candidate-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-width-recovery-candidate/
+            artifacts/terminal-validation/
+            benchmarks/terminal-viewport-tests/build/outputs/androidTest-results/
+          if-no-files-found: error
+          retention-days: 30
