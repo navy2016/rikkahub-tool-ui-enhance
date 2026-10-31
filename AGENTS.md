@@ -395,6 +395,14 @@ P2首次挂载预检4dc2bf5/run41184883013成功4场景/0性能：80列25行，1
 不声称完整还原旧失败时序。v2配对固定此driver与原32c07c8候选，新320窗口不混入旧30。
 预检原报告SHA6c7be22f97374e0cd5ec8ccc045115c618c22e842654e7c5fe28ca38ce7b9344，生产未变。
 
+P2 v2 ecd34ca/run41185891968最终failure：pair2候选1k-hidden在首次挂载前配置又变空，
+`Configured LocalSettings never reached the test host`。日志明确先persisted/flow确认正确，
+随后failure时偏好空；200完整invocation窗口+失败invocation其他30窗口，只有2完整四场景pair。
+且已发现2处精确FrameMetrics缺失，不可宣称通过。全原件在paired-v2-original，relay41189758775/artifact13038165085。
+新增无性能启动诊断：RikkaHubApp.incrementLaunchCount读取旧Settings再整份update是具体覆盖路径。
+先4未加完成门槛+4等待本PID启动写日志+1明确受控旧副本重放，不改生产、不第三轮跑性能。
+协议benchmarks/TERMINAL_STARTUP_SETTINGS.md，suite=startupSettings。旧230窗口不得混入未来采样。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

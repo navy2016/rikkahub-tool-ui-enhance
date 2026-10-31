@@ -6,7 +6,7 @@ on:
       suite:
         description: 'Full page samples, transport preflight, or same-device AB/BA experiment'
         type: choice
-        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, tuiHistory, tuiHistoryOnly, tuiHistoryCompletion, fullVirtual, fullVirtualOnly, fullVirtualLatency, realClock, realClockSetup, altWidth, contentPaired, widthRecovery, widthRecoveryCandidate, widthRecoveryPaired, widthRecoverySetup, tracePreflight, versionRegression, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
+        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, tuiHistory, tuiHistoryOnly, tuiHistoryCompletion, fullVirtual, fullVirtualOnly, fullVirtualLatency, realClock, realClockSetup, altWidth, contentPaired, widthRecovery, widthRecoveryCandidate, widthRecoveryPaired, widthRecoverySetup, startupSettings, tracePreflight, versionRegression, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
         default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'
@@ -56,6 +56,9 @@ permissions:
   actions: read
 
 jobs:
+  startup-settings:
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'startupSettings' }}
+    uses: ./.github/workflows/terminal-startup-settings.yml
   width-recovery-setup:
     if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'widthRecoverySetup' }}
     uses: ./.github/workflows/terminal-width-recovery-setup.yml
@@ -179,7 +182,7 @@ jobs:
           note('Original pipeline failure callers', callers)
           PY
   pipeline:
-    if: ${{ inputs.evidence_run_id == '' && inputs.suite != 'paired' && inputs.suite != 'bundlePaired' && inputs.suite != 'tracePreflight' && inputs.suite != 'versionRegression' && inputs.suite != 'altWidth' && inputs.suite != 'contentPaired' && inputs.suite != 'widthRecovery' && inputs.suite != 'widthRecoveryCandidate' && inputs.suite != 'widthRecoveryPaired' && inputs.suite != 'widthRecoverySetup' }}
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite != 'paired' && inputs.suite != 'bundlePaired' && inputs.suite != 'tracePreflight' && inputs.suite != 'versionRegression' && inputs.suite != 'altWidth' && inputs.suite != 'contentPaired' && inputs.suite != 'widthRecovery' && inputs.suite != 'widthRecoveryCandidate' && inputs.suite != 'widthRecoveryPaired' && inputs.suite != 'widthRecoverySetup' && inputs.suite != 'startupSettings' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     env:

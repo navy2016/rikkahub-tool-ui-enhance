@@ -1,0 +1,44 @@
+name: Startup Settings Writer Diagnosis
+on:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Validate observation and replay boundaries
+        run: python3 -B -m unittest discover -s .github/scripts -p test_terminal_startup_settings.py
+      - name: Build pinned native test asset
+        run: python3 -B .github/scripts/build-terminal-proot.py
+      - name: Build unmodified Release-derived app and no-performance diagnosis
+        run: |
+          chmod +x gradlew
+          python3 -B .github/scripts/terminal-startup-settings.py build
+      - name: Observe fixed fresh-process settings writes and explicit stale-copy control
+        run: python3 -B .github/scripts/terminal-startup-settings.py run
+      - name: Preserve diagnostic originals without APK delivery
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-startup-settings-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-startup-settings/
+            artifacts/terminal-pipeline/
+            artifacts/terminal-validation/
+          if-no-files-found: error
+          retention-days: 30
