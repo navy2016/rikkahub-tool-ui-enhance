@@ -22,6 +22,10 @@ run_arm() {
   local arm_status=0
   local stage="$results_root/viewport-$arm"
   local log="artifacts/terminal-validation/instrumentation-$arm.log"
+  local extra=()
+  if [ "${TERMINAL_VIEWPORT_GROUP:-}" = fullVirtualMechanism ]; then
+    extra+=(-PterminalFullVirtualMechanism=true -PterminalPipelineTests=true)
+  fi
 
   # Keep each renderer's result tree independent. A stuck lazy arm must not erase the
   # completed eager arm or prevent the reporting step from seeing its 12 cases.
@@ -32,6 +36,7 @@ run_arm() {
   TERMINAL_TIMEOUT_LOG_PATH="$log" \
     python3 .github/scripts/run-terminal-with-timeout.py "$timeout_seconds" \
     bash .github/scripts/run-terminal-gradle.sh -PterminalViewportTests=true \
+      "${extra[@]}" \
       :benchmarks:terminal-viewport-tests:connectedReleaseAndroidTest \
       -Pandroid.testInstrumentationRunnerArguments.class="me.rerere.rikkahub.viewporttest.$test_class" \
       -Pandroid.testInstrumentationRunnerArguments.viewportLazyHistory="$arm" \
@@ -98,6 +103,13 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
+if [ "$group" = fullVirtualMechanism ]; then
+  mkdir -p artifacts/terminal-full-virtual-mechanism
+  adb logcat -G 8M
+  run_arm full-virtual-mechanism TerminalFullVirtualMechanismTest 520
+  adb logcat -d -v threadtime TerminalFullMechanism:I '*:S' > artifacts/terminal-full-virtual-mechanism/mechanism-logcat.txt
+  exit "$overall_status"
+fi
 if [ "$group" = cursorTiming ]; then
   mkdir -p artifacts/terminal-cursor-experiment
   run_arm cursor-draw-diagnostic TerminalFullVirtualCursorTimingDiagnosticTest 240

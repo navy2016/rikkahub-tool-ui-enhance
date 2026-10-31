@@ -1,0 +1,41 @@
+import groovy.json.JsonOutput
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
+import org.gradle.api.artifacts.result.UnresolvedDependencyResult
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+
+gradle.projectsEvaluated {
+    rootProject.tasks.register('terminalMechanismDependencies') {
+        doLast {
+            def selection = [
+                ':app': ['releaseRuntimeClasspath', 'terminaltestRuntimeClasspath', 'terminaltestAndroidTestRuntimeClasspath'],
+                ':benchmarks:terminal-viewport-tests': ['releaseRuntimeClasspath', 'releaseAndroidTestRuntimeClasspath']
+            ]
+            def report = [sourceSha: System.getenv('GITHUB_SHA'), runId: System.getenv('GITHUB_RUN_ID'), configurations: []]
+            selection.each { projectPath, names ->
+                def project = rootProject.project(projectPath)
+                names.each { name ->
+                    def config = project.configurations.findByName(name)
+                    if (config == null || !config.canBeResolved) {
+                        throw new GradleException("Missing resolvable ${projectPath}:${name}; available=" + project.configurations.findAll { it.canBeResolved }.collect { it.name })
+                    }
+                    def graph = config.incoming.resolutionResult
+                    def modules = graph.allComponents.findAll { it.id instanceof ModuleComponentIdentifier }.collect { c ->
+                        [group: c.id.group, module: c.id.module, version: c.id.version,
+                         reasons: c.selectionReason.descriptions.collect { it.description }]
+                    }.sort { a,b -> "${a.group}:${a.module}" <=> "${b.group}:${b.module}" }
+                    def failures = graph.allDependencies.findAll { it instanceof UnresolvedDependencyResult }
+                    if (!failures.isEmpty()) throw new GradleException('Unresolved graph entries: ' + failures.collect { it.attempted.displayName })
+                    def composeEdges = graph.allDependencies.findAll { d ->
+                        d instanceof ResolvedDependencyResult && d.selected.id instanceof ModuleComponentIdentifier &&
+                        d.selected.id.group.startsWith('androidx.compose')
+                    }.collect { d -> [from: d.from.id.displayName, requested: d.requested.displayName, selected: d.selected.id.displayName] }
+                    report.configurations.add([project: projectPath, configuration: name, modules: modules, composeEdges: composeEdges])
+                }
+            }
+            def dest = rootProject.file('artifacts/terminal-full-virtual-mechanism/resolved-dependencies.json')
+            dest.parentFile.mkdirs()
+            dest.text = JsonOutput.prettyPrint(JsonOutput.toJson(report)) + '\n'
+            println('Resolved runtime graphs captured without changing dependency constraints')
+        }
+    }
+}

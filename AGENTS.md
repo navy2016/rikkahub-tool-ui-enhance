@@ -325,6 +325,13 @@ ALT宽度候选结论不采用：f1211a5/run41152305179，43JVM+42字体oracle�
 下一独立假设是全虚拟ALT列表内容捕获新frame导致重复子组合；先验证内容身份/重组，
 不叠加已拒绝宽度缓存、不改默认模式或选择/鼠标行为。
 
+用户已确认总体方案，当前只推进FULL_VIRTUAL P0机制验证：生产仍55db111。
+Workflow terminal-viewport-interactions.yml/fullVirtualMechanism，只在generated/viewportSources
+的一份FullVirtualTranscript副本加非可观察计数；跟踪内容定义/区间/item提交/行组合/
+真实测量及Paragraph复用，25固定窗口，无性能时间指标、不含任何已拒绝缓存。
+同时CI保存正式Release/派生目标/驱动及fixture的5个运行时依赖图，不能以BOM推定实际版本。
+协议benchmarks/TERMINAL_FULL_VIRTUAL_MECHANISM.md；工作目录/workspace/terminal-review/full-virtual-mechanism/。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

@@ -80,6 +80,14 @@ val syncViewportSources by tasks.registering(SyncViewportSources::class) {
         "me/rerere/rikkahub/ui/theme/Type.kt",
     ))
     outputDirectory.set(layout.buildDirectory.dir("generated/viewportSources"))
+    val mechanismProbe = providers.gradleProperty("terminalFullVirtualMechanism").orNull == "true"
+    inputs.property("terminalFullVirtualMechanism", mechanismProbe)
+    if (mechanismProbe) doLast {
+        val result = ProcessBuilder("python3", "-B", rootProject.file(".github/scripts/terminal-full-virtual-mechanism.py").absolutePath,
+            "instrument", "--directory", outputDirectory.get().asFile.absolutePath)
+            .directory(rootProject.projectDir).inheritIO().start().waitFor()
+        check(result == 0) { "Full virtual generated-source instrumentation failed" }
+    }
 }
 val syncViewportResources by tasks.registering(SyncViewportSources::class) {
     sourceDirectory.set(rootProject.layout.projectDirectory.dir("app/src/main/res"))
