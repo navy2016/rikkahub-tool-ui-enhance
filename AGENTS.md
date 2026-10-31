@@ -535,6 +535,12 @@ inframe原页面回归86c5b411/run41248446341 success，原件离线验证：普
 当前inframe候选已49JVM+32机制离线恢复+原2页面交互通过，但还没有性能A/B与最终492/182回归，生产仍55，当前无CI运行。
 下一步单独冻结新性能协议(不得沿用P2成绩)，再比较原版/相同冻结候选，不能从机制结果直接宣称提速。
 
+用户继续后新建独立inframe性能协议benchmarks/terminal-inframe-performance/protocol.json。
+同bfa两文件候选，无probe/P2。固定4AB/BA×4场景×5轮×refresh/sync60/return=480窗口/96预热/384正式。
+主终点inputToBufferEvidenceNs，UI并列门禁，DisplayFrame结束守卫；普通主/UI≤.80且各>=3/4赢，
+sync/return主/UI与所有系统结束≤1.05。任何null不丢，含预热全480身份/提交/呈现完整才允许筛选通过。
+构建前只读复核49JVM+16callback/16fallback/2截前缀及两原页面原件，不重新采前置样本。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
