@@ -541,6 +541,11 @@ inframe原页面回归86c5b411/run41248446341 success，原件离线验证：普
 sync/return主/UI与所有系统结束≤1.05。任何null不丢，含预热全480身份/提交/呈现完整才允许筛选通过。
 构建前只读复核49JVM+16callback/16fallback/2截前缀及两原页面原件，不重新采前置样本。
 
+inframe性能协议冻结d1e5474188267d707018677514cfe99e2dca0695，SHA92a30fc4b284b046fd310bf28170fdf2fe1c5280b600cbf0efa311f67b811c0e。
+入口terminal-inframe-performance.py，suite=inframePerformance，driver TerminalInFramePerformanceTest。
+源码差异验证支持Page变更+新增helper(原版不存在)，不误要求两个source键集合完全相同；实际资源和驱动仍同hash。
+工作目录/workspace/terminal-review/full-virtual-inframe-performance-v1；324主机检查通过，尚待完整性能结果，不自动采用。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

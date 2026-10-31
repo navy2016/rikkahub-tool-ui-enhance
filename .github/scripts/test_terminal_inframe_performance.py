@@ -61,4 +61,33 @@ class InFramePerformanceContracts(unittest.TestCase):
                     for row in group['rows']:
                         if row['condition']=='refresh':row['inputToBufferEvidenceNs']=10 if inv['pair']<2 else 61000
         self.assertFalse(m.aggregate(data)['passesFrozenPerformanceScreen'])
+    def test_source_scope_allows_only_one_changed_and_one_added_file(self):
+        m.guard();spec=m.candidate.spec()['files'];shared={'common':'fixed'}
+        a=dict(shared);b=dict(shared)
+        for name,h in spec.items():
+            if h['base'] is not None:a[name]=h['base']
+            b[name]=h['candidate']
+        manifests=dict(legacy=dict(sources=a),candidate=dict(sources=b));m.verify_sources(manifests)
+        b['extra']='different'
+        with self.assertRaises(ValueError):m.verify_sources(manifests)
+    def test_old_failed_mechanism_status_is_not_relabeled(self):
+        p=m.protocol();self.assertEqual('failure',p['prerequisites']['mechanismOriginalConclusion'])
+        self.assertEqual('success',p['prerequisites']['pageConclusion']);self.assertFalse(p['rejectedP2Included'])
+    def test_driver_has_exact_frozen_three_action_order_and_clock(self):
+        text=(m.ROOT/m.TEST).read_text();p=m.protocol()
+        for i,conditions in enumerate(p['matrix']['conditionOrder']):
+            self.assertIn(str(i)+' -> listOf('+','.join('"'+c+'"' for c in conditions)+')',text)
+        self.assertIn('sleep 0.060',text);self.assertIn('clock=SystemClock::elapsedRealtimeNanos',text)
+        self.assertIn('val closed=tailEnd',text);self.assertIn('for(round in 0..4)',text)
+        self.assertNotIn('mainClock',text);self.assertNotIn('INFRAME_CALLBACK',text)
+    def test_cli_after_all_function_definitions(self):
+        import ast
+        self.assertIsInstance(ast.parse(Path(m.__file__).read_text()).body[-1],ast.If)
+    def test_manifest_sources_stable_across_reporter_switch(self):
+        import types
+        before=m.sources();old=m.ci.real_clock
+        try:
+            m.ci.real_clock=types.SimpleNamespace(TEST=m.real.TEST)
+            self.assertEqual(before,m.sources())
+        finally:m.ci.real_clock=old
 if __name__=='__main__':unittest.main()

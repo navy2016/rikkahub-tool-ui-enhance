@@ -1,0 +1,51 @@
+name: In-frame Publication Full Performance Comparison
+on:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  paired:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify frozen480window matrix and null-safe performance gates
+        run: |
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_inframe_performance.py
+          python3 -B .github/scripts/terminal-inframe-performance.py guard
+      - name: Recheck existing mechanism and page originals without new device samples
+        run: python3 -B .github/scripts/terminal-inframe-performance.py prerequisites
+      - name: Build pinned shared native test asset
+        run: python3 -B .github/scripts/build-terminal-proot.py
+      - name: Build unprobed Release-derived baseline candidate and one driver
+        run: |
+          chmod +x gradlew
+          python3 -B .github/scripts/terminal-inframe-performance.py build
+      - name: Run four paired launches with refresh synchronization and alternate return
+        run: python3 -B .github/scripts/terminal-inframe-performance.py experiment
+      - name: Preserve all fixed observations nulls and original traces without APK delivery
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-inframe-performance-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-inframe-performance/
+            artifacts/terminal-pipeline/manifest.json
+            artifacts/terminal-pipeline/proot-overlay.json
+            artifacts/terminal-validation/
+          if-no-files-found: error
+          retention-days: 30
