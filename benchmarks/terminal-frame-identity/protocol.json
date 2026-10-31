@@ -1,0 +1,68 @@
+{
+  "id": "terminal-frame-identity-v1",
+  "stage": "collector-qualification-not-optimization",
+  "baseProductionSha": "55db111129c662067345aa99540b506de305da37",
+  "baseProductionTree": "8caf50d5c40e228f1d5bcc09d3db505757568b68",
+  "clocks": {
+    "pipelineAndDriver": "CLOCK_BOOTTIME",
+    "ftrace": "boot-only; omitted-or-zero ftrace_clock",
+    "frameTimeline": "BUILTIN_CLOCK_BOOTTIME=6",
+    "frameMetrics": "raw token identity only; public Vsync is MONOTONIC, never compared to BOOTTIME"
+  },
+  "matrix": {
+    "cases": ["identity-1000-hidden", "identity-1000-shown", "identity-10000-hidden", "identity-10000-shown"],
+    "roundsPerCase": 4,
+    "conditions": ["refresh", "return"],
+    "order": "even round refresh-return; odd round return-refresh",
+    "windows": 32,
+    "performanceWarmups": 0,
+    "responseAndFirstAttemptDeadlineNs": 25000000000,
+    "naturalObservationTailNs": 500000000,
+    "maxAttemptRecordsPerWindow": 128
+  },
+  "attempt": {
+    "event": "FRAME_DRAWN",
+    "revision": "exact final EMULATOR_FED revision; record but do not qualify other revisions",
+    "clock": "CLOCK_BOOTTIME",
+    "uiIdentity": "entire callback timestamp lies inside exactly one complete main-thread Choreographer#doFrame token span",
+    "recordAll": true
+  },
+  "submission": {
+    "identity": "same token in exactly one RT DrawFrames task; one setFrameTimelineInfo mapping for expected VRI queue and frameNumber; same frameNumber in nested BLAST acquireNextBufferLocked; swap and Drawing spans; one is_buffer=true SurfaceFrame",
+    "endpoint": "bufferEvidenceNs=BLAST acquireNextBufferLocked trace begin, a named evidence point, not physical visibility or exact driver queue insertion",
+    "noSubmission": "complete RT task contains syncFrameState but no Drawing/mapping/acquire/swap and no matching SurfaceFrame",
+    "selection": "earliest qualified attempt having its own complete submission evidence; never attach later RT-only work to an earlier attempt"
+  },
+  "presentation": {
+    "identity": "submitted attempt's exact PID/token SurfaceFrame cookie end and exact display_frame_token DisplayFrame cookie end",
+    "endpoint": "DisplayFrame end in BOOTTIME, system composition endpoint, not photon time or first visible text",
+    "presentTypes": [1, 2, 3],
+    "droppedType": 4,
+    "unknownType": 5
+  },
+  "states": {
+    "attempt": ["QUALIFIED", "OTHER_REVISION", "AFTER_WINDOW"],
+    "submission": ["SUBMITTED", "NO_SUBMISSION", "UNKNOWN", "AMBIGUOUS"],
+    "presentation": ["PRESENTED", "DROPPED", "NOT_APPLICABLE", "UNOBSERVED", "AMBIGUOUS"],
+    "metrics": ["BOTH_EXACT", "ONE_EXACT", "ABSENT", "CONFLICT"]
+  },
+  "integrity": {
+    "requireStartupWriteCompletionBeforeTestSettings": true,
+    "requirePersistedFlowAndActualFirstLocalSettings": true,
+    "requireExactResponseBytesAndUnchangedHistory": true,
+    "requireSameBootAndVerifiedInstalledApks": true,
+    "rejectLostFtraceOrParseErrorsOrRelevantUnclosedSpans": true,
+    "rejectDuplicateClockOrCookieOrTaskIdentities": true,
+    "retainNoSubmissionDroppedAndMissingNotifications": true,
+    "missingPresentationValue": null,
+    "neverDropOrReplaceSamples": true
+  },
+  "boundaries": {
+    "noPublicCommitCallbackAsProof": true,
+    "noNearestFrameOrPriorMetricOrLaterAnimationSubstitution": true,
+    "noArtificialDrawInsideObservation": true,
+    "noRetroactiveP2Acceptance": true,
+    "noOptimizationAdoptionGateInThisProtocol": true,
+    "futurePerformanceRequiresSeparatePreregisteredCompleteExperiment": true
+  }
+}

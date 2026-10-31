@@ -432,6 +432,13 @@ FrameMetricsAudit ee236bf/run41195130931成功192draw/192commit，全部rawtoken
 当前没有CI在运行，P2仍未合入/无新APK。下一步应先冻结独立的draw/submission/presentation分层协议，
 不能修改旧v2的FrameMetrics门禁或用相邻帧补齐；也不反复诊断到想要的成绩。
 
+用户继续后进入独立terminal-frame-identity-v1采集资格协议，不是P2第三轮性能：
+benchmarks/terminal-frame-identity/protocol.json 固定32窗口(1k/10k×IME，4轮刷新/返回)、500ms自然尾部。
+流水线和driver显式统一BOOTTIME；精确UI token→RT任务→VRI/frameNumber→BLAST取帧→SF/Display。
+分别保存UI尝试、实际buffer证据、系统结束；缺统计与无提交分开，禁止借用RT动画/最近帧/公开commit。
+旧P2保持失败。先冻结协议/解析状态机+确定性测试，再一次未改生产的CI资格验证；不构建候选。
+工作目录/workspace/terminal-review/frame-identity-v1/；旧375文件P2证据包及检查点不改写。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

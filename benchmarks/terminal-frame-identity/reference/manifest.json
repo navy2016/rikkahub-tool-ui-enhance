@@ -1,0 +1,20 @@
+[
+  {
+    "repo": "google/perfetto",
+    "commit": "4995f83afb3545bc1b94a27c15329529d32ed21b",
+    "path": "protos/perfetto/trace/ftrace/ftrace_event_bundle.proto",
+    "sha256": "c8d9c8d13ae811821b22db92d49ad08acafd00a97896777ec9eef9473d5e39e1"
+  },
+  {
+    "repo": "google/perfetto",
+    "commit": "4995f83afb3545bc1b94a27c15329529d32ed21b",
+    "path": "protos/perfetto/trace/clock_snapshot.proto",
+    "sha256": "90c94de705e5427afb905c1df7ca84921bf3b52d6312751ee5c9587862c76bf5"
+  },
+  {
+    "repo": "google/perfetto",
+    "commit": "4995f83afb3545bc1b94a27c15329529d32ed21b",
+    "path": "protos/perfetto/common/builtin_clock.proto",
+    "sha256": "ae1d1542bc0a1f1fbd29d9351f19e2a86bd8add28c8e06ef662a7beadb8226fe"
+  }
+]
