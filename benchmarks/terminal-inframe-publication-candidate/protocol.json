@@ -1,0 +1,49 @@
+{
+  "id": "terminal-inframe-publication-candidate-v1",
+  "stage": "candidate-boundaries-and-mechanism-not-performance",
+  "baseProductionSha": "55db111129c662067345aa99540b506de305da37",
+  "baseTree": "8caf50d5c40e228f1d5bcc09d3db505757568b68",
+  "diagnosisRun": 41221492776,
+  "diagnosisReportSha256": "31fba331ba8ef6912aa08c07dda6dbd4efadfa323968dd731cff7cec6aa965af",
+  "candidateFiles": 2,
+  "rejectedP2Included": false,
+  "eligibility": ["FULL_VIRTUAL", "native notification owner", "active publication job and context", "attached", "main thread", "not selecting", "no pending resize", "no redraw hold", "no forced blank", "notification SYNC false", "current Snapshot writable"],
+  "publish": "original latestPublishTerminalFrame(false,false), with original emulator-lock SYNC recheck and Snapshot transaction",
+  "pending": "clear before callback capture only; keep new notifications after successful capture; restore on refusal; original continuation untouched on fallback",
+  "protectedPaths": ["synchronized-output guard and timeout", "resize settling and fallback", "50ms forced-blank grace", "failed capture retry", "cancellation", "non-FULL modes", "selection", "input byte/FIFO", "one scroll writer"],
+  "jvm": {
+    "candidateMethods": 12,
+    "existingRenderSnapshotMethods": 8,
+    "existingRenderedRowsMethods": 29,
+    "totalMethods": 49,
+    "guardVectors": 2048,
+    "lateCancelledCallbackMustNotPublish": true,
+    "notificationsDuringCaptureMustSurvive": true
+  },
+  "device": {
+    "cases": ["inframe-1000-hidden", "inframe-1000-shown", "inframe-10000-hidden", "inframe-10000-shown"],
+    "rounds": 4,
+    "conditions": ["refresh", "sync"],
+    "order": "even refresh-sync, odd sync-refresh",
+    "windows": 32,
+    "syncPeerHoldMs": 60,
+    "naturalTailNs": 500000000,
+    "all16OrdinaryMustPublishInsideOwnFrameCallback": true,
+    "all16SyncControlsMustTakeOriginalFallback": true,
+    "exactBytesRevisionHistoryGridImeRequired": true,
+    "noDuplicatePublicationForResponseRevision": true
+  },
+  "probe": {
+    "clock": "BOOTTIME via existing trace capture; production MONOTONIC unchanged",
+    "locations": ["frame-wait start", "callback start/end", "eligibility result", "in-frame publish call/result", "continuation", "original fallback sync and resize guards", "original fallback publish", "blank wait", "existing publication stages"],
+    "stripToCandidateBytesRequired": true,
+    "traceOnlyInstrumentationIsNotShippingCandidate": true
+  },
+  "limits": {
+    "noLocalAndroidBuild": true,
+    "noPerformanceClaimOrAdoption": true,
+    "noAutomaticRetries": true,
+    "noDefaultModeChange": true,
+    "laterFullPerformanceAndRegressionRequired": true
+  }
+}

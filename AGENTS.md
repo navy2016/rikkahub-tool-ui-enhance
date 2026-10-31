@@ -496,6 +496,14 @@ H1“只是帧信号等待主导”不完整，H2本矩阵成立。未改生产�
 工作目录full-virtual-publication-wait，report原SHA31fba331ba8ef6912aa08c07dda6dbd4efadfa323968dd731cff7cec6aa965af。
 原urllib CDN TLS reset时已用该目录read_members_curl.py保持严格206/Content-Range取同一artifact，不是重采样。
 
+用户继续后设计独立in-frame publication候选，目录benchmarks/terminal-inframe-publication-candidate/；不含P2。
+生产仍55。candidate.patch只改Page，新增helper以单独hash固定源码CI临时安装；12新JVM测试也只在CI拷入app test，
+普通checkout没有引用不存在helper的测试。页面renderTerminalFrame和fallback同步/resize/blank字节保持可逆；仅安全时在callback调用原publisher(false,false)。
+守卫：FULL/native owner/active job+context/attached/main/nonselection/no pending resize/no redraw hold/no forced blank/nonSYNC/可写Snapshot。
+pending只在capture前清理，成功之后的新通知不得再清；refusal恢复pending，旧continuation继续原路径。
+首次目标49 JVM(12新+8RenderSnapshot+29RenderedRows)，32真实refresh/sync机制窗口；不跑优化A/B、无收益断言。
+工作目录/workspace/terminal-review/full-virtual-inframe-publication；候选与probe均有逆变换检查。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
