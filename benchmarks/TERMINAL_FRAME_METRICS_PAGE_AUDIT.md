@@ -1,0 +1,25 @@
+# One fixed two-observer terminal collector diagnosis, not another optimization trial
+
+PlainView collector audit ee236bf40a154be71aa29d73abfb3f8406dc05d4/run41195130931 passed:
+96paced+96vsyncdraws,192commits,allrawtoken/publicVsyncidentities agree. Callbackdrops0,
+getter/rawdisagreements0. ReportSHA1aaf53e9b7133d4cbe0521b8161b85457f021eaabe2cf444dac45bc9d6831a67.
+It didNOTreproduce previous terminalgaps anddoesnotretroactivelyvalidate missingrecords.
+
+Nextfixeddiagnosis:unchanged55production withreal10kterminal,IMEhidden/shown;20alternating
+refresh/ALT-return roundspercase =80windows total. SamecurrentP2trace transport,notP2A/B:
+thereisno candidatetarget,no gainthresholdandnoreplacement loop. Timing events areforframe
+identity only;report iscollectorDiagnosisOnly/performanceMeasured=false.
+
+Before ANYtestsettingswrite waitforthisPID'sexistingRikkaHubApp.incrementLaunchCount completion
+log,asstartupdiagnosis a2dc738/run41192017536 verified. Thenretain persisted/flow/actualfirst
+LocalSettings barriers. No productionSettingsStore orstartupwriter change.
+
+TwoWindow.OnFrameMetricsAvailableListeners,eachwithownHandlerThread,are registeredbeforethe
+setup/seed phase. Eachsynchronouslycopies raw23longFrameMetrics bufferplus publicVsync data.
+Afterexactdraw→gfxinterval association comparebothqueues usingrawtoken/publicVsync separately:
+both-exact,one-only,neither,ambiguous. ExactSF/Displaytokens retainedindependently. No previous-
+frameborrowing;missingcallbacks remainmissing. Twoobserveroverhead mayaffectscheduling,so a
+complete80samplecapture stillwouldnotdisprove priorrarergaps orprovephone performance.
+
+CurrentP2v1/v2 remainfailed andcandidateunadopted. Missingreproduction isnot a reason to
+repeatthiscollectorworkload untila desiredoutcome. Reportbothpositiveandnegative observations.

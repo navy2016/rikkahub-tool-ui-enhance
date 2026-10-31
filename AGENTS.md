@@ -417,6 +417,12 @@ SurfaceStats回调查4元素ring，查不到不发Java FrameMetrics，Java dropC
 正准备独立FrameMetricsAudit：未改生产+自定义View，96 paced/96 vsync请求，原始23long数组+
 publicVsync+commit回调+gfx/SF采集，缺失照留不补帧，不是新P2性能轮次。协议TERMINAL_FRAME_METRICS_AUDIT.md。
 
+FrameMetricsAudit ee236bf/run41195130931成功192draw/192commit，全部rawtoken与publicVsync一致，
+0drop/0getter分歧；未复现终端缺失，不是P2通过。现在准备frameMetricsPageAudit固定80窗口：
+10k原版真实页hidden/shown，各20刷新/返回轮，2独立listener/Handler队列同步原始数组；不构建候选。
+先等待本PID启动计数写回执再配置，保留原3层首挂载门槛。若两边同缺失再定位通知前路径。
+新驱动TerminalFrameMetricsPageAuditTest，协议TERMINAL_FRAME_METRICS_PAGE_AUDIT.md；不反复补样。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

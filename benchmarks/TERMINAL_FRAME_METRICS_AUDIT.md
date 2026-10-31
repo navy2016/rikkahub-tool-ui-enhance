@@ -28,3 +28,9 @@ Reportexact-IDcategories:bothsame,rawtoken-only,publicVsync-only,neither,ambiguo
 bytargetPID/token,notnearesttime. No expectationthatplainView mustreproduceCompose/PTyfailure.
 Workflow success meansdiagnostic inventory completed,NOTthatpreviousmissingframesnowexist or
 P2performancepasses. Nomodification ofglobalgraphicsflags/systemimage/production/candidate.
+
+Result ee236bf/run41195130931:192draws/192commits,all192both-exact-same-metric;public/raw
+disagreements0,callbackdrops0,lostftracebundles0. This simpleView didnotreproduce terminalgaps.
+ReportSHA1aaf53e9b7133d4cbe0521b8161b85457f021eaabe2cf444dac45bc9d6831a67;rawtraceSHA
+751fff923ed506d931f2710c05a0bed812d630b75df87e69e6583cd5e555b4b8. Nextcollector-onlyprotocol:
+TERMINAL_FRAME_METRICS_PAGE_AUDIT.md. No change toprevious performancegates.
