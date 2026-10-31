@@ -44,6 +44,36 @@ class P2IdentityPerformanceContracts(unittest.TestCase):
     def test_unknown_identity_cannot_be_accepted_with_numeric_endpoints(self):
         inv=fixture();inv[0]['result']['classifications'][0]['rows'][3]['identityDecidable']=False
         self.assertFalse(m.aggregate(inv)['passesFrozenPerformanceScreen'])
+    def test_protocol_and_parser_are_pinned_to_prior_commits(self):
+        m.guard();self.assertEqual('3f4b031fb73dc16cdb41ae0775edf30fa664f17d',m.FREEZE_SHA)
+        self.assertEqual('767756fdd1a3f069aee3adb98b1a09f014b3d3d2',m.protocol()['identityParserSha'])
+    def test_driver_has_same_sampling_mechanism_as_qualified_driver(self):
+        original=(m.ROOT/'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalFrameIdentityQualificationTest.kt').read_text()
+        expected=original.replace('class TerminalFrameIdentityQualificationTest :','class TerminalP2IdentityPerformanceTest :')
+        for name in ('OneThousandHidden','OneThousandShown','TenThousandHidden','TenThousandShown'):
+            expected=expected.replace('@Test fun identity'+name+'()', '@Test fun p2Identity'+name+'()')
+        expected=expected.replace('val case="identity-$size-', 'val case="p2identity-$size-').replace('for(round in 0..3)','for(round in 0..4)')
+        expected=expected.replace('.put("warmup",false)', '.put("warmup",round==0)')
+        expected=expected.replace('.put("collectorDiagnosisOnly",true).put("performanceMeasured",false).put("protocolId","terminal-frame-identity-v1")',
+            '.put("collectorDiagnosisOnly",false).put("performanceMeasured",true).put("protocolId","terminal-p2-identity-performance-v1")')
+        expected=expected.replace('// Qualification endpoint A is a UI attempt, not proof of a submitted buffer.',
+            '// Endpoint A is a UI attempt; primary B requires its own exact buffer chain.')
+        self.assertEqual(expected,(m.ROOT/m.TEST).read_text())
+    def test_cli_entrypoint_after_all_functions(self):
+        import ast
+        tree=ast.parse(Path(m.__file__).read_text());self.assertIsInstance(tree.body[-1],ast.If)
+    def test_swapped_reporter_does_not_change_source_inventory(self):
+        import types
+        before=m.sources();old=m.ci.real_clock
+        try:
+            m.ci.real_clock=types.SimpleNamespace(TEST=m.real.TEST)
+            self.assertEqual(before,m.sources())
+        finally:m.ci.real_clock=old
+    def test_prerequisite_does_not_relabel_historical_failure(self):
+        p=m.protocol();self.assertEqual('failure',p['qualification']['originalConclusion'])
+        source=Path(m.__file__).read_text();self.assertIn('noNewDeviceSamples=True',source)
+        self.assertIn('fullResultSha256=ci.digest(full)',source)
+        self.assertIn("(ROOT/name).write_bytes(raw)",source)
     def test_missing_or_reordered_pairs_rejected(self):
         for inv in (fixture()[:-1],list(reversed(fixture()))):
             with self.assertRaises(ValueError):m.aggregate(inv)

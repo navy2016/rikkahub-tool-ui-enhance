@@ -1,0 +1,51 @@
+name: P2 Exact Buffer Identity Performance
+on:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  paired:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify preregistered primary endpoint missing-value policy and source scope
+        run: |
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_p2_identity_performance.py
+          python3 -B .github/scripts/terminal-p2-identity-performance.py guard
+      - name: Recompute existing qualification evidence without running Android
+        run: python3 -B .github/scripts/terminal-p2-identity-performance.py prerequisite
+      - name: Build pinned shared PRoot test asset
+        run: python3 -B .github/scripts/build-terminal-proot.py
+      - name: Build two Release-derived targets and one shared driver
+        run: |
+          chmod +x gradlew
+          python3 -B .github/scripts/terminal-p2-identity-performance.py build
+      - name: Run fixed four AB-BA pairs on one boot with exact frame identity
+        run: python3 -B .github/scripts/terminal-p2-identity-performance.py experiment
+      - name: Preserve all originals fixed matrices nulls and audit records without APK delivery
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-p2-identity-performance-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-p2-identity-performance/
+            artifacts/terminal-pipeline/manifest.json
+            artifacts/terminal-pipeline/proot-overlay.json
+            artifacts/terminal-validation/
+          if-no-files-found: error
+          retention-days: 30

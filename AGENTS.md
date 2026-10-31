@@ -460,6 +460,12 @@ benchmarks/terminal-p2-identity-performance/protocol.json：主终点input→精
 FrameMetrics可双/单/无通知独立记录但CONFLICT失败；必须有真实提交/呈现链，绝非追认旧门槛。
 构建前先读取既有qualification artifact离线复核32/64/12，不重采。全局源码及P2三文件候选保持不变。
 
+新性能协议冻结提交3f4b031fb73dc16cdb41ae0775edf30fa664f17d；JSON SHA256
+99a3281c6646b4cbe22964d293774d0f8cbb12091a2a1bc0558109f925b4368f。实现为terminal-p2-identity-performance.py，
+driver TerminalP2IdentityPerformanceTest，suite=p2IdentityPerformance。共享driver/资源，两目标只3文件差异；
+原始case数据每invocation保存在result.json，聚合引用其hash避免重复膨胀，不删除任何原始数据。
+工作目录/workspace/terminal-review/p2-identity-performance-v1；288主机契约通过；旧P2/资格报告均不重写。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
