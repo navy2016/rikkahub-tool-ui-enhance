@@ -1,0 +1,46 @@
+name: In-frame Publication Candidate Boundaries
+on:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify candidate source scope original fallback and probe inverse
+        run: |
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_inframe_publication.py
+          python3 -B .github/scripts/terminal-inframe-publication.py guard
+      - name: Build pinned native test asset
+        run: python3 -B .github/scripts/build-terminal-proot.py
+      - name: Run49ReleaseJVMboundaries then build traced Release-derived candidate
+        run: |
+          chmod +x gradlew
+          python3 -B .github/scripts/terminal-inframe-publication.py build
+      - name: Verify fixed32real-page ordinary and sync-control windows
+        run: python3 -B .github/scripts/terminal-inframe-publication.py run
+      - name: Preserve all candidate boundary evidence without APK delivery
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-inframe-publication-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-inframe-publication/
+            artifacts/terminal-pipeline/
+            artifacts/terminal-validation/
+          if-no-files-found: error
+          retention-days: 30

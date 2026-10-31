@@ -504,6 +504,12 @@ pending只在capture前清理，成功之后的新通知不得再清；refusal�
 首次目标49 JVM(12新+8RenderSnapshot+29RenderedRows)，32真实refresh/sync机制窗口；不跑优化A/B、无收益断言。
 工作目录/workspace/terminal-review/full-virtual-inframe-publication；候选与probe均有逆变换检查。
 
+in-frame候选/协议冻结bfa29900798d6bb591c66da543859aaa37361dd7；协议SHA884495008f0760ece6b96de9293dcb320e0cabfd7d924cae8c18e8a42b4549c2。
+已有新driver TerminalInFramePublicationTest；suite=inframePublication；49 JVM(12新+8+29)与32机制窗口，307主机测试通过。
+新增可写Snapshot守卫，11布尔条件2048组合，真实取消迟到callback和新通知下一帧用HeldFrameClock测。
+CI先plain候选testReleaseUnitTest，再仅追踪探针Release派生APK；构建后Page/Trace恢复、helper和临时unit移除，生产不改。
+普通16窗口必须在自己的callback及同Choreographer帧里发布；sync16必须原active guard回退；任一失败保留原件不补样。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

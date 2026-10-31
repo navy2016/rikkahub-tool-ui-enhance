@@ -27,4 +27,40 @@ class InFrameSourceContracts(unittest.TestCase):
         self.assertEqual({m.PAGE,m.HELPER},set(m.spec()['files']))
         self.assertIsNone(m.spec()['files'][m.HELPER]['base']);self.assertFalse((m.ROOT/m.HELPER).exists())
         self.assertEqual(49,m.protocol()['jvm']['totalMethods'])
+    def test_native_driver_has_same_inputs_and_timing_as_diagnosis(self):
+        old=(m.ROOT/'app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPublicationWaitTest.kt').read_text()
+        expected=old.replace('class TerminalPublicationWaitTest :','class TerminalInFramePublicationTest :')
+        for suffix in ('OneThousandHidden','OneThousandShown','TenThousandHidden','TenThousandShown'):
+            expected=expected.replace('@Test fun publication'+suffix+'()', '@Test fun inframe'+suffix+'()')
+        expected=expected.replace('val case="publication-$size-', 'val case="inframe-$size-')
+        expected=expected.replace('.put("protocolId","terminal-publication-wait-v1")','.put("protocolId","terminal-inframe-publication-candidate-v1")')
+        self.assertEqual(expected,(m.ROOT/m.TEST).read_text())
+    def test_compile_source_inventory_only_adds_helper_when_overlay_exists(self):
+        import types
+        source=m.sources();self.assertNotIn(m.HELPER,source);old=m.ci.real_clock
+        try:
+            m.ci.real_clock=types.SimpleNamespace(TEST=m.real.TEST)
+            self.assertEqual(source,m.sources())
+        finally:m.ci.real_clock=old
+    def test_cli_after_definitions(self):
+        import ast
+        tree=ast.parse(Path(m.__file__).read_text());self.assertIsInstance(tree.body[-1],ast.If)
+    def test_ordinary_publication_must_be_inside_its_own_callback(self):
+        class Index:
+            def ui_for(self,ns):return [dict(token=7,startNs=0,endNs=200)] if 0<=ns<=200 else []
+        stages=['INFRAME_CALLBACK_START','INFRAME_ELIGIBLE','INFRAME_PUBLISH_CALL','FRAME_PUBLISHED','INFRAME_PUBLISH_RESULT','INFRAME_CALLBACK_END']
+        events=[dict(stage=name,seq=i+1,ns=(i+1)*10,revision=5,flag=True) for i,name in enumerate(stages)]
+        sample=dict(events=events,fedRevision=5,phase='r0-refresh',condition='refresh')
+        self.assertTrue(m.classify(sample,Index())['callbackPublication'])
+        events[3]['ns']=300
+        with self.assertRaises(ValueError):m.classify(sample,Index())
+    def test_sync_must_keep_active_original_guard(self):
+        class Index:
+            def ui_for(self,ns):return []
+        names=['INFRAME_CALLBACK_START','INFRAME_ELIGIBLE','INFRAME_CALLBACK_END','INFRAME_FALLBACK_SYNC_START','INFRAME_FALLBACK_SYNC_END','INFRAME_FALLBACK_CALL','FRAME_PUBLISHED']
+        events=[dict(stage=n,seq=i+1,ns=(i+1)*10,revision=5,flag=n in ('INFRAME_FALLBACK_SYNC_START','INFRAME_FALLBACK_SYNC_END')) for i,n in enumerate(names)]
+        sample=dict(events=events,fedRevision=5,phase='r0-sync',condition='sync')
+        self.assertTrue(m.classify(sample,Index())['fallbackPublication'])
+        events[3]['flag']=False
+        with self.assertRaises(ValueError):m.classify(sample,Index())
 if __name__=='__main__':unittest.main()
