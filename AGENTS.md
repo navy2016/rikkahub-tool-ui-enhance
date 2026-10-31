@@ -453,6 +453,13 @@ Perfetto协议明确首包flag证明无前置loss；解析修正仅此精确bare
 原件/workspace/terminal-review/frame-identity-v1/original，恢复offline-recovery.json，原报告SHA
 70d13539d99b2384738d403bbe6fdbdab86d848d549508dc603a936ef5ba33fd。后续须新性能协议，P2未采用/生产55未变。
 
+用户继续后进入独立P2 identity-performance：先冻结机器协议与聚合器，再采全新矩阵；不改旧P2失败。
+benchmarks/terminal-p2-identity-performance/protocol.json：主终点input→精确BLAST取帧证据，UI尝试并列门禁、
+系统DisplayFrame结束守卫。4AB/BA×4场景×5轮刷新/返回=320/64预热；返回主/UI≤.80且各>=3/4赢，
+刷新主/UI和系统≤1.05。任一正式null传染该侧中位数及最终比值，含预热全320须可判定且有提交/呈现。
+FrameMetrics可双/单/无通知独立记录但CONFLICT失败；必须有真实提交/呈现链，绝非追认旧门槛。
+构建前先读取既有qualification artifact离线复核32/64/12，不重采。全局源码及P2三文件候选保持不变。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

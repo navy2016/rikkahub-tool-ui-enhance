@@ -1,0 +1,89 @@
+{
+  "id": "terminal-p2-identity-performance-v1",
+  "purpose": "new complete P2 controlled comparison; never complete or relabel old P2 v1/v2",
+  "productionSha": "55db111129c662067345aa99540b506de305da37",
+  "productionTree": "8caf50d5c40e228f1d5bcc09d3db505757568b68",
+  "candidateCorrectnessRun": 41180293887,
+  "candidateCorrectnessSha": "32c07c8b6cf504cbd62a8c07a7e795cdf3f2acb8",
+  "candidatePatch": "benchmarks/terminal-width-recovery-candidate/candidate.patch",
+  "candidateFiles": 3,
+  "identityProtocolSha256": "8205b614f689ceaa0553aefa1323a56ca1bcd939ec8ffefe66726095e02c43b9",
+  "identityParserSha": "767756fdd1a3f069aee3adb98b1a09f014b3d3d2",
+  "qualification": {
+    "run": 41206196746,
+    "deviceSourceSha": "280a77650fbe9ac21cdf4f79382163e1675e4645",
+    "originalConclusion": "failure",
+    "originalReportSha256": "70d13539d99b2384738d403bbe6fdbdab86d848d549508dc603a936ef5ba33fd",
+    "artifactId": 13044831419,
+    "artifactName": "terminal-frame-identity-280a77650fbe9ac21cdf4f79382163e1675e4645-1",
+    "requireReadOnlyRecoveryBeforeBuild": true,
+    "expectedRecoveredWindows": 32,
+    "expectedRecoveredAttempts": 64,
+    "expectedProvenSequenceStarts": 12,
+    "neverChangeOriginalRunConclusion": true
+  },
+  "environment": {
+    "api": 34,
+    "abi": "x86_64",
+    "renderer": "existing SwiftShader KVM harness",
+    "oneBoot": true,
+    "sharedDriverAndAssets": true,
+    "targetBuild": "Release-derived terminaltest, non-debuggable, no mechanism overlay",
+    "nativeGrid": "80 columns; hidden grid stable before IME; physical rows unchanged",
+    "productionDefaultModeUnchanged": true
+  },
+  "matrix": {
+    "pairs": 4,
+    "armOrder": [["legacy", "candidate"], ["candidate", "legacy"], ["legacy", "candidate"], ["candidate", "legacy"]],
+    "cases": ["p2identity-1000-hidden", "p2identity-1000-shown", "p2identity-10000-hidden", "p2identity-10000-shown"],
+    "rounds": 5,
+    "warmupRounds": [0],
+    "conditions": ["refresh", "return"],
+    "conditionOrder": "even round refresh-return, odd round return-refresh",
+    "windows": 320,
+    "warmupWindows": 64,
+    "formalWindows": 256,
+    "samplesPerConditionPerCasePerArmPerPair": 4,
+    "naturalObservationTailNs": 500000000
+  },
+  "endpoints": {
+    "primary": "inputToBufferEvidenceNs",
+    "coGate": "inputToAttemptNs",
+    "systemGuard": "inputToDisplayEndNs",
+    "selection": "first qualified attempt, first independently proven submitted attempt, first independently proven presented attempt; never borrow another token",
+    "notClaimed": ["first visible text pixel", "physical photon time", "phone FPS", "formal APK performance"]
+  },
+  "aggregation": {
+    "withinArm": "median of all four formal windows for one case/condition in one launch pair",
+    "betweenArms": "candidate median divided by legacy median within that launch pair",
+    "acrossPairs": "median of four paired ratios, never a pooled-window ratio",
+    "null": "any formal null makes that arm median and the four-pair ratio null; no omission or imputation"
+  },
+  "gates": {
+    "returnPrimaryRatioMax": 0.8,
+    "returnPrimaryWinningPairsMin": 3,
+    "returnUiRatioMax": 0.8,
+    "returnUiWinningPairsMin": 3,
+    "refreshPrimaryRatioMax": 1.05,
+    "refreshUiRatioMax": 1.05,
+    "systemRatioMaxBothConditions": 1.05,
+    "allFourCasesMustPass": true,
+    "all320WindowsIdentityDecidable": true,
+    "all320WindowsMustHaveSubmissionAndPresentationWithinCutoff": true,
+    "frameMetricsPolicy": "BOTH_EXACT, ONE_EXACT or ABSENT retained as independent notification status; CONFLICT fails. Exact buffer and display chain mandatory regardless.",
+    "qualificationDoesNotAdoptCandidate": true,
+    "fullProductionRegressionsRequiredBeforeAdoption": true
+  },
+  "execution": {
+    "settings": "wait same-PID startup whole-settings write completion, configure once, retain persisted/flow/actual first LocalSettings guards",
+    "nativeFailure": "preserve all logs; stop outer launch matrix after the existing per-invocation fixed method inventory finishes",
+    "identityFailure": "preserve missing or unknown values and finish only the already fixed matrix; final integrity and adoption fail",
+    "retries": 0,
+    "replacementSamples": 0,
+    "forceDrawInsideWindow": false,
+    "protocolChangesAfterSampling": false,
+    "oldSamplesReused": false,
+    "apkDownloadedLocally": false,
+    "automaticProductionMerge": false
+  }
+}
