@@ -309,6 +309,14 @@ SurfaceFrame/0丢调度bundle。完整JSON哈希113d25ae718edc947f242c0b81e529ee
 UI结构更新；不据不同模式单次数据宣称手机提速。生产仍55db111。所有准备失败单独保留，
 本轮工作目录/workspace/terminal-review/real-clock/；无手机采集要求，无新正式Release。
 
+最新用户明确“继续优化终端全量虚拟化模式”，覆盖上一项默认TUI分块计划。
+当前候选只针对FULL_VIRTUAL备用屏幕每帧整屏测宽：benchmarks/terminal-full-virtual-alt-width/
+candidate.patch三文件实验补丁，不改live生产。显式fullVirtualWidth限定owned ALT元数据、
+相同字体/owner/屏幕代次与Text才复用，最多物理行数的Text+宽度；旧width()规则不变。
+新增6JVM、42原生字体oracle、真实页面4对AB/BA(288窗口/48预热)；性能不靠工作计数判定。
+协议benchmarks/TERMINAL_FULL_VIRTUAL_ALT_WIDTH.md；workflow terminal-alt-width.yml，仅云端Release。
+工作目录/workspace/terminal-review/full-virtual-alt-width/，生产仍55db111。不要重跑旧薄光标/默认TUI实验。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

@@ -1,0 +1,18 @@
+{
+  "baseProductionSha": "55db111129c662067345aa99540b506de305da37",
+  "baseTree": "8caf50d5c40e228f1d5bcc09d3db505757568b68",
+  "files": {
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndex.kt": {
+      "base": "0c4581b140149e9fba922291c16fdf5b184921bd7fd9c54a692d29f35fc36180",
+      "candidate": "13d79906dcc3a36db5a18da9c50b1c3d793581eafd7cd6b849a3b226f27b436a"
+    },
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalFullVirtualTranscript.kt": {
+      "base": "a09f5ff88732e304633226edda5673c28b91786cdca10a2e5321b6f41be067a6",
+      "candidate": "0a9ca623f6eb249283449146f8de6d68c6d3c4a80ccdda2727d2cd034a0b043d"
+    },
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalPreparedWidth.kt": {
+      "base": "59d0adf287687e0aba2562791f9b91053312c0c59fa2817d57a131080c9e73cf",
+      "candidate": "c27d8c72ec1c929e7335849d28fbeea4eb3e8a4ca77c4d918af4915cc62328dd"
+    }
+  }
+}
