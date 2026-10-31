@@ -347,6 +347,12 @@ P0设备机制验证790a1b1/run41165306118：25窗口/1JUnit通过；报告要�
 方法，不计时；要求未变item提交/内容重建归零及所有必要失效。之后才无探针真实PTY对照。
 协议benchmarks/TERMINAL_FULL_VIRTUAL_CONTENT.md，工作目录/workspace/terminal-review/full-virtual-alt-content/。
 
+P1机制门禁fae4f8e/run41167700810成功：8方法、25场景+2边界。4次单行更新内容定义/区间/
+item执行均0，只有改动Row组合1；134400像素fallback一致、同revision空白保护和原6交互通过。
+下一步contentPaired工作流真实时钟对照，仍同一单文件补丁且去掉机制探针，不用旧测宽补丁。
+预定4AB/BA组、288窗口48预热；缺系统记录不替换、不丢样本，完成既定矩阵后最终CI/采用
+仍必须失败，缺数据整组系统中位数为null。原生正确性错误直接停。live生产仍55db111。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

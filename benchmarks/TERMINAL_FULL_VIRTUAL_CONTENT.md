@@ -28,3 +28,15 @@ UNINSTRUMENTEDone-file candidate andbyte-identicaldriver/resources. Freeze4AB/BA
 primaryinput→response-revisiondrawmedianratio<=.90 eachtargetscene,>=3/4pairs improve,and
 systempresentmedianratio<=1.05;missingframesstaymissing. No automaticadoptionfromitemcounts.
 Full492JVM/182viewport/page gates onlyafterperformance passes;formalRelease last,CIonly,noAPKdelivery.
+
+Mechanismgate fae4f8e/run41167700810 PASSED:8methods,25scenes+2boundaries. All4single-rowedits
+nowhave0contentchanges/intervalbuilds/itemattempts;onlychangedmeasurementRow commits once.
+Unownedfallback134400pixels match;forceblank same-revisioncommit works. Old6interaction methods
+passed unchanged. No runtime gain inferred from this test-clock evidence.
+
+Next independentperformance workflowterminal-pipeline-tests.yml/contentPaired,uses sameonefile
+UNINSTRUMENTEDpatch andsameexisting nativeclock ALTdriver;does not rerun oldwidthcandidate/font
+experiment.4AB/BApairs/288windows48warmups fixed inadvance. System association misses do not
+trigger replacement samples:finishonlythefixedmatrix,preserve missingmetrics asnull,incomplete
+phase medians staynull andfinalCI/acceptance MUSTfail. Native correctnessfailure stillstops.
+Thus allrawplannedresults survive withoutrelaxing mandatorycomplete-system evidencegate.
