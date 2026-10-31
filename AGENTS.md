@@ -332,6 +332,14 @@ Workflow terminal-viewport-interactions.yml/fullVirtualMechanism，只在generat
 同时CI保存正式Release/派生目标/驱动及fixture的5个运行时依赖图，不能以BOM推定实际版本。
 协议benchmarks/TERMINAL_FULL_VIRTUAL_MECHANISM.md；工作目录/workspace/terminal-review/full-virtual-mechanism/。
 
+P0设备机制验证790a1b1/run41165306118：25窗口/1JUnit通过；报告要求驱动自带Foundation
+的错误导致job最终failure。驱动从目标APK使用Foundation，已离线修正报告并保留原失败，
+不重跑场景。4次单行编辑均同screen身份、1次内容/区间重建、23item执行，其中22未变；
+未变测量Row组合0、Paragraph变化0。不是整屏重排，仅外层item失效。5运行时图确认本轮
+目标Foundation/Runtime/UI/ui-text=1.11.0-alpha06，驱动公共版本一致；未改依赖。
+下一步可进入独立P1内容稳定候选，但必须守住SEL/MOUSE/结构/字体/代次失效，并实测收益；
+当前仍无优化合入/正式Release，生产55db111。P0报告恢复在full-virtual-mechanism/recovered-report.json。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

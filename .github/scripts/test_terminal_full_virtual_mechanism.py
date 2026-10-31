@@ -49,4 +49,16 @@ class MechanismContracts(unittest.TestCase):
         self.assertIn('terminaltestAndroidTestRuntimeClasspath',script)
         self.assertIn('releaseAndroidTestRuntimeClasspath',script)
         self.assertNotIn('resolutionStrategy',script);self.assertNotIn('strictly',script)
+    def test_driver_may_use_target_foundation_but_common_versions_must_match(self):
+        configs=[]
+        for project,names in ((':app',('releaseRuntimeClasspath','terminaltestRuntimeClasspath','terminaltestAndroidTestRuntimeClasspath')),
+            (':benchmarks:terminal-viewport-tests',('releaseRuntimeClasspath','releaseAndroidTestRuntimeClasspath'))):
+            for name in names:
+                modules=[dict(group='androidx.compose.runtime',module='runtime',version='1.11.0-alpha06'),dict(group='androidx.compose.ui',module='ui-text',version='1.11.0-alpha06')]
+                if 'AndroidTest' not in name:modules.append(dict(group='androidx.compose.foundation',module='foundation',version='1.11.0-alpha06'))
+                configs.append(dict(project=project,configuration=name,modules=modules))
+        rows=m.dependency_summary(dict(configurations=configs));self.assertEqual(5,len(rows))
+        self.assertTrue(rows[2]['foundationSource'].startswith('target:'))
+        configs[2]['modules'][0]['version']='wrong'
+        with self.assertRaises(ValueError):m.dependency_summary(dict(configurations=configs))
 if __name__=='__main__':unittest.main()

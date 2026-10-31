@@ -75,8 +75,17 @@ def dependency_summary(value):
     result=[]
     for c in configs:
         versions={v['group']+':'+v['module']:v['version'] for v in c['modules'] if v['group'].startswith('androidx.compose')}
-        require('androidx.compose.foundation:foundation' in versions and 'androidx.compose.runtime:runtime' in versions,'Compose graph incomplete')
-        result.append(dict(project=c['project'],configuration=c['configuration'],versions=versions))
+        driver='AndroidTest' in c['configuration']
+        require('androidx.compose.runtime:runtime' in versions and 'androidx.compose.ui:ui-text' in versions,'Compose graph incomplete')
+        host_name='terminaltestRuntimeClasspath' if c['project']==':app' else 'releaseRuntimeClasspath'
+        if driver:
+            host=next(x for x in configs if x['project']==c['project'] and x['configuration']==host_name)
+            host_modules={v['group']+':'+v['module']:v['version'] for v in host['modules']}
+            require('androidx.compose.foundation:foundation' in host_modules,'Driver target has no Foundation')
+            require(all(host_modules.get(k)==v for k,v in versions.items() if k in host_modules),'Driver/target common dependency mismatch')
+        else:require('androidx.compose.foundation:foundation' in versions,'Target graph has no Foundation')
+        result.append(dict(project=c['project'],configuration=c['configuration'],versions=versions,
+            foundationSource='target:'+host_name if driver and 'androidx.compose.foundation:foundation' not in versions else 'this-configuration'))
     return result
 def report():
     guard();raw=(OUT/'mechanism-logcat.txt').read_text();samples,done=parse_samples(raw)
@@ -117,6 +126,10 @@ def report():
     legacy.compact('Full virtual P0 mechanism',(OUT/'summary.json').read_bytes())
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('action',choices=('guard','instrument','report'));p.add_argument('--directory');a=p.parse_args()
-    if a.action=='guard':print(guard())
-    elif a.action=='report':report()
-    else:require(a.directory is not None,'Generated directory required');instrument(a.directory)
+    try:
+        if a.action=='guard':print(guard())
+        elif a.action=='report':report()
+        else:require(a.directory is not None,'Generated directory required');instrument(a.directory)
+    except (ValueError,KeyError,OSError,subprocess.SubprocessError) as e:
+        message=(type(e).__name__+': '+str(e))[:2300].replace('%','%25').replace('\n','%0A').replace('\r','%0D')
+        print('::error title=Full virtual mechanism reporting stopped::'+message);raise SystemExit(1)

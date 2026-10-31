@@ -32,3 +32,26 @@ Workflow `terminal-viewport-interactions.yml` suite=`fullVirtualMechanism`,one s
 overlay isfingerprinted andeveryothercopiedsource must match production. Existingproductionguard
 andhistoricalreport testsstay intact. Need no phone data or accounts. Future P1 needs separate
 precisegeometry/SEL/MOUSE gates andreal-clockAB/BA;neverusethis test clock as performance evidence.
+
+## P0 observed result (790a1b1 / run41165306118)
+
+Oneinstrumentedmethod/25windows passed ondevice,all cleanup/count/identity assertions held.
+CIreporting failed with `Compose graph incomplete`:driver runtimegraph legitimately omits
+Foundation supplied by its targetAPK. Fixed onlyoffline reporting to distinguish this while
+stillrequiring targetFoundation andmatchingcommon target/driver versions. Originalworkflow
+remainsfailure;no rerun or fabricatedsuccess. Sameartifactraws/JUnit/generatedsource verified.
+
+Fourfixedsingle-row edits each keptsamephysical-listidentity but created1newcontentdefinition,
+1interval build,23itembodyattempts/commits:22unchangeditemsre-entered. UnchangedRow/VirtualRow
+commitprobe=0 and unchangedunderlyingParagraphchanges=0. Threeidlewindows hadallzero work;
+threeunchangedtextrepublishes recreatedcontent and23/24items butdidnotreshape text.
+Scope:rowprobe isexistingmeasurementRow/VirtualRowcommit,not everyinternalComposegroup.
+ProbeSideEffects can affectexecution;these aremechanismcounts,not CPU/latency savings.
+
+Resolved thisrun:appRelease/terminaltest/fixture target Foundation+Runtime+UI+ui-text all
+1.11.0-alpha06. Bothdrivers' commonRuntime/UI agree;Foundation comes fromtarget. No dependency
+versions werechanged. This doesnot retroactivelyidentify everypreviousAPK's fullgraph.
+
+Decision:P1may test ONLYouteritem-content stability onownedALT/PAN/noSEL. There is no evidence
+that23Textrows recompose/reshape;don'toptimize a fictitiousfull-screenparagraph bottleneck.
+Need separategeometry/identityinvalidation checks andreal-clockAB/BA before anyproduction change.
