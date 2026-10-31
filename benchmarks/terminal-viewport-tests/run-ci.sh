@@ -106,6 +106,13 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
+if [ "$group" = widthRecovery ]; then
+  mkdir -p artifacts/terminal-width-recovery
+  adb logcat -G 8M
+  run_arm width-recovery TerminalWidthRecoveryMechanismTest 420
+  adb logcat -d -v threadtime TerminalWidthRecovery:I '*:S' > artifacts/terminal-width-recovery/mechanism-logcat.txt
+  exit "$overall_status"
+fi
 if [ "$group" = fullVirtualContent ]; then
   mkdir -p artifacts/terminal-full-virtual-content
   adb logcat -G 8M

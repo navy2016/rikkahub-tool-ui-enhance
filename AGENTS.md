@@ -360,6 +360,13 @@ P1真实时钟f494b07/run41168627198已完整通过执行/数据完整性，4AB/
 未达标，保留候选研究结果但不生产采用/不补跑挑成绩。FullJSON113a5050dce6e656f7669dfaeb68d82905ce255e4be4f148613bbe91305fa737。
 下一独立P2可研究主/备用屏往返的主屏标量宽度恢复；以未改生产55为基线，不叠加此候选。
 
+用户继续后进入P2基线，不实现候选、不叠加P1：32夹具状态记录验证1k/10k历史接受测宽量，
+通过后20原生时钟窗口对照MAIN局部刷新与ALT返回；4预热16正式，不是代码候选A/B。
+新驱动TerminalWidthRecoveryPageTest、新脚本terminal-width-recovery.py，补充按真实tid解析
+后台Terminal.productionWidth区间；旧只读主线程atrace会漏冷测宽。记录累计接受行数而非
+lastMeasuredHistoryRows。协议benchmarks/TERMINAL_WIDTH_RECOVERY.md，pipeline suite=widthRecovery。
+工作目录/workspace/terminal-review/full-virtual-width-recovery/；live生产仍55db111。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
