@@ -375,6 +375,12 @@ P2基线97b0ef2/run41177096610成功：32计数状态+20原生窗口(4预热)，
 第一门禁45JVM(8new+18oldwidth+19full)+32候选状态/ALT释放+原6交互，suite=widthRecoveryCandidate；
 之后才新的真实PTY候选对照，不能把基线差值当优化收益。全量492/182与正式Release尚未运行。
 
+P2候选32c07c8/run41180293887正确性成功：45JVM、32状态、原6交互(7设备方法)。返回同历史
+重测0，字体/列数失效仍H，ALT期间保留1个标量候选且离开后0。现在准备独立widthRecoveryPaired：
+1k/10k×原生IME隐藏/显示，4AB/BA启动配对，每场景5个刷新/返回轮次(首轮预热)，共320/64预热。
+冻结返回比<=.80且>=3/4改善；MAIN刷新与系统呈现比<=1.05；证据缺失仍失败不补样。
+协议benchmarks/TERMINAL_WIDTH_RECOVERY_PAIRED.md。新驱动先稳定隐藏网格再开IME；生产仍55db111。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
