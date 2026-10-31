@@ -529,6 +529,12 @@ CI先plain候选testReleaseUnitTest，再仅追踪探针Release派生APK；构�
 协议benchmarks/terminal-inframe-publication-candidate/page-regression.json，SHA41df3363f0e5c649de14a57bb0c8e3ddbe590ee0dd3cda0a892ed52d46ec72a0。
 工作目录full-virtual-inframe-publication/page-regression；这是正确性，不是性能A/B，不会自动采用或交付APK。
 
+inframe原页面回归86c5b411/run41248446341 success，原件离线验证：普通/TUI各9phase、4×160tick、10k历史、25物理行。
+选择复制/IME/重入/鼠标/ALT-MAIN/ACK输入桥通过；无probe候选与安装hash匹配，原验证器validate_page断言未改。
+报告SHA c832a9e0f76742c15dcf7ad659076a4ccdb91914d9f79ab52c1fd5647f05ce4e。
+当前inframe候选已49JVM+32机制离线恢复+原2页面交互通过，但还没有性能A/B与最终492/182回归，生产仍55，当前无CI运行。
+下一步单独冻结新性能协议(不得沿用P2成绩)，再比较原版/相同冻结候选，不能从机制结果直接宣称提速。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
