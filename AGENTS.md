@@ -466,6 +466,14 @@ driver TerminalP2IdentityPerformanceTest，suite=p2IdentityPerformance。共享d
 原始case数据每invocation保存在result.json，聚合引用其hash避免重复膨胀，不删除任何原始数据。
 工作目录/workspace/terminal-review/p2-identity-performance-v1；288主机契约通过；旧P2/资格报告均不重写。
 
+新P2身份对照17ce87d/run41211396105完整success，但性能门禁false：320窗口/64预热/4配对，720尝试全提交/呈现，
+717双FrameMetrics精确、3无通知保留。返回主终点比(1k隐/显、10k隐/显)=.583153/.540458/.298832/.256409，均4/4改善；
+普通刷新1k显示主1.159412/UI1.060074/系统1.070614，10k隐藏主1.063650/UI1.094233/系统1.145560，超过1.05。
+因此P2不采用、不补跑、不进行492/182或正式Release。原结果SHA2959035ab786eb826eb159df8927f64f4d4dde68eb32c9d5318f087d7740cf37。
+完整原件original/terminal-p2-identity-performance，verify_experiment.py已离线复核全部320/720与6个失败守卫。
+同次stage-attribution.json：回退较大部分在fed→publish(1k显+6.670ms/10k隐+4.657ms)，刷新widthCPU仅+.030–.043ms；
+未证明根因，不能归咎噪声或简单width重复；下一独立假设应追踪发布前等待，不叠加已拒绝P2。当前无CI运行，生产55不变。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
