@@ -523,6 +523,12 @@ CI先plain候选testReleaseUnitTest，再仅追踪探针Release派生APK；构�
 工作目录full-virtual-inframe-publication/original与offline-recovery.json。当前无CI运行；还未做性能A/B或全面交互回归，生产仍55。
 下一步先原真实页面选择/鼠标/IME/重入回归，再单独冻结性能，不要把机制结果当提速结论。
 
+用户继续后新增原页面回归阶段：suite=inframePageRegression，script terminal-inframe-page-regression.py。
+目标是无probe的同一bfa冻结候选；新TerminalInFramePageRegressionTest与原TerminalFullVirtualPageTest逐字节逆变换一致，
+仅类名和写设置前等待同PID启动完成日志有差异。原2方法/9phase/4×160tick输出/选择复制/鼠标/重入/ALT/MAIN/输入桥断言不改。
+协议benchmarks/terminal-inframe-publication-candidate/page-regression.json，SHA41df3363f0e5c649de14a57bb0c8e3ddbe590ee0dd3cda0a892ed52d46ec72a0。
+工作目录full-virtual-inframe-publication/page-regression；这是正确性，不是性能A/B，不会自动采用或交付APK。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

@@ -1,0 +1,21 @@
+{
+  "id": "terminal-inframe-publication-page-regression-v1",
+  "stage": "native-page-regression-not-performance",
+  "candidateFreezeSha": "bfa29900798d6bb591c66da543859aaa37361dd7",
+  "baseProductionSha": "55db111129c662067345aa99540b506de305da37",
+  "candidateFiles": 2,
+  "traceProbeOverlay": false,
+  "driverBase": "app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalFullVirtualPageTest.kt",
+  "driverChanges": ["class name", "wait existing same-PID startup write completion before any test setting write"],
+  "methods": ["fullVirtualPageOrdinaryKeyboardSelectionMouseAndReentry", "fullVirtualPageTuiKeyboardSelectionMouseAndReentry"],
+  "phases": ["initial", "imeOpen", "imeClosed", "selection", "reentry", "mouse", "alternate", "main", "input"],
+  "finiteBursts": ["imeOpen", "imeClosed", "selection", "reentry"],
+  "ticksPerBurst": 160,
+  "intervalMs": 100,
+  "assertionsUnchanged": true,
+  "startupSettingsProductionFix": false,
+  "noRetriesOrReplacement": true,
+  "performanceMeasured": false,
+  "automaticAdoption": false,
+  "remainingGates": ["new separately frozen complete performance A/B", "full production regressions before adoption"]
+}
