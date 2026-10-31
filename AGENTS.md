@@ -482,6 +482,11 @@ driver TerminalP2IdentityPerformanceTest，suite=p2IdentityPerformance。共享d
 仅CI临时三文件trace overlay(Page/Manager/PipelineTrace)，原条件/延时/原子发布剥除探针后逐字节还原。
 新增frame-wait-start/callback/end、job/coalescing、sync/resize、模型锁、通知发布标记；BOOT诊断、生产MONO时间不改。
 
+发布等待协议冻结2434e29b498057a2f1670d1769224817cefba402，SHA989f03de269a1cdd8ac1e73df4f477710b20b4c10d0ac35865009064c5ebccf1。
+driver TerminalPublicationWaitTest，suite=publicationWait。每窗口保存256前缀事件以证明已有job归属；不能猜测received必新建job。
+297主机契约通过；全量源码剥除探针逆变换相同。build后还原live，manifest.environmentSources记录还原环境，sources记录实际probe APK。
+此诊断32窗口仅refresh/sync60ms，首次完整响应后500ms自然尾部；不改变同步输出100ms保护、resize/blank等待或Snapshot事务。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

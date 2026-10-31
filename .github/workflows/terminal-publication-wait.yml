@@ -1,0 +1,46 @@
+name: Full Virtual Publication Wait Diagnosis
+on:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Validate frozen trace-only inverse and publication chain contracts
+        run: |
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_publication_wait.py
+          python3 -B .github/scripts/terminal-publication-wait.py guard
+      - name: Build pinned native test asset
+        run: python3 -B .github/scripts/build-terminal-proot.py
+      - name: Build Release-derived55 with reversible trace-only instrumentation
+        run: |
+          chmod +x gradlew
+          python3 -B .github/scripts/terminal-publication-wait.py build
+      - name: Observe fixed ordinary and synchronized-output scheduling windows
+        run: python3 -B .github/scripts/terminal-publication-wait.py run
+      - name: Preserve source inverse proof original markers and raw traces without APK delivery
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-publication-wait-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-publication-wait/
+            artifacts/terminal-pipeline/
+            artifacts/terminal-validation/
+          if-no-files-found: error
+          retention-days: 30
