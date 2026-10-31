@@ -403,6 +403,14 @@ P2 v2 ecd34ca/run41185891968最终failure：pair2候选1k-hidden在首次挂载�
 先4未加完成门槛+4等待本PID启动写日志+1明确受控旧副本重放，不改生产、不第三轮跑性能。
 协议benchmarks/TERMINAL_STARTUP_SETTINGS.md，suite=startupSettings。旧230窗口不得混入未来采样。
 
+启动覆盖诊断a2dc738/run41192017536成功9方法：unfenced0自然复现偏好已确认后随launchCount0→1
+变空，其他3未fence场景保留；4个等待本PIDincrementLaunchCount完成回执场景全保留；受控旧副本
+重放再次覆盖。确认启动整份Settings写回竞态；未改生产。报告SHA533c628152a2347f3029fbced5c1a09e0b4e6172ebfc7b894eac918ad74b928e。
+v2全部原件在full-virtual-width-recovery/paired-v2-all-original，230窗口46预热/228系统匹配/24trace；
+两缺失是pair0候选10k-hidden r2-refresh、pair2原版10k-shown r3-refresh。精确SF/Display token存在且
+is_buffer=1，但FrameMetrics缺失，前一帧回调不可替代。TX名称不等于无buffer。仍不采用P2、不重跑第三轮。
+当前无CI在运行。下一步先解决完整系统关联采集；或单独请求处理生产启动设置竞态，不混入P2补丁。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

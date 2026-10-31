@@ -23,3 +23,21 @@ No attempttofix productionSettingsStore orlaunchcount ispartofthis P2experiment.
 If causalpathisconfirmed,anynext performanceprotocolmustfirstwaitfor applicationstartupwrite
 completion,thenconfigureonceandkeepexisting persisted/flow/firstLocalSettingschecks. Do not
 add a loopthatrewritespreferences untila desiredsampleappears. Priorv1/v2results remain separate.
+
+## Observed a2dc738 / run41192017536 (success)
+
+All9diagnostic methods completed. unfenced0 naturally showedprefpresent withlaunchCount0,
+thenprefemptywithlaunchCount1 afterthisPID'sincrementLaunchCount completion;other3unfenced
+cases retained. All4fencedcases retained. Explicitstale-copyreplay removedtheprefagain.
+Thus the whole-settings startupwriter race is reproduced inunchangedproduction;thisdoesnot
+capture theexactstackoftheearlierv1/v2failure. ReportSHA256
+533c628152a2347f3029fbced5c1a09e0b4e6172ebfc7b894eac918ad74b928e.
+No productionfix ornewP2performance invocation wasmade. Futuretestsetupcanwaitforthisexisting
+startupcompletion beforewriting once,thenretainthepersisted/flow/firstLocalSettings checks.
+
+P2v2reanalysis preserved230windows(46warmups),228exactsystemmatches,24rawtraces. Two missing
+FrameMetrics arepair0/candidate/10k-hidden/r2-refresh andpair2/legacy/10k-shown/r3-refresh.
+Both haveexactSurfaceFrame/DisplayFrame tokens andis_buffer=true (protofield11),yetno exact
+VsyncFrameMetrics. NearbyFrameMetrics belongtothepriorVsync. TXlayerprefix isNOTproof ofa
+bufferlessframe. Originalmissingclassification remains;notanexcusetoborrowanotherframe or
+removeFrameMetrics requirement posthoc. No thirdperformance rununtilmeasurement issue resolved.
