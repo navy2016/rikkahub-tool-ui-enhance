@@ -26,6 +26,9 @@ run_arm() {
   if [ "${TERMINAL_VIEWPORT_GROUP:-}" = fullVirtualMechanism ]; then
     extra+=(-PterminalFullVirtualMechanism=true -PterminalPipelineTests=true)
   fi
+  if [ "${TERMINAL_VIEWPORT_GROUP:-}" = fullVirtualContent ]; then
+    extra+=(-PterminalFullVirtualContent=true -PterminalPipelineTests=true)
+  fi
 
   # Keep each renderer's result tree independent. A stuck lazy arm must not erase the
   # completed eager arm or prevent the reporting step from seeing its 12 cases.
@@ -103,6 +106,19 @@ if [ "${TERMINAL_VIEWPORT_SUITE:-all}" = defaultBottom ]; then
 fi
 
 group="${TERMINAL_VIEWPORT_GROUP:-all}"
+if [ "$group" = fullVirtualContent ]; then
+  mkdir -p artifacts/terminal-full-virtual-content
+  adb logcat -G 8M
+  run_arm full-virtual-content TerminalFullVirtualContentTest 520
+  run_arm content-scenes TerminalFullVirtualInstrumentedTest#fullVirtualAllScenesRemainVirtualWithRealGeometry 240
+  run_arm content-anchors TerminalFullVirtualInstrumentedTest#fullVirtualLockedFontsRtlImeAndReentryPreserveTheStableAnchor 180
+  run_arm content-copy TerminalFullVirtualInstrumentedTest#fullVirtualSelectionSystemMenuCopiesAWordAndOffscreenSelectAll 240
+  run_arm content-drag TerminalFullVirtualInstrumentedTest#fullVirtualSelectionHandleCrossesViewportWithoutLosingOffscreenText 240
+  run_arm content-mouse TerminalFullVirtualInstrumentedTest#fullVirtualMouseMappingIncludesOffscreenPhysicalOrigin 120
+  run_arm content-handoff TerminalFullVirtualInstrumentedTest#fullVirtualModeSwitchKeepsOldChoicesAndMeasuredReadPosition 180
+  adb logcat -d -v threadtime TerminalFullContent:I TerminalFullVirtual:I '*:S' > artifacts/terminal-full-virtual-content/content-logcat.txt
+  exit "$overall_status"
+fi
 if [ "$group" = fullVirtualMechanism ]; then
   mkdir -p artifacts/terminal-full-virtual-mechanism
   adb logcat -G 8M

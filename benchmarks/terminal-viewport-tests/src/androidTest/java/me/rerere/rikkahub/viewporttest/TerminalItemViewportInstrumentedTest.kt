@@ -569,6 +569,7 @@ class TerminalItemViewportInstrumentedTest {
         val widthCheckpoint: TerminalWidthCheckpointStore? = null,
         private val mountStreamFrames: Int = 0,
         private val cursorOverlayExperiment: Boolean = false,
+        private val contentUnownedControl: Boolean = false,
     ) {
         val terminal = terminalOverride ?: TerminalEmulator(initialColumns = 80, initialRows = 24,
             maxScrollbackLines = historyRows).apply {
@@ -578,6 +579,10 @@ class TerminalItemViewportInstrumentedTest {
         }
         private fun render(): TerminalEmulator.RenderFrame {
             val raw = if (cursorOverlayExperiment) terminal.renderFrameForCursorOverlay() else terminal.renderFrame()
+            if (contentUnownedControl) {
+                check(raw.isAlternateScreen && raw.historyCount == 0)
+                return raw.copy(rows = raw.rows.toList())
+            }
             if (!stressSpans) return raw
             val ids = raw.historyLineIds + raw.screenLineIds
             return raw.copy(rows = raw.rows.mapIndexed { i, row ->
@@ -671,10 +676,10 @@ class TerminalItemViewportInstrumentedTest {
             publish()
         }
 
-        fun publish() {
+        fun publish(forcePendingBlanks: Boolean = true, nowMs: Long = 1_000L) {
             val next = render()
             Snapshot.withMutableSnapshot {
-                rowStore.publish(next, sparse || mode.isFullVirtual, tui || next.isAlternateScreen || fullGrid, true, 1_000L,
+                rowStore.publish(next, sparse || mode.isFullVirtual, tui || next.isAlternateScreen || fullGrid, forcePendingBlanks, nowMs,
                     allowUnownedSparse = mode.isFullVirtual)
                 published = TerminalRenderSnapshot.capture(next, rowStore)
             }

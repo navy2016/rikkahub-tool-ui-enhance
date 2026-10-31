@@ -1,0 +1,10 @@
+{
+  "baseProductionSha": "55db111129c662067345aa99540b506de305da37",
+  "baseTree": "8caf50d5c40e228f1d5bcc09d3db505757568b68",
+  "files": {
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalFullVirtualTranscript.kt": {
+      "base": "a09f5ff88732e304633226edda5673c28b91786cdca10a2e5321b6f41be067a6",
+      "candidate": "460d66de3eaadacad29fb87d8a042996856a6b6efcf84c4eb7a94d05c1a22f66"
+    }
+  }
+}

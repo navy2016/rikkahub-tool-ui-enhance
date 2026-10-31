@@ -81,12 +81,21 @@ val syncViewportSources by tasks.registering(SyncViewportSources::class) {
     ))
     outputDirectory.set(layout.buildDirectory.dir("generated/viewportSources"))
     val mechanismProbe = providers.gradleProperty("terminalFullVirtualMechanism").orNull == "true"
+    val contentCandidate = providers.gradleProperty("terminalFullVirtualContent").orNull == "true"
+    check(!mechanismProbe || !contentCandidate) { "Select P0 or P1 instrumentation, never both" }
     inputs.property("terminalFullVirtualMechanism", mechanismProbe)
+    inputs.property("terminalFullVirtualContent", contentCandidate)
     if (mechanismProbe) doLast {
         val result = ProcessBuilder("python3", "-B", rootProject.file(".github/scripts/terminal-full-virtual-mechanism.py").absolutePath,
             "instrument", "--directory", outputDirectory.get().asFile.absolutePath)
             .directory(rootProject.projectDir).inheritIO().start().waitFor()
         check(result == 0) { "Full virtual generated-source instrumentation failed" }
+    }
+    if (contentCandidate) doLast {
+        val result = ProcessBuilder("python3", "-B", rootProject.file(".github/scripts/terminal-full-virtual-content.py").absolutePath,
+            "instrument", "--directory", outputDirectory.get().asFile.absolutePath)
+            .directory(rootProject.projectDir).inheritIO().start().waitFor()
+        check(result == 0) { "Full virtual content candidate instrumentation failed" }
     }
 }
 val syncViewportResources by tasks.registering(SyncViewportSources::class) {

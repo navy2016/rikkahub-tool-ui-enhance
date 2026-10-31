@@ -17,6 +17,9 @@ internal object TerminalFullVirtualMechanismProbe {
     private var itemAttempts = 0
     private val items = LinkedHashMap<Long, Int>()
     private val rows = LinkedHashMap<Long, Int>()
+    var boundedItemsUsed = false
+        private set
+    fun branchCommitted(value: Boolean) { if (active) boundedItemsUsed = value }
     data class Counts(val definitions: Int, val definitionChanges: Int, val screenChanges: Int,
         val frameChanges: Int, val intervalBuilds: Int, val itemAttempts: Int,
         val items: Map<Long, Int>, val rows: Map<Long, Int>)
@@ -44,5 +47,5 @@ internal object TerminalFullVirtualMechanismProbe {
     fun rowCommitted(id: Long) { if (active) increment(rows,id) }
     fun snapshot() = Counts(definitions,definitionChanges,screenChanges,frameChanges,intervalBuilds,itemAttempts,
         items.toMap(),rows.toMap())
-    fun stop() { active=false;definition=null;screen=null;frame=null;beginWindow() }
+    fun stop() { active=false;boundedItemsUsed=false;definition=null;screen=null;frame=null;beginWindow() }
 }

@@ -1,0 +1,101 @@
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalFullVirtualTranscript.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalFullVirtualTranscript.kt
+@@ -8,6 +8,7 @@
+ import androidx.compose.foundation.layout.height
+ import androidx.compose.foundation.layout.widthIn
+ import androidx.compose.foundation.lazy.LazyColumn
++import androidx.compose.foundation.lazy.LazyListScope
+ import androidx.compose.runtime.Composable
+ import androidx.compose.runtime.CompositionLocalProvider
+ import androidx.compose.runtime.DisposableEffect
+@@ -21,6 +22,7 @@
+ import androidx.compose.ui.text.resolveDefaults
+ import androidx.compose.ui.unit.dp
+ import me.rerere.rikkahub.utils.TerminalEmulator
++import me.rerere.rikkahub.utils.ownedRows
+ 
+ /**
+  * Explicit full virtualization, including physical screen rows. Old renderer branches never enter
+@@ -77,31 +79,64 @@
+             Box(Modifier.fillMaxSize())
+         } else {
+             CompositionLocalProvider(LocalTerminalPointerScope provides pointerScope) {
++                val ownedAlternate = if (frame.isAlternateScreen && frame.historyCount == 0 &&
++                    rows is TerminalSparseRows && rows.frame === frame && panEnabled && !selectionEnabled
++                ) frame.ownedRows()?.takeIf { !it.includesHistory } else null
++                val itemContent: LazyListScope.() -> Unit = if (ownedAlternate != null) {
++                    val measurements = binding.measurements
++                    remember(TerminalChunkViewIdentity(screen, ownedAlternate.history.owner),
++                        frame.screenGeneration, ownedAlternate.columns, metrics, style, measurements, selection) {
++                        terminalFullVirtualPhysicalItems(screen, style, metrics, measurements, selection)
++                    }
++                } else {
++                    {
++                        items(count = frame.rows.size, key = { index ->
++                            if (index < frame.historyCount) frame.historyLineIds[index] else frame.screenLineIds[index - frame.historyCount]
++                        }, contentType = { "terminal-virtual-row" }) { index ->
++                            val row = if (rows is TerminalSparseRows && index < frame.historyCount) {
++                                val id = frame.historyLineIds[index]
++                                val text = frame.rows[index].text
++                                remember(id, text) { TerminalRenderedRowState(id, text) }
++                            } else rows[index]
++                            key(bound.pass.metricKey, row.lineId) {
++                                TerminalVirtualSelectableRow(selection, index, row, style, bound.pass.metricKey,
++                                    binding.measurements, selectionEnabled)
++                            }
++                        }
++                        item(key = TERMINAL_LAZY_TAIL_KEY, contentType = "terminal-tail") {
++                            Spacer(Modifier.height(8.dp))
++                        }
++                    }
++                }
+                 LazyColumn(
+                     modifier = Modifier.fillMaxSize().horizontalScroll(horizontal, enabled = panEnabled || selectionEnabled)
+                         .widthIn(min = with(density) { width.toDp() }),
+                     state = binding.lazy,
+                     userScrollEnabled = panEnabled || selectionEnabled,
+                     flingBehavior = bound.gestures.flingBehavior,
+-                ) {
+-                    items(count = frame.rows.size, key = { index ->
+-                        if (index < frame.historyCount) frame.historyLineIds[index] else frame.screenLineIds[index - frame.historyCount]
+-                    }, contentType = { "terminal-virtual-row" }) { index ->
+-                        val row = if (rows is TerminalSparseRows && index < frame.historyCount) {
+-                            val id = frame.historyLineIds[index]
+-                            val text = frame.rows[index].text
+-                            remember(id, text) { TerminalRenderedRowState(id, text) }
+-                        } else rows[index]
+-                        key(bound.pass.metricKey, row.lineId) {
+-                            TerminalVirtualSelectableRow(selection, index, row, style, bound.pass.metricKey,
+-                                binding.measurements, selectionEnabled)
+-                        }
+-                    }
+-                    item(key = TERMINAL_LAZY_TAIL_KEY, contentType = "terminal-tail") {
+-                        Spacer(Modifier.height(8.dp))
+-                    }
+-                }
++                    content = itemContent,
++                )
+             }
+         }
+     }
+ }
++
++/** The bounded row list keeps observable Text, not an old frame/pass or a second scroll owner. */
++private fun terminalFullVirtualPhysicalItems(
++    screen: List<TerminalRenderedRowState>,
++    style: TextStyle,
++    metric: Any,
++    measurements: TerminalLazyItemMeasurements,
++    selection: TerminalVirtualSelectionUi,
++): LazyListScope.() -> Unit = {
++    items(count = screen.size, key = { index -> screen[index].lineId },
++        contentType = { "terminal-virtual-row" }) { index ->
++        val row = screen[index]
++        key(metric, row.lineId) {
++            TerminalVirtualSelectableRow(selection, index, row, style, metric, measurements, false)
++        }
++    }
++    item(key = TERMINAL_LAZY_TAIL_KEY, contentType = "terminal-tail") {
++        Spacer(Modifier.height(8.dp))
++    }
++}

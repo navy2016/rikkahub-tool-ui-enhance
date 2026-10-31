@@ -340,6 +340,13 @@ P0设备机制验证790a1b1/run41165306118：25窗口/1JUnit通过；报告要�
 下一步可进入独立P1内容稳定候选，但必须守住SEL/MOUSE/结构/字体/代次失效，并实测收益；
 当前仍无优化合入/正式Release，生产55db111。P0报告恢复在full-virtual-mechanism/recovered-report.json。
 
+已进入P1外层ALT内容身份候选：benchmarks/terminal-full-virtual-alt-content/candidate.patch，
+只改一份FullVirtualTranscript测试副本，live生产仍55db111。限定owned ALT/零历史/PAN/无SEL，
+按screen引用+owner/代次/度量保留内容，callback不捕获frame/pass/bound，文字仍可观察。
+第一轮workflow terminal-viewport-interactions.yml/fullVirtualContent：25机制+2边界+原6交互
+方法，不计时；要求未变item提交/内容重建归零及所有必要失效。之后才无探针真实PTY对照。
+协议benchmarks/TERMINAL_FULL_VIRTUAL_CONTENT.md，工作目录/workspace/terminal-review/full-virtual-alt-content/。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
