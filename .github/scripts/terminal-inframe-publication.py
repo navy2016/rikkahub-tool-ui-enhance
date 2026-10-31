@@ -165,13 +165,15 @@ def build():
     try:
         for name,text in c.items():(ROOT/name).write_text(text)
         (ROOT/UNIT).write_bytes((BASE/'TerminalInFramePublicationTest.kt').read_bytes())
-        command=['bash','.github/scripts/run-terminal-gradle.sh','-PterminalPipelineTests=true','-PterminalViewportTests=true','-PincludeX86_64AbiForTests=true',
-            '-I','benchmarks/terminal-full-virtual-mechanism/dependencies.init.gradle','terminalMechanismDependencies',':app:testReleaseUnitTest']
+        # AGP creates host tests for testBuildType. terminalPipelineTests overrides it to
+        # terminaltest, so the true Release JVM gate must be a separate Gradle invocation.
+        command=['bash','.github/scripts/run-terminal-gradle.sh','-PterminalReleaseTests=true',':app:testReleaseUnitTest']
         for name in ('TerminalInFramePublicationTest','TerminalRenderSnapshotTest','TerminalRenderedRowsTest'):
             command+=['--tests','me.rerere.rikkahub.data.container.'+name]
         subprocess.run(command+['--stacktrace'],cwd=ROOT,check=True,timeout=1800);jvm=junit_receipt()
         for name,text in probe.items():(ROOT/name).write_text(text)
         subprocess.run(['bash','.github/scripts/run-terminal-gradle.sh','-PterminalPipelineTests=true','-PterminalViewportTests=true','-PincludeX86_64AbiForTests=true',
+            '-I','benchmarks/terminal-full-virtual-mechanism/dependencies.init.gradle','terminalMechanismDependencies',
             ':app:assembleTerminaltest',':app:assembleTerminaltestAndroidTest','--stacktrace'],cwd=ROOT,check=True,timeout=1800)
         ci.prepare();manifest=json.loads((ci.OUT/'manifest.json').read_bytes());expected=dict(base_sources)
         for name,text in probe.items():expected[name]=sha(text.encode())

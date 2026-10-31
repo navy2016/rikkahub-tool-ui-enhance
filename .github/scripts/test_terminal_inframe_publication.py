@@ -45,6 +45,13 @@ class InFrameSourceContracts(unittest.TestCase):
     def test_cli_after_definitions(self):
         import ast
         tree=ast.parse(Path(m.__file__).read_text());self.assertIsInstance(tree.body[-1],ast.If)
+    def test_release_jvm_does_not_enable_overriding_android_test_build_type(self):
+        import ast
+        tree=ast.parse(Path(m.__file__).read_text())
+        commands=[n.value for n in ast.walk(tree) if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='command' for t in n.targets)]
+        self.assertEqual(1,len(commands));values=ast.literal_eval(commands[0])
+        self.assertIn('-PterminalReleaseTests=true',values);self.assertIn(':app:testReleaseUnitTest',values)
+        self.assertNotIn('-PterminalPipelineTests=true',values)
     def test_ordinary_publication_must_be_inside_its_own_callback(self):
         class Index:
             def ui_for(self,ns):return [dict(token=7,startNs=0,endNs=200)] if 0<=ns<=200 else []

@@ -510,6 +510,11 @@ in-frame候选/协议冻结bfa29900798d6bb591c66da543859aaa37361dd7；协议SHA8
 CI先plain候选testReleaseUnitTest，再仅追踪探针Release派生APK；构建后Page/Trace恢复、helper和临时unit移除，生产不改。
 普通16窗口必须在自己的callback及同Choreographer帧里发布；sync16必须原active guard回退；任一失败保留原件不补样。
 
+首次inframe边界952edc6/run41245660245在Gradle任务选择阶段failure，0 JVM/0设备窗口：
+`Cannot locate tasks that match ':app:testReleaseUnitTest' as task 'testReleaseUnitTest' not found in project ':app'.`
+原因terminalPipelineTests覆盖testBuildType；构建入口修正为单独-PterminalReleaseTests=true做JVM，
+依赖图捕获移到后续-PterminalPipelineTests=true的APK调用。冻结候选/协议/断言未改；旧失败回执保留。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
