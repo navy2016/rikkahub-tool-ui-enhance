@@ -216,14 +216,21 @@ def validate_cases(text):
 def classify(sample,index):
     events=sample['events'];target=sample['fedRevision'];published=[e for e in events if e['stage']=='FRAME_PUBLISHED' and e['revision']==target]
     require(len(published)==1,'Duplicate/missing response-revision publication')
-    pub=published[0];callbacks=[];active=None
-    for e in sample.get('prefixEvents',[])+events:
-        if e['stage']=='INFRAME_CALLBACK_START':active=e
+    pub=published[0];callbacks=[];active=None;prefix=sample.get('prefixEvents',[]);clipped=[];seen_start=False
+    require(events and all(a['seq']<b['seq'] for a,b in zip(prefix+events,(prefix+events)[1:])),'Callback event sequence invalid')
+    for e in prefix+events:
+        if e['stage']=='INFRAME_CALLBACK_START':
+            require(active is None,'Nested or unclosed callback start');active=e;seen_start=True
         elif e['stage']=='INFRAME_CALLBACK_END':
-            require(active is not None,'Callback end without start');callbacks.append((active,e));active=None
+            if active is None:
+                # takeLast(256) may begin INSIDE an older callback. This is not a missing
+                # marker in the measured window. Preserve only that one leading prefix end.
+                require(len(prefix)==256 and not seen_start and not clipped and e['seq']<events[0]['seq'],'Callback end without start')
+                clipped.append(e);continue
+            callbacks.append((active,e));active=None
     containing=[(a,b) for a,b in callbacks if a['seq']<pub['seq']<b['seq']]
     result=dict(phase=sample['phase'],condition=sample['condition'],publishedSeq=pub['seq'],publishedBootNs=pub['ns'],
-        publicationUiFrames=index.ui_for(pub['ns']),callbackPublication=False,fallbackPublication=False)
+        publicationUiFrames=index.ui_for(pub['ns']),callbackPublication=False,fallbackPublication=False,clippedPrefixCallbackEnds=clipped)
     def exactly(stage,lo,hi):
         matches=[e for e in events if e['stage']==stage and lo<e['seq']<hi];require(len(matches)==1,'Expected marker '+stage);return matches[0]
     if sample['condition']=='refresh':

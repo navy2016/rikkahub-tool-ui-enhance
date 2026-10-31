@@ -25,3 +25,26 @@ publish仅一次；拒绝不得清pending或调用publish；false恢复pending�
 真实Release派生页面：1k/10k×IME，普通刷新与同步控制；普通条件应证明FRAME_PUBLISHED在原callback及其UI帧内，
 同步控制必须保留原guard。检查全部字节、最终revision、原历史身份、80列物理网格和原始迹线。
 任何无法证明的边界停止，不删断言、不补样、不自动采用。后续完整回归和独立性能对照仍是前置要求。
+
+## 首轮结果与原件恢复（候选未采用）
+
+候选冻结于bfa29900798d6bb591c66da543859aaa37361dd7，协议SHA256
+884495008f0760ece6b96de9293dcb320e0cabfd7d924cae8c18e8a42b4549c2。
+候选Page+helper始终保持冻结hash，没有把探针变成候选逻辑。
+
+首次952edc6/run41245660245在任务选择前置阶段失败：terminalPipelineTests覆盖testBuildType，
+`testReleaseUnitTest`不存在；0JVM/0设备窗口。修正构建入口为独立-PterminalReleaseTests=true调用，
+再以terminalPipelineTests构建设备目标；不是改候选或重采性能。
+
+02be6ce7d47aadfd50bda6b6562a9e4d3f9ac2e1/run41245994937：49 Release JVM通过，4设备方法/32窗口完成。
+原汇总30/32，通过的为14普通callback+16SYNC fallback；两处10k/r0-refresh报`Callback end without start`。
+原因是takeLast(256)前缀从旧回调中途开始，解析器把前缀的孤立旧END误当当前窗口缺事件。
+两个当前响应都有完整START/ELIGIBLE/CALL/FRAME_PUBLISHED/RESULT/END，均在同一Choreographer帧中。
+
+修正只接纳“长度恰256的前缀、尚未见START、唯一领先END、seq在当前窗口之前”的截断历史，原样记录；
+当前窗口缺START/END、嵌套START或未证明截断仍失败。没有重跑Android或修改候选/协议/断言。
+离线同批原件恢复16普通帧内+16SYNC原保护回退，49JVM全部通过。
+原报告SHA256a14d74bef6eb72fb1bbab48cfc45071bd26d3881641ca780c24f7e17c1569154，原workflow仍failure。
+
+这是机制/选定边界，不是性能采用。下一步应先补齐真实页面选择/鼠标/IME/重入等原交互回归，再冻结新性能A/B；
+不叠加P2，不用这32窗口估计优化百分比，不交付正式APK。

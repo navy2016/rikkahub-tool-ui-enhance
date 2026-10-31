@@ -70,4 +70,20 @@ class InFrameSourceContracts(unittest.TestCase):
         self.assertTrue(m.classify(sample,Index())['fallbackPublication'])
         events[3]['flag']=False
         with self.assertRaises(ValueError):m.classify(sample,Index())
+    def test_only_a_capped_leading_prefix_end_can_be_retained_without_start(self):
+        class Index:
+            def ui_for(self,ns):return [dict(token=7,startNs=0,endNs=10000)]
+        names=['INFRAME_CALLBACK_START','INFRAME_ELIGIBLE','INFRAME_PUBLISH_CALL','FRAME_PUBLISHED','INFRAME_PUBLISH_RESULT','INFRAME_CALLBACK_END']
+        events=[dict(stage=n,seq=300+i,ns=3000+i,revision=5,flag=True) for i,n in enumerate(names)]
+        prefix=[dict(stage='OLD',seq=i+1,ns=i+1,revision=1,flag=None) for i in range(256)]
+        prefix[1]['stage']='INFRAME_CALLBACK_END'
+        sample=dict(events=events,prefixEvents=prefix,fedRevision=5,phase='r0-refresh',condition='refresh')
+        self.assertEqual(1,len(m.classify(sample,Index())['clippedPrefixCallbackEnds']))
+        for change in ('uncapped','current-end','nested'):
+            import copy
+            value=copy.deepcopy(sample)
+            if change=='uncapped':value['prefixEvents']=value['prefixEvents'][1:]
+            elif change=='current-end':value['events'][0]['stage']='INFRAME_CALLBACK_END'
+            else:value['events'][1]['stage']='INFRAME_CALLBACK_START'
+            with self.assertRaises(ValueError):m.classify(value,Index())
 if __name__=='__main__':unittest.main()

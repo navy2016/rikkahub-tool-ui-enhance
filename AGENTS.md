@@ -515,6 +515,14 @@ CI先plain候选testReleaseUnitTest，再仅追踪探针Release派生APK；构�
 原因terminalPipelineTests覆盖testBuildType；构建入口修正为单独-PterminalReleaseTests=true做JVM，
 依赖图捕获移到后续-PterminalPipelineTests=true的APK调用。冻结候选/协议/断言未改；旧失败回执保留。
 
+修正入口02be6ce/run41245994937已完成49 Release JVM+4设备方法/32窗口，原CI汇总failure(30/32)。
+两10k/r0-refresh报Callback end without start：256前缀截到旧回调中间，当前响应回调完整。
+解析仅允许完整256前缀中的唯一领先旧END，记录clippedPrefixCallbackEnds；新窗口缺START仍拒绝。
+同次原件离线恢复16普通callback内同帧发布+16SYNC active guard原路径；不重跑Android/不改候选与冻结协议。
+原报告SHA a14d74bef6eb72fb1bbab48cfc45071bd26d3881641ca780c24f7e17c1569154。原CI结论不改。
+工作目录full-virtual-inframe-publication/original与offline-recovery.json。当前无CI运行；还未做性能A/B或全面交互回归，生产仍55。
+下一步先原真实页面选择/鼠标/IME/重入回归，再单独冻结性能，不要把机制结果当提速结论。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
