@@ -22,6 +22,7 @@ def fixture(returnRatio=.6,refreshRatio=1.):
 class RecoveryPairedContracts(unittest.TestCase):
     def test_candidate_stays_the_passed_three_file_patch(self):
         self.assertEqual(3,len(m.guard()['files']));self.assertEqual(41180293887,m.GATE_RUN)
+        self.assertEqual(41184883013,m.SETUP_RUN)
         code=Path(m.__file__).read_text();self.assertIn('Common driver was rebuilt differently',code)
         self.assertIn('Source overlay not restored',code)
     def test_frozen_return_and_refresh_guards(self):

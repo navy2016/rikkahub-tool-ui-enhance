@@ -48,3 +48,13 @@ commit. Afterfirstcommit,guard cannotunmount measuredpage. Boundedsetup snapshot
 fields/hashes;nominaltimeouts/measurementprotocol/thresholds/candidatepatch unchanged.
 Run four setupOnly cases (no performancewindows) first viawidthRecoverySetup. Do notrerun320
 windows untilpreflight passes. Old30windows stay separate,neverfilled intoa new comparison.
+
+Preparationpreflight4dc2bf59ee161b73c9cd65dcdbd5b7c7ab217ead/run41184883013 PASSED4cases with
+0performancewindows:80columns/25physicalrows,1000/10000history,nativeIMEhidden/shown. Inall4,
+after-write decodedflow stillhadnomatchingcommandpref;persisted-and-flow-confirmed/before-mount
+correct. This captures anactual readinessgap,not the completeoldfailureinterleaving.
+PreflightreportSHA2566c7be22f97374e0cd5ec8ccc045115c618c22e842654e7c5fe28ca38ce7b9344.
+
+v2 now pinsbyte-identicalpreflightdriver andsame32c07c8candidate. Newfixed320windowrun,not
+completion/replacement ofold30windows. Same thresholds/condition order/samplecounts,withactual
+first-mountconfiguration checked. No productionsettings repair included.

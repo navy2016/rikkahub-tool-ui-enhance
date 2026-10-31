@@ -14,7 +14,8 @@ CLASS='me.rerere.rikkahub.pipeline.TerminalWidthRecoveryPairedTest'
 METHODS=('recoveryHiddenOneThousand','recoveryShownOneThousand','recoveryHiddenTenThousand','recoveryShownTenThousand')
 CASES=tuple(f'widthRecovery-{size}-{ime}' for size in (1000,10000) for ime in ('hidden','shown'))
 GATE_RUN=41180293887;GATE_SHA='32c07c8b6cf504cbd62a8c07a7e795cdf3f2acb8'
-PAIRS=4;SUITE='P2-width-checkpoint-paired-v1'
+SETUP_RUN=41184883013;SETUP_SHA='4dc2bf59ee161b73c9cd65dcdbd5b7c7ab217ead'
+PAIRS=4;SUITE='P2-width-checkpoint-paired-v2-configured-mount'
 original_sources=ci.sources
 def spec():return json.loads((BASE/'sources.json').read_bytes())
 def git(*args):return subprocess.check_output(['git','-c','core.fileMode=false',*args],cwd=ROOT,timeout=40)
@@ -25,6 +26,7 @@ def guard():
         'Candidate changed since correctness gate')
     for p,h in s['files'].items():require(ci.digest(ROOT/p)==h['base'],'Production no longer baseline')
     require(len(s['files'])==3,'Not the fixed P2 three-file candidate')
+    require(git('show',SETUP_SHA+':'+TEST)==(ROOT/TEST).read_bytes(),'Driver differs from successful first-mount preflight')
     return s
 def sources():
     result=original_sources()
@@ -43,7 +45,10 @@ def build():
     pair.require_ci();guard();configure();require(not git('diff','--name-only','HEAD').strip(),'Dirty tracked checkout')
     gate=json.loads(subprocess.check_output(['gh','api',f'repos/navy2016/rikkahub-tool-ui-enhance/actions/runs/{GATE_RUN}'],text=True,timeout=30))
     require(gate['head_sha']==GATE_SHA and gate['conclusion']=='success','Correctness gate not passed')
+    setup=json.loads(subprocess.check_output(['gh','api',f'repos/navy2016/rikkahub-tool-ui-enhance/actions/runs/{SETUP_RUN}'],text=True,timeout=30))
+    require(setup['head_sha']==SETUP_SHA and setup['conclusion']=='success','Configured first-mount preflight not passed')
     OUT.mkdir(parents=True,exist_ok=False);BUILD.mkdir(parents=True,exist_ok=False);save(OUT/'correctness-run.json',gate)
+    save(OUT/'setup-run.json',setup)
     originals={p:(ROOT/p).read_bytes() for p in spec()['files']};manifests={}
     try:
         subprocess.run(['git','apply','--check',str(PATCH)],cwd=ROOT,check=True);subprocess.run(['git','apply',str(PATCH)],cwd=ROOT,check=True)
@@ -67,7 +72,8 @@ def build():
         guard();require(not git('diff','--name-only','HEAD').strip(),'Source overlay not restored')
     assets=pair.verify_bundles(manifests);sha,run=ci.identity()
     shutil.copyfile(ROOT/'artifacts/terminal-full-virtual-mechanism/resolved-dependencies.json',OUT/'resolved-dependencies.json')
-    plan=dict(suite=SUITE,sourceSha=sha,runId=run,pairs=PAIRS,gateRun=GATE_RUN,gateSha=GATE_SHA,productionChanged=False,
+    plan=dict(suite=SUITE,sourceSha=sha,runId=run,pairs=PAIRS,gateRun=GATE_RUN,gateSha=GATE_SHA,setupRun=SETUP_RUN,setupSha=SETUP_SHA,
+        previousFailedRun=41181696048,productionChanged=False,
         manifests=manifests,patchSha256=ci.digest(PATCH),sharedAssetInventorySha256=assets)
     save(OUT/'plan.json',plan);save(ci.OUT/'manifest.json',manifests['legacy'])
 def validate(text):
@@ -80,6 +86,9 @@ def validate(text):
         _,size,ime=c['case'].split('-');size=int(size);shown=ime=='shown'
         require(c['historySize']==size and c['expectedIme']==shown and c['baselineOnly'] is False and c['passed'] and
             c['mode']=='fullVirtual' and c['clock']=='real-android-no-compose-test-clock','Incorrect native paired case')
+        preparation=c['preparation']
+        require([x['stage'] for x in preparation]==['before-write','after-write','persisted-and-flow-confirmed','before-mount'] and
+            all(x['configured'] and not x['init'] for x in preparation[-2:]),'First-mount configuration evidence missing')
         expected=[(r,pos,condition) for r in range(5) for pos,condition in enumerate(baseline.conditions(r))]
         require([(s['index'],s['position'],s['condition']) for s in c['samples']]==expected,'Fixed per-launch transition order differs')
         require([d['phase'] for d in c['phaseDumps']]==[f'r{r}-{a}' for r,p,a in expected],'Missing exact per-window gfxinfo')

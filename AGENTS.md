@@ -390,6 +390,11 @@ SettingsStore在PreferencesStore.kt：update乐观写flow、DataStore重发，�
 不改生产/候选/阈值/超时。先suite=widthRecoverySetup四场景无性能预检，通过才重新固定矩阵。
 首次失败原件目录full-virtual-width-recovery/failed-pair-original，old30不混入新结果。
 
+P2首次挂载预检4dc2bf5/run41184883013成功4场景/0性能：80列25行，1k/10k与原生IME均正确。
+四次after-write流仍无匹配偏好，持久层/flow确认及before-mount正确，证明有实际就绪间隙；
+不声称完整还原旧失败时序。v2配对固定此driver与原32c07c8候选，新320窗口不混入旧30。
+预检原报告SHA6c7be22f97374e0cd5ec8ccc045115c618c22e842654e7c5fe28ca38ce7b9344，生产未变。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
