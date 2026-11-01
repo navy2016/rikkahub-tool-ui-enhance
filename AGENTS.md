@@ -9,6 +9,15 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## 有限启动尾部诊断已验证（优先于下方待运行记录）
+
+573341f8902e787d50966120a195ac8d90242717/run41353833781 success；artifact13101954048/只读relay41354159180。
+8原trace/回执/原分析完全复算，8固定目标截止前链齐全、原parser无fault；基线也2/2成功，不证明任何drain方案改善。
+辅助审计选择后仍有6..22结构性UI缓冲尝试，7/8末结构token缺SurfaceFrame；不是协议目标，不替换原目标/结果。
+报告benchmarks/results/trace-finite-tail-v1.md，工作目录/workspace/terminal-review/full-virtual-trace-finite-tail，verify_finite.py/verified-report.json。
+无APK/终端性能/资格/采用。V3及滑动V1保持closed/rejected；C1仍机制通过但性能未开始，306生产不变。
+下一建议是独立少量真实306native PTY单窗口尾部诊断，而不是重跑840矩阵；当前无待完成CI。
+
 ## 当前有限启动尾部诊断（独立新实验，不重跑V3或滑动V1）
 
 benchmarks/terminal-trace-finite-tail：每case Settings force-stop→HOME等待4s→trace→单次am start -W。

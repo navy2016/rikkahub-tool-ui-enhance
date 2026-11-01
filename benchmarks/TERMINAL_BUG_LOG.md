@@ -180,3 +180,13 @@ changes separately. Performance rejection by itself is not proof of a specific s
   decoded JSON maps. Their counters matched but JSON stringifies integer object keys.
 - Normalize only the two known maps' keys in`verify_diagnostic.py`, then compare complete structures.
   All6normal analyses match; all8originaltrace hashes and receipts verified. No native/parser change.
+
+## OBSERVATION-FINITE-TAIL-003 — finite-launch targets complete but terminal tail remains unqualified
+- Fixed8case run41353833781/source573341f890 succeeded. Artifact13101954048/relay41354159180,
+  all8raw hashes/receipts/analyses independently matched. No APK or terminal timing samples.
+- All fixed selected targets have complete pre-cut chains,including both baselines,so no improvement
+  can be attributed to extra wait/periodicflush/volume input. HistoricalV3isnot repaired by this result.
+- Ancillary replay shows6..22later structural UI attempts and7/8last structural tokens without a
+  SurfaceFrame. These are not the frozen selected targets and are not used to change the verdict.
+- Built-in Settings launch still cannot establish the cause of static terminal final-buffer absence.
+  A separate small native306experiment is needed; no current native qualification or C1adoption.
