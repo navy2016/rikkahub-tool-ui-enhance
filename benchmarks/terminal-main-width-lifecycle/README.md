@@ -56,6 +56,7 @@ checkpoint在释放时复制标量，原lease阻止过期页写回；不能保�
 
 本地只读检查：`python3 -B .github/scripts/terminal-main-width-lifecycle.py guard`
 Python守卫测试：`python3 -B -m unittest discover -s .github/scripts -p test_terminal_main_width_lifecycle.py`
-云端workflow：terminal-main-width-lifecycle.yml，明确ref=opt/terminal-verified-a79e7b6。
+云端入口：terminal-pipeline-tests.yml，suite=mainWidthLifecycle，明确ref=opt/terminal-verified-a79e7b6。
+它调用terminal-main-width-lifecycle.yml；新workflow未在默认分支注册，不能单独按文件名dispatch。
 所有临时源码覆盖由context manager在finally逐文件原样恢复；app/src/main树不得被提交为候选。
 identity.json/protocol.json按实际源码和方法清单冻结；修改候选必须产生新的证据身份，不能追改已执行结果。

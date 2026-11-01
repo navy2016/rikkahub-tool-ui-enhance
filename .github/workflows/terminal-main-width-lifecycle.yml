@@ -1,6 +1,6 @@
 name: MAIN Width Lifecycle A1 Mechanism
 'on':
-  workflow_dispatch: null
+  workflow_call: null
 permissions:
   contents: read
   actions: read
