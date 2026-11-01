@@ -561,6 +561,12 @@ bottomVisibility6/tuiHistory5/selectionRepair9=182全部通过。候选本体未
 性能唯一NO_SUBMISSION是pair0候选1k显示r0-return预热窗口的后续seq224/token21764；首个seq223/token21750已提交呈现，终点不受影响。
 当前还未生产采用/正式APK；回归和性能通过后仍遵守不自动合入，先交付可核验原件。
 
+最终只读取证355ab74/run41260467243 success，artifact13064652283；本地XML逐方法复核504 JVM+182 viewport通过，
+collection proof SHA82cfb692a1a419d12c49e5163aecb932bda2caae5fd25b4279f960e322e05e0d。
+原件full-virtual-inframe-final-regression/original，性能原件full-virtual-inframe-performance-v1/original；当前无CI运行。
+性能+最终正确性前置已全部通过，尚未合入bfa候选/未构建正式Release。等待明确采用步骤，不能把当前55说成已优化。
+后续采用只允许原冻结Page候选hash ad418a9c4fdda6bd7d6d161807ca9607e2ea37f2c34a1deb9f721c57d32a1eea及helper hash24ab5bc0d4c922bee666bdbef894aa83ff0d4c58f78a74103e1c980c9f3f5bc4。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash
