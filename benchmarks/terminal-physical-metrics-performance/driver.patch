@@ -1,0 +1,189 @@
+--- a/app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalMainWidthPerformanceTest.kt
++++ b/app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPhysicalMetricsPerformanceTest.kt
+@@ -59,8 +59,8 @@
+ import org.koin.core.component.KoinComponent
+ import org.koin.core.component.inject
+ 
+-/** A1 versus306,2016frozen windows. Native ActivityScenario/accessibility,never a Compose test clock. */
+-class TerminalMainWidthPerformanceTest : KoinComponent {
++/** B1 versus306: separate MAIN redraw,ALT redraw and guard processes. Native clocks/identities only. */
++class TerminalPhysicalMetricsPerformanceTest : KoinComponent {
+     @get:Rule val timeout=Timeout.seconds(360)
+     private val manager: BackgroundProcessManager by inject()
+     private val proot: PRootManager by inject()
+@@ -162,18 +162,41 @@
+         @Synchronized fun windowFinishedAfter(viewportNs: Long)=traversals.any{it[0]<=viewportNs && viewportNs<=it[1]}
+         @Synchronized fun readTraversals()=traversals.map{it.copyOf()}
+     }
+-    @Test fun mainWidthPerfOneThousandHidden() = exercise(1000, false)
+-    @Test fun mainWidthPerfOneThousandShown() = exercise(1000, true)
+-    @Test fun mainWidthPerfTenThousandHidden() = exercise(10000, false)
+-    @Test fun mainWidthPerfTenThousandShown() = exercise(10000, true)
++    @Test fun physicalMetricsMainOneThousandHidden() = exercise(1000, false, "main")
++    @Test fun physicalMetricsMainOneThousandShown() = exercise(1000, true, "main")
++    @Test fun physicalMetricsMainTenThousandHidden() = exercise(10000, false, "main")
++    @Test fun physicalMetricsMainTenThousandShown() = exercise(10000, true, "main")
++    @Test fun physicalMetricsAltOneThousandHidden() = exercise(1000, false, "alt")
++    @Test fun physicalMetricsAltOneThousandShown() = exercise(1000, true, "alt")
++    @Test fun physicalMetricsAltTenThousandHidden() = exercise(10000, false, "alt")
++    @Test fun physicalMetricsAltTenThousandShown() = exercise(10000, true, "alt")
++    @Test fun physicalMetricsGuardOneThousandHidden() = exercise(1000, false, "guard")
++    @Test fun physicalMetricsGuardOneThousandShown() = exercise(1000, true, "guard")
++    @Test fun physicalMetricsGuardTenThousandHidden() = exercise(10000, false, "guard")
++    @Test fun physicalMetricsGuardTenThousandShown() = exercise(10000, true, "guard")
+ 
+-    private fun exercise(size: Int, expectedIme: Boolean) {
++    private val redrawSuffix = " 中文 e\u0301 👩‍💻 אבג 0123"
++    private fun redrawText(marker: String, row: Int): String =
++        if(row==24) marker else "r${row.toString().padStart(2,'0')} $marker$redrawSuffix"
++    private fun redrawResponse(marker: String): String = (1..24).joinToString("") { row ->
++        "\u001b[$row;1H\u001b[2K" + if(row==24) "$marker\r" else
++            "\u001b[1;3;${31+row%6}m${redrawText(marker,row)}\u001b[0m\r"
++    }
++
++    private fun exercise(size: Int, expectedIme: Boolean, cohort: String) {
++        require(cohort in listOf("main","alt","guard"))
++        val redraw = cohort!="guard"
++        val alternateCohort = cohort=="alt"
+         val mode = TerminalRenderMode.FULL_VIRTUAL
+         val tui = true
+         val setupOnly=InstrumentationRegistry.getArguments().getString("realClockSetupOnly")=="true"
+-        val case="mainwidthperf-$size-${if(expectedIme) "shown" else "hidden"}";val launch=UUID.randomUUID().toString();val sandbox="real-clock-$launch"
++        val case="physical$cohort-$size-${if(expectedIme) "shown" else "hidden"}";val launch=UUID.randomUUID().toString();val sandbox="real-clock-$launch"
+         val startup = startupReceipt()
+         val saved=runBlocking{settings.settingsFlow.first{!it.init}}
++        // One printf command, not24subprocesses/commands. Do not assume one syscall or PTY read:
++        // all real chunks remain counted. Python independently checks the complete finite bytes.
++        val redrawFormat=redrawResponse("%s").replace("\u001b","\\033").replace("\r","\\r")
++        val redrawArguments=(1..24).joinToString(" "){"\"${'$'}command\""}
+         val script="""
+             stty icanon icrnl -echo -onlcr
+             in_alt=0
+@@ -193,6 +216,7 @@
+                 ECHO:*)
+                   if [ "${'$'}in_alt" -eq 1 ];then printf '\033[?1049l';in_alt=0;fi
+                   printf '\033[24;1H\033[2K%s\r' "${'$'}command";;
++                DRAW:*) printf '$redrawFormat' $redrawArguments;;
+                 SYNC:*) printf '\033[?2026h\033[24;1H\033[2K%s\r' "${'$'}command"
+                   sleep 0.060
+                   printf '\033[?2026l';;
+@@ -331,11 +355,19 @@
+                 await("post-setup native visibility: $phase",3000){visibleText(lastMarker)}
+                 gates.add(JSONObject().put("phase",phase).put("rows",terminal.rows).put("columns",terminal.columns).put("alternate",alternate).put("ime",expectedIme).put("virtual",true))
+             }
+-            settle(false,"initial");val rows=terminal.rows
++            // Wait for the same completed IME/grid setup before freezing MAIN provenance.
++            // Capturing it immediately after opening IME could bind a pre-settle snapshot.
++            settle(false,"initial-main")
++            val initialHistory=terminal.renderFrame().ownedRows()!!.history
++            assertEquals(size,initialHistory.size)
++            if(alternateCohort) {
++                runBlocking{manager.sendInput(id,"ALT").getOrThrow()}
++                await("initial alternate marker"){trace.viewport()?.viewport?.alternate==true}
++                lastMarker="ALT-READY"
++            }
++            settle(alternateCohort,"initial");val rows=terminal.rows
+             assertEquals("IME changed the physical PTY grid",physicalRowsBeforeIme,rows)
+             assertTrue("Row24 protocol target outside grid", rows >= 24)
+-            val initialHistory=terminal.renderFrame().ownedRows()!!.history
+-            assertEquals(size,initialHistory.size)
+             if(setupOnly) {
+                 emitCase(JSONObject().put("case",case).put("setupOnly",true).put("acceptance",false).put("passed",true)
+                     .put("viewport",trace.viewport()?.viewport.toString()).put("modelRows",terminal.rows).put("modelColumns",terminal.columns)
+@@ -344,7 +376,7 @@
+                 return
+             }
+             for(round in 0..20) {
+-                val conditions=when(round % 6) {
++                val conditions=if(redraw) listOf("redraw") else when(round % 6) {
+                     0 -> listOf("refresh","sync","return")
+                     1 -> listOf("return","sync","refresh")
+                     2 -> listOf("sync","refresh","return")
+@@ -359,16 +391,17 @@
+                         runBlocking{manager.sendInput(id,"ALT").getOrThrow()}
+                         await("alternate marker"){trace.viewport()?.viewport?.alternate==true}
+                         lastMarker="ALT-READY";settle(true,"prepare-$phase")
+-                    } else settle(false,"prepare-$phase")
++                    } else settle(alternateCohort,"prepare-$phase")
+                     var field: AccessibilityNodeInfo?=null
+                     await("editable native node"){field=editor();field!=null}
+                     val input=checkNotNull(field)
+                     try {
+                         assertTrue("Native editor has no IME action",input.actionList.any{it.id==AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id})
+-                        val expected="${if(condition=="sync") "SYNC" else "ECHO"}:$case:${round.toString().padStart(2,'0')}:$position"
+-                        val output=(if(condition=="return") "\u001b[?1049l" else if(condition=="sync") "\u001b[?2026h" else "")+
++                        val expected="${if(redraw) "DRAW" else if(condition=="sync") "SYNC" else "ECHO"}:$case:${round.toString().padStart(2,'0')}:$position"
++                        val output=if(redraw) redrawResponse(expected) else (if(condition=="return") "\u001b[?1049l" else if(condition=="sync") "\u001b[?2026h" else "")+
+                             "\u001b[24;1H\u001b[2K$expected\r"+(if(condition=="sync") "\u001b[?2026l" else "")
+-                        val payload=output.toByteArray();val before=trace.beginWindow()
++                        val payload=output.toByteArray();assertTrue("Finite write exceeds peer budget",payload.size<=4096)
++                        val before=trace.beginWindow()
+                         assertTrue("Editor detached",input.refresh())
+                         val arguments=Bundle().apply{putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,expected)}
+                         val clockBefore=JSONObject().put("readStartBootNs",SystemClock.elapsedRealtimeNanos()).put("readEndBootNs",SystemClock.elapsedRealtimeNanos())
+@@ -377,7 +410,7 @@
+                         assertTrue(input.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id))
+                         val actionReturned=SystemClock.elapsedRealtimeNanos()
+                         var observedEvents: List<TerminalPipelineEvent>?=null;var polls=0
+-                        await("complete main recovery draw",25_000) {
++                        await("complete finite-response draw",25_000) {
+                             val snapshot=trace.snapshot();polls++
+                             val feeds=snapshot.filter{it.stage==TerminalPipelineStage.EMULATOR_FED}
+                             val complete=feeds.isNotEmpty() && feeds.sumOf{it.bytes}==payload.size &&
+@@ -410,14 +443,21 @@
+                         // Queries and history identity checks are AFTER the measured recovery draw.
+                         await("post-recovery native visibility",3000){visibleText(expected)};lastMarker=expected
+                         val recovered=terminal.renderFrame()
+-                        assertFalse(recovered.isAlternateScreen);assertEquals(size,recovered.historyCount)
+-                        assertSame("Unchanged MAIN history was replaced",initialHistory,recovered.ownedRows()!!.history)
++                        assertEquals(alternateCohort,recovered.isAlternateScreen)
++                        assertEquals(if(alternateCohort)0 else size,recovered.historyCount)
++                        if(!alternateCohort) assertSame("Unchanged MAIN history was replaced",initialHistory,recovered.ownedRows()!!.history)
++                        if(redraw) for(row in 1..24) {
++                            assertEquals("Complete redrawn physical row=$row",redrawText(expected,row),
++                                recovered.rows[recovered.historyCount+row-1].text.text.trimEnd())
++                        }
+                         samples.add(JSONObject().put("phase",phase).put("index",round).put("condition",condition).put("position",position)
+                             .put("warmup",round==0).put("clock","CLOCK_BOOTTIME").put("closedBootNs",closed).put("beganNs",began).put("actionReturnedNs",actionReturned).put("observedNs",observed)
+                             .put("uiNs",ui.timeNanos).put("publishedNs",published.timeNanos).put("drawNs",draw.timeNanos)
+                             .put("fedRevision",revision).put("publishedRevision",published.frameRevision).put("drawRevision",draw.frameRevision)
+                             .put("outputBytes",payload.size).put("outputSha256",hash(output)).put("virtual",true).put("tracePolls",polls)
+-                            .put("eventCount",events.size).put("visibleAfterMeasurement",true).put("sameInitialHistory",true)
++                            .put("eventCount",events.size).put("visibleAfterMeasurement",true)
++                            .put("alternate",alternateCohort).put("screenRowsVerified",if(redraw)24 else 1)
++                            .put("sameInitialHistory",if(alternateCohort)JSONObject.NULL else true)
+                             .put("events",JSONArray().apply{events.forEach{e->put(JSONObject().put("seq",e.sequence).put("stage",e.stage.name)
+                                 .put("ns",e.timeNanos).put("bytes",e.bytes).put("revision",e.frameRevision).put("virtual",e.virtual ?: JSONObject.NULL))}}))
+                         dumps.add(JSONObject().put("phase",phase).put("clockBefore",clockBefore)
+@@ -426,18 +466,30 @@
+                     } finally {input.recycle()}
+                 }
+             }
++            // ALT does not expose its hidden MAIN document. Restore and prove it AFTER every
++            // frozen window has closed. Never label an unobserved per-window history as equal.
++            if(alternateCohort) {
++                lastMarker="ECHO:HISTORY-CHECK:$case"
++                runBlocking{manager.sendInput(id,lastMarker).getOrThrow()}
++                settle(false,"after-alt-history")
++            }
++            val finalMain=terminal.renderFrame()
++            assertFalse(finalMain.isAlternateScreen);assertEquals(size,finalMain.historyCount)
++            assertSame("MAIN history changed during the cohort",initialHistory,finalMain.ownedRows()!!.history)
++            val historyVerifiedAt=SystemClock.elapsedRealtimeNanos()
+             owner.onActivity{activity->listener?.let{activity.window.decorView.viewTreeObserver.removeOnDrawListener(it)};activity.window.removeOnFrameMetricsAvailableListener(observer);activity.window.removeOnFrameMetricsAvailableListener(mirror);attached=false}
+             val drained=CountDownLatch(2);handler.post{drained.countDown()};mirrorHandler.post{drained.countDown()}
+             assertTrue(drained.await(5,TimeUnit.SECONDS));assertEquals(0,observer.overflow);assertEquals(0,mirror.overflow)
+             val draws=JSONArray().apply{observer.readDraws().forEach{put(JSONObject().put("ns",it.timeNs).put("drawingTimeMs",it.drawingTimeMs))}}
+             val metrics=JSONArray().apply{observer.readMetrics().forEach{put(JSONArray(it.toList()))}}
+             emitCase(JSONObject().put("case",case).put("mode",mode.id).put("tui",tui).put("launch",launch).put("pid",android.os.Process.myPid())
++                .put("cohort",cohort).put("mainHistoryVerifiedAfterAllWindows",true).put("historyVerifiedAtBootNs",historyVerifiedAt)
+                 .put("samples",JSONArray(samples)).put("gates",JSONArray(gates)).put("draws",draws).put("metrics",metrics).put("phaseDumps",JSONArray(dumps))
+                 .put("preparation",JSONArray(preparation)).put("startupReceipt",startup)
+                 .put("metricsRaw",JSONArray().apply{observer.readRawMetrics().forEach{put(JSONArray(it.toList()))}})
+                 .put("mirrorMetrics",JSONArray().apply{mirror.readMetrics().forEach{put(JSONArray(it.toList()))}})
+                 .put("mirrorRaw",JSONArray().apply{mirror.readRawMetrics().forEach{put(JSONArray(it.toList()))}})
+-                .put("collectorDiagnosisOnly",false).put("performanceMeasured",true).put("protocolId","terminal-main-width-performance-v1")
++                .put("collectorDiagnosisOnly",false).put("performanceMeasured",true).put("protocolId","terminal-physical-metrics-performance-v1")
+                 .put("completedTraversals",JSONArray().apply{observer.readTraversals().forEach{put(JSONArray(it.toList()))}})
+                 .put("clock", "CLOCK_BOOTTIME").put("historySize",size).put("baselineOnly",false).put("expectedIme",expectedIme).put("droppedFrameMetrics",observer.readMetrics().sumOf{it[9]}).put("passed",true))
+         } catch(error: Throwable) {

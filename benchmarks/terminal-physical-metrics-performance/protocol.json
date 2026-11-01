@@ -1,0 +1,1239 @@
+{
+  "baseProductionSha": "306e0b80b508c961bc00f2d4b34a2688e5857a1a",
+  "baseTree": "ac97798416997a8230c9fa2a5a8569cf0ed0a911",
+  "identityParserSha": "767756fdd1a3f069aee3adb98b1a09f014b3d3d2",
+  "identityProtocolSha256": "8205b614f689ceaa0553aefa1323a56ca1bcd939ec8ffefe66726095e02c43b9",
+  "environment": {
+    "api": 34,
+    "abi": "x86_64",
+    "guest": "existing nonroot two-CPU KVM SwiftShader harness",
+    "oneBoot": true,
+    "sharedDriverAndResourceAssets": true,
+    "releaseDerivedNonDebuggableTargets": true,
+    "noLocalApkDownload": true,
+    "nativeGrid": "80 columns; stable hidden grid before IME; physical rows unchanged"
+  },
+  "endpoints": {
+    "primary": "inputToBufferEvidenceNs",
+    "coGate": "inputToAttemptNs",
+    "systemGuard": "inputToDisplayEndNs",
+    "identity": "unchanged exact BOOTTIME frame-identity-v1 chain",
+    "notClaimed": [
+      "first visible pixel",
+      "photon time",
+      "phone FPS",
+      "formal release APK performance"
+    ]
+  },
+  "aggregation": {
+    "withinArm": "median of20formal windows in one case/condition/arm/pair",
+    "withinPair": "candidate statistic divided by legacy306 statistic",
+    "acrossPairs": "median of4paired ratios; never pooled-window ratio",
+    "tail": "nearest-rank sample p95 within each20-window arm (rank19),then4paired ratios; sample guard only,not population percentile estimate",
+    "worst": "per-pair maximum of ALL20formal windows; compare directly,never aggregate away a bad pair",
+    "null": "one formal null invalidates its arm median,p95,maximum and paired aggregate; never dropped/filled/replaced"
+  },
+  "diagnostics": {
+    "mainFrameLongWallThresholdNs": 50000000,
+    "mainFrameIntervals": "complete main-thread Choreographer spans intersecting each fixed input..cutoff; not CPU and not a replacement endpoint",
+    "widthIntervals": "wall interval union, not CPU, no phase subtraction to claim causal improvement"
+  },
+  "execution": {
+    "startup": "existing same-PID launch-write completion then one configuration write and persisted/flow/actual first LocalSettings checks",
+    "nativeFailure": "preserve invocation's assigned methods then stop outer matrix",
+    "identityFailure": "keep missing state and finish only frozen matrix; final integrity and acceptance fail",
+    "resampling": false,
+    "oldSamplesReused": false,
+    "forceDrawDuringWindow": false,
+    "protocolChangesAfterSampling": false,
+    "automaticProductionAdoption": false,
+    "fullFinalRegressionsRequired": true
+  },
+  "serialization": {
+    "casePartChars": 2600,
+    "casePartsMax": 1024,
+    "caseRawBytesMax": 33554432,
+    "observerRowsMax": 8192,
+    "traceBytesMaxExclusive": 100663296,
+    "note": "Independent21window redraw and63window guard processes;1024x2600case fragments,32MiBraw JSON,8192observer rows,existing240s/96MiBtrace caps. No runtime cap adjustment."
+  },
+  "id": "terminal-physical-metrics-performance-v1",
+  "stage": "independent306-versus-b1-performance",
+  "candidateFreezeSha": "f9c7e03643be06625c164ee0c4ef8359063941c1",
+  "candidateFiles": 5,
+  "candidateIdentitySha256": "c8c2475077b82b23afad953a7b038e2f060739d9ac2a960ee6908a437c29be9d",
+  "candidateProtocolSha256": "540761e47f28647d4bc85680871bb7908f85db7e4d5d9d2fd813a3fe71402ed3",
+  "traceProbeOverlay": false,
+  "rejectedA1Included": false,
+  "rejectedP2Included": false,
+  "cIncluded": false,
+  "prerequisites": {
+    "sourceSha": "f9c7e03643be06625c164ee0c4ef8359063941c1",
+    "run": 41295383061,
+    "conclusion": "success",
+    "jvmArtifact": 13078169318,
+    "jvmArtifactName": "terminal-physical-metrics-jvm-f9c7e03643be06625c164ee0c4ef8359063941c1-1",
+    "jvmReportSha256": "763a0f2a24b634df483a427942041673112cea0af31cb25647b63c9ec747b19b",
+    "componentArtifact": 13078854911,
+    "componentArtifactName": "terminal-physical-metrics-component-f9c7e03643be06625c164ee0c4ef8359063941c1-1",
+    "componentReportSha256": "1127beeb2cce6ccb215de43aad7cfdccd77ee148d1ebd57cfdc97fbe53f2aa9b",
+    "expectedJvmMethods": 529,
+    "expectedComponentMethods": 28,
+    "expectedLifecycleScenes": 24,
+    "readOnlyBeforeNewBuild": true,
+    "neverChangeHistoricalConclusions": true
+  },
+  "matrix": {
+    "armOrder": [
+      [
+        "legacy",
+        "candidate"
+      ],
+      [
+        "candidate",
+        "legacy"
+      ],
+      [
+        "legacy",
+        "candidate"
+      ],
+      [
+        "candidate",
+        "legacy"
+      ]
+    ],
+    "cases": [
+      "physicalmain-1000-hidden",
+      "physicalmain-1000-shown",
+      "physicalmain-10000-hidden",
+      "physicalmain-10000-shown",
+      "physicalalt-1000-hidden",
+      "physicalalt-1000-shown",
+      "physicalalt-10000-hidden",
+      "physicalalt-10000-shown",
+      "physicalguard-1000-hidden",
+      "physicalguard-1000-shown",
+      "physicalguard-10000-hidden",
+      "physicalguard-10000-shown"
+    ],
+    "caseSpecs": {
+      "physicalmain-1000-hidden": {
+        "method": "physicalMetricsMainOneThousandHidden",
+        "cohort": "main",
+        "historySize": 1000,
+        "expectedIme": false,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "physicalmain-1000-shown": {
+        "method": "physicalMetricsMainOneThousandShown",
+        "cohort": "main",
+        "historySize": 1000,
+        "expectedIme": true,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "physicalmain-10000-hidden": {
+        "method": "physicalMetricsMainTenThousandHidden",
+        "cohort": "main",
+        "historySize": 10000,
+        "expectedIme": false,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "physicalmain-10000-shown": {
+        "method": "physicalMetricsMainTenThousandShown",
+        "cohort": "main",
+        "historySize": 10000,
+        "expectedIme": true,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "physicalalt-1000-hidden": {
+        "method": "physicalMetricsAltOneThousandHidden",
+        "cohort": "alt",
+        "historySize": 1000,
+        "expectedIme": false,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "physicalalt-1000-shown": {
+        "method": "physicalMetricsAltOneThousandShown",
+        "cohort": "alt",
+        "historySize": 1000,
+        "expectedIme": true,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "physicalalt-10000-hidden": {
+        "method": "physicalMetricsAltTenThousandHidden",
+        "cohort": "alt",
+        "historySize": 10000,
+        "expectedIme": false,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "physicalalt-10000-shown": {
+        "method": "physicalMetricsAltTenThousandShown",
+        "cohort": "alt",
+        "historySize": 10000,
+        "expectedIme": true,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "physicalguard-1000-hidden": {
+        "method": "physicalMetricsGuardOneThousandHidden",
+        "cohort": "guard",
+        "historySize": 1000,
+        "expectedIme": false,
+        "conditions": [
+          "refresh",
+          "sync",
+          "return"
+        ],
+        "conditionOrder": [
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ]
+        ],
+        "windows": 63
+      },
+      "physicalguard-1000-shown": {
+        "method": "physicalMetricsGuardOneThousandShown",
+        "cohort": "guard",
+        "historySize": 1000,
+        "expectedIme": true,
+        "conditions": [
+          "refresh",
+          "sync",
+          "return"
+        ],
+        "conditionOrder": [
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ]
+        ],
+        "windows": 63
+      },
+      "physicalguard-10000-hidden": {
+        "method": "physicalMetricsGuardTenThousandHidden",
+        "cohort": "guard",
+        "historySize": 10000,
+        "expectedIme": false,
+        "conditions": [
+          "refresh",
+          "sync",
+          "return"
+        ],
+        "conditionOrder": [
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ]
+        ],
+        "windows": 63
+      },
+      "physicalguard-10000-shown": {
+        "method": "physicalMetricsGuardTenThousandShown",
+        "cohort": "guard",
+        "historySize": 10000,
+        "expectedIme": true,
+        "conditions": [
+          "refresh",
+          "sync",
+          "return"
+        ],
+        "conditionOrder": [
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ]
+        ],
+        "windows": 63
+      }
+    },
+    "rounds": 21,
+    "warmupRounds": [
+      0
+    ],
+    "windows": 3360,
+    "warmupWindows": 160,
+    "formalWindows": 3200,
+    "windowsPerInvocation": 420,
+    "rawTraceFiles": 96,
+    "formalPerConditionPerCasePerArmPerPair": 20,
+    "syncPeerHoldMs": 60,
+    "responseDeadlineNs": 25000000000,
+    "naturalObservationTailNs": 500000000,
+    "separateProcessesForCohorts": true,
+    "historyProof": "initial-main setup gate before snapshot; MAIN per-window identity; ALT per-window unknown and verified after timed windows by MAIN restoration"
+  },
+  "payload": {
+    "redrawRows": 24,
+    "columns": 80,
+    "suffix": " 中文 é 👩‍💻 אבג 0123",
+    "bytesMax": 4096,
+    "redraw": "one native shell printf command with24marker substitutions, rows1..23 bold+italic+ANSI color, row24plain marker; no assumption of one syscall/read",
+    "markers": "DRAW for redraw,SYNC for sync,ECHO for refresh/return; case:round2digits:position",
+    "postWindowChecks": "24complete model rows plus native marker visibility; never queried to fabricate the endpoint"
+  },
+  "gates": {
+    "redrawPrimaryRatioMax": 0.8,
+    "redrawUiRatioMax": 0.8,
+    "redrawPrimaryWinningPairsMin": 3,
+    "redrawUiWinningPairsMin": 3,
+    "guardPrimaryRatioMax": 1.05,
+    "guardUiRatioMax": 1.05,
+    "systemRatioMaxAllConditions": 1.05,
+    "sampleP95RatioMaxAllEndpointsConditions": 1.1,
+    "worstPairRatioAllowance": 1.5,
+    "worstPairAbsoluteAllowanceNs": 100000000,
+    "allWindowsIdentitiesRequired": true,
+    "allWindowsNeedSubmissionAndPresentationWithinCutoff": true,
+    "frameMetrics": "BOTH_EXACT/ONE_EXACT/ABSENT retained as cross-check states; CONFLICT fails; exact buffer and display chain always required",
+    "noTargetGainOffsetsGuardRegression": true
+  },
+  "driverSha256": "025fa0f56304b73cbc184345a973abcaf6d2097e30f444312c2dfcb0083b9067"
+}

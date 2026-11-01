@@ -4,6 +4,9 @@
 
 ## Active terminal optimization branch
 
+用户新增要求：推进中发现bug必须记入benchmarks/TERMINAL_BUG_LOG.md（位置/复现证据/根因/修复/验证）。
+范围明确的小bug顺手修复；已冻结候选/协议不得静默夹带修改，必须独立版本与重新资格验证。
+
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
 ## B1当前任务（优先于下方B未开始记录）
