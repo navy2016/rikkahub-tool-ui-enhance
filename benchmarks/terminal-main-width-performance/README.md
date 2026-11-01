@@ -46,3 +46,11 @@ Perfetto沿用32MiB ring/240s/96MiB上限，BOOTTIME和原identity状态机不�
 
 只有性能与资料完整性均通过，后续才运行缺失的完整182视口/页面/生命周期回归并讨论正式采用。
 本轮不宣称正式混淆APK或用户设备提速。失败完整归档，不微调同候选反复追成绩。
+
+## 执行入口
+
+只读守卫：`python3 -B .github/scripts/terminal-main-width-performance.py guard`。
+本地仅Python：`python3 -B -m unittest discover -s .github/scripts -p test_terminal_main_width_performance.py`。
+已注册workflow `terminal-pipeline-tests.yml`，显式ref=opt/terminal-verified-a79e7b6、suite=mainWidthPerformance；
+调用新的terminal-main-width-performance.yml，不改默认分支，不直接dispatch未注册的新文件。
+候选守卫及来源资格保持533/20机制阶段原代码；性能脚本独立复核原artifact与XML之后才构建。
