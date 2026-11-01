@@ -136,7 +136,7 @@ changes separately. Performance rejection by itself is not proof of a specific s
   stop and observed disappearance,never treating signal permission denial as completion. Native
   full-page qualification still required; diagnostic success is not840window qualification.
 
-## INFRA-LIFECYCLE-005 — JitPack401 blocks V3 before any device window [retry build passed; native qualification running]
+## INFRA-LIFECYCLE-005 — JitPack401 blocks V3 before any device window [build recovered; native qualification completed/rejected separately]
 - Run41342838188/source9985cfc fails `:app:mergeTerminaltestNativeLibs` resolving unchanged
   `com.github.rikkahub:sqlite-android:-SNAPSHOT`: GETmaven-metadata.xml returns401Unauthorized.
 - Qualification step never started; no app/device window or trace sample exists from this run.
@@ -148,3 +148,18 @@ changes separately. Performance rejection by itself is not proof of a specific s
 - Retry41343554975/sourcea5ccea0 (documentation-only difference) successfully completed the unchanged
   target/collector build and entered native840window qualification. Dependency declarations and versions
   were not changed. Native results are not yet retrieved; this fixes no historical performance verdict.
+- Final: all840windows/24traces were independently replayed. Qualification fails on16formal tail windows,
+  separately from this recovered dependency access error. No further infrastructure/sample retry authorized.
+
+## INCIDENT-LIFECYCLE-006 — final-round FrameTimeline endpoints missing despite orderly stop [V3closed/rejected; cause under investigation]
+- Run41343554975/sourcea5ccea0 completed840windows and24traces; original artifact13099142636/relay41347058077.
+- All raw identities/native cases/stop and pull receipts independently match the frozen CI classifications.
+  16formal windows fail,allr20:3BUFFER_CHAIN_INCOMPLETE with no SurfaceFrame;13missing-cookie-end after submission.
+  Five have earlier complete endpoints but a later qualified incomplete attempt; the original gate rejects them.
+- 1201qualified attempts/1198submitted/1185presented,1200BOTH_EXACT+1ABSENT. No original-parser trace faults.
+  Missing evidence is not proof of actual nonsubmission or dropped/late display; no null becomes a duration.
+- Perfetto v34CLI already flushes on SIGINT. Service all_data_sources_flushed can include errors; process exit
+  and this event are not complete-producer-data proofs. AOSP/SDK writer-tail references are diagnostic leads,
+  not binary/source identity or a proven cause in this guest. No historical parser/data change or resampling.
+- Next: independently freeze a small no-APK tail-delivery diagnostic; keep timing cutoffs and all missing
+  endpoints intact. CurrentV3 remainsfailed; C1performance cannot begin until a new acquisition qualifies.

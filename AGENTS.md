@@ -9,6 +9,18 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## V3最终结论（优先于所有下方running／pending记录）
+
+唯一原生资格41343554975/sourcea5ccea022cd53f2a6595e6e84887f6899ee9f39d已failure，840窗口/24原轨迹/2launch全部离线复算完毕。
+原artifact13099142636经只读relay41347058077取回；results hash3e863d05b4718c4a79ba80154580ed31c7855908135f178baf3423655136a2d8。
+qualificationPassed=false；824完整/16正式尾窗不完整，全部r20；原解析器24traceFaults均空，但不等于所有FrameTimeline终点齐全。
+1201合格尝试/1198提交/1185呈现；1200BOTH_EXACT+1ABSENT，无冲突。3BUFFER_CHAIN_INCOMPLETE缺SurfaceFrame，13missing-cookie-end。
+5个尾窗已有更早完整终点，因后来合格尝试不完整仍按冻结规则拒绝；不删尝试/补采/延长截止/放宽解析器。
+PID/start ticks/proc消失和文件hash回执通过；下一步独立无APK诊断生产者尾部交付，不把服务flush事件或进程退出当完整证据。
+报告benchmarks/results/trace-lifecycle-v3-rejected.md；工作目录/workspace/terminal-review/full-virtual-trace-lifecycle-v3-infra-retry。
+verified-report.json/verified-windows.csv/verified-tail-gaps.json为完整结果；verify_qualification.py未改且全量运行成功，当前无待完成CI。
+C1仍机制528JVM/44组件/17新场景已验证，性能未开始/未采用；生产仍306/main ac977984。下一诊断尚未派发。
+
 ## 当前轨迹生命周期V3（优先于下方V1/V2/诊断待运行记录）
 
 无APK诊断41341668403确认572B同一config：direct/pipe可启动、heredoc被SELinux shell_data_file read拒绝。

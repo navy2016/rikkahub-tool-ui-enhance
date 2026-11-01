@@ -1,4 +1,8 @@
-# Trace lifecycle qualification — diagnosed transport defects, native result pending
+# Trace lifecycle qualification — transport defects diagnosed; V3 completed/rejected
+
+**Final update:** run41343554975 completed. All840windows/24raw traces independently replayed;
+qualificationPassed=false,16formalr20windows have incomplete endpoints. See`trace-lifecycle-v3-rejected.md`.
+The historicalpending descriptions below are superseded; no qualification run is active and none is redispatched.
 
 C1mechanism528JVM/44component/17scene has passed independently. This work is a separate306-only
 acquisition qualification, not C1performance/adoption and not reclassification of rejectedA1/B1.
