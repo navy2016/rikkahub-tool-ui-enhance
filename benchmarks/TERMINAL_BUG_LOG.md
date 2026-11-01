@@ -103,3 +103,13 @@ changes separately. Performance rejection by itself is not proof of a specific s
   config bytes. No change to306, raw trace recipe,840window matrix, frame parser or acceptance gates.
 - Original failure remains failed. Native changes are in`benchmarks/terminal-trace-lifecycle-v2/v1-transport-fix.patch`;
   host tests reproduce broken tokenization and verify fixed stdin/config/exit handling; V2device proof pending.
+
+## BUG-LIFECYCLE-003 — V2heredoc does not deliver readable config to Android Perfetto [investigating]
+- Run41339783414/source90815fa built, then all12first-launch native cases failed at Perfetto startup:
+  `The TraceConfig is empty`. The sh command now executes and returns its exit receipt; quote parsing is fixed.
+- Original artifact13096254355/relay41341253419 independently confirms12empty sample arrays and no
+  TRACE_START. Actual windows=0, trace starts=0, second launch not executed. V2 stays failed.
+- Host heredoc/cat success did not prove Android Perfetto could read that descriptor after its startup.
+  The lower-level reason is not yet established; do not label it a parser/production failure.
+- Before any further840window run, use a no-APK Android34direct-stdin/heredoc/pipe comparison with
+  byte hashes, process exit status and available SELinux diagnostics. No resampling or gate relaxation.

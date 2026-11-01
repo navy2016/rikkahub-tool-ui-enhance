@@ -1,0 +1,25 @@
+name: Android34 Perfetto Config Transport Diagnostic
+'on':
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - name: Compare three fixed config transports on the same nonroot guest without APK
+        run: python3 -B .github/scripts/terminal-trace-transport-diagnostic.py
+      - name: Keep all failures config bytes and original short diagnostic traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-trace-transport-diagnostic-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/terminal-trace-transport-diagnostic/
+          if-no-files-found: error
+          retention-days: 30

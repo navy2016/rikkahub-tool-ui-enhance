@@ -9,6 +9,14 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## 当前先做无APK配置传输诊断（优先于下方V2运行中记录）
+
+V2source90815fa343256438624d6b959755c895bf4071af/run41339783414已failure；构建通过但Perfetto报The TraceConfig is empty。
+原artifact13096254355经relay41341253419恢复，12失败case核验0samples/0TRACE_START，未启动第二launch；旧V1/V2失败保留。
+先以suite=traceTransportDiagnostic在无APK Android34 guest比较同一config的direct/heredoc/pipe三路径，不继续盲派840矩阵。
+固定诊断脚本terminal-trace-transport-diagnostic.py，不编译/安装app，不做终端性能窗口，不提供身份资格通过结论。
+工作目录/workspace/terminal-review/full-virtual-trace-transport-diagnostic；按dispatch/receipt恢复。C1已528/44/17机制通过，未测性能/未采用。
+
 ## 当前轨迹生命周期V2：修复V1零窗口shell传输故障（优先于V1待运行记录）
 
 V1source2f1535c7bb67d20d0b59c305db1846d60a2d63a3/run41338176466已failure；构建成功，12方法均在trace-start之前失败。
