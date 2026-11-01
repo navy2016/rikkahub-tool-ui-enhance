@@ -127,14 +127,55 @@ def report_viewport(group):
         save(OUT/'selection-repair-evidence.json',data)
     save(OUT/(group+'-report.json'),dict(sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],group=group,cases=rows,count=len(rows),passed=True,productionChanged=False))
     ci.notice('notice','Final in-frame viewport '+group,f'{len(rows)} exact original methods passed; candidate unchanged, no performance reuse.')
+def collect():
+    """Read existing regression artifacts only: no Gradle, emulator, rerun or result replacement."""
+    require(os.environ.get('GITHUB_ACTIONS')=='true','Evidence collection only in CI');p=guard()
+    run_id=41258895634;source='8822e81b3a605e10fae1d8508282c0dc59fbc934';run=api(f'actions/runs/{run_id}')
+    require(run['head_sha']==source and run['conclusion']=='success','Original final regression not successful')
+    jobs=api(f'actions/runs/{run_id}/jobs?per_page=100')['jobs'];executed=[j for j in jobs if j['conclusion']!='skipped']
+    require(len(executed)==9 and all(j['conclusion']=='success' for j in executed),'Missing final regression jobs')
+    artifact_list=api(f'actions/runs/{run_id}/artifacts?per_page=100')['artifacts']
+    artifacts=[a for a in artifact_list if a['name'].startswith('terminal-inframe-final-') and source in a['name']]
+    require(len(artifacts)==9 and all(not a['expired'] for a in artifacts),'Missing original final artifacts')
+    folder=OUT/'collected'
+    subprocess.run(['gh','run','download',str(run_id),'--repo','navy2016/rikkahub-tool-ui-enhance','--pattern','terminal-inframe-final-*','--dir',str(folder)],check=True,timeout=240)
+    require(not any(f.suffix.lower() in ('.apk','.aab') for f in folder.rglob('*')),'Unexpected APK in evidence collection')
+    unit_dirs=[d for d in folder.iterdir() if d.name.startswith('terminal-inframe-final-jvm-')];require(len(unit_dirs)==1,'Unit artifact ambiguous')
+    files=list(unit_dirs[0].rglob('unit/TEST-*.xml'));unit_rows=junit(files)
+    expected={(x['classname'],name) for x in p['unitInventory'] for name in x['methods']}
+    extra=re.findall(r'@Test\s+fun\s+(\w+)\(', (candidate.BASE/'TerminalInFramePublicationTest.kt').read_text())
+    expected|={('me.rerere.rikkahub.data.container.TerminalInFramePublicationTest',name) for name in extra}
+    require(len(unit_rows)==504 and {(x['classname'],x['name']) for x in unit_rows}==expected,'Collected504 JVM differs')
+    unit_reports=list(unit_dirs[0].rglob('unit/report.json'));require(len(unit_reports)==1,'Unit report missing');unit_report=json.loads(unit_reports[0].read_bytes())
+    hashes={n:sha(t.encode()) for n,t in candidate.candidate().items()};require(unit_report['candidateHashes']==hashes,'Unit candidate differs')
+    group_reports=[];total=0
+    for group,inventory in p['viewportGroups'].items():
+        roots=[d for d in folder.iterdir() if d.name.startswith('terminal-inframe-final-viewport-'+group+'-')];require(len(roots)==1,'Missing shard artifact:'+group)
+        xmls=list(roots[0].rglob('TEST-*.xml'));rows=junit(xmls)
+        expected=collections.Counter()
+        for item in inventory:
+            for name in item['methods']:expected[('me.rerere.rikkahub.viewporttest.'+item['classname'],name)]+=2 if item['classname']=='TerminalTranscriptGeometryInstrumentedTest' else 1
+        require(collections.Counter((x['classname'],x['name'].split('[',1)[0]) for x in rows)==expected,'Collected viewport methods differ:'+group)
+        reports=list(roots[0].rglob(group+'-report.json'));require(len(reports)==1,'Missing shard report');report=json.loads(reports[0].read_bytes())
+        require(report['sourceSha']==source and str(report['runId'])==str(run_id) and report['passed'] and report['cases']==rows,'Shard report identity/data differs')
+        copied=list(roots[0].rglob('fixture-source.json'));require(len(copied)==1,'Fixture source proof missing')
+        receipt=json.loads(copied[0].read_bytes());require(receipt['candidateHashes']==hashes and receipt['pageSchedulerNotInFixture'],'Fixture/candidate source differs')
+        total+=len(rows);group_reports.append(dict(group=group,count=len(rows),reportSha256=sha(reports[0].read_bytes())))
+    require(total==182,'Collected182 viewport inventory differs')
+    save(OUT/'verified-collection.json',dict(collectionSourceSha=os.environ['GITHUB_SHA'],collectionRunId=os.environ['GITHUB_RUN_ID'],
+        originalRun=run_id,originalSourceSha=source,originalConclusion=run['conclusion'],jvmMethods=504,viewportMethods=182,
+        groups=group_reports,candidateHashes=hashes,artifacts=artifacts,noNewTests=True,productionChanged=False))
+    save(OUT/'original-run.json',run)
+    ci.notice('notice','Final regression originals reverified','504 JVM +182 viewport exact originals rechecked; no rerun, no production adoption.')
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('action',choices=('guard','gate','unit','fixture-build','viewport','viewport-report'));parser.add_argument('--group');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('action',choices=('guard','gate','unit','fixture-build','viewport','viewport-report','collect'));parser.add_argument('--group');args=parser.parse_args()
     try:
         if args.action=='guard':print(json.dumps(dict(jvm=guard()['jvmMethods'],viewport=plan()['viewportMethods'])))
         elif args.action=='gate':gate()
         elif args.action=='unit':unit()
         elif args.action=='fixture-build':fixture_build()
         elif args.action=='viewport':viewport(args.group)
+        elif args.action=='collect':collect()
         else:report_viewport(args.group)
     except (ValueError,KeyError,OSError,subprocess.SubprocessError,ET.ParseError) as error:
         ci.notice('error','Final in-frame regression stopped',type(error).__name__+': '+str(error)[:2400]);raise SystemExit(1)

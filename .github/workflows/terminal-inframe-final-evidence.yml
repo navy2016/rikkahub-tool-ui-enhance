@@ -1,0 +1,26 @@
+name: Collect Existing In-frame Final Regression Evidence
+on:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - name: Verify existing504JVM and182viewport originals without executing tests
+        run: python3 -B .github/scripts/terminal-inframe-final-regression.py collect
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terminal-inframe-final-verified-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/terminal-inframe-final-regression/
+          if-no-files-found: error
+          retention-days: 30
