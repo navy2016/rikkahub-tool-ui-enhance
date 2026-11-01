@@ -1,0 +1,32 @@
+{
+  "files": {
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalFullVirtualTranscript.kt": {
+      "base": "a09f5ff88732e304633226edda5673c28b91786cdca10a2e5321b6f41be067a6",
+      "candidate": "9e203872c61340ba7893468809890cf250dcfe246b13613889c665a43c0fe21b",
+      "asset": "benchmarks/terminal-physical-metrics-b1/candidate/TerminalFullVirtualTranscript.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalPhysicalMeasurements.kt": {
+      "base": "bb5154ab7d7f9373012d7dfd6630cf7d978c80b2d000de9392f535820506e168",
+      "candidate": "8394c9c29bc438a1fea3e2af037013b7bd2cc5ad208928b85e5051cc3e4350f9",
+      "asset": "benchmarks/terminal-physical-metrics-b1/candidate/TerminalPhysicalMeasurements.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalPreparedWidth.kt": {
+      "base": "59d0adf287687e0aba2562791f9b91053312c0c59fa2817d57a131080c9e73cf",
+      "candidate": "b1be981c267f28324fb38f338644c3690348cd3bd0e2ae07ee347f85363cd087",
+      "asset": "benchmarks/terminal-physical-metrics-b1/candidate/TerminalPreparedWidth.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndex.kt": {
+      "base": "0c4581b140149e9fba922291c16fdf5b184921bd7fd9c54a692d29f35fc36180",
+      "candidate": "4290892006f343f9bcd13401307eea77a0ae8844dd74e1b3b1b8857c30b3cec0",
+      "asset": "benchmarks/terminal-physical-metrics-b1/candidate/TerminalTranscriptWidthIndex.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt": {
+      "base": "af61ec9dde39a31f11bea4588ca9ad689e09bfe01c7d2fe9588b3a96829bf117",
+      "candidate": "86db636d8264381d7883a0ed370d72144a47530485beef51b52733219297175b",
+      "asset": "benchmarks/terminal-physical-metrics-b1/candidate/TerminalViewportBinding.kt"
+    }
+  },
+  "protocolSha256": "a0ce1c2e9fbb385c6be0f3a7b7b3aac45997b129962b48190d84fc25ca3e06ae",
+  "patchSha256": "c92d2f1c9e597be4f6d1392c2aa7795d6bfd7c8e61f0c8d8d6eb5b9517e16452",
+  "baselineTestsSha256": "984b4fef43095ceeca9ca4e3dff6d2cae434bf7df43bc0dc60bbe26bf2e36aaa"
+}

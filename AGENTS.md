@@ -6,6 +6,17 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## B1当前任务（优先于下方B未开始记录）
+
+用户在A1拒绝结案后要求继续推进优化；现独立从306设计B1物理行宽高产物共享，不含A1/P2，不调度A1复验。
+隔离目录benchmarks/terminal-physical-metrics-b1；五候选文件仅CI overlay，生产main ac977984保持不变。
+自然宽度读取现有TextMeasurer结果的multiParagraph.intrinsics.maxIntrinsicWidth并ceil，不能用受约束size.width。
+共享仅canonical打包字体/owned帧，弱frame身份+metric+完整Text校验；同一现有物理缓存最多80条，无历史layout/额外ALT缓存。
+原MAIN宽度缓存先于共享来源；原历史生命周期/ALT冷返回/blank grace/worker请求token和单writer全部保持306。
+机制范围原504+新25=529Release JVM；原21+新7=28真实字体组件，24场景。无性能终点，不自动采用或Release。
+本地18项Python守卫通过；Kotlin/Android尚未运行。通过既有terminal-pipeline-tests.yml suite=physicalMetricsB1调用新workflow_call。
+工作目录/workspace/terminal-review/full-virtual-physical-metrics-b1；后续状态以该目录dispatch/receipt为准，不重复派发。
+
 ## A1最终结论（优先于下方性能运行中记录）
 
 用户确认41281700735完成后，已取回同次原artifact13075880259，经只读relay41287136178恢复全部原件。
