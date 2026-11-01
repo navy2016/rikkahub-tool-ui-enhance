@@ -125,3 +125,8 @@ changes separately. Performance rejection by itself is not proof of a specific s
   This does not establish which historical frame/packet was affected and does not change A1/B1 results.
 - Preserve frozen collectors. Separately verify `/proc/PID/stat` readability/liveness and disappearance
   after SIGINT before a new acquisition recipe. No root/SELinux weakening or replacement measurements.
+- No-APKstop diagnostic41342164946/source86b07f5 proves `/proc/PID/stat` readable while the exact
+  live Perfetto PID rejects kill0 with Permission denied. After SIGINT, proc disappears. Its first
+  directory-test/read loop hit the expected exit race (read returned ENOENT after directory test),
+  preserved as stopExit73. Race-safe diagnostic must accept ENOENT only after rechecking proc absence,
+  not conflate it with persistent permission/read errors. Still no terminal-window samples.

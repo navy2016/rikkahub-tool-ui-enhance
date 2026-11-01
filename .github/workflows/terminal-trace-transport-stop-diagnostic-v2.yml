@@ -1,0 +1,25 @@
+name: Android34 Perfetto Stop Ownership Race-Safe Diagnostic
+'on':
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - name: Check live proc identity and post-SIGINT disappearance on the same nonroot guest without APK
+        run: python3 -B .github/scripts/terminal-trace-transport-stop-diagnostic-v2.py
+      - name: Keep all failures config bytes and original short diagnostic traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-trace-transport-stop-diagnostic-v2-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/terminal-trace-transport-stop-diagnostic-v2/
+          if-no-files-found: error
+          retention-days: 30
