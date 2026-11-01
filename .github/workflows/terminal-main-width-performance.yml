@@ -1,5 +1,5 @@
 name: A1 MAIN Width End-to-End Performance
-true:
+'on':
   workflow_call: null
 permissions:
   contents: read

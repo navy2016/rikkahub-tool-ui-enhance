@@ -126,4 +126,9 @@ class MainWidthPerformanceTests(unittest.TestCase):
     def test_interval_union_is_not_double_counted_cpu_time(self):
         self.assertEqual(m.interval_union([dict(startNs=2,endNs=6),dict(startNs=4,endNs=9)],0,10),7)
         self.assertEqual(m.interval_union([dict(startNs=0,endNs=20)],5,10),5)
+    def test_reusable_workflow_has_an_on_key_not_yaml11_boolean(self):
+        text=(m.ROOT/'.github/workflows/terminal-main-width-performance.yml').read_text()
+        self.assertIn("\n'on':\n  workflow_call:",text)
+        self.assertNotRegex(text,r'(?m)^true:')
+        self.assertIn('mainWidthPerformance',(m.ROOT/'.github/workflows/terminal-pipeline-tests.yml').read_text())
 if __name__=='__main__':unittest.main()
