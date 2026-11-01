@@ -9,6 +9,17 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## 当前独立306轨迹生命周期资格（C1性能之前，优先于下方尚未运行记录）
+
+C1机制528/44/17已验证，但尚未采用/测性能。用户继续后冻结benchmarks/terminal-trace-lifecycle V1。
+只构建未改306目标和隔离native驱动；2次固定启动×12process cases=840窗口(40预热/800正式)/24原轨迹，无候选/AB配对/收益统计。
+驱动通过UiAutomation RWE shell UID+stdin启动Perfetto，initial设置/IME/history门后开启，所有窗口后、ALT恢复/移除listener/Activity卸载前SIGINT+等待exit+hash原文件。
+保留原32MiB ring/1s writes/240s96MiB/ftrace+FrameTimeline；采样前明确不启用独立process_stats生产者。
+原frame-identity解析器/协议字节不变；任何实际收集到的非首次丢包/未闭合/冲突仍全轨迹拒绝，不裁剪/滤包/按窗口放行，不追认B1。
+协议35a412563a9288e5eef2dc9cc147871059083f737e6054e57be8985962e8690b，15项本地新guard测试通过；原identity状态机测试另保留。
+通过terminal-pipeline-tests.yml suite=traceLifecycle调用新workflow；工作目录/workspace/terminal-review/full-virtual-trace-lifecycle，按dispatch/receipt恢复，禁止重复派发。
+该资格即使成功也不自动派发C1性能或采用；生产始终306/main ac977984。
+
 ## C1当前任务：独立可见几何证明共享（优先于下方下一方向未开始记录）
 
 用户要求继续推进优化；从306独立创建benchmarks/terminal-geometry-c1，A1/B1/P2仍拒绝。

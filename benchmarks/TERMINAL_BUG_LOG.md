@@ -83,3 +83,11 @@ changes separately. Performance rejection by itself is not proof of a specific s
 - The scripted replacement did not match the old literal, leaving the prior harness identity pin.
 - Rebound exactly once to the new C1 identity JSON SHA256; guard and17host tests pass. No CI run,
   Android build, frozen candidate mutation or sample was produced under the wrong pin.
+
+## GUARD-LIFECYCLE-001 — old qualification glob includes a different frozen production baseline [corrected before dispatch]
+- The new workflow's initial `test_terminal_frame_identity*.py` glob also selected the historical
+  qualification guard, which correctly failed `Identity qualification changed production` on306.
+- Its parser tests and its historical production qualification are distinct. The new workflow now
+  runs exact`test_terminal_frame_identity.py` plus`test_terminal_trace_lifecycle.py`, whose306source
+  guard is separately frozen. The old qualification test/guard/parser are unchanged,not bypassed in
+  their historical experiment. No device run was dispatched under the incorrect selection.
