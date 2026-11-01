@@ -1,0 +1,1208 @@
+{
+  "id": "terminal-trace-lifecycle-v3",
+  "stage": "independent306-collector-qualification-not-performance",
+  "baseProductionSha": "306e0b80b508c961bc00f2d4b34a2688e5857a1a",
+  "baseTree": "ac97798416997a8230c9fa2a5a8569cf0ed0a911",
+  "priorClosureSha": "c59fb5285c7e11154dfd7f86cfc7cc9f657ebc11",
+  "historicalDriver": "app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPhysicalMetricsPerformanceTest.kt",
+  "historicalDriverSha256": "025fa0f56304b73cbc184345a973abcaf6d2097e30f444312c2dfcb0083b9067",
+  "identityParserSha": "767756fdd1a3f069aee3adb98b1a09f014b3d3d2",
+  "identityProtocolSha256": "8205b614f689ceaa0553aefa1323a56ca1bcd939ec8ffefe66726095e02c43b9",
+  "matrix": {
+    "cases": [
+      "lifecyclemain-1000-hidden",
+      "lifecyclemain-1000-shown",
+      "lifecyclemain-10000-hidden",
+      "lifecyclemain-10000-shown",
+      "lifecyclealt-1000-hidden",
+      "lifecyclealt-1000-shown",
+      "lifecyclealt-10000-hidden",
+      "lifecyclealt-10000-shown",
+      "lifecycleguard-1000-hidden",
+      "lifecycleguard-1000-shown",
+      "lifecycleguard-10000-hidden",
+      "lifecycleguard-10000-shown"
+    ],
+    "caseSpecs": {
+      "lifecyclemain-1000-hidden": {
+        "method": "traceLifecycleMainOneThousandHidden",
+        "cohort": "main",
+        "historySize": 1000,
+        "expectedIme": false,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "lifecyclemain-1000-shown": {
+        "method": "traceLifecycleMainOneThousandShown",
+        "cohort": "main",
+        "historySize": 1000,
+        "expectedIme": true,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "lifecyclemain-10000-hidden": {
+        "method": "traceLifecycleMainTenThousandHidden",
+        "cohort": "main",
+        "historySize": 10000,
+        "expectedIme": false,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "lifecyclemain-10000-shown": {
+        "method": "traceLifecycleMainTenThousandShown",
+        "cohort": "main",
+        "historySize": 10000,
+        "expectedIme": true,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "lifecyclealt-1000-hidden": {
+        "method": "traceLifecycleAltOneThousandHidden",
+        "cohort": "alt",
+        "historySize": 1000,
+        "expectedIme": false,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "lifecyclealt-1000-shown": {
+        "method": "traceLifecycleAltOneThousandShown",
+        "cohort": "alt",
+        "historySize": 1000,
+        "expectedIme": true,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "lifecyclealt-10000-hidden": {
+        "method": "traceLifecycleAltTenThousandHidden",
+        "cohort": "alt",
+        "historySize": 10000,
+        "expectedIme": false,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "lifecyclealt-10000-shown": {
+        "method": "traceLifecycleAltTenThousandShown",
+        "cohort": "alt",
+        "historySize": 10000,
+        "expectedIme": true,
+        "conditions": [
+          "redraw"
+        ],
+        "conditionOrder": [
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ],
+          [
+            "redraw"
+          ]
+        ],
+        "windows": 21
+      },
+      "lifecycleguard-1000-hidden": {
+        "method": "traceLifecycleGuardOneThousandHidden",
+        "cohort": "guard",
+        "historySize": 1000,
+        "expectedIme": false,
+        "conditions": [
+          "refresh",
+          "sync",
+          "return"
+        ],
+        "conditionOrder": [
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ]
+        ],
+        "windows": 63
+      },
+      "lifecycleguard-1000-shown": {
+        "method": "traceLifecycleGuardOneThousandShown",
+        "cohort": "guard",
+        "historySize": 1000,
+        "expectedIme": true,
+        "conditions": [
+          "refresh",
+          "sync",
+          "return"
+        ],
+        "conditionOrder": [
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ]
+        ],
+        "windows": 63
+      },
+      "lifecycleguard-10000-hidden": {
+        "method": "traceLifecycleGuardTenThousandHidden",
+        "cohort": "guard",
+        "historySize": 10000,
+        "expectedIme": false,
+        "conditions": [
+          "refresh",
+          "sync",
+          "return"
+        ],
+        "conditionOrder": [
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ]
+        ],
+        "windows": 63
+      },
+      "lifecycleguard-10000-shown": {
+        "method": "traceLifecycleGuardTenThousandShown",
+        "cohort": "guard",
+        "historySize": 10000,
+        "expectedIme": true,
+        "conditions": [
+          "refresh",
+          "sync",
+          "return"
+        ],
+        "conditionOrder": [
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ],
+          [
+            "return",
+            "refresh",
+            "sync"
+          ],
+          [
+            "refresh",
+            "return",
+            "sync"
+          ],
+          [
+            "sync",
+            "return",
+            "refresh"
+          ],
+          [
+            "refresh",
+            "sync",
+            "return"
+          ],
+          [
+            "return",
+            "sync",
+            "refresh"
+          ],
+          [
+            "sync",
+            "refresh",
+            "return"
+          ]
+        ],
+        "windows": 63
+      }
+    },
+    "rounds": 21,
+    "warmupRounds": [
+      0
+    ],
+    "windows": 840,
+    "warmupWindows": 40,
+    "formalWindows": 800,
+    "windowsPerInvocation": 420,
+    "rawTraceFiles": 24,
+    "formalPerConditionPerCasePerArmPerPair": 20,
+    "syncPeerHoldMs": 60,
+    "responseDeadlineNs": 25000000000,
+    "naturalObservationTailNs": 500000000,
+    "separateProcessesForCohorts": true,
+    "historyProof": "initial-main setup gate before snapshot; MAIN per-window identity; ALT per-window unknown and verified after timed windows by MAIN restoration",
+    "launches": 2,
+    "arm": "unchanged306"
+  },
+  "payload": {
+    "redrawRows": 24,
+    "columns": 80,
+    "suffix": " \u4e2d\u6587 e\u0301 \ud83d\udc69\u200d\ud83d\udcbb \u05d0\u05d1\u05d2 0123",
+    "bytesMax": 4096,
+    "redraw": "one native shell printf command with24marker substitutions, rows1..23 bold+italic+ANSI color, row24plain marker; no assumption of one syscall/read",
+    "markers": "DRAW for redraw,SYNC for sync,ECHO for refresh/return; case:round2digits:position",
+    "postWindowChecks": "24complete model rows plus native marker visibility; never queried to fabricate the endpoint"
+  },
+  "serialization": {
+    "casePartChars": 2600,
+    "casePartsMax": 1024,
+    "caseRawBytesMax": 33554432,
+    "observerRowsMax": 8192,
+    "traceBytesMaxExclusive": 100663296,
+    "note": "Independent21window redraw and63window guard processes;1024x2600case fragments,32MiBraw JSON,8192observer rows,existing240s/96MiBtrace caps. No runtime cap adjustment."
+  },
+  "environment": {
+    "api": 34,
+    "abi": "x86_64",
+    "guest": "existing nonroot two-CPU KVM SwiftShader harness",
+    "oneBoot": true,
+    "sharedDriverAndResourceAssets": true,
+    "releaseDerivedNonDebuggableTargets": true,
+    "noLocalApkDownload": true,
+    "nativeGrid": "80 columns; stable hidden grid before IME; physical rows unchanged"
+  },
+  "driverSha256": "83f7f3a15b76266ceb1f57705384e968753d504134de3a8f187180c860d3bf4a",
+  "traceConfigSha256": "e379b818afffb31c1b61cb4d8a8a8550f14da2fbce2a0d4abd0828674ecaa374",
+  "lifecycle": {
+    "startAfter": "initial-main,initial setup gates and immutable MAIN history capture",
+    "stopBefore": "ALT history restoration/listener removal/Activity close/settings restoration",
+    "start": "UiAutomation shell UID executes sh; script on stdin; exact config via base64-decode anonymous pipe,background-wait PID plus readable matching proc stat/start ticks",
+    "stop": "same shell UID SIGINT+bounded100x100ms race-safe proc disappearance; match PID/start ticks before and during stop,never kill0 as exit proof; raw file SHA256+size",
+    "observer": "original BOOTTIME dual FrameMetrics and native revision/bytes/gates; no observer substituted for exact frame chain",
+    "traceRecipe": "unchanged32768KiB ring/1000ms file writes/240s96MiB caps,original ftrace+sched+gfx/view/wm/dalvik+FrameTimeline; process_stats producer excluded from endpoint trace",
+    "rawTraceNeverFilteredOrTrimmed": true,
+    "framesOrPacketsDroppedByVerifier": false,
+    "windowScopedFaultExemption": false,
+    "purpose": "qualify new acquisition ownership only; no reinterpretation of B1V1 results"
+  },
+  "acceptance": {
+    "allFixedLaunchesAndCases": true,
+    "all840WindowIdentitiesRequired": true,
+    "allNativeCasesAndLifecycleReceiptsRequired": true,
+    "allTraceFaultsFatal": true,
+    "noSubmissionAndPresentationNulls": true,
+    "frameMetricsConflictFatal": true,
+    "performanceRatiosNotComputed": true,
+    "noResampling": true,
+    "noAutomaticCandidateAdoption": true,
+    "noAutomaticPerformanceDispatch": true,
+    "matchingProcStartIdentityAndObservedAbsenceRequired": true
+  },
+  "candidateIncluded": false,
+  "productionChanged": false,
+  "optimizationMeasured": false,
+  "performanceAccepted": false,
+  "formalReleaseBuilt": false,
+  "localApkDownload": false,
+  "transportCorrection": {
+    "previousRun": 41339783414,
+    "previousSourceSha": "90815fa343256438624d6b959755c895bf4071af",
+    "previousProtocolSha256": "9e1b7b40fa3fe9669ea3c36ce692f73366481ccacb6d3b0544c74ac22255dcb3",
+    "previousObservedWindows": 0,
+    "previousNativeTraceStarts": 0,
+    "previousFailure": "The TraceConfig is empty; SELinux denies mksh heredoc file read",
+    "change": "anonymous pipe replaces heredoc; proc stat identity+absence replaces denied signull wait",
+    "unchanged": [
+      "306production",
+      "identityParser",
+      "traceConfig",
+      "matrix",
+      "endpoints",
+      "lifecycleBoundaries",
+      "noCandidate",
+      "noRelaxation",
+      "noReplacementPerformanceData"
+    ],
+    "diagnosisRuns": [
+      41341668403,
+      41342164946,
+      41342417785
+    ],
+    "diagnosis": "same572byte SHA: direct/pipe starts,heredoc denied shell_data_file read; readable live proc rejects kill0; race-safe SIGINT/proc disappearance succeeds"
+  }
+}

@@ -9,6 +9,16 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## 当前轨迹生命周期V3（优先于下方V1/V2/诊断待运行记录）
+
+无APK诊断41341668403确认572B同一config：direct/pipe可启动、heredoc被SELinux shell_data_file read拒绝。
+无APK停止诊断41342164946确认kill0返回Permission denied但proc存活；目录/读取退出竞态保留stopExit73。
+race-safe诊断41342417785确认proc可读、SIGINT后确实消失并stopExit0。不能把旧kill0失败当退出证明，历史结果不追认。
+V3独立benchmarks/terminal-trace-lifecycle-v3：sh程序走stdin，config走匿名pipe；PID/comm/start ticks前后一致，proc消失后hash原轨迹再卸载。
+配置/解析器/840窗口/24trace/2launch不变；只修传输并加强停止证明。V1/V2仍failure且各0采样窗口，C1仍机制已通过但未采用。
+V3协议3b1565f113c9eff14ceb11e71c1bf1ad3a6c799537838fb92981c62a3bca3288，18新+20原身份本地测试通过。
+workflow suite=traceLifecycleV3；恢复目录/workspace/terminal-review/full-virtual-trace-lifecycle-v3。只有独立资格通过后再冻结C1性能，禁止重复派发/自动采用。
+
 ## 当前先做无APK配置传输诊断（优先于下方V2运行中记录）
 
 V2source90815fa343256438624d6b959755c895bf4071af/run41339783414已failure；构建通过但Perfetto报The TraceConfig is empty。

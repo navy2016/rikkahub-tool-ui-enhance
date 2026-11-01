@@ -130,3 +130,7 @@ changes separately. Performance rejection by itself is not proof of a specific s
   directory-test/read loop hit the expected exit race (read returned ENOENT after directory test),
   preserved as stopExit73. Race-safe diagnostic must accept ENOENT only after rechecking proc absence,
   not conflate it with persistent permission/read errors. Still no terminal-window samples.
+- Race-safe no-APK diagnostic41342417785/sourcec59fb528 checks readable live proc and denied kill0,
+  then returns SIGINT/proc-absence stopExit0. V3adds matching PID/comm/start ticks before/during
+  stop and observed disappearance,never treating signal permission denial as completion. Native
+  full-page qualification still required; diagnostic success is not840window qualification.

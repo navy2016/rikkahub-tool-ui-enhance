@@ -1,0 +1,95 @@
+--- a/benchmarks/terminal-trace-lifecycle-v2/TerminalTraceLifecycleQualificationTest.kt
++++ b/benchmarks/terminal-trace-lifecycle-v3/TerminalTraceLifecycleQualificationTest.kt
+@@ -87,12 +87,11 @@
+     /** Small setup/cleanup shell calls only; closes every descriptor even on timeout/error. */
+     private fun shell(text: String, input: ByteArray = byteArrayOf()): ShellResult {
+         // Runtime.exec(String) tokenizes command arguments; it does NOT parse shell quoting.
+-        // Execute only "sh". The shell program and a distinct config heredoc travel over stdin.
+-        val delimiter="TRACE_CONFIG_EOF_306_2026"
+-        val config=String(input,Charsets.UTF_8)
+-        check(config.lineSequence().none{it==delimiter})
+-        val invocation=if(input.isEmpty()) text else text+" <<'"+delimiter+"'\n"+config+
+-            (if(config.endsWith("\n")) "" else "\n")+delimiter
++        // Execute only "sh". The program uses stdin; exact config uses an anonymous pipe.
++        val encoded=Base64.getEncoder().encodeToString(input)
++        // mksh heredocs are shell_data_file temporaries that Perfetto cannot read after its
++        // SELinux domain transition. An anonymous pipe was independently verified on Android34.
++        val invocation=if(input.isEmpty()) text else "printf %s '"+encoded+"' | base64 -d | "+text
+         val program="(\n"+invocation+"\n); rc=${'$'}?; printf \"\\nTRACE_SHELL_EXIT:%s\\n\" \"${'$'}rc\"; exit \"${'$'}rc\"\n"
+         val pipes=automation.executeShellCommandRwe("sh")
+         check(pipes.size==3)
+@@ -119,6 +118,8 @@
+         private var began=0L
+         private var started=0L
+         private var startResult: ShellResult?=null
++        private var processStat=""
++        private var processStartTicks=0L
+         private var receipt: JSONObject?=null
+         var stopped=false
+             private set
+@@ -135,15 +136,43 @@
+             val pids=result.output.lineSequence().filter{it.matches(Regex("[0-9]+"))}.toList()
+             if(pids.size==1)pid=pids.single().toInt()
+             check(result.exit==0 && pid!=null){"Perfetto startup failed: $result"}
++            val proc=shell("cat /proc/${requireNotNull(pid)}/stat")
++            check(proc.exit==0){"Perfetto live proc proof failed: $proc"}
++            processStat=proc.output;processStartTicks=startTicks(proc.output,requireNotNull(pid))
+             emit("TRACE_START",JSONObject().put("case",case).put("pid",pid).put("remote",remote)
+                 .put("beginBootNs",began).put("startedBootNs",started).put("configSha256",expected)
+-                .put("exit",result.exit).put("stdout",result.output).put("stderr",result.error))
++                .put("exit",result.exit).put("stdout",result.output).put("stderr",result.error)
++                .put("processStat",processStat).put("processStartTicks",processStartTicks))
++        }
++        private fun startTicks(stat: String, target: Int): Long {
++            check(stat.startsWith("$target (perfetto) ")){"Wrong trace process: $stat"}
++            val fields=stat.substringAfterLast(") ").trim().split(Regex("\\s+"))
++            check(fields.size>=20)
++            return fields[19].toLong().also{check(it>0)}
+         }
+         fun stop(): JSONObject {
+             receipt?.let{return it}
+             val target=requireNotNull(pid){"Trace PID absent"};val stopAt=SystemClock.elapsedRealtimeNanos()
+-            val result=shell("kill -INT $target && { n=0; while kill -0 $target 2>/dev/null; do n=${'$'}((n+1)); [ \"${'$'}n\" -lt 100 ] || exit 72; sleep 0.1; done; }")
+-            check(result.exit==0){"Perfetto stop/wait failed: $result"}
++            val before=shell("cat /proc/$target/stat")
++            check(before.exit==0 && startTicks(before.output,target)==processStartTicks){"Trace PID vanished or was reused before stop"}
++            val program="""
++                kill -INT $target || exit 71
++                n=0
++                while [ -d /proc/$target ]; do
++                  if data=${'$'}(cat /proc/$target/stat 2>/dev/null); then
++                    printf '%s\n' "${'$'}data"
++                  else
++                    [ ! -d /proc/$target ] && break
++                    exit 73
++                  fi
++                  n=${'$'}((n+1)); [ "${'$'}n" -lt 100 ] || exit 72; sleep 0.1
++                done
++                [ ! -d /proc/$target ] || exit 74
++                printf 'PROC_ABSENT\n'
++            """.trimIndent()
++            val result=shell(program)
++            check(result.exit==0 && result.output.lineSequence().last()=="PROC_ABSENT"){"Perfetto stop/proc wait failed: $result"}
++            result.output.lineSequence().filter{it!="PROC_ABSENT"}.forEach{check(startTicks(it,target)==processStartTicks){"Trace PID reused during stop"}}
+             stopped=true // No later Activity/listener cleanup is part of this trace.
+             val finished=SystemClock.elapsedRealtimeNanos()
+             val file=shell("sha256sum $remote && stat -c %s $remote")
+@@ -156,7 +185,8 @@
+                 .put("stoppedBootNs",finished).put("startExit",startResult!!.exit).put("stopExit",result.exit)
+                 .put("startStdout",startResult!!.output).put("startStderr",startResult!!.error)
+                 .put("stopStdout",result.output).put("stopStderr",result.error).put("bytes",bytes).put("sha256",sha)
+-                .put("stoppedBeforeTeardown",true).put("configSha256",InstrumentationRegistry.getArguments().getString("traceLifecycleConfigSha256"))
++                .put("stoppedBeforeTeardown",true).put("procAbsentAfterStop",true).put("processStat",processStat)
++                .put("processStartTicks",processStartTicks).put("preStopProcessStat",before.output).put("configSha256",InstrumentationRegistry.getArguments().getString("traceLifecycleConfigSha256"))
+             receipt=value;emit("TRACE_STOP",value);return value
+         }
+     }
+@@ -573,7 +603,7 @@
+                 .put("metricsRaw",JSONArray().apply{observer.readRawMetrics().forEach{put(JSONArray(it.toList()))}})
+                 .put("mirrorMetrics",JSONArray().apply{mirror.readMetrics().forEach{put(JSONArray(it.toList()))}})
+                 .put("mirrorRaw",JSONArray().apply{mirror.readRawMetrics().forEach{put(JSONArray(it.toList()))}})
+-                .put("collectorDiagnosisOnly",true).put("performanceMeasured",false).put("protocolId","terminal-trace-lifecycle-v2")
++                .put("collectorDiagnosisOnly",true).put("performanceMeasured",false).put("protocolId","terminal-trace-lifecycle-v3")
+                 .put("completedTraversals",JSONArray().apply{observer.readTraversals().forEach{put(JSONArray(it.toList()))}})
+                 .put("clock", "CLOCK_BOOTTIME").put("historySize",size).put("baselineOnly",true).put("expectedIme",expectedIme).put("droppedFrameMetrics",observer.readMetrics().sumOf{it[9]}).put("passed",true))
+         } catch(error: Throwable) {
