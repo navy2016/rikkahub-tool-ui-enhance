@@ -1,0 +1,108 @@
+{
+  "id": "terminal-trace-finite-tail-v1",
+  "stage": "finite-built-in-launch-tail-diagnosis-only",
+  "parentSourceSha": "7c1afa98c429365aaba120d1d0d1e3496033227e",
+  "baseProductionSha": "306e0b80b508c961bc00f2d4b34a2688e5857a1a",
+  "baseTree": "ac97798416997a8230c9fa2a5a8569cf0ed0a911",
+  "priorV3Run": 41343554975,
+  "priorV3Verdict": "closed/rejected",
+  "priorTailDiagnosticRun": 41351430986,
+  "priorTailVerdict": "closed/incomplete",
+  "transportSourceSha256": "d4b2e3db8c1df75574b7f1edc047f2554d6274c76916040f7cc5c593c8bc0ab8",
+  "identitySourceSha256": "bc4a2bee5972295e957edb2fe06b8d799e618ae8a38451007f446497e078bb46",
+  "baselineConfigSha256": "6098913e0fc0dbdcf6f1b3780a48f802a297e33e44fda3322d0a80ddc7563ff2",
+  "periodicConfigSha256": "5bacac8388736263b2ac3d6c57da0c1ee53198a2ae70674e60f4a70435c74ee2",
+  "expectedFingerprint": "Android/sdk_phone64_x86_64/emu64x:14/UE1A.230829.036.A1/11228894:userdebug/test-keys",
+  "expectedPerfetto": "Perfetto v34.0 (N/A)",
+  "order": [
+    "baseline",
+    "wait",
+    "periodic",
+    "volume",
+    "volume",
+    "periodic",
+    "wait",
+    "baseline"
+  ],
+  "targetPackage": "com.android.settings",
+  "systemAction": "android.settings.SETTINGS",
+  "setup": {
+    "forceStopBeforeEach": true,
+    "homeBeforeEach": true,
+    "settleBeforeTraceMs": 4000
+  },
+  "stimulus": {
+    "command": [
+      "am",
+      "start",
+      "-W",
+      "-a",
+      "android.settings.SETTINGS"
+    ],
+    "finite": true,
+    "noSwipeOrFling": true
+  },
+  "selection": {
+    "begin": "stimulusBegin.upperBoundNs",
+    "end": "selectionEnd.lowerBoundNs",
+    "afterLaunchReturnMs": 250,
+    "rule": "latest completed main-thread Choreographer UI in fixed interval with unique same-token RT/mapping/acquire/Drawing/swap structural evidence; never inspect FrameTimeline availability during selection",
+    "keepEveryUICandidate": true,
+    "noBufferObservedIsNotNoSubmission": true
+  },
+  "observation": {
+    "afterSelectionEndMs": 500,
+    "cut": "observationCut.lowerBoundNs",
+    "rule": "selection is closed first; later UI tokens cannot replace the target; endpoints must be strictly before this independent cut"
+  },
+  "clock": {
+    "name": "CLOCK_BOOTTIME",
+    "source": "/proc/uptime",
+    "resolutionNs": 10000000,
+    "uncertainty": "10ms floor/upper bounds; no false nanosecond clock precision"
+  },
+  "variants": {
+    "baseline": {
+      "periodicFlushMs": 0,
+      "afterCutQuietMs": 50
+    },
+    "wait": {
+      "periodicFlushMs": 0,
+      "afterCutQuietMs": 1050
+    },
+    "periodic": {
+      "periodicFlushMs": 250,
+      "afterCutQuietMs": 1050
+    },
+    "volume": {
+      "periodicFlushMs": 0,
+      "beforePulseQuietMs": 50,
+      "command": [
+        "input",
+        "keyevent",
+        "KEYCODE_VOLUME_UP"
+      ],
+      "afterPulseQuietMs": 1050,
+      "scope": "ordinary public user key after diagnostic cutoff; never a target/endpoint substitute; transient ephemeral-guest volume only"
+    }
+  },
+  "invariants": {
+    "noApkBuildOrInstall": true,
+    "noRootOrSelinuxChanges": true,
+    "noSurfaceFlingerDebugTransactions": true,
+    "noTerminalTimingSamples": true,
+    "noV3ResamplingOrReinterpretation": true,
+    "noCandidate": true,
+    "noQualificationClaim": true,
+    "noPerformanceClaim": true,
+    "noReplacementCases": true,
+    "noHistoricalParserOrDriverEdits": true,
+    "allRawTracesFailuresAndNullsRetained": true,
+    "selectionIndependentOfObservedTimeline": true
+  },
+  "stop": "reuse frozen pipe/SIGINT/PID-comm-start-ticks/race-safe-proc-disappearance helpers; failed traces retained",
+  "limits": {
+    "traceBytesMax": 100663296,
+    "bodyResultPerCaseMaxBytes": 8388608
+  }
+}

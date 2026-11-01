@@ -9,6 +9,15 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## 当前有限启动尾部诊断（独立新实验，不重跑V3或滑动V1）
+
+benchmarks/terminal-trace-finite-tail：每case Settings force-stop→HOME等待4s→trace→单次am start -W。
+启动返回250ms固定选择区间，再独立观察500ms截止；目标只从UI/RT/mapping/acquire/Drawing/swap结构选，不查询timeline成败。
+baseline/wait/periodic/volume正反各一次共8case，volume仅在截止后普通KEYCODE_VOLUME_UP，不使用1004或提权。
+配置沿用原Settings诊断base/periodic，生产306/原V3/滑动V1/C1/identity解析器均未改。无APK构建/安装/终端性能或采用结论。
+协议6cc80118213857a51e3d020591b2b0b33438b9b739d4d5af516bf6cc92e4b105，18项本地边界测试通过。
+workflow suite=traceFiniteTail；恢复目录/workspace/terminal-review/full-virtual-trace-finite-tail，按唯一dispatch/receipt恢复，禁止补采/重复派发。
+
 ## 无APK尾部诊断V1结案（优先于下方派发／待结果记录）
 
 source351d6b57be81290487b59bb80a425c52deca52b0/run41351430986已failure，原artifact13100653852/relay41351888266。

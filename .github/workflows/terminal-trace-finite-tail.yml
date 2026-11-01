@@ -1,0 +1,29 @@
+name: Android34 Finite Stimulus FrameTimeline Tail Diagnostic
+'on':
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - name: Verify finite stimulus selection cutoff and historical source boundaries
+        run: |
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_trace_finite_tail.py
+          python3 -B .github/scripts/terminal-trace-finite-tail.py guard
+      - name: Run eight finite-launch diagnostics on the same nonroot Android34 guest without APK
+        run: python3 -B .github/scripts/terminal-trace-finite-tail.py run
+      - name: Retain every original raw trace receipt and inconclusive result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-trace-finite-tail-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/terminal-trace-finite-tail/
+          if-no-files-found: error
+          retention-days: 30
