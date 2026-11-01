@@ -1,0 +1,140 @@
+name: In-frame Publication Final Regression
+'on':
+  workflow_call: null
+permissions:
+  contents: read
+  actions: read
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        lfs: true
+        fetch-depth: 0
+    - name: Verify performance prerequisite and final inventory
+      run: 'python3 -B -m unittest discover -s .github/scripts -p test_terminal_inframe_final_regression.py
+
+        python3 -B .github/scripts/terminal-inframe-final-regression.py gate'
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: terminal-inframe-final-gate-${{ github.sha }}-${{ github.run_attempt }}
+        path: artifacts/terminal-inframe-final-regression/
+        if-no-files-found: error
+        retention-days: 30
+  unit:
+    needs: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        lfs: true
+        fetch-depth: 0
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - uses: gradle/actions/setup-gradle@v4
+    - name: Run original492 plus candidate12 true Release JVM tests
+      run: 'chmod +x gradlew
+
+        python3 -B .github/scripts/terminal-inframe-final-regression.py unit'
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: terminal-inframe-final-jvm-${{ github.sha }}-${{ github.run_attempt }}
+        path: 'artifacts/terminal-inframe-final-regression/
+
+          artifacts/terminal-validation/
+
+          artifacts/terminal-tui-bundle/'
+        if-no-files-found: error
+        retention-days: 30
+  viewport:
+    needs: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+        - geometry
+        - interaction
+        - bundle
+        - tuiDisplay
+        - bottomVisibility
+        - tuiHistory
+        - selectionRepair
+    env:
+      TERMINAL_VIEWPORT_SUITE: selectionRepair
+      TERMINAL_VIEWPORT_GROUP: ${{ matrix.group }}
+      TERMINAL_BOTTOM_CONTROL: 'false'
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        lfs: true
+        fetch-depth: 0
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - uses: gradle/actions/setup-gradle@v4
+    - name: Build Release component fixture and verify copied source identity
+      run: 'chmod +x gradlew
+
+        python3 -B .github/scripts/terminal-inframe-final-regression.py fixture-build'
+    - name: Enable KVM
+      run: 'echo ''KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"'' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+
+        sudo udevadm control --reload-rules
+
+        sudo udevadm trigger --name-match=kvm
+
+        '
+    - name: Run unchanged complete viewport shard
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 34
+        arch: x86_64
+        target: default
+        profile: Nexus 6
+        cores: 2
+        ram-size: 4096M
+        heap-size: 768M
+        disable-animations: false
+        emulator-boot-timeout: 900
+        emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+        script: python3 -B .github/scripts/terminal-inframe-final-regression.py viewport --group ${{ matrix.group }}
+    - name: Preserve exact case inventory even on failure
+      if: always()
+      run: python3 -B .github/scripts/terminal-inframe-final-regression.py viewport-report --group '${{ matrix.group }}'
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: terminal-inframe-final-viewport-${{ matrix.group }}-${{ github.sha }}-${{ github.run_attempt }}
+        path: 'artifacts/terminal-inframe-final-regression/
+
+          artifacts/terminal-validation/
+
+          artifacts/terminal-selection-repair/
+
+          artifacts/terminal-tui-bundle/
+
+          artifacts/terminal-bottom-visibility/
+
+          artifacts/terminal-tui-history/
+
+          benchmarks/terminal-viewport-tests/build/outputs/androidTest-results/'
+        if-no-files-found: error
+        retention-days: 30

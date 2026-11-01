@@ -546,6 +546,15 @@ inframe性能协议冻结d1e5474188267d707018677514cfe99e2dca0695，SHA92a30fc4b
 源码差异验证支持Page变更+新增helper(原版不存在)，不误要求两个source键集合完全相同；实际资源和驱动仍同hash。
 工作目录/workspace/terminal-review/full-virtual-inframe-performance-v1；324主机检查通过，尚待完整性能结果，不自动采用。
 
+inframe性能25afad0/run41253490506 success，原件已离线重算480窗口/96预热，803合格尝试，802双FrameMetrics/1无通知。
+dataComplete=true，全部冻结性能门槛通过；刷新主比1k隐/显/10k隐/显=.453803/.442658/.494269/.552973，均4/4赢；
+SYNC与ALT返回和系统守卫均按冻结中位规则通过。原结果SHA9fc3b988770040b7136605808369d1adc5471b3fbeacf2598b7aa94ab227fb54。
+还未生产采用。下一为最终回归suite=inframeFinalRegression，504 JVM=原492+12，182视口=原173+6fullVirtual正确性+3selectionRepair，
+不用少2项的180入口，也不重跑旧fullVirtual性能。plan benchmarks/terminal-inframe-final-regression/plan.json逐方法/hash冻结。
+唯一旧测试调整TerminalSmoothnessSourceTest：旧字面空withFrameNanos检查改为实质等帧/active/资格/保护回退验证，原方法不删，491其他旧用例不改。
+视口复制组件不含Page/helper，明确报告pageSchedulerNotInFixture；实际Page已由原2交互与480性能验证。
+工作目录/workspace/terminal-review/full-virtual-inframe-final-regression；330主机契约通过。待最终回归结果，不自动合入/发APK。
+
 使用 Android Studio 或命令行 Gradle：
 
 ```bash

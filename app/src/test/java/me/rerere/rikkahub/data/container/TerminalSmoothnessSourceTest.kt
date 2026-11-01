@@ -7,6 +7,46 @@ import org.junit.Test
 import java.io.File
 
 class TerminalSmoothnessSourceTest {
+    /** Require an actual frame boundary, not the obsolete spelling of an empty callback. */
+    private fun assertCoalescedFramePublication() {
+        val body = processSessionSource.substringAfter("    fun scheduleTerminalRender() {")
+            .substringBefore("    LaunchedEffect(processId, appliedTerminalRenderMode")
+            .lineSequence().map { it.substringBefore("//") }.joinToString("\n")
+        assertTrue(body.contains("if (renderJob.get()?.isActive == true) return"))
+        assertTrue(body.contains("renderJob.set(scope.launch {"))
+        assertTrue(body.contains("while (renderPending.getAndSet(false))"))
+        assertEquals(1, Regex("withFrameNanos\\s*\\{").findAll(body).count())
+        if (body.contains("val publishedInFrame")) {
+            val callback = body.substringAfter("val publishedInFrame = withFrameNanos {").substringBefore("}").trim()
+            assertEquals("publicationContext.isActive && latestTryPublishInFrame()", callback)
+            val eligibility = processSessionSource.substringAfter("val latestTryPublishInFrame")
+                .substringBefore("    fun scheduleTerminalRender() {")
+            for (required in listOf(
+                "terminalInFramePublicationAllowed(", "fullVirtual = appliedTerminalRenderMode.isFullVirtual",
+                "hasNotificationOwner = sessionTerminalEmulator != null && terminalOutputUpdates != null",
+                "active = renderJob.get()?.isActive == true", "attached = publicationAttached.get()",
+                "onMainThread = android.os.Looper.myLooper() === android.os.Looper.getMainLooper()",
+                "selectionActive = selectionMode", "resizePending = bgManager.hasPendingTerminalResize(processId)",
+                "awaitingResizeRedraw = resizeAwaitingTuiRedraw.get()", "forcedBlankPending = forceBlankPending.get()",
+                "synchronizedOutput = terminalOutputUpdates?.value?.synchronizedOutput ?: true",
+                "snapshotWritable = !Snapshot.current.readOnly", "tryTerminalInFramePublication(allowed, renderPending)",
+                "latestPublishTerminalFrame(false, false)"
+            )) assertTrue(required, eligibility.contains(required))
+            assertTrue(body.contains("if (!publishedInFrame) {"))
+            assertTrue(body.contains("val publicationContext = currentCoroutineContext()"))
+            val fallback = body.substringAfter("if (!publishedInFrame) {")
+                .substringBefore("                if (forceBlankPending.get()) {")
+            assertTrue(fallback.contains("awaitTerminalSynchronizedOutput(terminalOutputUpdates, TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS)"))
+            assertTrue(fallback.contains("if (resizeAwaitingTuiRedraw.get())"))
+            assertTrue(fallback.contains("val forced = forceBlankPending.getAndSet(false)"))
+            assertTrue(fallback.contains("if (!latestPublishTerminalFrame(forced, !syncCompleted))"))
+            assertTrue(fallback.contains("if (forced) forceBlankPending.set(true)"))
+            assertTrue(fallback.contains("renderPending.set(true)"))
+        } else {
+            assertTrue(body.contains("withFrameNanos { }"))
+        }
+        assertTrue(body.contains("delay(TERMINAL_GRID_CLEAR_GRACE_MS)"))
+    }
     private fun terminalUiSource(name: String): String = listOf(
         File("app/src/main/java/me/rerere/rikkahub/ui/pages/container/$name.kt"),
         File("src/main/java/me/rerere/rikkahub/ui/pages/container/$name.kt"),
@@ -471,7 +511,7 @@ class TerminalSmoothnessSourceTest {
         assertTrue(processSessionSource.contains("if (restored.autoScroll) Int.MAX_VALUE else restored.verticalOffsetPx"))
         assertTrue(processSessionSource.contains("TerminalViewportController(restoredViewportState"))
         assertTrue(processSessionSource.contains("if (!currentFullscreen || !state.initialized) return"))
-        assertTrue(processSessionSource.contains("withFrameNanos { }"))
+        assertCoalescedFramePublication()
         assertTrue(backgroundProcessManagerSource.contains("rememberTerminalCommand"))
         assertTrue(backgroundProcessManagerSource.contains("getTerminalCommandHistory"))
         assertTrue(processSessionSource.contains("addAll(bgManager.getTerminalCommandHistory(processId))"))
