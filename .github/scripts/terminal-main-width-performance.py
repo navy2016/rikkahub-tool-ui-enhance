@@ -43,7 +43,8 @@ def guard():
 def sources():
     result=old_sources()
     paths=[TEST,'.github/scripts/terminal-main-width-performance.py','.github/scripts/terminal-main-width-lifecycle.py',
-        '.github/scripts/terminal-frame-identity.py','benchmarks/terminal-frame-identity/protocol.json',
+        '.github/scripts/terminal-frame-identity.py','.github/scripts/terminal-paired-profile-audit.py',
+        '.github/scripts/audit-release-profiles.py','benchmarks/terminal-frame-identity/protocol.json',
         'benchmarks/terminal-main-width-performance/protocol.json','benchmarks/terminal-main-width-lifecycle/identity.json',
         'benchmarks/terminal-main-width-lifecycle/protocol.json','benchmarks/terminal-main-width-lifecycle/candidate.patch',
         'benchmarks/terminal-full-virtual-mechanism/dependencies.init.gradle',
@@ -83,6 +84,17 @@ def preserve_bundle_diagnostics(manifests):
     save(OUT/'bundle-differences.json',report)
     for chunk in range(0,len(changed),4):
         ci.notice('notice','A1 exact bundle difference',json.dumps(changed[chunk:chunk+4],separators=(',',':')))
+    # Diagnostic only: verify generated profile identity before the SAME strict byte-equality
+    # gate rejects it. This does not grant a profile exception or authorize measurement.
+    profile_audit=load('a1_paired_profile_audit','terminal-paired-profile-audit.py');profiles={}
+    for arm,manifest in manifests.items():
+        target=manifest['apks']['target']
+        profiles[arm],symbols=profile_audit.audit(ROOT/target['file'],target['sha256'],manifest['sourceSha'])
+        save(OUT/('profile-'+arm+'.json'),profiles[arm]);save(OUT/('profile-'+arm+'-symbols.json'),symbols)
+    result=profile_audit.compare(profiles['legacy'],profiles['candidate'])
+    save(OUT/'profile-comparison.json',dict(sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],
+        diagnosticOnly=True,assetsEqualExceptionGranted=False,comparison=result,profiles=profiles))
+    ci.notice('notice','A1 read-only profile consistency',json.dumps(result,separators=(',',':')))
     return report
 def prerequisites():
     pair.require_ci();p=guard();q=p['prerequisites'];OUT.mkdir(parents=True,exist_ok=False)

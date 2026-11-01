@@ -16,6 +16,9 @@ A1性能首次实际run41278159851/source98d53b2在双目标打包一致性阶�
 `Paired target manifests/resources/runtime assets differ`。未启动设备实验、0性能窗口，原失败保留。
 当前只增加双包hash清单诊断，mainWidthBundleDiagnostic明确跳过experiment；不放宽旧资产相等守卫。
 原失败的两APK未作为artifact保留，诊断重建不得声称是原二进制；候选/驱动/协议保持f543171冻结字节。
+build-only诊断run41279081126/sourcea201537重现，唯一差异assets/dexopt/baseline.prof（19619/19625字节）；
+其他资产/资源/native及Web产物相等。仍未采样。增加只读prof010/profm002↔各自DEX CRC和符号方法/类审计，
+继续走mainWidthBundleDiagnostic，不授予profile例外、不复制/移除/重签APK，不改旧固定212/55审计。
 
 用户在306后续方案／完整检查点之后要求继续，现推进A1：独立MAIN历史宽度生命周期的候选及机制验证。
 范围benchmarks/terminal-main-width-lifecycle/，新workflow terminal-main-width-lifecycle.yml；生产仍306/main ac977984。
