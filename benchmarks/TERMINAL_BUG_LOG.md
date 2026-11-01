@@ -113,3 +113,15 @@ changes separately. Performance rejection by itself is not proof of a specific s
   The lower-level reason is not yet established; do not label it a parser/production failure.
 - Before any further840window run, use a no-APK Android34direct-stdin/heredoc/pipe comparison with
   byte hashes, process exit status and available SELinux diagnostics. No resampling or gate relaxation.
+- Diagnostic41341668403/source5e46c113 independently reproduced the cause: all3cat SHA256 values
+  equal the572byte config; directstdin/pipe start successfully, heredoc reports empty config. Original
+  SELinux audit denies Perfetto read of`/data/local/tmp/sh*.tmp` with`shell_data_file`label. Do not chmod
+  or disable SELinux; use actual pipe transport. Artifact13097224397/relay41341886904 originals checked.
+
+## BUG-LIFECYCLE-004 — kill0 permission denial is mistaken for process exit [stop proof under diagnosis]
+- Same no-APK Android34diagnostic originals contain SELinux `denied { signull }` from shell to Perfetto.
+  The legacy `while kill -0 ...` loop can return success on permission denial before the process exits.
+- Successful SIGINT/wait/pull status alone is therefore not a trustworthy stop-completion proof.
+  This does not establish which historical frame/packet was affected and does not change A1/B1 results.
+- Preserve frozen collectors. Separately verify `/proc/PID/stat` readability/liveness and disappearance
+  after SIGINT before a new acquisition recipe. No root/SELinux weakening or replacement measurements.
