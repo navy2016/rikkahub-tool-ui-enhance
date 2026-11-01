@@ -9,6 +9,16 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## 无APK尾部诊断V1结案（优先于下方派发／待结果记录）
+
+source351d6b57be81290487b59bb80a425c52deca52b0/run41351430986已failure，原artifact13100653852/relay41351888266。
+8原trace和receipt核验，6正常分支分析与CI一致。两个1004composite返回Operation not permitted，原失败保留、不提权。
+baseline两次有missing-end和unclosed span；wait/periodic原解析器无fault，但尾部frame终点在逻辑cut后，不能称未提交或flush无效。
+Settings滑动惯性/尾部目标选择使结果不能外推到V3静止终端。下一诊断需有限刺激、单独的固定目标与截止，不改历史cut/解析器。
+本地replay整数计数键转JSON字符串的比较bug已只在验证器修正；原脚本/数据不变。
+报告benchmarks/results/trace-tail-diagnostic-v1-incomplete.md；工作目录/workspace/terminal-review/full-virtual-trace-tail-diagnostic，verify_diagnostic.py和verified-report.json。
+V3仍840/24完全复算后资格失败，C1仅机制通过未测性能/未采用，生产306不变。目前无待完成CI。
+
 ## 当前独立无APK尾部诊断（V3已结案，不是补采）
 
 冻结benchmarks/terminal-trace-tail-diagnostic：baseline/wait/periodic/composite正反各一次，8场景；内置Settings，无app编译/安装。

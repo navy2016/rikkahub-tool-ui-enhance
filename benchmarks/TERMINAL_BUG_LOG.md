@@ -163,3 +163,20 @@ changes separately. Performance rejection by itself is not proof of a specific s
   not binary/source identity or a proven cause in this guest. No historical parser/data change or resampling.
 - Next: independently freeze a small no-APK tail-delivery diagnostic; keep timing cutoffs and all missing
   endpoints intact. CurrentV3 remainsfailed; C1performance cannot begin until a new acquisition qualifies.
+
+## INCIDENT-TAIL-DIAG-001 — compositor request denied and moving-tail cutoff is inconclusive [V1closed/incomplete]
+- Fixed8case no-APK run41351430986/source351d6b5 failed. All8raw traces/receipts verified from
+  artifact13100653852/relay41351888266; six normal analyses match CI, two failed branches are not replaced.
+- Bothcomposite requests return exit0 but explicit Parcel `Operation not permitted`; the guard correctly
+  refuses success. Never change permissions or bypass the restriction.
+- Baseline has missing final records+unclosed spans; wait/periodic have no parser faults or pre-cut missing
+  SurfaceFrame ends, but the chosen tail frame's display endpoint is after the fixed logical cut.
+  This is not no-submission or a demonstration that flush is ineffective. Sliding Settings is not a
+  controlled stationary terminal response. New diagnosis needs finite stimulus and separate target/cut
+  bounds; no cutoff/target selection change is applied retroactively toV1orV3.
+
+## BUG-TAIL-REPLAY-002 — integer protobuf histogram keys compared to JSON string keys [fixed locally]
+- Firstoffline tail replay asserted in-memory `timelineKindCounts`/`payloadCounts` maps equal to
+  decoded JSON maps. Their counters matched but JSON stringifies integer object keys.
+- Normalize only the two known maps' keys in`verify_diagnostic.py`, then compare complete structures.
+  All6normal analyses match; all8originaltrace hashes and receipts verified. No native/parser change.
