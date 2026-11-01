@@ -1,5 +1,5 @@
 """Frozen306-versus-A1 end-to-end comparison. No historical guard weakening or automatic adoption."""
-import argparse,base64,collections,hashlib,importlib.util,json,math,os,re,shutil,statistics,subprocess,types,zlib
+import argparse,base64,collections,hashlib,importlib.util,json,math,os,re,shutil,statistics,subprocess,types,zipfile,zlib
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 BASE=ROOT/'benchmarks/terminal-main-width-performance';PROTOCOL=BASE/'protocol.json'
@@ -58,6 +58,32 @@ def verify_sources(manifests):
     for name,item in spec.items():require(a[name]==item['base'] and b[name]==item['candidate'],'A1 source bytes differ:'+name)
     require(a[TEST]==b[TEST]==protocol()['driverSha256'],'Different frozen common driver source')
 def configure():ci.sources=sources;pair.OUT=OUT;pair.BUILD=BUILD;pair.verify_sources=verify_sources
+def preserve_bundle_diagnostics(manifests):
+    """Hash-only exact package differences before the strict existing guard; never relax it."""
+    inventories={}
+    for arm,manifest in manifests.items():
+        save(OUT/('built-'+arm+'-manifest.json'),manifest)
+        path=ROOT/manifest['apks']['target']['file']
+        with zipfile.ZipFile(path) as archive:
+            require(len(archive.namelist())==len(set(archive.namelist())),'Duplicate target archive members')
+            entries={}
+            for entry in archive.infolist():
+                if entry.is_dir():continue
+                name=entry.filename
+                if name.startswith(('assets/','lib/','res/','static/')) or name in ('AndroidManifest.xml','resources.arsc'):
+                    raw=archive.read(entry);entries[name]=dict(bytes=len(raw),sha256=sha(raw))
+            inventories[arm]=entries;save(OUT/('built-'+arm+'-assets.json'),entries)
+    a,b=inventories['legacy'],inventories['candidate'];changed=[]
+    for name in sorted(set(a)|set(b)):
+        if a.get(name)!=b.get(name):changed.append(dict(name=name,legacy=a.get(name),candidate=b.get(name),
+            strictGuardMember=name.startswith(('assets/','lib/','res/')) or name in ('AndroidManifest.xml','resources.arsc')))
+    report=dict(sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],originalFailureRun=41278159851,
+        originalFailedApksRetained=False,theseAreNewBuildsNotOriginalApks=True,changed=changed,
+        strictGuardDifferences=sum(x['strictGuardMember'] for x in changed),candidateUnchanged=True,deviceSamples=0)
+    save(OUT/'bundle-differences.json',report)
+    for chunk in range(0,len(changed),4):
+        ci.notice('notice','A1 exact bundle difference',json.dumps(changed[chunk:chunk+4],separators=(',',':')))
+    return report
 def prerequisites():
     pair.require_ci();p=guard();q=p['prerequisites'];OUT.mkdir(parents=True,exist_ok=False)
     run=api(f'actions/runs/{q["run"]}');jobs=api(f'actions/runs/{q["run"]}/jobs?per_page=100')['jobs']
@@ -107,6 +133,7 @@ def build():
     finally:
         for name,raw in before.items():(ROOT/name).write_bytes(raw)
         guard();require(not git('diff','--name-only','HEAD').strip(),'A1 build overlay leaked into production')
+    preserve_bundle_diagnostics(manifests)
     assets=pair.verify_bundles(manifests);source,run=ci.identity()
     shutil.copyfile(ROOT/'artifacts/terminal-full-virtual-mechanism/resolved-dependencies.json',OUT/'resolved-dependencies.json')
     save(OUT/'plan.json',dict(sourceSha=source,runId=run,freezeSha=FREEZE_SHA,protocol=p,protocolSha256=PROTOCOL_SHA256,

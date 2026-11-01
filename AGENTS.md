@@ -12,6 +12,11 @@
 样本p95比≤1.10；每pair最坏candidate≤max(legacy×1.5,legacy+100ms)，不混池、不补采、不以收益抵消守卫。
 工作目录/workspace/terminal-review/full-virtual-main-width-performance-v1；尚缺性能和最终完整回归，不自动采用、不叠B/C。
 
+A1性能首次实际run41278159851/source98d53b2在双目标打包一致性阶段失败：
+`Paired target manifests/resources/runtime assets differ`。未启动设备实验、0性能窗口，原失败保留。
+当前只增加双包hash清单诊断，mainWidthBundleDiagnostic明确跳过experiment；不放宽旧资产相等守卫。
+原失败的两APK未作为artifact保留，诊断重建不得声称是原二进制；候选/驱动/协议保持f543171冻结字节。
+
 用户在306后续方案／完整检查点之后要求继续，现推进A1：独立MAIN历史宽度生命周期的候选及机制验证。
 范围benchmarks/terminal-main-width-lifecycle/，新workflow terminal-main-width-lifecycle.yml；生产仍306/main ac977984。
 候选只存于benchmarks，CI临时覆盖5源文件并finally恢复；Page/helper/输入/默认/测量/滚动/选择不改。

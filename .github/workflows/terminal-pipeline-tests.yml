@@ -6,7 +6,7 @@ on:
       suite:
         description: 'Full page samples, transport preflight, or same-device AB/BA experiment'
         type: choice
-        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, tuiHistory, tuiHistoryOnly, tuiHistoryCompletion, fullVirtual, fullVirtualOnly, fullVirtualLatency, realClock, realClockSetup, altWidth, contentPaired, widthRecovery, widthRecoveryCandidate, widthRecoveryPaired, widthRecoverySetup, startupSettings, frameMetricsAudit, frameMetricsPageAudit, frameIdentityQualification, p2IdentityPerformance, publicationWait, inframePublication, inframePageRegression, inframePerformance, inframeFinalRegression, inframeFinalEvidence, mainWidthLifecycle, mainWidthPerformance, tracePreflight, versionRegression, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
+        options: [pipeline, transport, all, tuiBundle, tuiOnly, bottomVisibility, bottomOnly, tuiHistory, tuiHistoryOnly, tuiHistoryCompletion, fullVirtual, fullVirtualOnly, fullVirtualLatency, realClock, realClockSetup, altWidth, contentPaired, widthRecovery, widthRecoveryCandidate, widthRecoveryPaired, widthRecoverySetup, startupSettings, frameMetricsAudit, frameMetricsPageAudit, frameIdentityQualification, p2IdentityPerformance, publicationWait, inframePublication, inframePageRegression, inframePerformance, inframeFinalRegression, inframeFinalEvidence, mainWidthLifecycle, mainWidthPerformance, mainWidthBundleDiagnostic, tracePreflight, versionRegression, paired, bundlePaired, service, byteBuffer, soak, mountDiagnostic]
         default: pipeline
       evidence_run_id:
         description: 'Read bounded original pipeline failure excerpts; skips building'
@@ -56,6 +56,11 @@ permissions:
   actions: read
 
 jobs:
+  main-width-bundle-diagnostic:
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'mainWidthBundleDiagnostic' }}
+    uses: ./.github/workflows/terminal-main-width-performance.yml
+    with:
+      diagnostic_only: true
   main-width-performance:
     if: ${{ inputs.evidence_run_id == '' && inputs.suite == 'mainWidthPerformance' }}
     uses: ./.github/workflows/terminal-main-width-performance.yml
@@ -218,7 +223,7 @@ jobs:
           note('Original pipeline failure callers', callers)
           PY
   pipeline:
-    if: ${{ inputs.evidence_run_id == '' && inputs.suite != 'paired' && inputs.suite != 'bundlePaired' && inputs.suite != 'tracePreflight' && inputs.suite != 'versionRegression' && inputs.suite != 'altWidth' && inputs.suite != 'contentPaired' && inputs.suite != 'widthRecovery' && inputs.suite != 'widthRecoveryCandidate' && inputs.suite != 'widthRecoveryPaired' && inputs.suite != 'widthRecoverySetup' && inputs.suite != 'startupSettings' && inputs.suite != 'frameMetricsAudit' && inputs.suite != 'frameMetricsPageAudit' && inputs.suite != 'frameIdentityQualification' && inputs.suite != 'p2IdentityPerformance' && inputs.suite != 'publicationWait' && inputs.suite != 'inframePublication' && inputs.suite != 'inframePageRegression' && inputs.suite != 'inframePerformance' && inputs.suite != 'inframeFinalRegression' && inputs.suite != 'inframeFinalEvidence' && inputs.suite != 'mainWidthLifecycle' && inputs.suite != 'mainWidthPerformance' }}
+    if: ${{ inputs.evidence_run_id == '' && inputs.suite != 'paired' && inputs.suite != 'bundlePaired' && inputs.suite != 'tracePreflight' && inputs.suite != 'versionRegression' && inputs.suite != 'altWidth' && inputs.suite != 'contentPaired' && inputs.suite != 'widthRecovery' && inputs.suite != 'widthRecoveryCandidate' && inputs.suite != 'widthRecoveryPaired' && inputs.suite != 'widthRecoverySetup' && inputs.suite != 'startupSettings' && inputs.suite != 'frameMetricsAudit' && inputs.suite != 'frameMetricsPageAudit' && inputs.suite != 'frameIdentityQualification' && inputs.suite != 'p2IdentityPerformance' && inputs.suite != 'publicationWait' && inputs.suite != 'inframePublication' && inputs.suite != 'inframePageRegression' && inputs.suite != 'inframePerformance' && inputs.suite != 'inframeFinalRegression' && inputs.suite != 'inframeFinalEvidence' && inputs.suite != 'mainWidthLifecycle' && inputs.suite != 'mainWidthPerformance' && inputs.suite != 'mainWidthBundleDiagnostic' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     env:

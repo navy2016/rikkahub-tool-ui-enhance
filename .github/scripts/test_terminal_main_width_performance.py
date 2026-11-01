@@ -131,4 +131,8 @@ class MainWidthPerformanceTests(unittest.TestCase):
         self.assertIn("\n'on':\n  workflow_call:",text)
         self.assertNotRegex(text,r'(?m)^true:')
         self.assertIn('mainWidthPerformance',(m.ROOT/'.github/workflows/terminal-pipeline-tests.yml').read_text())
+    def test_package_diagnostics_precede_unrelaxed_equality_guard(self):
+        text=Path(m.__file__).read_text()
+        self.assertIn('preserve_bundle_diagnostics(manifests)\n    assets=pair.verify_bundles(manifests)',text)
+        self.assertNotIn('check_files=False',text)
 if __name__=='__main__':unittest.main()
