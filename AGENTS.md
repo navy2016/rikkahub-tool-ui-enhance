@@ -19,6 +19,11 @@
 首轮6b831072/41294632502已failure：28真实字体组件/24场景通过；JVM新FIFO测试误写shared=1，实际应2。
 306原hiddenCursorColumnReservationChangesBothMovedAndNewRows已证明：隐藏光标尾空格移除+新行尾空格使两行变化。
 仅修正该新测试并增加行ID/前后Text/4reused断言；五候选源码和设备测试字节不变。原失败保留，新SHA重新验证机制，不是性能补采。
+校正源码f9c7e03643be06625c164ee0c4ef8359063941c1/run41295383061已success；529JVM/28组件/24场景同次原件全部离线核验。
+当前B1identity c8c2475077b82b23afad953a7b038e2f060739d9ac2a960ee6908a437c29be9d；五候选字节仍6b831072。
+原artifact13078169318/13078854911经relay41296051791/41296100335只读中转，无APK/新采样。
+报告benchmarks/results/physical-metrics-b1-mechanism.md；verified-evidence/与verify_evidence.py在工作目录。
+B1仅机制通过，尚未冻结/派发性能，不采用，不Release；下一步独立多行/TUI端到端性能设计，保持306和A1拒绝结论。
 
 ## A1最终结论（优先于下方性能运行中记录）
 
