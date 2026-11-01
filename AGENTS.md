@@ -24,6 +24,10 @@ classes7.dex方法数57557→57559且CRC改变，故onlyLocationChecksumsDiffer=
 新增采样前build-contract.json（原字节相等失败不追认）：除baseline.prof外还扩大到static Web的所有资产字节相等；
 prof需自身DEX校验+完整符号等价，profilem仍相等。历史pair verifier不改、APK不改写/删除/复制profile。
 新性能必须携带typed buildContract SHA；计时协议f543171/2016窗口及A1候选不变。目前仍0已测性能窗口。
+新增构建契约提交0fc31431f637b47912ad5b7f8a688b0fe703b2e9，hash48380bd3f7e51e5fa589d13c5f76d8c8b0855cc8317a94b90ae58bc47888cc67。
+唯一typed性能run41281700735已经派发；尚未宣称完成或通过，当前状态以typed-performance-dispatch.json及回执为准。
+原6DEX/42431方法/7799类符号JSON取回后逐项相等；自身DEX二进制校验在CI完成，本地没有APK。
+诊断报告benchmarks/results/main-width-a1-profile-build-diagnosis.md。不得重跑原失败、不得重复派发当前2016矩阵。
 
 用户在306后续方案／完整检查点之后要求继续，现推进A1：独立MAIN历史宽度生命周期的候选及机制验证。
 范围benchmarks/terminal-main-width-lifecycle/，新workflow terminal-main-width-lifecycle.yml；生产仍306/main ac977984。
