@@ -9,6 +9,22 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## B1性能V1最终结论（优先于下方运行中/尚未验证记录）
+
+唯一性能run41300006846/sourcea5ed6075853a155028c213a015de500ddc07672f已failure并结案，不补采。
+同次artifact13084527235经只读relay41317096277取回；原400MiB拒绝relay41316773111保持failure。
+全部3360窗口/96原Perfetto/8invocation已离线逐槽复算并完整合并，完全匹配CI原分类及冻结统计。
+dataComplete=false，性能screen=false，B1不采用；生产仍306/main ac977984，无需回滚，不为B1追加182视口/正式Release。
+8轨迹完整性失败使462窗口(440正式)无合格提交/呈现证据；7非首次丢包标志+2未闭合相关UI span，1轨迹重叠。
+4759合格UI尝试/4001提交/4001呈现；3998BOTH_EXACT/3ABSENT/758UNLINKED；不是462窗口实际未提交的证明。
+另有30数值门槛失败(17中位/5p95/8最坏pair)，73完整性或缺值失败。可计算重绘主比最优0.930532，未达0.80。
+96原生场景及IME/历史身份门通过；双包原始资产确实逐字节相等，不能把失败归因于打包差异。
+报告benchmarks/results/physical-metrics-b1-performance-rejected.md；工作目录/workspace/terminal-review/full-virtual-physical-metrics-performance-v1。
+verified-report.json/verified-windows.csv为完整合并；raw-shards/slot-0..7.zip无损保留200原成员(含全部96轨迹/96方法log/8结果)。
+source/为a5ed607源码胶囊，verify_experiment.py未改；replay_archives.py --slot N/--all可无网络逐槽复算，包内一次只解压一槽。
+bug台账已补：精确中转大小许可已验证、IME快照顺序96场景验证、轨迹完整性V1拒绝、摘要10片仅9可见以及本地429退避修复。
+不修改冻结候选/解析器/协议救分；A1也保持拒绝。下一优化方向必须从306独立立项，先解决取证生命周期资格再谈采样。
+
 ## B1独立性能V1（优先于下方性能未开始记录）
 
 用户要求继续；从306与未变B1候选冻结新的MAIN/ALT24行重绘及原refresh/SYNC/return守卫。

@@ -20,10 +20,12 @@ changes separately. Performance rejection by itself is not proof of a specific s
   handshake. A later setup transition could invalidate the stored provenance before timing starts.
 - Fix: call `settle(false,"initial-main")` before capture, record the extra setup gate explicitly.
 - Validation: native-driver/protocol source guards verified the order and full gate inventory
-  before freeze6ecaa60; all52host source/statistics/profile tests passed. Device execution pending.
+  before freeze6ecaa60; all52host source/statistics/profile tests passed. Run41300006846's96native
+  cases, setup gates and final MAIN history identities were independently rechecked from originals.
+  The separate trace-integrity/performance rejection does not invalidate these native assertions.
   No candidate/production or already-frozen protocol changed.
 
-## BUG-TRANSPORT-B1-001 —400MiB relay cap rejects the complete96trace archive [fix pending validation]
+## BUG-TRANSPORT-B1-001 —400MiB relay cap rejects the complete96trace archive [fixed]
 - Location: `.github/workflows/relay-artifact.yml`, artifact ownership/size guard.
 - Evidence: relay41316773111 failed `Artifact ownership, size, expiry or digest is invalid`;
   artifact13084527235 is542237998bytes, exceeds400MiB, unexpired and exactly bound to completed
@@ -31,12 +33,36 @@ changes separately. Performance rejection by itself is not proof of a specific s
 - Fix: one exact run/source/id/name/digest/size permit. Every other archive keeps400MiB, and
   downloaded/uploaded bytes still require the original SHA256. No experiment,APK or threshold change.
 - Original failed relay stays failed. Retry is transport only; no repeated device samples.
-- Validation: source/policy checks and exact-source relay pending.
+- Validation: commit770ae1d,7exact-bound policy checks passed. Transport-only relay41317096277
+  succeeded; original542237998bytes/digest validated in CI and selected originals retained locally.
 
-## INCIDENT-B1PERF-002 — native run complete but frame evidence not fully decidable [investigating]
+## INCIDENT-B1PERF-002 — native run complete but frame evidence not fully decidable [V1 closed/rejected]
 - Run41300006846/sourcea5ed607 failed `B1 frame identity evidence incomplete; originals kept,no replacement sampling`.
 - Build and typed qualification passed; raw asset bytes identical. Full frozen matrix report emitted.
-- CI summary declares10fragments but only1..9 are available in check annotations. This summary channel
-  is incomplete; retrieve originalsummary/results and hash-check before interpreting missing windows.
-- Root cause/affected windows not yet established. Preserve all nulls and native traces; no sampler,
-  parser or gate change and no resampling. An evidence failure is not yet a proven production bug.
+- All96raw traces/3360windows independently replayed, exactly matching the frozen CI classification.
+  Eight traces invalidate462windows (440formal): seven noninitial `previous_packet_dropped=1`
+  markers with `first_packet_on_sequence=0` and prior observed packets, plus two unclosed relevant
+  Choreographer spans (one trace overlaps). All dropped-marker packets contain ProcessTree field2.
+- Both unclosed UI spans start after the final timed cutoff (2734530007ns and5783747877ns), but
+  frozen `terminal-frame-identity.py:attempt` rejects any trace fault before following the frame chain.
+  This is NOT evidence that462windows actually failed to submit. No per-window exemption is introduced.
+- All96Perfetto start/stop/wait/pull receipts succeeded. No trace reaches96MiB. These receipts do not
+  prove packet completeness; the exact reason producers emitted the dropped flags remains unproven.
+- B1V1 is rejected for integrity AND30numerically decidable gate failures. No sampler/parser/threshold
+  change, no replacement data or APK. Production stays306; no production rendering defect is inferred.
+
+## BUG-EVIDENCE-B1-003 — multipart check summary is not fully delivered [artifact recovery complete]
+- `terminal-physical-metrics-performance.py:experiment` emits typed qualification plus10summary notices
+  in one step. Only summary parts1..9 are present in the completed check-run annotations.
+- Originalsummary.json canonical SHA2565ebf52073cf7efb6368eaf8b796c0f2e67930427ae30ee30dc678c179b0f9032
+  and all9available parts independently match. Part10 was not fabricated; full artifact is authoritative.
+- Historical emitter stays frozen. Future protocols must reserve per-step annotation capacity or use
+  separately bounded publication steps; this is a delivery defect,not a reason to repeat sampling.
+
+## BUG-TRANSPORT-B1-004 — rapid small CDN range retries ignore429 backoff [fixed locally]
+- Local evidence reader hit `HTTP/1.1 429 Too Many Requests` fetching many small trace-status records;
+  the original immediate4retry loop did not respect rate limiting. All96raw traces were already verified.
+- The B1-only workspace reader now paces network ranges≥3s and honors numeric Retry-After with≥60s
+  backoff; retains verified caches and bounded206/Content-Range/CRC/SHA checks. No timing code changed.
+- Validation: resumed only the same metadata byte ranges; all195additional provenance members retrieved,
+  including96successful trace start/stop/wait/pull receipts. No full ZIP/APK download or new device run.
