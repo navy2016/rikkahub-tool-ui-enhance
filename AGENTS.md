@@ -9,6 +9,18 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## B1独立性能V1（优先于下方性能未开始记录）
+
+用户要求继续；从306与未变B1候选冻结新的MAIN/ALT24行重绘及原refresh/SYNC/return守卫。
+协议/驱动冻结6ecaa60db0eb45f71aa6cd15bcfd0fca076bbee6，目录benchmarks/terminal-physical-metrics-performance。
+12独立进程场景×4AB/BA配对，3360窗口=160预热+3200正式；96份原轨迹，每臂/配对/场景/条件20正式窗口。
+MAIN/ALT重绘主/UI配对中位比≤0.80且≥3/4改善，全部非目标及系统中位≤1.05；p95≤1.10，逐pair最坏≤max(原×1.5,原+100ms)。
+沿用原身份解析器/500ms自然尾窗/240s96MiB轨迹上限；ALT窗口不虚构隐藏MAIN历史证明，最后恢复MAIN核验。
+typed profile资格采样前固定，不改写APK/旧guard；读取同次B1机制529/28/24原件作为先决条件，不重跑A1。
+52项本地源码/协议检查通过。工作目录/workspace/terminal-review/full-virtual-physical-metrics-performance-v1，按dispatch/receipt恢复，禁止重复派发。
+发现bug记录benchmarks/TERMINAL_BUG_LOG.md；当前已修复新驱动冻结前IME历史快照先后风险，源码顺序守卫通过，设备验证待完成。
+生产仍306/main ac977984；性能尚无结果，不采用、不正式Release。
+
 ## B1当前任务（优先于下方B未开始记录）
 
 用户在A1拒绝结案后要求继续推进优化；现独立从306设计B1物理行宽高产物共享，不含A1/P2，不调度A1复验。

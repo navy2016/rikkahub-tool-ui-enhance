@@ -19,5 +19,6 @@ changes separately. Performance rejection by itself is not proof of a specific s
 - Risk: capturing history immediately after opening IME precedes the existing stable-grid/IME
   handshake. A later setup transition could invalidate the stored provenance before timing starts.
 - Fix: call `settle(false,"initial-main")` before capture, record the extra setup gate explicitly.
-- Validation: native-driver/protocol source guards must verify the order and full gate inventory;
-  device execution pending. No candidate/production or frozen protocol changed.
+- Validation: native-driver/protocol source guards verified the order and full gate inventory
+  before freeze6ecaa60; all52host source/statistics/profile tests passed. Device execution pending.
+  No candidate/production or already-frozen protocol changed.

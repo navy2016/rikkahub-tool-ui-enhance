@@ -1,0 +1,53 @@
+name: B1 Physical Metrics Independent Performance
+'on':
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  paired:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 210
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Validate frozen B1 source matrix statistics and typed profile contracts
+        run: |
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_physical_metrics_b1.py
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_physical_metrics_performance.py
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_paired_profile_audit.py
+          python3 -B .github/scripts/terminal-physical-metrics-performance.py guard
+      - name: Recheck original529JVM28component24scene mechanism evidence
+        run: python3 -B .github/scripts/terminal-physical-metrics-performance.py prerequisites
+      - name: Build pinned common native PTY test asset
+        run: python3 -B .github/scripts/build-terminal-proot.py
+      - name: Build306 and B1 Release-derived targets and one identical driver
+        run: |
+          chmod +x gradlew
+          python3 -B .github/scripts/terminal-physical-metrics-performance.py build --typed-assets
+      - name: Run fixed4pairs12cases3360windows without replacement sampling
+        run: python3 -B .github/scripts/terminal-physical-metrics-performance.py experiment
+      - name: Preserve same-run hashes original traces complete nulls and frozen decision
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-physical-metrics-performance-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-physical-metrics-performance/
+            artifacts/terminal-pipeline/manifest.json
+            artifacts/terminal-pipeline/proot-overlay.json
+            artifacts/terminal-validation/
+          if-no-files-found: error
+          retention-days: 30
