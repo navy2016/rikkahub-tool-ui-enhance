@@ -92,7 +92,7 @@ changes separately. Performance rejection by itself is not proof of a specific s
   guard is separately frozen. The old qualification test/guard/parser are unchanged,not bypassed in
   their historical experiment. No device run was dispatched under the incorrect selection.
 
-## BUG-LIFECYCLE-002 — UiAutomation Runtime.exec does not preserve sh-c quoting [V1 failed; V2 fix awaiting CI]
+## BUG-LIFECYCLE-002 — UiAutomation Runtime.exec does not preserve sh-c quoting [quote transport fixed; V1 stays failed]
 - V1run41338176466/source2f1535c built successfully, then all12assigned first-launch methods failed
   before tracing: `Trace shell exit receipt missing` / `f: no closing quote`; cleanup reports `Trace PID absent`.
 - Same-run artifact13096382095 was relayed by41339387919; all12original case errors verified with
@@ -102,9 +102,10 @@ changes separately. Performance rejection by itself is not proof of a specific s
 - New isolated V2 passes only`sh` and writes the program via stdin, with a quoted heredoc for exact
   config bytes. No change to306, raw trace recipe,840window matrix, frame parser or acceptance gates.
 - Original failure remains failed. Native changes are in`benchmarks/terminal-trace-lifecycle-v2/v1-transport-fix.patch`;
-  host tests reproduce broken tokenization and verify fixed stdin/config/exit handling; V2device proof pending.
+  host tests reproduce broken tokenization and verify fixed stdin/exit handling. V2reached Perfetto,
+  proving shell invocation works, then failed the separate heredoc-read defect below. No qualification pass.
 
-## BUG-LIFECYCLE-003 — V2heredoc does not deliver readable config to Android Perfetto [investigating]
+## BUG-LIFECYCLE-003 — V2heredoc does not deliver readable config to Android Perfetto [SELinux cause confirmed; V3qualification pending]
 - Run41339783414/source90815fa built, then all12first-launch native cases failed at Perfetto startup:
   `The TraceConfig is empty`. The sh command now executes and returns its exit receipt; quote parsing is fixed.
 - Original artifact13096254355/relay41341253419 independently confirms12empty sample arrays and no
@@ -135,7 +136,7 @@ changes separately. Performance rejection by itself is not proof of a specific s
   stop and observed disappearance,never treating signal permission denial as completion. Native
   full-page qualification still required; diagnostic success is not840window qualification.
 
-## INFRA-LIFECYCLE-005 — JitPack401 blocks V3 before any device window [one infrastructure retry planned]
+## INFRA-LIFECYCLE-005 — JitPack401 blocks V3 before any device window [retry build passed; native qualification running]
 - Run41342838188/source9985cfc fails `:app:mergeTerminaltestNativeLibs` resolving unchanged
   `com.github.rikkahub:sqlite-android:-SNAPSHOT`: GETmaven-metadata.xml returns401Unauthorized.
 - Qualification step never started; no app/device window or trace sample exists from this run.
@@ -144,3 +145,6 @@ changes separately. Performance rejection by itself is not proof of a specific s
   `-80cedc8888-1`; upstream repository is public. No token is sent to JitPack.
 - Keep original failed run. One separately identified infrastructure retry may use unchangedV3
   source files/protocol/driver/config; it is not replacement sampling. If unresolved, retain the failure.
+- Retry41343554975/sourcea5ccea0 (documentation-only difference) successfully completed the unchanged
+  target/collector build and entered native840window qualification. Dependency declarations and versions
+  were not changed. Native results are not yet retrieved; this fixes no historical performance verdict.

@@ -21,6 +21,9 @@ workflow suite=traceLifecycleV3；恢复目录/workspace/terminal-review/full-vi
 V3首次source9985cfc0df08f5044cad32e8a8d064d698fbb5fd/run41342838188在构建阶段因JitPack sqlite-android:-SNAPSHOT元数据401失败，资格步骤未开始，0窗口。
 同一公开URL无凭据GET已恢复200；不改依赖、不发token。允许一次独立标记的构建基础设施重试，V3所有源码/协议/驱动/config原字节不变。
 重试恢复目录/workspace/terminal-review/full-virtual-trace-lifecycle-v3-infra-retry，按唯一dispatch追踪；原失败继续保留，不是重采。
+唯一重试sourcea5ccea022cd53f2a6595e6e84887f6899ee9f39d/run41343554975当前in_progress；构建success，进入840window/24trace原生资格。
+900s自动观察窗口已结束，不重置/不后台监控。实际完成窗口数未知，资格未获完整原件、未独立复算，不能宣称通过。
+verify_qualification.py已绑定retry source/run且调用冻结V3/identity规则；未执行原件验证。先读该run，不重复dispatch。
 
 ## 当前先做无APK配置传输诊断（优先于下方V2运行中记录）
 
