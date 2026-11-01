@@ -6,6 +6,19 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## A1最终结论（优先于下方性能运行中记录）
+
+用户确认41281700735完成后，已取回同次原artifact13075880259，经只读relay41287136178恢复全部原件。
+2016窗口/32Perfetto/8invocation离线逐槽重算并完整合并：dataComplete=true，性能screen=false，A1拒绝采用。
+3698合格尝试/3693提交/3693呈现，5个更晚NO_SUBMISSION保留；FrameMetrics3682 BOTH_EXACT/16 ABSENT，无缺失窗口。
+失败为refresh的6项中位数+4项p95。10k显示refresh提交/UI中位比1.155582/1.221333；return均4/4改善不能抵消。
+原run仍success（表示执行/完整性，不代表性能）；原byte-equality失败仍failure。结果hash6687a55df37c5418e8b40475bcbcc996285ef3dd25258be4f99c42e16d98e4e0。
+生产始终306/main ac977984，无需回滚；不重采/改门槛/叠B/C救分，不为A1追加182视口或正式Release。
+报告benchmarks/results/main-width-a1-performance-rejected.md，工作目录/workspace/terminal-review/full-virtual-main-width-performance-v1。
+下一建议B独立物理行宽高产物共享，基线仍306；B尚未实现/运行。当前无待完成性能run。
+历史verify-inframe-adoption.py因新增TerminalMainWidthPerformanceTest.kt会报`Verified viewport/page/driver tests changed`；
+这是其冻结测试范围保护，不是生产回退。不要放宽旧守卫；新A1/performance guard以及相对306的app/src/main/构建/依赖字节检查已通过。
+
 用户在A1机制通过报告后要求继续，现冻结306↔A1端到端性能V1；尚未代表已执行/已通过/已采用。
 协议benchmarks/terminal-main-width-performance/protocol.json；候选c4113db五文件与生产306均保持原字节。
 4配对×4场景×3条件×21轮=2016窗口，96预热；return主/UI收益≥20%且≥3/4配对，refresh/SYNC≤5%回退，系统≤5%。
