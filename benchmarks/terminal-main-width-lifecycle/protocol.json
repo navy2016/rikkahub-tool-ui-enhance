@@ -1,0 +1,934 @@
+{
+  "suite": "terminal-main-width-lifecycle-a1",
+  "stage": "mechanism-not-performance",
+  "baseProductionSha": "306e0b80b508c961bc00f2d4b34a2688e5857a1a",
+  "baseTree": "ac97798416997a8230c9fa2a5a8569cf0ed0a911",
+  "branch": "opt/terminal-verified-a79e7b6",
+  "unitInventory": [
+    {
+      "classname": "me.rerere.rikkahub.data.container.PtyModeInferenceTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/PtyModeInferenceTest.kt",
+      "methods": [
+        "autoKeepsSimpleShellCooked",
+        "autoUsesRawForClaudeAndTuiCommands",
+        "ompAndPiTokensDoNotMatchUnrelatedCommands",
+        "tuiTokenInArgumentsDoesNotForceRawMode",
+        "customTuiCommandsUseRawWithoutMatchingUnrelatedCommands",
+        "fullGridMatcherUsesOnlyTheUserConfiguredList",
+        "explicitModeOverridesAuto"
+      ],
+      "sha256": "8ab1247878f5960567f1c50899ef15810155cdcb017b906506cb7cf8e7c50773"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.BunCompatibilitySourceTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/BunCompatibilitySourceTest.kt",
+      "methods": [
+        "bunWrapperIsPreferredOverRawBundledBinaryInPath",
+        "bunGlobalInstallsUsePersistentCacheStableWorkdirAndCopyBackend",
+        "ompInstallerUsesOfficialMuslBinaryInsteadOfBunPackage",
+        "bunGlobalBinRepairRecreatesPackageBinEntries"
+      ],
+      "sha256": "f872ed7ad433983a7a6fcc22c81529c55eee63b66c79294663b6c9f6bd706629"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalUiSourceTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalUiSourceTest.kt",
+      "methods": [
+        "frameRowsBindingAndDrawTraceUseOneAtomicPublicationWithoutRecapturingInComposition",
+        "panelCollectsOnlyFollowWhilePersistenceKeepsCompleteLiveControllerState",
+        "terminalKeysSupportCustomLabelsAndShiftLatch",
+        "virtualHistoryIsExplicitlyOptInAndDoesNotChangeDefaultRenderer",
+        "freshDefaultUsesMeasuredGeometryWithoutAVisitToVirtualHistory",
+        "rendererButtonIsAdditiveAndKeepsKeysUntouched",
+        "terminalQuickCommandsIncludeOmpInstallAndTest",
+        "chatInputHasTerminalButtonWithLongPress",
+        "customTuiEntryLivesInAdvancedSettingsNotSessionToolbar",
+        "fullGridProgramListIsIndependentEmptyByDefaultAndPersisted",
+        "longPressTerminalButtonNavigatesToStartedTerminalPanel",
+        "conversationListDisplaysRunningProcessCountInErrorColor",
+        "containerNetworkAccelerationSettingsAreExposed"
+      ],
+      "sha256": "8f57b279166ea5b2b280f2521ad9d3246ee39830d9d58c1b4ef5b48d5e2f26b0"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.ProcessSessionNavigationSourceTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/ProcessSessionNavigationSourceTest.kt",
+      "methods": [
+        "initialInteractiveSessionIsConsumedAfterFirstSelection"
+      ],
+      "sha256": "b1d0c432b47cf4262de5535479a2d6f198e479ec810e445c1c83385ac992a932"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.ConversationSandboxCleanupSourceTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/ConversationSandboxCleanupSourceTest.kt",
+      "methods": [
+        "deletingConversationStopsProcessesBeforeDeletingSandboxDirectory"
+      ],
+      "sha256": "10751e74bead8325eb383fc863b3412ebf773e7e43ca1c259026fa2537b71549"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalSmoothnessSourceTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalSmoothnessSourceTest.kt",
+      "methods": [
+        "terminalViewportAndActiveSessionAreRememberedInMemory",
+        "imeUsesAVisualViewportWithoutResizingThePty",
+        "listAndFullscreenReuseOneTerminalAndListPreviewNeverResizesThePty",
+        "renderedRowsFollowStableIdsWhenScrollbackIsTrimmed",
+        "gridRenderingReusesRowsAndProtectsTuiBottomChrome",
+        "tuiWidthDefaultsToFitAndQuickTerminalUsesUserSizeHint",
+        "longPressTerminalButtonReusesExistingTerminalAndDoesNotToastOnSuccess",
+        "repeatedFastFlingJumpsToTopOrBottomConservatively",
+        "controllerIsTheOnlyVerticalScrollOwnerAndCapturesConsumedUserDeltas",
+        "measuredLazyTargetsAreRevisionAndGenerationBound",
+        "lazyMeasurementDoesNotInventAnUnknownScrollRange",
+        "unverifiedLazyGeometryCannotAutoEnableInTheProductionTerminal",
+        "productionChunksUseArchivalMetadataButKeepTheExistingScrollAndSelectionOwners",
+        "outputPathRemainsImmediateAndUnbatched",
+        "imeAvoidanceCoversNewScrollRangeAndSupportsPerCommandCalibration",
+        "tuiViewportUsesPhysicalScreenRowsInsteadOfTheApplicationStatusBar",
+        "imeTargetUsesSemanticContentBottom",
+        "fullGridAlignmentIsExposedAsAUserManagedIndependentList",
+        "terminalScrollbackAndFastFlingPreferencesAreBoundedAndPersisted",
+        "mouseModeOwnsTouchDragAndSerializesPtyInput",
+        "semanticViewportReducerOwnsTerminalScrollReconciliation",
+        "terminalStateAndCommandHistorySurviveLeavingTerminalPage"
+      ],
+      "sha256": "d585eaedcc149a9f5b378139e651a668d7c446a1a082cf8495a5e2b4ef7f1bde"
+    },
+    {
+      "classname": "me.rerere.rikkahub.utils.TerminalEmulatorTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/utils/TerminalEmulatorTest.kt",
+      "methods": [
+        "delayedWrapMatchesXtermBehavior",
+        "parsesColonTrueColorAndOscTitleWithoutPrintingControlText",
+        "resizePreservesVisibleCells",
+        "rowOnlyResizeDoesNotReallocateScrollbackLines",
+        "columnResizeStillReallocatesScrollbackLines",
+        "gridResizePreservesBottomOnlyWhileShrinking",
+        "cjkAndCombiningCharactersUseExpectedCells",
+        "osc52ClipboardIsDecodedAndNotRendered",
+        "osc8HyperlinkAnnotatesRenderedTextWithoutPrintingControlText",
+        "cursorShapeAndSgrMouseReportsAreSupported",
+        "zwjFlagsSkinToneAndKeycapStayInSingleGraphemeCells",
+        "focusAndWheelReportsFollowXtermModes",
+        "cursorShapeUsesVisibleGlyphForBlankCells",
+        "sgrButtonDragAndReleaseKeepThePressedButton",
+        "x10AndUrxvtMouseModesAreReportedCorrectly",
+        "xtwinopsReportsTerminalAndCellSizes",
+        "osc7WorkingDirectoryUriIsCapturedWithoutRendering",
+        "secondaryDeviceAttributesAndRequestModeReportsAreSupported",
+        "oscColorQueriesAndPaletteOverridesAreSupported",
+        "tabStopsCanBeSetAndCleared",
+        "oscColorResetsRestoreDefaultsAndPaletteEntries",
+        "requestModeReportsMoreMouseAndAlternateModes",
+        "repeatPrecedingGraphicCharacterRepeatsFullGrapheme",
+        "oscPaletteResetSupportsMultipleEntriesAndAliases",
+        "requestModeReportsAnsiModesAndSgrBaselineControlsParse",
+        "insertModeInsertsPrintableCharactersAndReportsState",
+        "cursorTabulationUsesConfiguredTabStopsInBothDirections",
+        "private1048SaveRestoreCursorReportsStateIndependently",
+        "scrollbackLimitCanBeAdjustedWithoutResettingTheScreen",
+        "clearScrollbackApplicationKeypadAndSyncOutputModesAreSupported",
+        "privateDeviceStatusAndXtermVersionReportsAreSupported",
+        "alternateScrollMetaEscapeAndColonUnderlineModesAreTolerated",
+        "reverseVideoPrivateModeIsTrackedReportedAndSummarized",
+        "xtwinopsWindowAndTitleReportsAreSupported",
+        "xtwinopsTitleSaveAndRestoreAreSupported",
+        "keySequencesSupportXtermModifiersAndEditingKeys",
+        "c1ControlsHandleIndexNextLineReverseIndexAndTabSet",
+        "ansiNewlineModeControlsLineFeedCarriageReturnAndReportsState",
+        "xtermKeyboardOptionModesAreTrackedAndReported",
+        "oscIconAndWindowTitlesAreTrackedSeparatelyAndReported",
+        "xtwinopsTitleStacksSupportNestedAndSelectiveRestore",
+        "screenPixelReportAndPrivate47ModeReportAreSupported",
+        "xtGetTcapReportsCommonCapabilitiesAndUnknowns",
+        "osc52ClipboardQueryReturnsSafeEmptyResponse",
+        "sgrPixelMouseModeReportsPixelCoordinatesAndModeState",
+        "locatorStatusDeviceReportReturnsAvailable",
+        "decRequestStatusStringReportsCursorStyleSgrAndScrollRegion",
+        "decRequestStatusStringReportsUnknownSelectorsAsInvalid",
+        "decRequestStatusStringReportsCurrentSgrAttributes",
+        "decSelectiveCharacterProtectionIsTrackedAndReported",
+        "selectiveErasePreservesProtectedCharacters",
+        "rectangularEraseHonorsSelectiveProtection",
+        "rectangularCharacterAttributesCanBeChangedAndReversed",
+        "fillRectangleWritesRequestedCharacterAndClipsArea",
+        "copyRectangleCopiesCellsAndUsesSnapshotForOverlap",
+        "rectangleChecksumReportsDeterministicCellChecksum",
+        "horizontalScrollShiftsRowsInsideScrollRegion",
+        "bracketedPasteWrapsOnlyWhenModeIsEnabled",
+        "alternateScrollWheelSendsCursorKeysWithoutMouseTracking",
+        "modifyOtherKeysFormatsPrintableCharacterInputs",
+        "renderRowsMatchesFullRenderTextAndPreservesHyperlinks",
+        "renderFrameReusesArchivedRowsAndKeepsLiveRowsDynamic",
+        "historyGenerationChangesOnlyWhenEntireScrollbackIsCleared",
+        "activeUpdatesReuseTheEntireHistorySnapshotAtAllSizes",
+        "archivalSnapshotAppendsShareBlocksAndReadOnlyNewSourceRowsAtAllSizes",
+        "archivalLimitTrimsReadNoSourceRowsAndDoNotRetainRemovedPrefixes",
+        "archivalStyleAndColumnChangesRebuildEveryRowButPreservePublishedSnapshots",
+        "archivalClearAndBurstResetOwnershipWithoutLosingNonMonotonicIds",
+        "oldFramesRemainImmutableAcrossEveryHistoryInvalidation",
+        "hiddenHistoryDoesNotEvictTheMainHistorySnapshot",
+        "copiedSyntheticFramesCannotClaimOwnedSnapshotIdentity",
+        "archivalOrdinalsSurviveHeadTrimLimitChangeResizeAndAlternateScreen",
+        "archivalOrdinalsStayDenseWhenReverseIndexMakesHistoryIdsNonMonotonic",
+        "clearHistoryPathsNeverRecycleArchivalOrdinals",
+        "historyRenderRevisionOnlyChangesWhenRetainedHistoryTextMayChange",
+        "renderFrameInvalidatesArchivedRowsForGlobalStyleChanges",
+        "renderFrameExcludesScrollbackOnAlternateScreen",
+        "renderFramePreservesScreenLineIdentityWhenRowsArchive",
+        "renderFrameKeepsLineIdsAcrossResizeAndChangesGenerationOnFullClear",
+        "alternateScreenClearUsesSeparateGenerationAndRestoresMainLineIds",
+        "renderFrameKeepsRevisionStableUntilTerminalStateChanges",
+        "renderFrameTreatsStyledBlankTuiRowsAsVisibleScreenContent",
+        "renderFramePublishesRowsBoundsAndModesTogether",
+        "contentBoundsReportsNonBlankRowsWithoutPlainTextAllocation"
+      ],
+      "sha256": "bf7d2ff6d5bbb30b732d25445e713ca4101f708003c9cd2f8c8a19ed1e8e6aa2"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.ControlInputTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/ControlInputTest.kt",
+      "methods": [
+        "controlInputBytesCoverReadlineAndVimControlCharacters",
+        "controlInputBytesKeepExistingSpecialKeysStable",
+        "controlInputBytesSupportModifiedNavigationKeys",
+        "controlInputBytesSupportModifiedFunctionAndEditingKeys",
+        "controlInputBytesSupportAltPrintableMetaKeys",
+        "controlInputBytesSupportModifiedPrintableKeys"
+      ],
+      "sha256": "b8499d55a16e4629224cdd50f8b96388e203991275734c1b6cedbf8eaa608b84"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.InteractiveTerminalSnapshotTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/InteractiveTerminalSnapshotTest.kt",
+      "methods": [
+        "renderInteractiveTerminalSnapshotConvertsAnsiOutputToPlainScreen",
+        "renderInteractiveTerminalSnapshotIncludesTitleAndModeState",
+        "renderInteractiveTerminalSnapshotClampsRequestedSize",
+        "renderInteractiveTerminalSnapshotIncludesCursorMetadataAndWorkingDirectory",
+        "renderInteractiveTerminalSnapshotIncludesResponsesAndClipboardRequests",
+        "renderInteractiveTerminalSnapshotMarksBlankScreenEmpty",
+        "renderInteractiveTerminalSnapshotIncludesCursorLineContext",
+        "renderInteractiveTerminalSnapshotReportsSparseContentBounds",
+        "renderInteractiveTerminalSnapshotReportsCursorLineWhitespaceBounds",
+        "renderInteractiveTerminalSnapshotReportsCursorLineRegionBeforeAndAfterText",
+        "renderInteractiveTerminalSnapshotReportsSemanticCursorLineTextSegmentsInsideIndentedText",
+        "renderInteractiveTerminalSnapshotReportsCursorLineTextPaddingSegments",
+        "renderInteractiveTerminalSnapshotReportsCursorOutsideVisibleContent"
+      ],
+      "sha256": "e8a489a8ec9a3e6bd7484327bf9460450a9db7a28f18dc75ba2d67b2d70eafcc"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalRenderedRowsTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalRenderedRowsTest.kt",
+      "methods": [
+        "basicTextGateKeepsContentColorBrushAndComposeLinksOnMaterial",
+        "preStyledEmulatorUrlAnnotationsKeepTheirFastPathAndMetadata",
+        "unchangedIdsOnlyUpdateTextWithoutReplacingTheListOrRows",
+        "trimAndReorderReuseSurvivorsByIdNotPosition",
+        "pendingTuiBlankFollowsItsStableIdThroughReordering",
+        "ordinaryHistoryBlanksAreNeverDeferred",
+        "onlyTheBottomTuiRowsUseBlankGraceAndForcedCommitEndsIt",
+        "aNonBlankRedrawResetsTheGracePeriod",
+        "clearAndNewIdsDoNotReuseDeadRows",
+        "incompleteMetadataUsesTheSameFallbackIdsAtCreationAndUpdate",
+        "realEmulatorArchivalPreservesRowStateAtAllBenchmarkSizes",
+        "cachedTuiRedrawStillResetsAPendingBlank",
+        "pendingBlankSurvivesContiguousTrimAndAppend",
+        "suffixContainingAnOlderIdIsAReorderNotANewRow",
+        "unchangedCharactersStillApplyNewAnsiStyle",
+        "mixedStructuralUpdatesMatchStableIdReuseContract",
+        "completeFrameMetadataSkipsRetainedHistoryForActiveScreenUpdates",
+        "globalStyleChangesAndColumnResizeForceHistoryTextSynchronization",
+        "appendUsesFifoButIncompleteMetadataKeepsTheFullFallback",
+        "fifoAppendsAndTrimsVisitOnlyTheChangedTailAtAllSizes",
+        "growingHistoryAndNonMonotonicIdsPreserveScreenStatesWhenTheyArchive",
+        "mixedRealEmulatorMutationsMatchTheFullSynchronizer",
+        "pendingGridBlanksForceFullSyncUntilCommittedEvenWhenRowsArchive",
+        "replacedListSyntheticRowsDifferentOwnersAndScreenReorderCannotUseFifoProof",
+        "discardedSnapshotDoesNotAdvanceTheHistorySynchronizationProof",
+        "archivalChunksCoverEveryRowOnceWithBoundedGroupsAtAllSizes",
+        "unknownOrUnsafeArchivalMetadataAndTuiModesKeepFlatEager",
+        "archivalChunkMembershipIgnoresSparseAndReorderedLineIds",
+        "realEmulatorTrimsKeepSurvivingRowsInTheSameArchivalBucket"
+      ],
+      "sha256": "79af1731ad182506069d5ef8c2794b0e9f5d9cc1a2da4fb3c3ef8f9dc9fcc356"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalViewportReducerTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalViewportReducerTest.kt",
+      "methods": [
+        "tailAlwaysScrollsToBottom",
+        "tailIgnoresHistoryMetadataChanges",
+        "screenScrollsToScreenStartRow",
+        "screenClampsToMaxScroll",
+        "lockedStaysOnAnchorLine",
+        "lockedRestoresClippedTopOffset",
+        "capturedAnchorRoundTripsToOriginalScrollPosition",
+        "lockedAnchorTrimmedFallsBackToTail",
+        "lockedHistoryAnchorTrimmedMovesToClosestSurvivingHistoryLine",
+        "lockedHistoryAnchorFallsBackAfterEntireHistoryWasCleared",
+        "lockedAnchorNoIdFallsBackToTail",
+        "buildLineIdsFromFrameProducesCorrectIds",
+        "buildLineIdsRejectsIncompleteHistoryMetadata",
+        "buildLineIdsUsesPublishedNonContiguousHistoryIds",
+        "captureAnchorMarksScreenRowsWithFrameGeneration",
+        "lockedScreenAnchorFallsBackWhenGenerationChanges",
+        "archivedScreenAnchorSurvivesLaterScreenGenerationChanges",
+        "nearestHistoryLineUsesStableIdDistance",
+        "tailUsesSemanticTargetInsteadOfContainerMaximum",
+        "lockedAnchorUsesMeasuredTargetWhenVariableItemHeightsAreAvailable",
+        "measuredTargetIsClampedToTheCurrentScrollRange",
+        "measuredTargetForTrimmedAnchorIsNotAppliedToItsReplacementRow",
+        "buildLineIdsFromFrameHandlesNoHistory",
+        "buildLineIdsFromFrameHandlesHistoryOnly",
+        "captureReadsOnlyTheSelectedIdEvenWithTenThousandHistoryRows",
+        "ownedAnchorLookupReusesOrdinalsAcrossTextUpdatesAndHeadTrims",
+        "anchorLookupRejectsDifferentOwnersReplacedIdsAndClearedHistory"
+      ],
+      "sha256": "50cc7b3d3759b17fb40913789c1cdd25c67396f089807f84bb78367cbc9ee45d"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalViewportControllerTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalViewportControllerTest.kt",
+      "methods": [
+        "waitsForRealMetricsBeforeResolvingSavedSemanticAnchor",
+        "legacyPixelOnlyRestoreCapturesAnAnchorOnce",
+        "tailFollowsNewOutputWithoutAcquiringAnAnchor",
+        "repeatedFrameAtSameTargetDoesNotRestartPendingEffect",
+        "staleProgrammaticCompletionCannotOverwriteNewerEffect",
+        "programmaticCancellationDoesNotConvertFollowToLocked",
+        "newDragInvalidatesPendingScrollAndIgnoresItsCleanup",
+        "frameAndImeChangesWaitForDragToFinish",
+        "finalConsumedFlingDeltaIsNotLostWhenScrollingBecomesIdle",
+        "oldFlingFinallyCannotEndANewerDrag",
+        "draggingBackToBottomExplicitlyResumesFollow",
+        "outputDuringExplicitJumpIsAppliedAfterAnimationNotDuringIt",
+        "topJumpCompletionResolvesTrimmedAnchorFromTheLatestPublishedFrame",
+        "measuredAnchorTargetIsForwardedWithoutChangingEagerFallbackDefaults",
+        "measuredAnchorFromAnOlderFrameIsIgnored",
+        "jumpToTopStaysLockedDuringItsProgrammaticAnimation",
+        "userCanInterruptAnExplicitJumpWithoutBeingPulledBack",
+        "temporaryLayoutClampAndFullListPlacementDoNotRecaptureAnchor",
+        "incompleteMetadataPausesRatherThanUnlockingOrApplyingAnOldEffect",
+        "repeatedFontChangesUseOriginalCaptureScaleWithoutRoundingDrift",
+        "historyTrimAndClearUseReducerPolicyThroughTheController",
+        "imeHideNeverRestoresPixelsCapturedBeforeNewUserInput",
+        "followingImeHideUsesLatestOutputInsteadOfPreImePixels",
+        "shortTuiImeHoldIsInvalidatedByAnExplicitJump",
+        "tuiScreenResetDiscardsThePreviousImeBottomRow",
+        "programmaticOriginsCannotEnterTheUserInputPath",
+        "freshMeasuredEagerWaitsForCompleteLayoutAndFollowsActualBottom",
+        "restoredEagerAnchorBindsMissingMeasuredScaleOnceAndPreservesItAcrossFontChanges",
+        "staleEagerLayoutCannotBindRestoredHeightOrOverwriteKnownCapture"
+      ],
+      "sha256": "bb07687c815785628ceb8eab395d16164b1ced58253dc03c48a2a487d9f75db5"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalFastFlingTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalFastFlingTest.kt",
+      "methods": [
+        "configuredCountsOneThroughFiveWorkInBothDirections",
+        "speedDiagonalAndWindowBoundariesKeepTheExistingThresholds",
+        "changingDirectionOrExceedingTheWindowRestartsTheSequence",
+        "ineligibleFlingsDoNotCountAndTriggeringStartsANewSequence",
+        "invalidVelocityOrBackwardsClockCannotProduceAnAccidentalJump",
+        "confirmingTheJumpCountSettingResetsAnyPartialSequence",
+        "zeroRequiredCountIsNotASupportedSetting",
+        "fastBottomJumpConsumesAllVelocityAndZeroChildFlingCannotCancelIt",
+        "fastTopJumpLocksFirstStableLineAndProgrammaticDeltasCannotRecaptureIt",
+        "nearEdgeThresholdsDoNotConsumeANormalFlingOrInventAJump",
+        "selectionAndMouseModesDisableFastJumpsWithoutChangingControllerIntent",
+        "outputDuringJumpIsDeferredThenReconciledToTheNewBottom",
+        "realDragInterruptsJumpAndOldCompletionCannotPullTheViewportBack",
+        "cancelledOldFlingCannotEndTheDragThatReplacedIt",
+        "finalConsumedNormalFlingDeltaCapturesTheClippedAnchor"
+      ],
+      "sha256": "81555c1213b30c0f8f65ac6a44e39e0a6655ec6a6c33e292f102cb75a58fd331"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalViewportItemGeometryTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalViewportItemGeometryTest.kt",
+      "methods": [
+        "capturesRealClippedOffsetAcrossVariableHistoryHeights",
+        "anchorSurvivesTrimAndReorderingByStableIdNotOldIndex",
+        "missingOrReplacedGenerationDoesNotRestoreAnUnrelatedItem",
+        "offsetsClampInsideMeasuredItemAndMaximumScroll",
+        "measuredResolutionRejectsWrongAnchorGeneration",
+        "zeroHeightItemsAreRejectedRatherThanCreatingInvalidAnchors"
+      ],
+      "sha256": "4028121ff94bcccf4cc7f6f56d3b588152dcd2c4738b667a223248182201c604"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalLazyViewportAdapterTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalLazyViewportAdapterTest.kt",
+      "methods": [
+        "historyAnchorTargetsTheStableHistoryItemWithItsClippedOffset",
+        "screenAnchorTargetsTheSinglePhysicalGridItemWithInternalOffset",
+        "missingScreenContainerMeasurementDoesNotGuessAnInternalTarget",
+        "offscreenHistoryAnchorUsesStableIndexWithoutAnEstimatedHeight",
+        "topAndBottomUseStableStructuralItems",
+        "unknownOrWrongGenerationAnchorIsNotAddressed",
+        "archivedScreenAnchorSurvivesSubsequentScreenGenerationChange"
+      ],
+      "sha256": "bc678e88653110533604b71ea91e0f0609760137b4b16c7995b73ee016cef035"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalLazyViewportMeasurementTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalLazyViewportMeasurementTest.kt",
+      "methods": [
+        "measurementCacheIsBoundedByPreviousVisibleItemsNotVisitedHistory",
+        "disjointRevisitCannotResurrectAnOldAbsoluteCoordinate",
+        "overlappingLayoutsPreserveMeasuredAbsoluteContentCoordinates",
+        "bootstrapScrollIsConsumedByTheFirstLayoutOnly",
+        "disjointLayoutUsesExplicitExpectedScrollInsteadOfRowHeightEstimate",
+        "tailObservationMakesRangeKnownAndScreenRowsUseActualHeights",
+        "aFalseForwardBoundaryWithoutTheTailDoesNotClaimKnownRange",
+        "knownRangeUsesMeasuredTailBottomAndViewportHeight",
+        "measuredRangeNeverFallsBehindTheCurrentScrollPosition",
+        "incompletePhysicalScreenMeasurementDoesNotPublishPartialRows",
+        "screenRowsAreRejectedWhenTheirMeasuredSumDiffersFromTheScreenItem",
+        "generationChangeDoesNotReuseExpectedCoordinateFromTheOldLayout",
+        "screenGenerationChangeInvalidatesOnlyScreenGeometry",
+        "stableGenerationAfterInvalidationCanPublishMeasuredRowsAgain"
+      ],
+      "sha256": "99b4bf1a2b8f2415244cc10eacd575ce722b9fb020f18513c261015290220360"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalRenderPreferencesTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalRenderPreferencesTest.kt",
+      "methods": [
+        "keyboardStableModeIsAnIndependentPerCommandChoiceWithTheOriginalDefault",
+        "missingCorruptAndUnknownPreferencesKeepTheCurrentDefault",
+        "rendererChoiceIsNormalizedAndIsolatedPerCommand",
+        "rendererPreferenceMapStaysBounded",
+        "gridFallbackDoesNotMutateThePreferredMode",
+        "oneTimeStatusMigrationPreservesOrderLabelsAndNeverAddsKeys"
+      ],
+      "sha256": "b36057f66918e2f2d349a2f2ed23512878dd1d3afb7db9fd7e2385fea6a3df5c"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalItemViewportTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalItemViewportTest.kt",
+      "methods": [
+        "captureUsesMeasuredRowNotNominalPixelDivision",
+        "completedItemScrollReconcilesAgainstTheNewMeasuredViewport",
+        "synchronousScrollCompletionRequiresCurrentFrameIdentityAndGeometry",
+        "synchronousCompletionPreservesMeasuredAnchorAndDirectionalClamping",
+        "structuralEndStillNeedsBackwardCorrectionForBlankScreenRows",
+        "measuredEagerHandoffRestoresVariableHeightAnchorNotNominalGrid",
+        "topJumpSurvivesRendererHandoffAndTrimWhileWaitingForEagerGeometry",
+        "newUserInputCancelsTopIntentDuringRendererHandoff",
+        "imeHoldAcrossDelayedEagerMeasurementUsesVirtualTopNotDormantScroll",
+        "savedAnchorRestoresWithoutEverKnowingTotalHeight",
+        "restoredUnknownHeightBindsOnlyTheRequestedMeasuredRowThenScalesWithoutDrift",
+        "unknownRestoredScaleIgnoresStaleLayoutAndNeverOverwritesAKnownScale",
+        "firstKnownHeightClampsLegacyClipToTheActualRowAndKeepsItAcrossHandoff",
+        "fontChangesScaleFromOriginalCaptureAndDoNotAccumulateRounding",
+        "trimKeepsSurvivingIdThenReplacesRemovedHistoryButClearFollows",
+        "staleFrameWithSameRevisionCannotDriveCurrentLayout",
+        "outputDuringJumpAndStaleCompletionCannotOverrideNewDrag",
+        "topJumpCapturesLatestFirstLineAfterTrimAndRemainsLocked",
+        "lockDuringUnmeasuredFrameIsNotLost",
+        "consumedDragDuringUnmeasuredOutputCannotResumeFollow",
+        "semanticBottomAndContractedViewportUseMeasuredContentNotStructuralTail",
+        "screenAnchorMayArchiveButHistoryCannotMigrateBackIntoScreen"
+      ],
+      "sha256": "22df5289d4eec61c1f403cbacaff3211b653cfe6a604fc52d78cc4400a1efeef"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalTranscriptWidthIndexTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndexTest.kt",
+      "methods": [
+        "ownedActivityUpdatesDoNotMeasureHistoryAtOneFiveAndTenThousandRows",
+        "trimsRemoveOffscreenMaximumAndMeasureOnlyNewArchivedRow",
+        "metricsOwnerAndReplacedRowsRevokeFifoProof",
+        "failedMeasurementDoesNotLeavePartiallyValidMaximum",
+        "dormantScreenUpdatesAtAllSizesKeepWidthsWithoutMeasuringText",
+        "dormantArchivesMeasureEveryMissingSurvivorAndRemoveTheOffscreenMaximum",
+        "dormantHeadTrimNeedsNoNewMeasurementAndCannotProveARetiredFrame",
+        "dormantInvalidationsReleaseRetainedStateBeforeAnyRetry",
+        "disposalAndPartialMeasurementFailureRevokeAllCacheOwnership",
+        "equalRebuiltScreenTextNeedsNoMeasurementAndRetentionStaysBounded",
+        "scrollingAndScreenLineEditsReuseStableIdsInsteadOfOldPositions",
+        "shorteningTheWidestScreenRowReducesTheMaximum",
+        "identicalCharactersWithDifferentAnsiOrUrlAnnotationsAreNotCacheHits",
+        "hiddenCursorColumnReservationChangesBothMovedAndNewRows",
+        "syntheticRowsIdsGenerationAndDifferentOwnerCannotReuseScreenWidths",
+        "failureAfterScreenCacheHitsDoesNotPublishAPartialReplacement",
+        "randomizedScreenEditsCursorAndResizeMatchTheFullOracle",
+        "randomizedDormantFifoBurstsMatchAFullWidthOracle"
+      ],
+      "sha256": "0bf13c2ea09d2bdc524a9d49ef920064eae71a95a12b485dc952ca4cdefc258a"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalVirtualHistoryPolicyTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalVirtualHistoryPolicyTest.kt",
+      "methods": [
+        "stableKeyboardIsExplicitAndKeepsTheLegacyImeLatchUnchanged",
+        "stableKeyboardRetainsAllOtherCompatibilityGatesAndOffsetPreservation",
+        "applyingSameModeAfterKeyboardHideReleasesFallback",
+        "incompatibleModesNeverActivateVirtualHistory"
+      ],
+      "sha256": "a80e06d28083a0b336463724617c91a5bdfaed7caf44eb265db4715c6a5052aa"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalEagerGeometryCacheTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalEagerGeometryCacheTest.kt",
+      "methods": [
+        "splitPrefixMatchesFullSumsAcrossHistoryScreenBoundaryAndEmptyHistory",
+        "activeUpdatesShareHistoryAtOneFiveAndTenThousandRowsWithoutHistoryVisits",
+        "historyRemeasureInvalidatesSameFrameAndDoesNotMutatePublishedGeometry",
+        "sameFrameScreenRemeasureOnlyReplacesScreenPrefix",
+        "historyTrimAppendAndClearRebuildAgainstCurrentIdentity",
+        "metricsAndDifferentTerminalOwnerNeverReuseHistoricalPrefix",
+        "syntheticRowsAndIdsCannotReuseSameRevisionOrPlausibleMetadata",
+        "missingOrThrowingHistoryMeasurementNeverPublishesPartialProof",
+        "incompleteScreenCanRetryWithoutRescanningProvenHistory",
+        "clearAndInvalidFrameReleaseTheHistoricalProof",
+        "passiveDiagnosticsNeverPopulateOrReturnInvalidatedGeometry",
+        "prefixRejectsInvalidHeightsAndOverflowInsteadOfWrappingCoordinates",
+        "fifoAppendsAndTrimsAtOneFiveAndTenThousandRowsReadOnlyBoundaryBlocks",
+        "oneRemeasuredHistoricalRowRevokesOnlyItsBlockAndStaleTokenCannotRevokeReplacement",
+        "missingBoundaryMeasurementKeepsAllOtherBlocksButPublishesNoPartialGeometry",
+        "trimAcrossWholeBucketsNeverRetainsRetiredHeightBlocks",
+        "randomFifoHeightInvalidationAndMetricResetMatchIndependentGeometry",
+        "scalarBlockDirectoryOffsetsMatchFlatPrefixAtEveryBoundaryAlignment"
+      ],
+      "sha256": "3b1e4dd49a0f5be09e967d2be817074949b4b0ca08bfbfa95a552fb6cd8ec960"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalMeasurementInvalidationsTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalMeasurementInvalidationsTest.kt",
+      "methods": [
+        "tenThousandRowBurstPublishesOneWakeupUntilTheObserverAcknowledges",
+        "emissionDeliveryDoesNotRearmWhileTheBindingIsWaitingForItsFrame",
+        "cancelledCollectorCannotLosePendingChangesForItsReplacement",
+        "immediateCollectorCanAcknowledgeAndInvalidateDuringEmission",
+        "snapshotOnlyRefreshAcknowledgementDoesNotPublishSpuriousMeasurements"
+      ],
+      "sha256": "77db914f656860e4288eb1867a89b04a01a598de1c5afff9ae8b2533e31097b8"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalHistorySnapshotTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalHistorySnapshotTest.kt",
+      "methods": [
+        "coldAndUnchangedSnapshotsMatchListsAtEveryBucketBoundary",
+        "repeatedAppendAndTrimShareMiddleBlocksAndOnlyReadOneNewRowAtAllSizes",
+        "headTrimDoesNotReadSourceOrRetainTrimmedRowsInAnyBlock",
+        "growingTailReadsOnlySuffixAndPreservesAllCompleteBuckets",
+        "aBurstThatReplacesTheWholeWindowNeverKeepsAnOlderSnapshotChain",
+        "ownerGenerationAndStyleInvalidationsCannotReuseAnyBlock",
+        "nonFifoRangeChangesForceAFullRead",
+        "allBlankAndLastOccupiedRowTrimmingPreserveExactContentBounds",
+        "failedBuildDoesNotMutatePublishedBlocksOrPublishAPartialResult",
+        "publishedViewsCannotBeMutatedAndIndexChecksRemainListCompatible",
+        "largeArchivalOrdinalsDoNotOverflowBucketCoordinates",
+        "randomizedFifoWindowsMatchFullReferenceWithoutRetainedSourceReads"
+      ],
+      "sha256": "2aa9cae5c22cdb98fa6a04cd00275481df914d9966bb82585c8c8c399b420684"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalPipelineTraceTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalPipelineTraceTest.kt",
+      "methods": [
+        "viewportDiagnosticsAreBoundedScalarsAndDoNotConsumeTheEventRing",
+        "absentOrReversedDrawDiscardsPreviouslyAcceptedHalfOfAConfirmation",
+        "settleRequiresTwoNewActualDrawsNotTwoReadsOfOneSnapshot",
+        "visibleEagerHandoffAndUnmeasuredVirtualNeverSatisfyTheExpectedVirtualMode",
+        "everyCompatibilityReadinessAndSourceGateCanRejectASample",
+        "changedFrameOrInterveningInvalidLayoutRestartsConsecutiveDrawConfirmation",
+        "viewportDiagnosticsCannotCrossSessionsOrReviveAClosedCapture",
+        "disabledAndDifferentSessionsDoNotReadClockOrAllocateEvents",
+        "explicitWindowDiscardsSetupButNeverReusesSequenceNumbers",
+        "capacityBoundsEventsAndReportsDropsWithoutRenumbering",
+        "closedCaptureRejectsInFlightRecordAndCannotStopItsReplacement",
+        "snapshotsDoNotChangeWhenMoreEventsAreRecorded",
+        "concurrentIoAndUiPublishUniqueOrderedBoundedEvents",
+        "overlappingOrInvalidCapturesAreRejected"
+      ],
+      "sha256": "1ab5238ea9e20c2ef89c9d988ccc6a0ab8c99aa2bfbaa35a07cf425082387dfb"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalViewportFollowStateTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalViewportFollowStateTest.kt",
+      "methods": [
+        "tenThousandEffectsAndGesturesDoNotPublishAnotherFollowValue",
+        "everyBooleanTransitionIsPreservedAndScreenTailShareFollowState",
+        "lockedAnchorAndCaptureScaleUpdatesKeepOneFalseValue",
+        "coldProjectionHasNoBackgroundSubscriptionAndRestartReadsLatestState",
+        "actualControllerGesturesAndRestoresDoNotCreateASecondFollowOwner"
+      ],
+      "sha256": "daef76e2daffb8ef05eec8805d24d360d9954edb2464e16b63d208928fc9ee7a"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalRenderSnapshotTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalRenderSnapshotTest.kt",
+      "methods": [
+        "repeatedReadsReuseThePublicationWithoutComparingOrCopyingItsRows",
+        "sameFrameAndSameRevisionReplacementBothPublishNewIdentities",
+        "fifoResizeAndClearPublishMatchingStructureAndRetainOldListViews",
+        "forcedGridBlankCommitPublishesEvenWithTheExactSameFrameAndRowView",
+        "captureUsesTheO1ImmutableRowViewAndKeepsSurvivorIdentity",
+        "sameRevisionDifferentFrameAndWrongRowCountAreStillRejectedWithoutText",
+        "oldAndNewCallerSnapshotsEachSeeTheMatchingAtomicPublication",
+        "discardedPublicationCannotLeakItsFrameOrRowStructure"
+      ],
+      "sha256": "f89e8f05812740d7a8d5d9b6a57eb2e6504c7d595e250199938f50401f217731"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalChunkViewsTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalChunkViewsTest.kt",
+      "methods": [
+        "chunkViewKeysNeverReadStructuralEqualityOrHashCodes",
+        "chunkViewsCoverEachRowOnceAtEveryBoundaryAndHistorySize",
+        "activeTextAndSameRevisionNewFramesKeepTheSameImmutableStructureKey",
+        "equalIdsWithNewRowObjectsAndEqualPlansCannotReuseOldViews",
+        "fifoCrossingAnEntireBucketAndClearNeverMutateOldSlices",
+        "unprovenMutableSourcesStayUncachedAndMismatchedCapabilitiesAreRejected",
+        "abortedStructureReplacementLeavesTheOriginalSourceAndViewsValid"
+      ],
+      "sha256": "46f0ec713485dc14094ae17a75e879f933893a552b3bfba340db3d4e947fc6c1"
+    },
+    {
+      "classname": "me.rerere.rikkahub.utils.TerminalScreenCacheTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/utils/TerminalScreenCacheTest.kt",
+      "methods": [
+        "unchangedScreenAndSingleLineUpdatesBuildOnlyChangedRows",
+        "hiddenCursorReservationAndVisibleCursorMovementInvalidateBothRows",
+        "globalStyleRevisionsCannotCollideAfterHistoryClear",
+        "protocolMutationSequencesMatchTheFullScreenOracleAtEveryStep"
+      ],
+      "sha256": "3a66f887e841e42726b11b4be3680483743ea4a9373b02b4e5715b1d9b8ad8da"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalBundleContractsTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalBundleContractsTest.kt",
+      "methods": [
+        "foregroundStopDuringStartupWaitsForRealPromotion",
+        "foregroundFailureAndOldInstanceCannotConfirmNewRequest",
+        "conflatedNotificationStillAccountsForEveryParsedByteAndResize",
+        "notificationSequenceRemainsMonotonicWithConcurrentProducers",
+        "sparsePublicationAllocatesOnlyPhysicalStatesAtEveryHistorySize",
+        "sparseFifoAndEagerTransitionsPreserveFrameIdsAndActiveState",
+        "discardedSparseTransactionCannotPublishNewFrameOrRows",
+        "scalarWidthCheckpointSurvivesRemountButPrunesAndMeasuresOnlyNewArchives",
+        "checkpointLeasesRejectLateOldPagesAndClosedSessions",
+        "workerForkAndMeasurementFailureNeverCorruptTheDisplayedIndex",
+        "disposedOrReplacedIndexRejectsLateWorkerEvenIfItsFontAndFrameStillMatch"
+      ],
+      "sha256": "28d3cef3518af641fce0301762f1c9d8f30a0fd04b58066c5ebb33c74c9fad10"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalByteRingBufferTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalByteRingBufferTest.kt",
+      "methods": [
+        "byteRingRejectsNonPositiveCapacityAndDoesNotAllocateBeforeData",
+        "byteRingCapacityOneKeepsOnlyTheLastByteAndAbsoluteOffsets",
+        "byteRingExactFillPartialWrapAndRepeatedWrapMatchFrozenReference",
+        "byteRingOversizeAppendKeepsExactSuffixWithoutOldBytesOrGrowingStorage",
+        "byteRingInputAndReturnedSnapshotsCannotMutateRetainedData",
+        "byteRingUtf8CutsAnsiNulAndMalformedBytesKeepIndependentSliceDecoding",
+        "byteRingRandomizedChunksOffsetsAndLimitsMatchReferenceAcrossCapacities",
+        "byteRingReadCursorResumesAfterWrapAndClampsExpiredFutureAndInvalidLimits",
+        "byteRingLongOffsetsNeverNarrowToIntUntilInsideRetainedRange",
+        "byteRingOverflowRejectsWriteWithoutChangingBytesOrMetadata",
+        "byteRingConcurrentReaderSeesAnAtomicOffsetAndByteWindow",
+        "byteRingConcurrentProducersKeepEveryCompletedChunkWhenCapacityAllows"
+      ],
+      "sha256": "c715abf48a788ccc2ef877996f26cf6430d0aae79e9950ce3e19a62ef67cd312"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalByteBufferWiringTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalByteBufferWiringTest.kt",
+      "methods": [
+        "byteRingWiringPreservesCapacityOffsetsAndTheSingleOrderedParserPath",
+        "byteRingWiringDoesNotReplaceParsedScrollbackOrTheCopySource"
+      ],
+      "sha256": "b8ffd67fcb54c1acfd60ba9d49157e1cfb6782ad053fe4b1d132058d15e0dbe2"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalByteBufferBenchmarkTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalByteBufferBenchmarkTest.kt",
+      "methods": [
+        "byteRingBenchmarkSameJvmAlternatingArmsKeepBytesAndMeasureAllocation"
+      ],
+      "sha256": "ad6822e4eeb456d3a70c4ce17e0118d2b890d30debc59188ac03a9477129f6cd"
+    },
+    {
+      "classname": "me.rerere.rikkahub.utils.TerminalProtocolBundleTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/utils/TerminalProtocolBundleTest.kt",
+      "methods": [
+        "protocolKittyProbesDoNotRestoreCursorChangeStyleOrClaimSupport",
+        "protocolPiFallbackNegotiatesKeysWithoutSgrSideEffects",
+        "protocolUnknownPrefixAndIntermediateCannotExecutePlainCommands",
+        "protocolEraseDisplayDoesNotMoveCursorOrClearSavedHistory",
+        "protocolTextCommitPreservesEveryCodePointAndExplicitModifiers",
+        "protocolX10AndNormalReportsHaveSixBytePrefixAndRawHighBytes",
+        "protocolUtf8MouseEncodesFieldsButDoesNotCorruptLegacyMode",
+        "protocolSgrHoverMotionAndModifiersCannotBecomeButtonPresses",
+        "protocolPixelCoordinatesAreOneBasedAndStaleScreensAreRejected",
+        "protocolEveryByteSplitRetainsProbeOrderAndCursorState",
+        "protocolLargeLineCountsKeepTheExactSurvivingIdsTextAndHistory",
+        "protocolExtremeCountsAndTabsAreBoundedWithoutIntegerWrap",
+        "protocolOverlayKeepsUnderlyingTextAndReusesTextForCursorOnlyMoves",
+        "protocolPixelMetricsSurviveRisAndReportTheActualHostDimensions"
+      ],
+      "sha256": "95f9098bacda7dd781363d4d9ccaef749647fd5cd621b9ac84d8de11c194a1e0"
+    },
+    {
+      "classname": "me.rerere.rikkahub.utils.TerminalParserBundleTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/utils/TerminalParserBundleTest.kt",
+      "methods": [
+        "parserEveryUtf8BoundaryAndMalformedSequenceMatchesFrozenReference",
+        "parserScratchOverflowsAndResetWithinChunkKeepOneRevisionAndFullText",
+        "parserRandomMutationsResizeHistoryAndStylesMatchAtEveryPublication",
+        "parserOldPublishedFramesCannotBeMutatedBySharedCells",
+        "parserBenchmarkKeepsEveryAlternatingSampleAndReportsRealAllocations"
+      ],
+      "sha256": "63f0aeda09cbba6d11f80a0ed2192488d5c03a3d261849ccc84698e10a298ec2"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalConsistencyBundleTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalConsistencyBundleTest.kt",
+      "methods": [
+        "consistencySyncOutputCompletionWakesWithoutPollingAndTimeoutRemainsBounded",
+        "consistencyAbandonedCursorPublicationCannotMutateVisibleSnapshot",
+        "consistencyGraphemeEditsKeepCombiningZwjFlagsAndReplacementWhole",
+        "consistencyOneQueuePreservesMixedEventsAndOwnsRawArrays",
+        "consistencyResizeFailureAndSupersededRequestsCannotCommit",
+        "consistencyResizeExcludesParserAndFinishesAckEvenAfterCancellation",
+        "consistencyReadSnapshotMapsWideAndCombinedGlyphsWithoutSplittingSurrogates",
+        "consistencyReadSnapshotNeverConsumesProtocolOrClipboardQueues",
+        "consistencyAtomicSnapshotDoesNotMixResizeTextCursorAndModes"
+      ],
+      "sha256": "cb6448bb3c9b1651ae0df63ab6a4eb129250ee12669bbb676a931a619527d3d4"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalDisplayPolicyTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalDisplayPolicyTest.kt",
+      "methods": [
+        "displayOnlyDirectExplicitRegularCommandsAreEligible",
+        "displayChoiceNeverReinterpretsInputOrBypassesCompatibilityGates"
+      ],
+      "sha256": "ab804add309061176758cfce8a3781627e7c24417d9852bfeed7719dcbfbc410"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalTuiHistoryTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalTuiHistoryTest.kt",
+      "methods": [
+        "tuiHistoryOnlyExplicitNewModesCanEnableGrouping",
+        "tuiHistoryPreservesMouseSelectionFullGridAndAlternateFallbacks",
+        "tuiHistoryRejectsCopiedForgedAndEmptyHistory",
+        "tuiHistoryPerCommandPersistenceAndEffectiveFallbackAreIndependent",
+        "tuiHistoryGroupingFollowsOwnedFifoWithoutChangingScreenModeOrText",
+        "tuiHistoryWiringKeepsScreenMetricsRawStoreAndOneScrollWriter"
+      ],
+      "sha256": "f65757f4821b8598d82a42231edab89c473c4919b4e035176a3986832f7af685"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalFullVirtualTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalFullVirtualTest.kt",
+      "methods": [
+        "fullVirtualHandleTouchBoxAvoidsStatusAndNavigationBars",
+        "fullVirtualHandleSafeWindowPreservesInteriorAndFloatingOrigins",
+        "fullVirtualClipboardCoalescesRepeatedRowsWithoutLosingTextOrAnnotations",
+        "fullVirtualClipboardDoesNotMergeConflictingOrOverlappingStyles",
+        "fullVirtualClipboardPreservesUnstyledAndSeparatedText",
+        "fullVirtualStationaryLongPressAndHandleDownNeverAutoscroll",
+        "fullVirtualSelectionOnlyScrollsTowardTheDraggedEdge",
+        "fullVirtualSelectionHoldingAfterRealDragRetainsIntentUntilRelease",
+        "fullVirtualHorizontalOnlySelectionDoesNotInventVerticalMotion",
+        "fullVirtualIndependentPreferenceNeverChangesTheNineOldModes",
+        "fullVirtualSparseTuiPublishesOnlyScreenStatesAndRetainsEveryHistoryRow",
+        "fullVirtualScreenFollowUsesScreenOriginRatherThanHistoryNominalHeight",
+        "fullVirtualFullGridAndAlternateIncludeBlankPhysicalRows",
+        "fullVirtualImeOffsetHoldRemainsAutoWithoutForcingTail",
+        "fullVirtualSelectionEdgesSubmitOneBoundedOwnerEffect",
+        "fullVirtualSelectionCopiesOffscreenRowsAndAllWithoutUiState",
+        "fullVirtualSelectionSurvivesFifoUntilAnEndpointOrTextIsRetired",
+        "fullVirtualSelectionRejectsEditedScreenAndAlternateGeneration",
+        "fullVirtualSelectionNeverSplitsExtendedGraphemes"
+      ],
+      "sha256": "c36b35be6c82234d05154e70899f48700381e0eaf928540f7df106fabc7f56e2"
+    },
+    {
+      "classname": "me.rerere.rikkahub.data.container.TerminalBottomVisibilityTest",
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalBottomVisibilityTest.kt",
+      "methods": [
+        "bottomVisibilityBlankCursorIsPartOfMeasuredFollowBoundary",
+        "bottomVisibilityShellPromptKeepsSameTargetAndTrailingBlanksStayHidden",
+        "bottomVisibilityItemFollowUsesCursorRowNotLastNonblank",
+        "bottomVisibilityAllBlankScreenStillFollowsVisibleCursor",
+        "bottomVisibilityTuiPrefixUsesEveryMeasuredHistoryHeight",
+        "bottomVisibilityFullGridAndAlternateRespectMeasuredScreenPolicy",
+        "bottomVisibilityMissingOrWrongFrameMeasurementCannotPublishTuiTarget",
+        "bottomVisibilityAutomaticImeAvoidanceUsesActualExtentIncludingCursor",
+        "bottomVisibilityScreenRelativeImeExtentDoesNotCountOldHistory",
+        "bottomVisibilityTuiLockedReaderPreservesMeasuredAnchorAcrossAppendAndTrim"
+      ],
+      "sha256": "f11dad727c1858feb887a7003e396870517ba22d2f10ec316bb587b3f3132708"
+    },
+    {
+      "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalInFramePublicationTest.kt",
+      "sha256": "25b452bbb6d32c41363d5241eecac910953575f8a3d97b51f8d4a2a76d49cd58",
+      "classname": "me.rerere.rikkahub.data.container.TerminalInFramePublicationTest",
+      "methods": [
+        "allSafetyConditionsAreRequiredExhaustively",
+        "eligibleCaptureClearsBeforeAndPublishesOnce",
+        "declinedGateNeverConsumesPendingOrPublishes",
+        "rejectedCaptureRestoresPendingForOriginalPath",
+        "notificationDuringSuccessfulCaptureIsNotClearedAfterward",
+        "notificationAfterCallbackRemainsForNextLoop",
+        "modelRaceRefusalCanBeRetriedByOriginalContinuation",
+        "completedCallbackDoesNotDuplicateOriginalPublication",
+        "exceptionIsNotConvertedToSuccessfulPublication",
+        "cancelledJobDoesNotPublishEvenIfAnAlreadyCapturedFrameCallbackRuns",
+        "callbackNotificationSurvivesUntilNextFrameWithoutDuplicateContinuationPublish",
+        "readOnlySnapshotMustUseContinuationInsteadOfPublishingInCallback"
+      ]
+    }
+  ],
+  "candidateUnit": {
+    "asset": "benchmarks/terminal-main-width-lifecycle/TerminalMainWidthLifecycleTest.kt",
+    "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalMainWidthLifecycleTest.kt",
+    "sha256": "aea531ff4485f32b4206a18f4f5e234a915cd995e9aa3f7568d8b42f9e450fd0",
+    "classname": "me.rerere.rikkahub.data.container.TerminalMainWidthLifecycleTest",
+    "methods": [
+      "unchangedHistoryRoundTripsAtOneFiveAndTenThousandNeedNoHistoryMeasurements",
+      "alternateWidthNeverIncludesTheHiddenMainMaximumOrRetainsAlternateText",
+      "ordinaryRefreshStillReusesHistoryAndAllUnchangedMainScreenWidths",
+      "unmeasuredMainSuffixBeforeAltIsNotMistakenForMeasuredEnd",
+      "trimWhileAlternateRemovesRetiredMaximumOnReturnWithoutMeasuringSurvivors",
+      "previousMainFrameCannotReuseAfterPruningRetiredRows",
+      "changedMetricWhileAlternateRevokesHistoryEvenIfTheExternalProofLooksEqual",
+      "changedProofWhileAlternateRevokesHistoryEvenIfMetricsLookEqual",
+      "changedProofOnMainMakesRequiredWorkAndMeasurementAgree",
+      "missingProofTakesLegacyAlternateInvalidationPath",
+      "nonFullLegacyApiDoesNotOptInAndDoesNotRetainAlternateHistory",
+      "alternateStyleAndColumnInvalidationForceFullMainRemeasurement",
+      "clearHistoryWhileAlternateDoesNotResurrectOldMaximum",
+      "replacementOwnerAndForgedOwnedMetadataRevokeHiddenHistory",
+      "mainWithoutScrollbackCannotMasqueradeAsAlternateViaRenderFrameCopy",
+      "ownedAlternateProvenanceIsCapturedByTheEmulatorAndNeverInferredFromEmptyHistory",
+      "alternateOnlyAndEmptyMainNeverCreateAHistoryCheckpoint",
+      "failedAlternateScreenMeasurementDoesNotPublishReadyOrReusableHistory",
+      "failedSuffixAndNegativeWidthsNeverPublishAPartialHistory",
+      "alternateCheckpointRemountPreservesOnlyScalarsAndStillRequiresCurrentFrameReadiness",
+      "remountCheckpointRejectsWrongFontAndMeasuresNewUnpublishedSuffix",
+      "staleLeaseAndSessionCloseCannotOverwriteCurrentCheckpoint",
+      "legacyFallbackClearsAlternateOwnershipButPrunesMainWithoutGuessingMissingEnd",
+      "successfulWorkerTransfersBothHistoryAndFrameProofButCannotCommitAfterClear",
+      "simultaneousColdWorkerAndAlternatePublicationCannotCommitStaleMain",
+      "canceledWorkerAndWrongCompletedFrameCannotInventReadiness",
+      "sameRevisionNewFrameMustAcquireItsOwnReadyIdentity",
+      "scalarRetentionIsBoundedForWorstCaseMonotonicWidthsAndDisposeReleasesIt",
+      "randomizedFifoAltProofAndMetricTransitionsMatchFullOracle"
+    ]
+  },
+  "deviceInventory": [
+    {
+      "asset": "benchmarks/terminal-main-width-lifecycle/TerminalMainWidthLifecycleViewTest.kt",
+      "file": "benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/TerminalMainWidthLifecycleViewTest.kt",
+      "sha256": "693e3be6fd0703457746efae3c153ba62da1aec2d9b9ed25d18c64599ab12ace",
+      "classname": "me.rerere.rikkahub.viewporttest.TerminalMainWidthLifecycleViewTest",
+      "methods": [
+        "viewMainAltRoundTripsAvoidHistoryReshapingAtOneAndTenThousand",
+        "viewFontScaleRtlAndColumnChangesWhileAlternateRevokeTheOldHistoryProof",
+        "viewCheckpointSavedInAltSurvivesSameSessionRemountAndRejectsNewOwner",
+        "viewAlternateTrimAndUnpublishedSuffixUseActualSurvivingHistoryOnReturn",
+        "viewCustomFontKeepsCompatibilityAndSameRevisionPublicationKeepsExactReadiness"
+      ]
+    },
+    {
+      "file": "benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/TerminalFullVirtualInstrumentedTest.kt",
+      "sha256": "ab9112b809f141a92c7ebab3120af2afe9eefca5cb7d46cf33cd0caeae2098cc",
+      "classname": "me.rerere.rikkahub.viewporttest.TerminalFullVirtualInstrumentedTest",
+      "methods": [
+        "fullVirtualAllScenesRemainVirtualWithRealGeometry",
+        "fullVirtualLockedFontsRtlImeAndReentryPreserveTheStableAnchor",
+        "fullVirtualSelectionSystemMenuCopiesAWordAndOffscreenSelectAll",
+        "fullVirtualSelectionHandleCrossesViewportWithoutLosingOffscreenText",
+        "fullVirtualMouseMappingIncludesOffscreenPhysicalOrigin",
+        "fullVirtualModeSwitchKeepsOldChoicesAndMeasuredReadPosition"
+      ]
+    },
+    {
+      "file": "benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/TerminalIntrinsicWidthInstrumentedTest.kt",
+      "sha256": "3175df3a411d9c10f033f3b48661cc2df30a57b79e6b7bd6d9e7d36b3a188e22",
+      "classname": "me.rerere.rikkahub.viewporttest.TerminalIntrinsicWidthInstrumentedTest",
+      "methods": [
+        "intrinsicWidthAnsiCjkCombiningAndEmojiMatchFullLayout",
+        "intrinsicWidthMixedFontsSpansAndGeometricTransformsMatchFullLayout",
+        "intrinsicWidthParagraphDirectionsAndIndentsMatchFullLayout",
+        "intrinsicWidthEmptyWhitespaceAndBoundaryLengthsMatchFullLayout",
+        "intrinsicWidthPaletteResizeCursorAndGenerationFramesMatchFullLayout",
+        "intrinsicWidthScreenCacheMatchesUncachedFontsAnsiCursorAndResize",
+        "intrinsicWidthFifoIndexMatchesFullMaximumAfterTrimAndMetricChange",
+        "intrinsicWidthOwnedSingleParagraphMatchesFullAndMultiAtAllMetrics",
+        "intrinsicWidthSingleParagraphFallbackPreservesComplexAnnotationsAndSeparators"
+      ]
+    }
+  ],
+  "candidateView": {
+    "asset": "benchmarks/terminal-main-width-lifecycle/TerminalMainWidthLifecycleViewTest.kt",
+    "file": "benchmarks/terminal-viewport-tests/src/androidTest/java/me/rerere/rikkahub/viewporttest/TerminalMainWidthLifecycleViewTest.kt",
+    "sha256": "693e3be6fd0703457746efae3c153ba62da1aec2d9b9ed25d18c64599ab12ace",
+    "classname": "me.rerere.rikkahub.viewporttest.TerminalMainWidthLifecycleViewTest",
+    "methods": [
+      "viewMainAltRoundTripsAvoidHistoryReshapingAtOneAndTenThousand",
+      "viewFontScaleRtlAndColumnChangesWhileAlternateRevokeTheOldHistoryProof",
+      "viewCheckpointSavedInAltSurvivesSameSessionRemountAndRejectsNewOwner",
+      "viewAlternateTrimAndUnpublishedSuffixUseActualSurvivingHistoryOnReturn",
+      "viewCustomFontKeepsCompatibilityAndSameRevisionPublicationKeepsExactReadiness"
+    ]
+  },
+  "expectedJVM": 533,
+  "expectedDevice": 20,
+  "newUnitMethods": 29,
+  "newDeviceMethods": 5,
+  "productionAdoptionAllowed": false,
+  "performanceClaimAllowed": false,
+  "formalApkBuildAllowed": false,
+  "localApkDownload": false,
+  "requiredDeviceScenes": [
+    "1000-enter-0",
+    "1000-return-0",
+    "1000-enter-1",
+    "1000-return-1",
+    "1000-enter-2",
+    "1000-return-2",
+    "1000-fifo",
+    "10000-enter-0",
+    "10000-return-0",
+    "10000-enter-1",
+    "10000-return-1",
+    "10000-enter-2",
+    "10000-return-2",
+    "10000-fifo",
+    "font-enter",
+    "font-alt-edit",
+    "font-return",
+    "scale-enter",
+    "scale-alt-edit",
+    "scale-return",
+    "rtl-enter",
+    "rtl-alt-edit",
+    "rtl-return",
+    "columns-enter",
+    "columns-alt-edit",
+    "columns-return",
+    "remount-enter",
+    "remount-return",
+    "unpublished-suffix-enter",
+    "suffix-return",
+    "trim-enter",
+    "trim-hidden",
+    "trim-return",
+    "same-revision",
+    "custom-main",
+    "custom-enter",
+    "custom-return"
+  ]
+}

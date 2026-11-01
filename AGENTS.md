@@ -6,6 +6,13 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+用户在306后续方案／完整检查点之后要求继续，现推进A1：独立MAIN历史宽度生命周期的候选及机制验证。
+范围benchmarks/terminal-main-width-lifecycle/，新workflow terminal-main-width-lifecycle.yml；生产仍306/main ac977984。
+候选只存于benchmarks，CI临时覆盖5源文件并finally恢复；Page/helper/输入/默认/测量/滚动/选择不改。
+完整原504+新29 Release JVM，以及新5+原15真实字体组件；不调用旧P2或原性能方法。
+不放宽旧guard，不把机制计数当性能，不启动新正式Release；通过后才讨论独立端到端性能和最终采用。
+工作目录/workspace/terminal-review/full-virtual-main-width-lifecycle/；具体run和结果以新回执为准。
+
 用户在全部性能/最终回归证据后明确回复“好的，继续”，现正式采用bfa2990冻结的帧内安全发布两文件：
 ProcessSessionPage.kt hash ad418a9c4fdda6bd7d6d161807ca9607e2ea37f2c34a1deb9f721c57d32a1eea；
 新增TerminalInFramePublication.kt hash24ab5bc0d4c922bee666bdbef894aa83ff0d4c58f78a74103e1c980c9f3f5bc4。

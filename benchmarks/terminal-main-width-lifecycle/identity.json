@@ -1,0 +1,32 @@
+{
+  "files": {
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalTranscriptWidthIndex.kt": {
+      "base": "0c4581b140149e9fba922291c16fdf5b184921bd7fd9c54a692d29f35fc36180",
+      "candidate": "817e0045f835d07330e47f88937366134bec792ac1cc829719af55ad54a14853",
+      "asset": "benchmarks/terminal-main-width-lifecycle/candidate/TerminalTranscriptWidthIndex.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalPreparedWidth.kt": {
+      "base": "59d0adf287687e0aba2562791f9b91053312c0c59fa2817d57a131080c9e73cf",
+      "candidate": "f4692d66aa57c7e12673dcf884367eb83d52c7ac50818906840124260c49035a",
+      "asset": "benchmarks/terminal-main-width-lifecycle/candidate/TerminalPreparedWidth.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalFullVirtualTranscript.kt": {
+      "base": "a09f5ff88732e304633226edda5673c28b91786cdca10a2e5321b6f41be067a6",
+      "candidate": "83bf56cbf8e7815fc072ffc5e14a089c52b90ca6017348116e82730b71e20921",
+      "asset": "benchmarks/terminal-main-width-lifecycle/candidate/TerminalFullVirtualTranscript.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/utils/TerminalFrameSnapshot.kt": {
+      "base": "ff53900c9d3b7556119d878818a0e669fc3135fe9d1a0458204983a98d0294a5",
+      "candidate": "5a6c183638ac3d10140ed03365e0d632ee22ced25738d5e41d51324bf763ba20",
+      "asset": "benchmarks/terminal-main-width-lifecycle/candidate/TerminalFrameSnapshot.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/utils/TerminalEmulator.kt": {
+      "base": "667b2a4e5dc641e0c1a2dcf70e7f2bbbd30ec87b6aacac02fd61be522cbd6ffd",
+      "candidate": "019dcf6d9f73b7f502086ef9d1c1e31377aaa13232bad39a2a2737bfd873d6b7",
+      "asset": "benchmarks/terminal-main-width-lifecycle/candidate/TerminalEmulator.kt"
+    }
+  },
+  "protocolSha256": "e9a9aa76c80e19f243a2095624f8662e1aae62764b726e7e9849af78e9bc2994",
+  "patchSha256": "f9c6f05d46c3513df8bbccd9972a1d500593f455829a8036ee0f172d0c273986",
+  "baselineTestsSha256": "984b4fef43095ceeca9ca4e3dff6d2cae434bf7df43bc0dc60bbe26bf2e36aaa"
+}
