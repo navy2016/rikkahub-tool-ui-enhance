@@ -6,6 +6,12 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+用户在A1机制通过报告后要求继续，现冻结306↔A1端到端性能V1；尚未代表已执行/已通过/已采用。
+协议benchmarks/terminal-main-width-performance/protocol.json；候选c4113db五文件与生产306均保持原字节。
+4配对×4场景×3条件×21轮=2016窗口，96预热；return主/UI收益≥20%且≥3/4配对，refresh/SYNC≤5%回退，系统≤5%。
+样本p95比≤1.10；每pair最坏candidate≤max(legacy×1.5,legacy+100ms)，不混池、不补采、不以收益抵消守卫。
+工作目录/workspace/terminal-review/full-virtual-main-width-performance-v1；尚缺性能和最终完整回归，不自动采用、不叠B/C。
+
 用户在306后续方案／完整检查点之后要求继续，现推进A1：独立MAIN历史宽度生命周期的候选及机制验证。
 范围benchmarks/terminal-main-width-lifecycle/，新workflow terminal-main-width-lifecycle.yml；生产仍306/main ac977984。
 候选只存于benchmarks，CI临时覆盖5源文件并finally恢复；Page/helper/输入/默认/测量/滚动/选择不改。
