@@ -107,6 +107,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -127,6 +129,8 @@ import me.rerere.rikkahub.data.container.TerminalViewportController
 import me.rerere.rikkahub.data.container.TerminalViewportMetrics
 import me.rerere.rikkahub.data.container.TerminalPipelineStage
 import me.rerere.rikkahub.data.container.TerminalPipelineTrace
+import me.rerere.rikkahub.data.container.terminalInFramePublicationAllowed
+import me.rerere.rikkahub.data.container.tryTerminalInFramePublication
 import me.rerere.rikkahub.data.container.TerminalRenderMode
 import me.rerere.rikkahub.data.container.effectiveTerminalRenderMode
 import me.rerere.rikkahub.data.container.terminalRendererForCommand
@@ -964,6 +968,7 @@ private fun TerminalInteractivePanel(
     var editingTerminalItems by remember { mutableStateOf<String?>(null) }
     val terminalInputQueue = remember(processId) { TerminalUiInputQueue() }
     val renderPending = remember(processId) { AtomicBoolean(false) }
+    val publicationAttached = remember(processId) { AtomicBoolean(false) }
     val forceBlankPending = remember(processId) { AtomicBoolean(false) }
     val renderJob = remember(processId) { AtomicReference<Job?>(null) }
     val resizeRenderFallbackJob = remember(processId) { AtomicReference<Job?>(null) }
@@ -1191,39 +1196,63 @@ private fun TerminalInteractivePanel(
     val latestPublishTerminalFrame by rememberUpdatedState<(Boolean, Boolean) -> Boolean>(
         { force, allow -> renderTerminalFrame(force, allow) })
 
+    val latestTryPublishInFrame by rememberUpdatedState<() -> Boolean>({
+        val allowed = terminalInFramePublicationAllowed(
+            fullVirtual = appliedTerminalRenderMode.isFullVirtual,
+            hasNotificationOwner = sessionTerminalEmulator != null && terminalOutputUpdates != null,
+            active = renderJob.get()?.isActive == true,
+            attached = publicationAttached.get(),
+            onMainThread = android.os.Looper.myLooper() === android.os.Looper.getMainLooper(),
+            selectionActive = selectionMode,
+            resizePending = bgManager.hasPendingTerminalResize(processId),
+            awaitingResizeRedraw = resizeAwaitingTuiRedraw.get(),
+            forcedBlankPending = forceBlankPending.get(),
+            synchronizedOutput = terminalOutputUpdates?.value?.synchronizedOutput ?: true,
+            snapshotWritable = !Snapshot.current.readOnly,
+        )
+        tryTerminalInFramePublication(allowed, renderPending) {
+            latestPublishTerminalFrame(false, false)
+        }
+    })
+
     fun scheduleTerminalRender() {
         gridBlankCommitJob.getAndSet(null)?.cancel()
         renderPending.set(true)
         if (renderJob.get()?.isActive == true) return
         renderJob.set(scope.launch {
             while (renderPending.getAndSet(false)) {
-                withFrameNanos { } // One publication per display frame; no fixed 33ms polling cadence.
-                val syncCompleted = if (terminalOutputUpdates != null) {
-                    awaitTerminalSynchronizedOutput(terminalOutputUpdates, TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS)
-                } else {
-                    // Exceptional local emulator has no session notification owner; retain its guard.
-                    var syncWaited = 0L
-                    while (terminalEmulator.isSynchronizedOutput() && syncWaited < TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS) {
-                        delay(16L)
-                        syncWaited += 16L
-                    }
-                    !terminalEmulator.isSynchronizedOutput()
+                val publicationContext = currentCoroutineContext()
+                val publishedInFrame = withFrameNanos {
+                    publicationContext.isActive && latestTryPublishInFrame()
                 }
-                if (resizeAwaitingTuiRedraw.get()) {
-                    while (
-                        (System.nanoTime() - lastTerminalOutputAt.get()) / 1_000_000 <
-                            TERMINAL_RESIZE_REDRAW_SETTLE_MS &&
-                        (System.nanoTime() - resizeRedrawStartedAt.get()) / 1_000_000 <
-                            TERMINAL_RESIZE_RENDER_FALLBACK_MS
-                    ) {
-                        delay(16L)
+                if (!publishedInFrame) {
+                    val syncCompleted = if (terminalOutputUpdates != null) {
+                        awaitTerminalSynchronizedOutput(terminalOutputUpdates, TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS)
+                    } else {
+                        // Exceptional local emulator has no session notification owner; retain its guard.
+                        var syncWaited = 0L
+                        while (terminalEmulator.isSynchronizedOutput() && syncWaited < TERMINAL_SYNC_OUTPUT_MAX_WAIT_MS) {
+                            delay(16L)
+                            syncWaited += 16L
+                        }
+                        !terminalEmulator.isSynchronizedOutput()
                     }
-                }
-                renderPending.set(false) // Capture includes all notifications received while awaiting this frame.
-                val forced = forceBlankPending.getAndSet(false)
-                if (!latestPublishTerminalFrame(forced, !syncCompleted)) {
-                    if (forced) forceBlankPending.set(true)
-                    renderPending.set(true)
+                    if (resizeAwaitingTuiRedraw.get()) {
+                        while (
+                            (System.nanoTime() - lastTerminalOutputAt.get()) / 1_000_000 <
+                                TERMINAL_RESIZE_REDRAW_SETTLE_MS &&
+                            (System.nanoTime() - resizeRedrawStartedAt.get()) / 1_000_000 <
+                                TERMINAL_RESIZE_RENDER_FALLBACK_MS
+                        ) {
+                            delay(16L)
+                        }
+                    }
+                    renderPending.set(false) // Capture includes all notifications received while awaiting this frame.
+                    val forced = forceBlankPending.getAndSet(false)
+                    if (!latestPublishTerminalFrame(forced, !syncCompleted)) {
+                        if (forced) forceBlankPending.set(true)
+                        renderPending.set(true)
+                    }
                 }
                 if (forceBlankPending.get()) {
                     delay(TERMINAL_GRID_CLEAR_GRACE_MS)
@@ -1626,7 +1655,9 @@ private fun TerminalInteractivePanel(
     }
 
     DisposableEffect(processId) {
+        publicationAttached.set(true)
         onDispose {
+            publicationAttached.set(false)
             viewportRowResizeJob.getAndSet(null)?.cancel()
             renderJob.getAndSet(null)?.cancel()
             resizeRenderFallbackJob.getAndSet(null)?.cancel()

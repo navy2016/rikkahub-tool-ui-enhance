@@ -4,6 +4,17 @@
 
 ## Active terminal optimization branch
 
+### Current adoption override（优先于下方历史“仍55/未采用”记录）
+
+用户在全部性能/最终回归证据后明确回复“好的，继续”，现正式采用bfa2990冻结的帧内安全发布两文件：
+ProcessSessionPage.kt hash ad418a9c4fdda6bd7d6d161807ca9607e2ea37f2c34a1deb9f721c57d32a1eea；
+新增TerminalInFramePublication.kt hash24ab5bc0d4c922bee666bdbef894aa83ff0d4c58f78a74103e1c980c9f3f5bc4。
+12个边界测试复制到app/src/test；它们与最终504 JVM中的测试字节相同。原SRC55是比较基线，不再代表采用后的HEAD。
+允许按既有release.yml构建Release及verify-release-apk.yml独立核验，对照55/run41045773895；APK不下载本地/不作附件。
+采用源审计：.github/scripts/verify-inframe-adoption.py。仅两文件生产差异，不含P2，不改默认模式/字体/依赖/资源/native。
+历史实验脚本仍按其原基线守卫：不要放宽guard以在采用后的源码重跑历史试验；原件包与旧结果均不改。
+工作目录/workspace/terminal-review/inframe-adoption；正式构建/核验状态必须以该目录的新run回执为准，不能仅凭采用宣称APK已完成。
+
 用户要求从本地已验证的 `a79e7b693d42f22a086959e9fac0525b88515663` 建立独立优化线。
 当前使用 `opt/terminal-verified-a79e7b6`；推送和 workflow dispatch 均须明确指定此分支。
 原远端 `fix/terminal-viewport-semantic-reducer` 已有其他新提交，不自动 pull、merge、rebase 或覆盖它。
