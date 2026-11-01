@@ -22,6 +22,8 @@ def parse_profile(raw):
             last+=hot.number(2);require(last<row['numMethodIds'] and (not hot_ids or last>hot_ids[-1]),'Invalid hot method ordinal')
             hot_ids.append(last);require(hot.number(2)==0,'Runtime inline caches unsupported in this shipped baseline-profile audit')
         hot.done();types=binary.ids(r,row['classes']);bits=r.take((2*row['numMethodIds']+7)//8)
+        used=2*row['numMethodIds']%8
+        require(not used or bits[-1]>>(used)==0,'Nonzero unused profile bitmap bits')
         hot_set=set(hot_ids);flags={}
         for method in range(row['numMethodIds']):
             value=(1 if method in hot_set else 0)
@@ -100,3 +102,23 @@ def compare(legacy,candidate):
         onlyLocationChecksumsDiffer=legacy['normalizedProfileBodyExceptLocationChecksumsSha256']==candidate['normalizedProfileBodyExceptLocationChecksumsSha256'],
         sameSymbolicMethodsFlagsAndClasses=legacy['symbolicContentSha256']==candidate['symbolicContentSha256'],
         sourceSame=legacy['sourceSha']==candidate['sourceSha'])
+def qualify(profiles,assets):
+    """An explicit typed gate, NOT raw byte equality and NOT a general ignore-file list."""
+    require(set(profiles)==set(assets)=={'legacy','candidate'},'Both paired profile/asset records required')
+    a,b=assets['legacy'],assets['candidate'];profile='assets/dexopt/baseline.prof';metadata='assets/dexopt/baseline.profm'
+    require(set(a)==set(b) and profile in a and metadata in a,'Different paired asset member inventory')
+    for arm in profiles:
+        p=profiles[arm]
+        require(p['profileSha256']==assets[arm][profile]['sha256'] and p['metadataSha256']==assets[arm][metadata]['sha256'],'Profile audit not bound to these asset bytes')
+        require(p['matchesOwnDex'] and p['entries'] and all(e['matchesOwnDex'] for e in p['entries']),'Profile did not validate its own DEX')
+    different=[name for name in sorted(a) if a[name]!=b[name]]
+    require(all(name==profile for name in different),'Non-profile paired asset differs: '+str(different[:12]))
+    result=compare(profiles['legacy'],profiles['candidate'])
+    require(result['bothMatchOwnDex'] and result['sameMetadataBytes'] and result['sameSymbolicMethodsFlagsAndClasses'] and result['sourceSame'],
+        'Paired profile source/DEX/symbolic methods/flags/classes differ')
+    # The inventory key explicitly distinguishes a raw asset hash from a profile semantic proof.
+    common={name:value for name,value in a.items() if name!=profile}
+    common[profile]=dict(kind='own-dex-validated-prof010-symbolic-v1',symbolicContentSha256=profiles['legacy']['symbolicContentSha256'])
+    return dict(kind='a1-typed-profile-build-qualification-v1',rawAssetsByteIdentical=not different,
+        rawDifferences=different,nonProfileAssetsByteIdentical=True,comparison=result,
+        sharedTypedAssetInventorySha256=sha(canonical(common)),rawProfileSha256={arm:p['profileSha256'] for arm,p in profiles.items()})

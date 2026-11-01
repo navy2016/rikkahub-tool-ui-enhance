@@ -133,6 +133,10 @@ class MainWidthPerformanceTests(unittest.TestCase):
         self.assertIn('mainWidthPerformance',(m.ROOT/'.github/workflows/terminal-pipeline-tests.yml').read_text())
     def test_package_diagnostics_precede_unrelaxed_equality_guard(self):
         text=Path(m.__file__).read_text()
-        self.assertIn('preserve_bundle_diagnostics(manifests)\n    assets=pair.verify_bundles(manifests)',text)
+        self.assertIn('preserve_bundle_diagnostics(manifests)\n    assets=verify_typed_bundles(manifests) if typed_assets else pair.verify_bundles(manifests)',text)
         self.assertNotIn('check_files=False',text)
+    def test_build_contract_does_not_change_timing_or_old_verifier(self):
+        contract=m.build_contract();self.assertEqual(contract['timingProtocolSha256'],m.PROTOCOL_SHA256)
+        old=m.ROOT/'.github/scripts/run-terminal-pipeline-paired.py'
+        self.assertEqual(old.read_bytes(),m.git('show',m.FREEZE_SHA+':.github/scripts/run-terminal-pipeline-paired.py'))
 if __name__=='__main__':unittest.main()

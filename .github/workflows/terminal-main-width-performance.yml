@@ -32,17 +32,17 @@ jobs:
 
         python3 -B .github/scripts/terminal-main-width-performance.py guard
 
-        '
+
+        python3 -B -m unittest discover -s .github/scripts -p test_terminal_paired_profile_audit.py'
     - name: Recheck533JVM20component37scene A1 originals before new builds
       run: python3 -B .github/scripts/terminal-main-width-performance.py prerequisites
     - name: Build pinned shared native test asset
       run: python3 -B .github/scripts/build-terminal-proot.py
     - name: Build unprobed Release-derived baseline candidate and one driver
-      run: 'chmod +x gradlew
-
-        python3 -B .github/scripts/terminal-main-width-performance.py build
-
-        '
+      run: "chmod +x gradlew\nif [ \"${{ inputs.diagnostic_only }}\" = \"true\" ];\
+        \ then\n  python3 -B .github/scripts/terminal-main-width-performance.py build\n\
+        else\n  python3 -B .github/scripts/terminal-main-width-performance.py build\
+        \ --typed-assets\nfi"
     - name: Run four paired launches with20formal windows per condition
       run: python3 -B .github/scripts/terminal-main-width-performance.py experiment
       if: ${{ !inputs.diagnostic_only }}

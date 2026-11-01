@@ -47,4 +47,29 @@ class PairedProfileReaderTests(unittest.TestCase):
         self.assertTrue(all(m.compare(a,a).values()))
         b=copy.deepcopy(a);b['symbolicContentSha256']='other';self.assertFalse(m.compare(a,b)['sameSymbolicMethodsFlagsAndClasses'])
         b=copy.deepcopy(a);b['metadataSha256']='other';self.assertFalse(m.compare(a,b)['sameMetadataBytes'])
+    def valid_qualification(self):
+        profiles={arm:dict(matchesOwnDex=True,metadataSha256='meta',profileSha256=arm,
+            normalizedProfileBodyExceptLocationChecksumsSha256=arm,symbolicContentSha256='symbols',sourceSha='source',
+            entries=[dict(matchesOwnDex=True)]) for arm in ('legacy','candidate')}
+        assets={arm:{'assets/dexopt/baseline.prof':dict(bytes=10,sha256=arm),
+            'assets/dexopt/baseline.profm':dict(bytes=5,sha256='meta'),'lib/x86_64/lib.so':dict(bytes=3,sha256='native'),
+            'static/index.html':dict(bytes=5,sha256='web')} for arm in profiles}
+        return profiles,assets
+    def test_typed_qualification_requires_semantics_not_equal_profile_crc_body(self):
+        profiles,assets=self.valid_qualification();q=m.qualify(profiles,assets)
+        self.assertFalse(q['rawAssetsByteIdentical']);self.assertTrue(q['nonProfileAssetsByteIdentical'])
+        self.assertFalse(q['comparison']['onlyLocationChecksumsDiffer'])
+    def test_other_assets_and_web_must_still_be_byte_identical(self):
+        for name in ('lib/x86_64/lib.so','static/index.html','assets/dexopt/baseline.profm'):
+            profiles,assets=self.valid_qualification();assets['candidate'][name]['sha256']='changed'
+            with self.assertRaises(ValueError):m.qualify(profiles,assets)
+    def test_missing_file_changed_flag_and_unbound_profile_cannot_pass(self):
+        for kind in ('missing','symbols','source','dex','profile'):
+            profiles,assets=self.valid_qualification()
+            if kind=='missing':assets['candidate'].pop('static/index.html')
+            elif kind=='symbols':profiles['candidate']['symbolicContentSha256']='other'
+            elif kind=='source':profiles['candidate']['sourceSha']='other'
+            elif kind=='dex':profiles['candidate']['entries'][0]['matchesOwnDex']=False
+            else:profiles['candidate']['profileSha256']='other'
+            with self.assertRaises(ValueError):m.qualify(profiles,assets)
 if __name__=='__main__':unittest.main()

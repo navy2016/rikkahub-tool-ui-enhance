@@ -19,6 +19,11 @@ A1性能首次实际run41278159851/source98d53b2在双目标打包一致性阶�
 build-only诊断run41279081126/sourcea201537重现，唯一差异assets/dexopt/baseline.prof（19619/19625字节）；
 其他资产/资源/native及Web产物相等。仍未采样。增加只读prof010/profm002↔各自DEX CRC和符号方法/类审计，
 继续走mainWidthBundleDiagnostic，不授予profile例外、不复制/移除/重签APK，不改旧固定212/55审计。
+profile诊断run41280242644/source6e6b6eb证明双方匹配各自DEX、符号方法/HSP/类相等、profilem相同；
+classes7.dex方法数57557→57559且CRC改变，故onlyLocationChecksumsDiffer=false，不能简化成仅CRC差异。
+新增采样前build-contract.json（原字节相等失败不追认）：除baseline.prof外还扩大到static Web的所有资产字节相等；
+prof需自身DEX校验+完整符号等价，profilem仍相等。历史pair verifier不改、APK不改写/删除/复制profile。
+新性能必须携带typed buildContract SHA；计时协议f543171/2016窗口及A1候选不变。目前仍0已测性能窗口。
 
 用户在306后续方案／完整检查点之后要求继续，现推进A1：独立MAIN历史宽度生命周期的候选及机制验证。
 范围benchmarks/terminal-main-width-lifecycle/，新workflow terminal-main-width-lifecycle.yml；生产仍306/main ac977984。

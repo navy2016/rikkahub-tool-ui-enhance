@@ -54,3 +54,19 @@ Perfetto沿用32MiB ring/240s/96MiB上限，BOOTTIME和原identity状态机不�
 已注册workflow `terminal-pipeline-tests.yml`，显式ref=opt/terminal-verified-a79e7b6、suite=mainWidthPerformance；
 调用新的terminal-main-width-performance.yml，不改默认分支，不直接dispatch未注册的新文件。
 候选守卫及来源资格保持533/20机制阶段原代码；性能脚本独立复核原artifact与XML之后才构建。
+
+## 采样前新增的派生profile构建资格（非旧失败追认）
+
+原始run41278159851在`Paired target manifests/resources/runtime assets differ`失败，0窗口。
+build-only41279081126确认唯一差异baseline.prof；build-only41280242644进一步证明：
+双方prof均匹配各自DEX；profile所选完整方法描述符、H/S/P标志、类集合相同，baseline.profm字节相同；
+classes7.dex方法总数57557→57559且CRC改变，因此并非“只改CRC”的原始profile体相等。
+这三次原始byte-equality失败永久保留，没有以新规则改写其状态，亦没有测量样本可挑选。
+
+新增build-contract.json明确声明另一种构建资格，必须在第一次计时前固定：
+所有manifest/res/font/native/runtime及static Web资产仍逐成员逐字节相等，只有准确命名的baseline.prof改用
+“匹配自身DEX内部校验/ZIP CRC/方法类型计数 + 完整符号方法/标志/类集合等价”，profilem仍字节相等。
+不得忽略任意profile差异，不复制另一包的profile、不移除、不改写或重签APK；ART仍按原驱动统一speed编译。
+历史run-terminal-pipeline-paired.py字节不变；新的typed inventory仅在A1验证调用范围内使用并finally恢复。
+计时协议/驱动/2016矩阵/中位-p95-最坏门槛不变；报告必须区分rawAssetsByteIdentical=false与typed资格通过。
+新性能运行必须携带buildContractSha256，不能将它标成旧的原始资产字节相等协议。

@@ -10,18 +10,25 @@ CLASS='me.rerere.rikkahub.pipeline.TerminalMainWidthPerformanceTest'
 METHODS=('mainWidthPerfOneThousandHidden','mainWidthPerfOneThousandShown','mainWidthPerfTenThousandHidden','mainWidthPerfTenThousandShown')
 METRICS=('inputToBufferEvidenceNs','inputToAttemptNs','inputToDisplayEndNs')
 OUT=ROOT/'artifacts/terminal-main-width-performance';BUILD=ROOT/'artifacts/main-width-performance-build'
+BUILD_CONTRACT=BASE/'build-contract.json'
+BUILD_CONTRACT_SHA256='48380bd3f7e51e5fa589d13c5f76d8c8b0855cc8317a94b90ae58bc47888cc67'
 def load(name,filename):
     spec=importlib.util.spec_from_file_location(name,Path(__file__).with_name(filename));module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
 identity=load('a1_perf_identity','terminal-frame-identity.py')
 candidate=load('a1_perf_candidate','terminal-main-width-lifecycle.py')
 pair=load('a1_perf_pair','run-terminal-pipeline-paired.py')
-ci=pair.ci;real=ci.real_clock;old_sources=ci.sources;require=identity.require
+ci=pair.ci;real=ci.real_clock;old_sources=ci.sources;old_inventory=pair.inventory;require=identity.require
 def sha(raw):return hashlib.sha256(raw).hexdigest()
 def git(*args):return subprocess.check_output(['git','-c','core.fileMode=false',*args],cwd=ROOT,timeout=40)
 def save(path,value):path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(value,indent=2)+'\n')
 def api(path):return json.loads(subprocess.check_output(['gh','api','repos/navy2016/rikkahub-tool-ui-enhance/'+path],text=True,timeout=40))
 def protocol():
     raw=PROTOCOL.read_bytes();require(sha(raw)==PROTOCOL_SHA256,'A1 performance protocol changed');return json.loads(raw)
+def build_contract():
+    raw=BUILD_CONTRACT.read_bytes();require(sha(raw)==BUILD_CONTRACT_SHA256,'A1 typed profile build contract changed')
+    value=json.loads(raw);require(value['timingProtocolSha256']==PROTOCOL_SHA256 and value['beforeAnyDeviceSampling'],'Wrong timing/build contract binding')
+    require(ci.digest(ROOT/'.github/scripts/terminal-paired-profile-audit.py')==value['auditSourceSha256'],'Typed profile audit implementation changed')
+    return value
 def candidate_files():return candidate.spec()[0]['files']
 def guard():
     p=protocol();spec,_=candidate.guard()
@@ -45,7 +52,8 @@ def sources():
     paths=[TEST,'.github/scripts/terminal-main-width-performance.py','.github/scripts/terminal-main-width-lifecycle.py',
         '.github/scripts/terminal-frame-identity.py','.github/scripts/terminal-paired-profile-audit.py',
         '.github/scripts/audit-release-profiles.py','benchmarks/terminal-frame-identity/protocol.json',
-        'benchmarks/terminal-main-width-performance/protocol.json','benchmarks/terminal-main-width-lifecycle/identity.json',
+        'benchmarks/terminal-main-width-performance/protocol.json','benchmarks/terminal-main-width-performance/build-contract.json',
+        'benchmarks/terminal-main-width-lifecycle/identity.json',
         'benchmarks/terminal-main-width-lifecycle/protocol.json','benchmarks/terminal-main-width-lifecycle/candidate.patch',
         'benchmarks/terminal-full-virtual-mechanism/dependencies.init.gradle',
         'app/src/main/java/me/rerere/rikkahub/data/container/TerminalInFramePublication.kt']
@@ -58,7 +66,7 @@ def verify_sources(manifests):
     require(set(a)==set(b) and {k for k in a if a[k]!=b[k]}==set(spec),'Source difference is not exactly the five A1 files')
     for name,item in spec.items():require(a[name]==item['base'] and b[name]==item['candidate'],'A1 source bytes differ:'+name)
     require(a[TEST]==b[TEST]==protocol()['driverSha256'],'Different frozen common driver source')
-def configure():ci.sources=sources;pair.OUT=OUT;pair.BUILD=BUILD;pair.verify_sources=verify_sources
+def configure():ci.sources=sources;pair.OUT=OUT;pair.BUILD=BUILD;pair.verify_sources=verify_sources;pair.inventory=old_inventory
 def preserve_bundle_diagnostics(manifests):
     """Hash-only exact package differences before the strict existing guard; never relax it."""
     inventories={}
@@ -96,6 +104,38 @@ def preserve_bundle_diagnostics(manifests):
         diagnosticOnly=True,assetsEqualExceptionGranted=False,comparison=result,profiles=profiles))
     ci.notice('notice','A1 read-only profile consistency',json.dumps(result,separators=(',',':')))
     return report
+def verify_typed_bundles(manifests):
+    """Retain the original source/signing/files gate; explicitly type the profile inventory.
+    Every target byte hash is revalidated, with own-DEX+complete symbolic profile equivalence.
+    No APK rewriting, no mutation of the historical verifier module on disk.
+    """
+    contract=build_contract();audit=load('a1_typed_profile_gate','terminal-paired-profile-audit.py');profiles={};assets={}
+    for arm,manifest in manifests.items():
+        target=manifest['apks']['target'];path=ROOT/target['file']
+        profiles[arm],_=audit.audit(path,target['sha256'],manifest['sourceSha'])
+        with zipfile.ZipFile(path) as archive:
+            assets[arm]={name:dict(bytes=archive.getinfo(name).file_size,sha256=sha(archive.read(name))) for name in archive.namelist()
+                if not name.endswith('/') and (name.startswith(('assets/','lib/','res/','static/')) or name in ('AndroidManifest.xml','resources.arsc'))}
+    qualification=audit.qualify(profiles,assets)
+    slots={(ROOT/m['apks']['target']['file']).resolve():arm for arm,m in manifests.items()}
+    def typed_inventory(path):
+        arm=slots.get(path.resolve());require(arm is not None,'Typed inventory path outside validated target slots')
+        require(ci.digest(path)==manifests[arm]['apks']['target']['sha256'],'Target changed after profile audit')
+        value=dict(assets[arm]);value['assets/dexopt/baseline.prof']=dict(kind='own-dex-validated-prof010-symbolic-v1',symbolicContentSha256=profiles[arm]['symbolicContentSha256'])
+        return value
+    previous=pair.inventory
+    try:
+        pair.inventory=typed_inventory
+        inventory_hash=pair.verify_bundles(manifests)
+    finally:pair.inventory=previous
+    report=dict(sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],buildContractSha256=BUILD_CONTRACT_SHA256,
+        qualification=qualification,profiles=profiles,sharedAssetInventorySha256=inventory_hash,
+        originalByteEqualityRunsRemainFailure=[41278159851,41279081126,41280242644])
+    save(OUT/'typed-build-qualification.json',report)
+    ci.notice('notice','A1 typed package qualification',json.dumps(dict(buildContractSha256=BUILD_CONTRACT_SHA256,
+        rawAssetsByteIdentical=qualification['rawAssetsByteIdentical'],nonProfileAssetsByteIdentical=True,
+        sameSymbolicMethodsFlagsAndClasses=True,bothMatchOwnDex=True,notAnApkRewrite=True)))
+    return inventory_hash
 def prerequisites():
     pair.require_ci();p=guard();q=p['prerequisites'];OUT.mkdir(parents=True,exist_ok=False)
     run=api(f'actions/runs/{q["run"]}');jobs=api(f'actions/runs/{q["run"]}/jobs?per_page=100')['jobs']
@@ -123,7 +163,7 @@ def prerequisites():
     require(reports['jvm']['count']==533 and reports['component']['count']==20,'Mechanism inventory differs')
     save(OUT/'prerequisites.json',dict(sourceSha=os.environ['GITHUB_SHA'],runId=os.environ['GITHUB_RUN_ID'],originalSource=q['sourceSha'],originalRun=q['run'],noNewDeviceSamples=True,reports=reports))
     ci.notice('notice','A1 prerequisite verified','Same originals533JVM/20component/37scenes independently rechecked before any new build.')
-def build():
+def build(typed_assets=False):
     pair.require_ci();p=guard();configure();pre=json.loads((OUT/'prerequisites.json').read_bytes())
     require(pre['sourceSha']==os.environ['GITHUB_SHA'] and pre['runId']==os.environ['GITHUB_RUN_ID'],'Prerequisites not verified for this run')
     require(not git('diff','--name-only','HEAD').strip(),'Dirty build checkout');BUILD.mkdir(parents=True,exist_ok=False)
@@ -146,10 +186,11 @@ def build():
         for name,raw in before.items():(ROOT/name).write_bytes(raw)
         guard();require(not git('diff','--name-only','HEAD').strip(),'A1 build overlay leaked into production')
     preserve_bundle_diagnostics(manifests)
-    assets=pair.verify_bundles(manifests);source,run=ci.identity()
+    assets=verify_typed_bundles(manifests) if typed_assets else pair.verify_bundles(manifests);source,run=ci.identity()
     shutil.copyfile(ROOT/'artifacts/terminal-full-virtual-mechanism/resolved-dependencies.json',OUT/'resolved-dependencies.json')
     save(OUT/'plan.json',dict(sourceSha=source,runId=run,freezeSha=FREEZE_SHA,protocol=p,protocolSha256=PROTOCOL_SHA256,
-        productionChanged=False,manifests=manifests,sharedAssetInventorySha256=assets,candidateSpec=candidate.spec()[0]))
+        productionChanged=False,manifests=manifests,sharedAssetInventorySha256=assets,candidateSpec=candidate.spec()[0],
+        buildContractSha256=BUILD_CONTRACT_SHA256 if typed_assets else None))
     save(ci.OUT/'manifest.json',manifests['legacy'])
 def case_records(text):
     p=protocol();bounds=p['serialization'];groups={}
@@ -276,7 +317,8 @@ def aggregate(invocations):
 def experiment():
     pair.require_ci();p=guard();configure();source,run=ci.identity();plan=json.loads((OUT/'plan.json').read_bytes())
     require(plan['sourceSha']==source and plan['runId']==run and plan['protocolSha256']==PROTOCOL_SHA256,'Wrong frozen A1 plan')
-    require(pair.verify_bundles(plan['manifests'])==plan['sharedAssetInventorySha256'],'Shared runtime assets differ')
+    require(plan.get('buildContractSha256')==BUILD_CONTRACT_SHA256,'Performance requires the separately frozen typed build qualification')
+    require(verify_typed_bundles(plan['manifests'])==plan['sharedAssetInventorySha256'],'Typed shared runtime asset proof differs')
     original_out,original_report=ci.OUT,ci.real_clock
     def operation():
         doc=dict(sourceSha=source,runId=run,plan=plan,boot=pair.read_boot(),invocations=[])
@@ -304,10 +346,11 @@ def experiment():
         finally:ci.OUT=original_out;ci.real_clock=original_report
     ci.emulator(operation=operation)
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('action',choices=('guard','prerequisites','build','experiment'));args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('action',choices=('guard','prerequisites','build','experiment'));parser.add_argument('--typed-assets',action='store_true');args=parser.parse_args()
+    require(not args.typed_assets or args.action=='build','Typed flag is only a build qualification choice')
     if args.action=='guard':print(json.dumps(guard(),indent=2))
     elif args.action=='prerequisites':prerequisites()
-    elif args.action=='build':build()
+    elif args.action=='build':build(args.typed_assets)
     else:experiment()
 if __name__=='__main__':
     try:main()

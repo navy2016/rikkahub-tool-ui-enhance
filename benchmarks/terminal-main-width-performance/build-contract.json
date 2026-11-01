@@ -1,0 +1,41 @@
+{
+  "id": "a1-typed-profile-build-qualification-v1",
+  "timingProtocolSha256": "3a941a884f7dbbd5261a2feb8c13c417ef41e0bcfe2bd235b7d2200aecae32eb",
+  "timingProtocolFreezeSha": "f543171cda98411a9f65c8227f538a3307339472",
+  "candidateIdentitySha256": "f417e3fb3fe81d92fb4846f43b4e73ab225cf64b15594ed677ae54a944eaa422",
+  "beforeAnyDeviceSampling": true,
+  "priorPerformanceRun": 41278159851,
+  "priorConclusion": "failure",
+  "priorDeviceSamples": 0,
+  "basis": {
+    "run": 41280242644,
+    "sourceSha": "6e6b6eb443751f53d5a6cb52bd3f56d08c46783d",
+    "artifactId": 13072713766,
+    "artifactName": "terminal-main-width-bundle-diagnostic-6e6b6eb443751f53d5a6cb52bd3f56d08c46783d-1",
+    "profileComparisonSha256": "019c222cf398d30b5231581f32bb790af440998d5a09bec11057274e9e1dc3fd",
+    "bundleDifferencesSha256": "a3c698edaf1a31d8c5c55dced5133b49919deb293ca1da88cef6a6ae8e71cbc9",
+    "sameSymbolicMethodsFlagsAndClasses": true,
+    "bothMatchOwnDex": true,
+    "onlyLocationChecksumsDiffer": false,
+    "changedDex": "classes7.dex",
+    "methodIdCounts": {
+      "legacy": 57557,
+      "candidate": 57559
+    }
+  },
+  "assets": "identical ZIP member names; every manifest/res/font/native/runtime/static Web asset byte-identical except precisely assets/dexopt/baseline.prof",
+  "profile": "each original unmodified prof010 must match own DEX ZIP CRC,methodIdCount,typeIdCount and internal DEX SHA1/Adler32; complete symbolic method descriptors+H/S/P flags,class types and metadata class definitions must match exactly",
+  "metadata": "baseline.profm must remain byte-identical",
+  "notPermitted": [
+    "ignore arbitrary profile differences",
+    "copy other target profile",
+    "strip/rewrite/re-sign APK",
+    "remove method/class flags",
+    "change candidate/Page/helper/driver",
+    "relax frame identity or median/p95/worst gates",
+    "reinterpret prior byte-equality failure as success"
+  ],
+  "newRunRequired": true,
+  "historicalPairVerifierUnchanged": true,
+  "auditSourceSha256": "64be313149cb8687e8bb9c5d697a80de3fa7a764bd59afb6a8c520cfb416bc55"
+}
