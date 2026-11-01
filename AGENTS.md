@@ -20,6 +20,10 @@ readFull仍逐次读取和校验live item key/Text/font/height/physical geometry
 identity4b7e565a88d3f531c7c261ec9e3cb1f9ec2bfb3bf2e981d653863591fc9a4ab9，17项本地源码/协议检查通过。
 workflow_call terminal-geometry-c1.yml由terminal-pipeline-tests.yml suite=geometryC1派发；恢复目录/workspace/terminal-review/full-virtual-geometry-c1。
 生产仍306/main ac977984。后续性能采样前单独验证取证生命周期，不放宽历史B1解析器或补采B1。
+执行源码db6f041f92e9bdc8db26a348c573dbaf92b5d5e8/run41335095300已success；528JVM/44组件/17场景原件独立核验完毕。
+原artifact13094519563/13094789419经只读relay41336132955/41336337026恢复；无APK/重复采样。
+报告benchmarks/results/geometry-c1-mechanism.md；verified-evidence/verify_evidence.py和verification.json在工作目录。
+C1机制通过但不等于端到端收益，仍未采用。用户继续后开始独立306轨迹生命周期资格设计，尚未运行。
 
 ## B1性能V1最终结论（优先于下方运行中/尚未验证记录）
 

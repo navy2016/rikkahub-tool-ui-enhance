@@ -74,8 +74,9 @@ changes separately. Performance rejection by itself is not proof of a specific s
   design inspection, not an observed306production failure. No layout-identity cache was introduced.
 - C1 keeps every live readFull key/Text/height/physical check and detaches a private scalar array.
   Only that immutable geometry's validation proof is shared during policy copies; no across-read reuse.
-- Validation: new source guard and JVM mutation/oracle tests; real component synchronous-scroll,
-  metric/key/Text/height rejection, MAIN/ALT/FIFO and session-release tests await C1 CI.
+- Validation: C1 source17host checks and run41335095300 passed528JVM/44component/17new scenes;
+  actual synchronous-scroll, metric/key/Text/height rejection, MAIN/ALT/FIFO and session-release
+  original records were independently checked. C1 remains mechanism-only,not adopted.
 
 ## BUG-HARNESS-C1-002 — copied mechanism harness retained its old identity pin [fixed before dispatch]
 - During local scaffold validation, `terminal-geometry-c1.py guard` stopped with `C1 identity changed`.
