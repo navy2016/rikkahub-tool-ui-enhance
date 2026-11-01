@@ -1,0 +1,38 @@
+--- a/benchmarks/terminal-trace-lifecycle/TerminalTraceLifecycleQualificationTest.kt
++++ b/benchmarks/terminal-trace-lifecycle-v2/TerminalTraceLifecycleQualificationTest.kt
+@@ -86,8 +86,15 @@
+     private data class ShellResult(val output: String, val error: String, val exit: Int)
+     /** Small setup/cleanup shell calls only; closes every descriptor even on timeout/error. */
+     private fun shell(text: String, input: ByteArray = byteArrayOf()): ShellResult {
+-        val wrapped="sh -c '"+("("+text+"); rc=${'$'}?; printf \"\\nTRACE_SHELL_EXIT:%s\\n\" \"${'$'}rc\"; exit \"${'$'}rc\"").replace("'","'\"'\"'")+"'"
+-        val pipes=automation.executeShellCommandRwe(wrapped)
++        // Runtime.exec(String) tokenizes command arguments; it does NOT parse shell quoting.
++        // Execute only "sh". The shell program and a distinct config heredoc travel over stdin.
++        val delimiter="TRACE_CONFIG_EOF_306_2026"
++        val config=String(input,Charsets.UTF_8)
++        check(config.lineSequence().none{it==delimiter})
++        val invocation=if(input.isEmpty()) text else text+" <<'"+delimiter+"'\n"+config+
++            (if(config.endsWith("\n")) "" else "\n")+delimiter
++        val program="(\n"+invocation+"\n); rc=${'$'}?; printf \"\\nTRACE_SHELL_EXIT:%s\\n\" \"${'$'}rc\"; exit \"${'$'}rc\"\n"
++        val pipes=automation.executeShellCommandRwe("sh")
+         check(pipes.size==3)
+         val pool=Executors.newFixedThreadPool(2){work->Thread(work,"trace-shell-read").apply{isDaemon=true}}
+         fun read(fd: ParcelFileDescriptor): String = ParcelFileDescriptor.AutoCloseInputStream(fd).use { source ->
+@@ -97,7 +104,7 @@
+         }
+         try {
+             val output=pool.submit<String>{read(pipes[0])};val error=pool.submit<String>{read(pipes[2])}
+-            ParcelFileDescriptor.AutoCloseOutputStream(pipes[1]).use{it.write(input)}
++            ParcelFileDescriptor.AutoCloseOutputStream(pipes[1]).use{it.write(program.toByteArray(Charsets.UTF_8))}
+             val raw=output.get(35,TimeUnit.SECONDS);val stderr=error.get(35,TimeUnit.SECONDS)
+             val matches=Regex("(?m)^TRACE_SHELL_EXIT:([0-9]+)$").findAll(raw).toList()
+             check(matches.size==1){"Trace shell exit receipt missing: $raw $stderr"}
+@@ -566,7 +573,7 @@
+                 .put("metricsRaw",JSONArray().apply{observer.readRawMetrics().forEach{put(JSONArray(it.toList()))}})
+                 .put("mirrorMetrics",JSONArray().apply{mirror.readMetrics().forEach{put(JSONArray(it.toList()))}})
+                 .put("mirrorRaw",JSONArray().apply{mirror.readRawMetrics().forEach{put(JSONArray(it.toList()))}})
+-                .put("collectorDiagnosisOnly",true).put("performanceMeasured",false).put("protocolId","terminal-trace-lifecycle-v1")
++                .put("collectorDiagnosisOnly",true).put("performanceMeasured",false).put("protocolId","terminal-trace-lifecycle-v2")
+                 .put("completedTraversals",JSONArray().apply{observer.readTraversals().forEach{put(JSONArray(it.toList()))}})
+                 .put("clock", "CLOCK_BOOTTIME").put("historySize",size).put("baselineOnly",true).put("expectedIme",expectedIme).put("droppedFrameMetrics",observer.readMetrics().sumOf{it[9]}).put("passed",true))
+         } catch(error: Throwable) {

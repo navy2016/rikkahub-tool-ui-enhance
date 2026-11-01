@@ -91,3 +91,15 @@ changes separately. Performance rejection by itself is not proof of a specific s
   runs exact`test_terminal_frame_identity.py` plus`test_terminal_trace_lifecycle.py`, whose306source
   guard is separately frozen. The old qualification test/guard/parser are unchanged,not bypassed in
   their historical experiment. No device run was dispatched under the incorrect selection.
+
+## BUG-LIFECYCLE-002 — UiAutomation Runtime.exec does not preserve sh-c quoting [V1 failed; V2 fix awaiting CI]
+- V1run41338176466/source2f1535c built successfully, then all12assigned first-launch methods failed
+  before tracing: `Trace shell exit receipt missing` / `f: no closing quote`; cleanup reports `Trace PID absent`.
+- Same-run artifact13096382095 was relayed by41339387919; all12original case errors verified with
+  empty samples and no TRACE_START records. Actual observed windows=0, traces started=0; no second launch.
+- Android14UiAutomationConnection.java directly calls`Runtime.getRuntime().exec(command)`, so the
+  quoted script was split into multiple arguments. This is a new harness defect,not a rendering bug.
+- New isolated V2 passes only`sh` and writes the program via stdin, with a quoted heredoc for exact
+  config bytes. No change to306, raw trace recipe,840window matrix, frame parser or acceptance gates.
+- Original failure remains failed. Native changes are in`benchmarks/terminal-trace-lifecycle-v2/v1-transport-fix.patch`;
+  host tests reproduce broken tokenization and verify fixed stdin/config/exit handling; V2device proof pending.

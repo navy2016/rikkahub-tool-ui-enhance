@@ -9,6 +9,16 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## 当前轨迹生命周期V2：修复V1零窗口shell传输故障（优先于V1待运行记录）
+
+V1source2f1535c7bb67d20d0b59c305db1846d60a2d63a3/run41338176466已failure；构建成功，12方法均在trace-start之前失败。
+同次artifact13096382095经relay41339387919取回，12失败原件核验：samples全部空、无TRACE_START，实际0窗口/0trace启动，未执行第二launch。
+根因UiAutomationConnection.Runtime.exec(String)不解析sh-c引号；`Trace shell exit receipt missing`/`f: no closing quote`，不是306渲染或C1问题。
+V2完全独立目录benchmarks/terminal-trace-lifecycle-v2，仅命令传输改为executeShellCommandRwe("sh")+stdin脚本+quote heredoc承载原config。
+原V1文件/失败保留。矩阵840/24/2launch、trace config、阶段边界、身份解析器、门槛、306目标全部不变，不是B1补采/规则放宽。
+V2协议9e1b7b40fa3fe9669ea3c36ce692f73366481ccacb6d3b0544c74ac22255dcb3；new workflow suite=traceLifecycleV2。
+恢复目录/workspace/terminal-review/full-virtual-trace-lifecycle-v2；dispatch/receipt为准，禁止重复派发。C1机制仍已通过、性能未开始、未采用。
+
 ## 当前独立306轨迹生命周期资格（C1性能之前，优先于下方尚未运行记录）
 
 C1机制528/44/17已验证，但尚未采用/测性能。用户继续后冻结benchmarks/terminal-trace-lifecycle V1。

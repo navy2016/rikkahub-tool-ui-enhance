@@ -1,0 +1,210 @@
+--- a/app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/TerminalPhysicalMetricsPerformanceTest.kt
++++ b/benchmarks/terminal-trace-lifecycle-v2/TerminalTraceLifecycleQualificationTest.kt
+@@ -31,6 +31,7 @@
+ import java.util.zip.DeflaterOutputStream
+ import java.util.concurrent.CountDownLatch
+ import java.util.concurrent.TimeUnit
++import java.util.concurrent.Executors
+ import kotlinx.coroutines.flow.first
+ import kotlinx.coroutines.runBlocking
+ import kotlinx.coroutines.withTimeout
+@@ -59,8 +60,8 @@
+ import org.koin.core.component.KoinComponent
+ import org.koin.core.component.inject
+ 
+-/** B1 versus306: separate MAIN redraw,ALT redraw and guard processes. Native clocks/identities only. */
+-class TerminalPhysicalMetricsPerformanceTest : KoinComponent {
++/** Independent unchanged306 trace-lifecycle qualification. No optimization pairing or performance acceptance. */
++class TerminalTraceLifecycleQualificationTest : KoinComponent {
+     @get:Rule val timeout=Timeout.seconds(360)
+     private val manager: BackgroundProcessManager by inject()
+     private val proot: PRootManager by inject()
+@@ -82,6 +83,83 @@
+         while(!predicate()){if(SystemClock.elapsedRealtimeNanos()>=deadline)fail("Real clock deadline: $label");SystemClock.sleep(2)}
+     }
+     private fun command(text: String): String = ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(text)).bufferedReader().use{it.readText()}
++    private data class ShellResult(val output: String, val error: String, val exit: Int)
++    /** Small setup/cleanup shell calls only; closes every descriptor even on timeout/error. */
++    private fun shell(text: String, input: ByteArray = byteArrayOf()): ShellResult {
++        // Runtime.exec(String) tokenizes command arguments; it does NOT parse shell quoting.
++        // Execute only "sh". The shell program and a distinct config heredoc travel over stdin.
++        val delimiter="TRACE_CONFIG_EOF_306_2026"
++        val config=String(input,Charsets.UTF_8)
++        check(config.lineSequence().none{it==delimiter})
++        val invocation=if(input.isEmpty()) text else text+" <<'"+delimiter+"'\n"+config+
++            (if(config.endsWith("\n")) "" else "\n")+delimiter
++        val program="(\n"+invocation+"\n); rc=${'$'}?; printf \"\\nTRACE_SHELL_EXIT:%s\\n\" \"${'$'}rc\"; exit \"${'$'}rc\"\n"
++        val pipes=automation.executeShellCommandRwe("sh")
++        check(pipes.size==3)
++        val pool=Executors.newFixedThreadPool(2){work->Thread(work,"trace-shell-read").apply{isDaemon=true}}
++        fun read(fd: ParcelFileDescriptor): String = ParcelFileDescriptor.AutoCloseInputStream(fd).use { source ->
++            val out=ByteArrayOutputStream();val chunk=ByteArray(4096)
++            while(true){val n=source.read(chunk);if(n<0)break;check(out.size()+n<=131072){"Trace shell output overflow"};out.write(chunk,0,n)}
++            out.toString("UTF-8")
++        }
++        try {
++            val output=pool.submit<String>{read(pipes[0])};val error=pool.submit<String>{read(pipes[2])}
++            ParcelFileDescriptor.AutoCloseOutputStream(pipes[1]).use{it.write(program.toByteArray(Charsets.UTF_8))}
++            val raw=output.get(35,TimeUnit.SECONDS);val stderr=error.get(35,TimeUnit.SECONDS)
++            val matches=Regex("(?m)^TRACE_SHELL_EXIT:([0-9]+)$").findAll(raw).toList()
++            check(matches.size==1){"Trace shell exit receipt missing: $raw $stderr"}
++            return ShellResult(raw.substring(0,matches.single().range.first).trim(),stderr,matches.single().groupValues[1].toInt())
++        } finally {
++            pipes.forEach{runCatching{it.close()}};pool.shutdownNow();pool.awaitTermination(5,TimeUnit.SECONDS)
++        }
++    }
++    private inner class TraceCapture(private val case: String) {
++        val remote="/data/misc/perfetto-traces/lifecycle-$case.pftrace"
++        private var pid: Int?=null
++        private var began=0L
++        private var started=0L
++        private var startResult: ShellResult?=null
++        private var receipt: JSONObject?=null
++        var stopped=false
++            private set
++        fun start() {
++            val encoded=requireNotNull(InstrumentationRegistry.getArguments().getString("traceLifecycleConfig"))
++            val config=Base64.getDecoder().decode(encoded)
++            check(config.size in 1..16384 && !String(config).contains("linux.process_stats"))
++            val expected=requireNotNull(InstrumentationRegistry.getArguments().getString("traceLifecycleConfigSha256"))
++            check(hash(String(config,Charsets.UTF_8))==expected){"Trace config checksum differs"}
++            val cleared=shell("rm -f $remote");check(cleared.exit==0){"Trace cleanup failed: ${cleared.error}"}
++            began=SystemClock.elapsedRealtimeNanos()
++            val result=shell("perfetto --txt --background-wait -c - -o $remote",config);startResult=result
++            started=SystemClock.elapsedRealtimeNanos()
++            val pids=result.output.lineSequence().filter{it.matches(Regex("[0-9]+"))}.toList()
++            if(pids.size==1)pid=pids.single().toInt()
++            check(result.exit==0 && pid!=null){"Perfetto startup failed: $result"}
++            emit("TRACE_START",JSONObject().put("case",case).put("pid",pid).put("remote",remote)
++                .put("beginBootNs",began).put("startedBootNs",started).put("configSha256",expected)
++                .put("exit",result.exit).put("stdout",result.output).put("stderr",result.error))
++        }
++        fun stop(): JSONObject {
++            receipt?.let{return it}
++            val target=requireNotNull(pid){"Trace PID absent"};val stopAt=SystemClock.elapsedRealtimeNanos()
++            val result=shell("kill -INT $target && { n=0; while kill -0 $target 2>/dev/null; do n=${'$'}((n+1)); [ \"${'$'}n\" -lt 100 ] || exit 72; sleep 0.1; done; }")
++            check(result.exit==0){"Perfetto stop/wait failed: $result"}
++            stopped=true // No later Activity/listener cleanup is part of this trace.
++            val finished=SystemClock.elapsedRealtimeNanos()
++            val file=shell("sha256sum $remote && stat -c %s $remote")
++            check(file.exit==0){"Trace file receipt failed: $file"}
++            val lines=file.output.lines();check(lines.size==2)
++            val sha=lines[0].substringBefore(' ');val bytes=lines[1].trim().toLong()
++            check(sha.matches(Regex("[a-f0-9]{64}")) && bytes in 1 until 100663296L)
++            val value=JSONObject().put("case",case).put("tracePid",target).put("remote",remote)
++                .put("startBeginBootNs",began).put("startedBootNs",started).put("stopBeginBootNs",stopAt)
++                .put("stoppedBootNs",finished).put("startExit",startResult!!.exit).put("stopExit",result.exit)
++                .put("startStdout",startResult!!.output).put("startStderr",startResult!!.error)
++                .put("stopStdout",result.output).put("stopStderr",result.error).put("bytes",bytes).put("sha256",sha)
++                .put("stoppedBeforeTeardown",true).put("configSha256",InstrumentationRegistry.getArguments().getString("traceLifecycleConfigSha256"))
++            receipt=value;emit("TRACE_STOP",value);return value
++        }
++    }
+     private fun editor(): AccessibilityNodeInfo? {
+         val root=automation.rootInActiveWindow ?: return null
+         val todo=ArrayDeque<AccessibilityNodeInfo>();todo.add(root);var found: AccessibilityNodeInfo?=null
+@@ -162,18 +240,18 @@
+         @Synchronized fun windowFinishedAfter(viewportNs: Long)=traversals.any{it[0]<=viewportNs && viewportNs<=it[1]}
+         @Synchronized fun readTraversals()=traversals.map{it.copyOf()}
+     }
+-    @Test fun physicalMetricsMainOneThousandHidden() = exercise(1000, false, "main")
+-    @Test fun physicalMetricsMainOneThousandShown() = exercise(1000, true, "main")
+-    @Test fun physicalMetricsMainTenThousandHidden() = exercise(10000, false, "main")
+-    @Test fun physicalMetricsMainTenThousandShown() = exercise(10000, true, "main")
+-    @Test fun physicalMetricsAltOneThousandHidden() = exercise(1000, false, "alt")
+-    @Test fun physicalMetricsAltOneThousandShown() = exercise(1000, true, "alt")
+-    @Test fun physicalMetricsAltTenThousandHidden() = exercise(10000, false, "alt")
+-    @Test fun physicalMetricsAltTenThousandShown() = exercise(10000, true, "alt")
+-    @Test fun physicalMetricsGuardOneThousandHidden() = exercise(1000, false, "guard")
+-    @Test fun physicalMetricsGuardOneThousandShown() = exercise(1000, true, "guard")
+-    @Test fun physicalMetricsGuardTenThousandHidden() = exercise(10000, false, "guard")
+-    @Test fun physicalMetricsGuardTenThousandShown() = exercise(10000, true, "guard")
++    @Test fun traceLifecycleMainOneThousandHidden() = exercise(1000, false, "main")
++    @Test fun traceLifecycleMainOneThousandShown() = exercise(1000, true, "main")
++    @Test fun traceLifecycleMainTenThousandHidden() = exercise(10000, false, "main")
++    @Test fun traceLifecycleMainTenThousandShown() = exercise(10000, true, "main")
++    @Test fun traceLifecycleAltOneThousandHidden() = exercise(1000, false, "alt")
++    @Test fun traceLifecycleAltOneThousandShown() = exercise(1000, true, "alt")
++    @Test fun traceLifecycleAltTenThousandHidden() = exercise(10000, false, "alt")
++    @Test fun traceLifecycleAltTenThousandShown() = exercise(10000, true, "alt")
++    @Test fun traceLifecycleGuardOneThousandHidden() = exercise(1000, false, "guard")
++    @Test fun traceLifecycleGuardOneThousandShown() = exercise(1000, true, "guard")
++    @Test fun traceLifecycleGuardTenThousandHidden() = exercise(10000, false, "guard")
++    @Test fun traceLifecycleGuardTenThousandShown() = exercise(10000, true, "guard")
+ 
+     private val redrawSuffix = " 中文 e\u0301 👩‍💻 אבג 0123"
+     private fun redrawText(marker: String, row: Int): String =
+@@ -190,7 +268,7 @@
+         val mode = TerminalRenderMode.FULL_VIRTUAL
+         val tui = true
+         val setupOnly=InstrumentationRegistry.getArguments().getString("realClockSetupOnly")=="true"
+-        val case="physical$cohort-$size-${if(expectedIme) "shown" else "hidden"}";val launch=UUID.randomUUID().toString();val sandbox="real-clock-$launch"
++        val case="lifecycle$cohort-$size-${if(expectedIme) "shown" else "hidden"}";val launch=UUID.randomUUID().toString();val sandbox="real-clock-$launch"
+         val startup = startupReceipt()
+         val saved=runBlocking{settings.settingsFlow.first{!it.init}}
+         // One printf command, not24subprocesses/commands. Do not assume one syscall or PTY read:
+@@ -249,6 +327,7 @@
+         var scenario: ActivityScenario<TerminalPipelineTestActivity>?=null;var listener: ViewTreeObserver.OnDrawListener?=null
+         val observer=Observers();val thread=HandlerThread("real-clock-metrics").apply{start()};val handler=Handler(thread.looper)
+         val mirror=Observers();val mirrorThread=HandlerThread("frame-mirror-metrics").apply{start()};val mirrorHandler=Handler(mirrorThread.looper)
++        var perfetto: TraceCapture?=null
+         val samples=ArrayList<JSONObject>();val dumps=ArrayList<JSONObject>();val gates=ArrayList<JSONObject>();var attached=false
+         try {
+             // Establish the native accessibility connection BEFORE app startup/measurement.
+@@ -375,6 +454,9 @@
+                     .put("samples",JSONArray()).put("gates",JSONArray(gates)))
+                 return
+             }
++            // Scope the trace to the fully configured native page, not app startup/teardown.
++            perfetto=TraceCapture(case)
++            requireNotNull(perfetto).start()
+             for(round in 0..20) {
+                 val conditions=if(redraw) listOf("redraw") else when(round % 6) {
+                     0 -> listOf("refresh","sync","return")
+@@ -466,6 +548,8 @@
+                     } finally {input.recycle()}
+                 }
+             }
++            // Stop and prove completion BEFORE any ALT restoration, listener removal or Activity close.
++            val traceReceipt=requireNotNull(perfetto).stop()
+             // ALT does not expose its hidden MAIN document. Restore and prove it AFTER every
+             // frozen window has closed. Never label an unobserved per-window history as equal.
+             if(alternateCohort) {
+@@ -483,15 +567,15 @@
+             val draws=JSONArray().apply{observer.readDraws().forEach{put(JSONObject().put("ns",it.timeNs).put("drawingTimeMs",it.drawingTimeMs))}}
+             val metrics=JSONArray().apply{observer.readMetrics().forEach{put(JSONArray(it.toList()))}}
+             emitCase(JSONObject().put("case",case).put("mode",mode.id).put("tui",tui).put("launch",launch).put("pid",android.os.Process.myPid())
+-                .put("cohort",cohort).put("mainHistoryVerifiedAfterAllWindows",true).put("historyVerifiedAtBootNs",historyVerifiedAt)
++                .put("cohort",cohort).put("traceCapture",traceReceipt).put("mainHistoryVerifiedAfterAllWindows",true).put("historyVerifiedAtBootNs",historyVerifiedAt)
+                 .put("samples",JSONArray(samples)).put("gates",JSONArray(gates)).put("draws",draws).put("metrics",metrics).put("phaseDumps",JSONArray(dumps))
+                 .put("preparation",JSONArray(preparation)).put("startupReceipt",startup)
+                 .put("metricsRaw",JSONArray().apply{observer.readRawMetrics().forEach{put(JSONArray(it.toList()))}})
+                 .put("mirrorMetrics",JSONArray().apply{mirror.readMetrics().forEach{put(JSONArray(it.toList()))}})
+                 .put("mirrorRaw",JSONArray().apply{mirror.readRawMetrics().forEach{put(JSONArray(it.toList()))}})
+-                .put("collectorDiagnosisOnly",false).put("performanceMeasured",true).put("protocolId","terminal-physical-metrics-performance-v1")
++                .put("collectorDiagnosisOnly",true).put("performanceMeasured",false).put("protocolId","terminal-trace-lifecycle-v2")
+                 .put("completedTraversals",JSONArray().apply{observer.readTraversals().forEach{put(JSONArray(it.toList()))}})
+-                .put("clock", "CLOCK_BOOTTIME").put("historySize",size).put("baselineOnly",false).put("expectedIme",expectedIme).put("droppedFrameMetrics",observer.readMetrics().sumOf{it[9]}).put("passed",true))
++                .put("clock", "CLOCK_BOOTTIME").put("historySize",size).put("baselineOnly",true).put("expectedIme",expectedIme).put("droppedFrameMetrics",observer.readMetrics().sumOf{it[9]}).put("passed",true))
+         } catch(error: Throwable) {
+             runCatching{snapshotSetup("failure")}.onFailure {
+                 preparation.add(JSONObject().put("stage","failure-diagnostic").put("error",it.toString()))
+@@ -507,6 +591,8 @@
+             if(setupOnly)return
+             throw error
+         } finally {
++            val teardownStartedAt=SystemClock.elapsedRealtimeNanos()
++            if(perfetto?.stopped!=true)runCatching{perfetto?.stop()}.onFailure{emit("TRACE_STOP_FAILURE",JSONObject().put("case",case).put("error",it.toString()))}
+             try {
+                 scenario?.onActivity{activity->mounted=false;if(attached){listener?.let{activity.window.decorView.viewTreeObserver.removeOnDrawListener(it)};activity.window.removeOnFrameMetricsAvailableListener(observer);activity.window.removeOnFrameMetricsAvailableListener(mirror);attached=false}}
+                 scenario?.close()
+@@ -515,7 +601,8 @@
+                 try{process?.let{id->runBlocking{manager.closeInteractiveSession(id)};manager.removeProcessRecord(id)}}
+                 finally{runBlocking{settings.update{it.copy(terminalCommandPreferences=saved.terminalCommandPreferences,terminalRenderPreferences=saved.terminalRenderPreferences,
+                     terminalCustomTuiCommands=saved.terminalCustomTuiCommands,terminalFullGridCommands=saved.terminalFullGridCommands)}}}
+-                emit("CLEANUP",JSONObject().put("case",case).put("closed",process?.let{manager.getInteractiveTerminalEmulator(it)==null} ?: true).put("threadStopped",!thread.isAlive && !mirrorThread.isAlive))
++                emit("CLEANUP",JSONObject().put("case",case).put("closed",process?.let{manager.getInteractiveTerminalEmulator(it)==null} ?: true).put("threadStopped",!thread.isAlive && !mirrorThread.isAlive)
++                    .put("teardownStartedBootNs",teardownStartedAt).put("traceStopped",perfetto?.stopped==true))
+             }
+         }
+     }
