@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "suite": "terminal-geometry-c1-mechanism-v1",
+  "baseProductionSha": "306e0b80b508c961bc00f2d4b34a2688e5857a1a",
+  "baseTree": "ac97798416997a8230c9fa2a5a8569cf0ed0a911",
+  "protocolSha256": "387ca145acf8953fa700854312c266c73f4e0bf6b17d596f493797415fca5ba0",
+  "patchSha256": "7fca4f0a7a658bef6ca772b1fa0fd1093b379e1d0e102af5bd370a5b37ee2bd6",
+  "baselineTestsSha256": "984b4fef43095ceeca9ca4e3dff6d2cae434bf7df43bc0dc60bbe26bf2e36aaa",
+  "files": {
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalItemViewport.kt": {
+      "base": "862cbe1fb24f3189c379b5473144ec7639a49c816ea460e78d568331b9442096",
+      "candidate": "55a3d6573b13af37a93c72c4aaa012ab0614f7b519609d4129fb01e2b6667a3b",
+      "asset": "benchmarks/terminal-geometry-c1/candidate/TerminalItemViewport.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt": {
+      "base": "9f09dcf9d6f2b3769554273a1125974d30d54b51abdde2d2b56478e54dea86d8",
+      "candidate": "6586406327c6bfaf89b71fb50b2edd1d310cf5d7e013e523e1243874525e5802",
+      "asset": "benchmarks/terminal-geometry-c1/candidate/TerminalLazyItemMeasurements.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt": {
+      "base": "af61ec9dde39a31f11bea4588ca9ad689e09bfe01c7d2fe9588b3a96829bf117",
+      "candidate": "f7442455a0797f99f65cae94046cce798986b93e57afe14c256f211194d677bc",
+      "asset": "benchmarks/terminal-geometry-c1/candidate/TerminalViewportBinding.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt": {
+      "base": "4e8bcca180828756fa24e07993aed2e48d55d25683a34b9998bfd2b32a1efb85",
+      "candidate": "43909843c380cc696ca2d32c097c03e904dbe322a82475e7ed2d1201035e6740",
+      "asset": "benchmarks/terminal-geometry-c1/candidate/TerminalViewportController.kt"
+    }
+  }
+}

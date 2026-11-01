@@ -1,0 +1,128 @@
+--- a/app/src/main/java/me/rerere/rikkahub/data/container/TerminalItemViewport.kt
++++ b/app/src/main/java/me/rerere/rikkahub/data/container/TerminalItemViewport.kt
+@@ -13,6 +13,36 @@
+ internal data class TerminalVisibleRow(val index: Int, val topPx: Int, val heightPx: Int) {
+     init { require(index >= 0 && heightPx > 0) }
+     val bottomPx: Int get() = topPx + heightPx
++}
++
++/**
++ * One detached, validated visible-row vector. It owns ONLY immutable scalar rows, never a frame,
++ * Text, LazyList item, mutable builder or controller. It is not a cache across layout reads.
++ * Policy-only copies may reuse its geometry proof; a different frame row count cannot.
++ */
++internal class TerminalVisibleRowSnapshot private constructor(
++    private val values: Array<TerminalVisibleRow>,
++    private val frameRowCount: Int,
++) : AbstractList<TerminalVisibleRow>(), java.util.RandomAccess {
++    override val size: Int get() = values.size
++    override fun get(index: Int): TerminalVisibleRow = values[index]
++    fun validatedFor(rowCount: Int): Boolean = frameRowCount == rowCount
++
++    companion object {
++        fun capture(rows: List<TerminalVisibleRow>, rowCount: Int): TerminalVisibleRowSnapshot? {
++            if (rowCount < 0) return null
++            val values = rows.toTypedArray() // Never trust a caller's mutable list/backing array.
++            for (index in values.indices) {
++                val row = values[index]
++                if (row.index >= rowCount) return null
++                if (index > 0) {
++                    val previous = values[index - 1]
++                    if (previous.index >= row.index || previous.bottomPx > row.topPx) return null
++                }
++            }
++            return TerminalVisibleRowSnapshot(values, rowCount)
++        }
++    }
+ }
+ 
+ /**
+@@ -34,8 +64,10 @@
+ ) {
+     init {
+         require(viewportHeightPx >= 0 && cellHeightPx > 0 && tailPaddingPx >= 0)
+-        require(rows.zipWithNext().all { (a, b) -> a.index < b.index && a.bottomPx <= b.topPx })
+-        require(rows.all { it.index < frame.rows.size })
++        if (fullVirtual == null || rows !is TerminalVisibleRowSnapshot || !rows.validatedFor(frame.rows.size)) {
++            require(rows.zipWithNext().all { (a, b) -> a.index < b.index && a.bottomPx <= b.topPx })
++            require(rows.all { it.index < frame.rows.size })
++        }
+     }
+ 
+     val ready: Boolean get() = (!frame.isAlternateScreen || fullVirtual != null) && viewportHeightPx > 0 && rows.isNotEmpty() &&
+@@ -43,6 +75,13 @@
+         frame.historyLineIds.size == frame.historyCount &&
+         frame.screenLineIds.size == frame.rows.size - frame.historyCount &&
+         (fullVirtual == null || fullVirtual.screen.size == frame.screenLineIds.size)
++
++    /** Reuse only a proof-bearing FULL_VIRTUAL observation, never a generic/mutable caller list. */
++    fun withFullVirtualPolicy(policy: TerminalFullVirtualPolicy): TerminalItemViewport {
++        if (fullVirtual != null && rows is TerminalVisibleRowSnapshot && rows.validatedFor(frame.rows.size) &&
++            fullVirtual == policy) return this
++        return copy(fullVirtual = policy)
++    }
+ 
+     fun lineId(index: Int): Long = if (index < frame.historyCount) frame.historyLineIds[index]
+         else frame.screenLineIds[index - frame.historyCount]
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalLazyItemMeasurements.kt
+@@ -26,6 +26,7 @@
+ import me.rerere.rikkahub.data.container.TerminalItemViewport
+ import me.rerere.rikkahub.data.container.TerminalFullVirtualPolicy
+ import me.rerere.rikkahub.data.container.TerminalVisibleRow
++import me.rerere.rikkahub.data.container.TerminalVisibleRowSnapshot
+ import me.rerere.rikkahub.utils.TerminalEmulator
+ 
+ internal const val TERMINAL_LAZY_SCREEN_KEY = "terminal-active-screen"
+@@ -283,8 +284,9 @@
+             if (item.index >= frame.historyCount && policy.screen.rowHeight(item.index - frame.historyCount) != item.size) return null
+             rows.add(TerminalVisibleRow(item.index, item.offset - info.viewportStartOffset, item.size))
+         }
+-        if (rows.isEmpty() || rows.zipWithNext().any { (a, b) -> a.index >= b.index || a.bottomPx > b.topPx }) return null
+-        return TerminalItemViewport(frame, pass.metricKey, rows, info.viewportSize.height,
++        if (rows.isEmpty()) return null
++        val geometry = TerminalVisibleRowSnapshot.capture(rows, frame.rows.size) ?: return null
++        return TerminalItemViewport(frame, pass.metricKey, geometry, info.viewportSize.height,
+             cellHeightPx, tailPaddingPx, state.canScrollBackward, state.canScrollForward, policy)
+     }
+ 
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/container/TerminalViewportBinding.kt
+@@ -118,7 +118,7 @@
+                 metrics.imeVisible && (first == null || last == null ||
+                     last.bottomPx - first.topPx + metrics.tailPaddingPx > observation.viewportHeightPx)
+             }
+-            return controller.withRetainedItemScreenBottom(observation.copy(fullVirtual = policy.copy(avoidIme = exactAvoidance)))
++            return controller.withRetainedItemScreenBottom(observation.withFullVirtualPolicy(policy.copy(avoidIme = exactAvoidance)))
+         }
+         return measurements.read(current.pass, lazy, metrics.cellHeightPx, metrics.tailPaddingPx)
+     }
+--- a/app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt
++++ b/app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt
+@@ -228,7 +228,7 @@
+                 fullImeScreenBottom = listOfNotNull(fullImeScreenBottom,
+                     frame.terminalActiveBottomRow(full.preserveGrid)).maxOrNull()
+             }
+-            itemViewport = current.copy(fullVirtual = full.copy(retainedScreenBottom = fullImeScreenBottom))
++            itemViewport = current.withFullVirtualPolicy(full.copy(retainedScreenBottom = fullImeScreenBottom))
+             lastFullObservation = itemViewport
+         } else {
+             fullImeAnchor = null
+@@ -254,7 +254,7 @@
+     fun observeItemViewport(observation: TerminalItemViewport?) {
+         if (usesItemViewport) {
+             itemViewport = observation?.takeIf { it.frame === frame && it.ready }?.let {
+-                if (it.fullVirtual == null) it else it.copy(fullVirtual = it.fullVirtual.copy(retainedScreenBottom = fullImeScreenBottom))
++                if (it.fullVirtual == null) it else it.withFullVirtualPolicy(it.fullVirtual.copy(retainedScreenBottom = fullImeScreenBottom))
+             }
+             val current = itemViewport
+             val old = lastFullObservation
+@@ -267,7 +267,7 @@
+     fun withRetainedItemScreenBottom(observation: TerminalItemViewport): TerminalItemViewport {
+         val full = observation.fullVirtual ?: return observation
+         if (!full.ime || lastFullObservation?.frame?.screenGeneration != observation.frame.screenGeneration) return observation
+-        return observation.copy(fullVirtual = full.copy(retainedScreenBottom = fullImeScreenBottom))
++        return observation.withFullVirtualPolicy(full.copy(retainedScreenBottom = fullImeScreenBottom))
+     }
+ 
+     /** Temporary interaction ownership; AUTO/LOCK intent changes only if the selection actually scrolls. */

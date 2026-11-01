@@ -9,6 +9,18 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## C1当前任务：独立可见几何证明共享（优先于下方下一方向未开始记录）
+
+用户要求继续推进优化；从306独立创建benchmarks/terminal-geometry-c1，A1/B1/P2仍拒绝。
+4文件候选：TerminalItemViewport/TerminalLazyItemMeasurements/TerminalViewportBinding/TerminalViewportController。
+readFull仍逐次读取和校验live item key/Text/font/height/physical geometry；不按LazyListLayoutInfo身份缓存坐标。
+新private scalar-array TerminalVisibleRowSnapshot仅绑定行数/顺序/不重叠证明，不持有frame/Text/UI，普通列表保持原验证。
+策略未变的FULL proof observation可原样返回；策略变化创建新observation但复用已冻结几何。controller intent/IME/单writer/取消/测量通知时序不改。
+机制协议528Release JVM=504+24，44真实布局组件=37+7，17新场景；没有性能终点、不含老paired方法、不做最终182或正式Release。
+identity4b7e565a88d3f531c7c261ec9e3cb1f9ec2bfb3bf2e981d653863591fc9a4ab9，17项本地源码/协议检查通过。
+workflow_call terminal-geometry-c1.yml由terminal-pipeline-tests.yml suite=geometryC1派发；恢复目录/workspace/terminal-review/full-virtual-geometry-c1。
+生产仍306/main ac977984。后续性能采样前单独验证取证生命周期，不放宽历史B1解析器或补采B1。
+
 ## B1性能V1最终结论（优先于下方运行中/尚未验证记录）
 
 唯一性能run41300006846/sourcea5ed6075853a155028c213a015de500ddc07672f已failure并结案，不补采。

@@ -1,0 +1,94 @@
+name: Visible Geometry C1 Mechanism
+'on':
+  workflow_call: null
+permissions:
+  contents: read
+  actions: read
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        lfs: true
+        fetch-depth: 0
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - uses: gradle/actions/setup-gradle@v4
+    - name: Check exact306 source and candidate boundaries
+      run: 'python3 -B -m unittest discover -s .github/scripts -p test_terminal_geometry_c1.py
+
+        python3 -B .github/scripts/terminal-geometry-c1.py guard'
+    - name: Run original504 and candidate24 Release JVM methods once
+      run: 'chmod +x gradlew
+
+        python3 -B .github/scripts/terminal-geometry-c1.py unit'
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: terminal-geometry-c1-jvm-${{ github.sha }}-${{ github.run_attempt }}
+        path: 'artifacts/terminal-geometry-c1/
+
+          artifacts/terminal-validation/'
+        if-no-files-found: error
+        retention-days: 30
+  component:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        lfs: true
+        fetch-depth: 0
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '21'
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - uses: gradle/actions/setup-gradle@v4
+    - name: Build exact candidate in Release component fixture
+      run: 'chmod +x gradlew
+
+        python3 -B .github/scripts/terminal-geometry-c1.py fixture-build'
+    - name: Enable KVM
+      run: 'echo ''KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"''
+        | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+
+        sudo udevadm control --reload-rules
+
+        sudo udevadm trigger --name-match=kvm
+
+        '
+    - name: Verify44real-layout component methods with animations intact
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 34
+        arch: x86_64
+        target: default
+        profile: Nexus 6
+        cores: 2
+        ram-size: 4096M
+        heap-size: 768M
+        disable-animations: false
+        emulator-boot-timeout: 900
+        emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          -camera-back none
+        script: python3 -B .github/scripts/terminal-geometry-c1.py device
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: terminal-geometry-c1-component-${{ github.sha }}-${{ github.run_attempt
+          }}
+        path: 'artifacts/terminal-geometry-c1/
+
+          artifacts/terminal-validation/'
+        if-no-files-found: error
+        retention-days: 30

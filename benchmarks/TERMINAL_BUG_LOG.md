@@ -66,3 +66,19 @@ changes separately. Performance rejection by itself is not proof of a specific s
   backoff; retains verified caches and bounded206/Content-Range/CRC/SHA checks. No timing code changed.
 - Validation: resumed only the same metadata byte ranges; all195additional provenance members retrieved,
   including96successful trace start/stop/wait/pull receipts. No full ZIP/APK download or new device run.
+
+## RISK-GEOMETRY-C1-001 — live LazyList items are not immutable cache keys [avoided before sampling]
+- Source: inspected Compose1.11.0-alpha06 `LazyListMeasureResult.copyWithScrollDeltaWithoutRemeasure`
+  calls `LazyListMeasuredItem.applyScrollDelta` and shares the visibleItemsInfo list. Individual offsets mutate.
+- A retained layout/item reference is not immutable coordinate evidence. This was found during C1
+  design inspection, not an observed306production failure. No layout-identity cache was introduced.
+- C1 keeps every live readFull key/Text/height/physical check and detaches a private scalar array.
+  Only that immutable geometry's validation proof is shared during policy copies; no across-read reuse.
+- Validation: new source guard and JVM mutation/oracle tests; real component synchronous-scroll,
+  metric/key/Text/height rejection, MAIN/ALT/FIFO and session-release tests await C1 CI.
+
+## BUG-HARNESS-C1-002 — copied mechanism harness retained its old identity pin [fixed before dispatch]
+- During local scaffold validation, `terminal-geometry-c1.py guard` stopped with `C1 identity changed`.
+- The scripted replacement did not match the old literal, leaving the prior harness identity pin.
+- Rebound exactly once to the new C1 identity JSON SHA256; guard and17host tests pass. No CI run,
+  Android build, frozen candidate mutation or sample was produced under the wrong pin.

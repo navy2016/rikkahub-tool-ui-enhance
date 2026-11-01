@@ -1,0 +1,217 @@
+package me.rerere.rikkahub.data.container
+
+import me.rerere.rikkahub.utils.TerminalEmulator
+
+/** Item-native intent. No synthetic total height or prefix-height estimate is a scroll target. */
+internal sealed interface TerminalItemScrollTarget {
+    data object Top : TerminalItemScrollTarget
+    data object Follow : TerminalItemScrollTarget
+    data class Anchor(val anchor: ViewportAnchor, val capturedRowHeightPx: Int) : TerminalItemScrollTarget
+}
+
+/** Measured row coordinates relative to the visible viewport, NOT absolute transcript pixels. */
+internal data class TerminalVisibleRow(val index: Int, val topPx: Int, val heightPx: Int) {
+    init { require(index >= 0 && heightPx > 0) }
+    val bottomPx: Int get() = topPx + heightPx
+}
+
+/**
+ * One detached, validated visible-row vector. It owns ONLY immutable scalar rows, never a frame,
+ * Text, LazyList item, mutable builder or controller. It is not a cache across layout reads.
+ * Policy-only copies may reuse its geometry proof; a different frame row count cannot.
+ */
+internal class TerminalVisibleRowSnapshot private constructor(
+    private val values: Array<TerminalVisibleRow>,
+    private val frameRowCount: Int,
+) : AbstractList<TerminalVisibleRow>(), java.util.RandomAccess {
+    override val size: Int get() = values.size
+    override fun get(index: Int): TerminalVisibleRow = values[index]
+    fun validatedFor(rowCount: Int): Boolean = frameRowCount == rowCount
+
+    companion object {
+        fun capture(rows: List<TerminalVisibleRow>, rowCount: Int): TerminalVisibleRowSnapshot? {
+            if (rowCount < 0) return null
+            val values = rows.toTypedArray() // Never trust a caller's mutable list/backing array.
+            for (index in values.indices) {
+                val row = values[index]
+                if (row.index >= rowCount) return null
+                if (index > 0) {
+                    val previous = values[index - 1]
+                    if (previous.index >= row.index || previous.bottomPx > row.topPx) return null
+                }
+            }
+            return TerminalVisibleRowSnapshot(values, rowCount)
+        }
+    }
+}
+
+/**
+ * One completed layout, stamped with the exact rendered frame and layout identity. A caller must
+ * reject LazyList items whose keys/indices still describe the previous frame. Only currently
+ * visible history and (at most) the complete physical screen belong here, not all visited rows.
+ * [layoutKey] changes on font/density/direction/backend changes, not ordinary scrolling/output.
+ */
+internal data class TerminalItemViewport(
+    val frame: TerminalEmulator.RenderFrame,
+    val layoutKey: Any,
+    val rows: List<TerminalVisibleRow>,
+    val viewportHeightPx: Int,
+    val cellHeightPx: Int,
+    val tailPaddingPx: Int,
+    val canScrollBackward: Boolean,
+    val canScrollForward: Boolean,
+    val fullVirtual: TerminalFullVirtualPolicy? = null,
+) {
+    init {
+        require(viewportHeightPx >= 0 && cellHeightPx > 0 && tailPaddingPx >= 0)
+        if (fullVirtual == null || rows !is TerminalVisibleRowSnapshot || !rows.validatedFor(frame.rows.size)) {
+            require(rows.zipWithNext().all { (a, b) -> a.index < b.index && a.bottomPx <= b.topPx })
+            require(rows.all { it.index < frame.rows.size })
+        }
+    }
+
+    val ready: Boolean get() = (!frame.isAlternateScreen || fullVirtual != null) && viewportHeightPx > 0 && rows.isNotEmpty() &&
+        frame.historyCount in 0..frame.rows.size && frame.screenStartRow == frame.historyCount &&
+        frame.historyLineIds.size == frame.historyCount &&
+        frame.screenLineIds.size == frame.rows.size - frame.historyCount &&
+        (fullVirtual == null || fullVirtual.screen.size == frame.screenLineIds.size)
+
+    /** Reuse only a proof-bearing FULL_VIRTUAL observation, never a generic/mutable caller list. */
+    fun withFullVirtualPolicy(policy: TerminalFullVirtualPolicy): TerminalItemViewport {
+        if (fullVirtual != null && rows is TerminalVisibleRowSnapshot && rows.validatedFor(frame.rows.size) &&
+            fullVirtual == policy) return this
+        return copy(fullVirtual = policy)
+    }
+
+    fun lineId(index: Int): Long = if (index < frame.historyCount) frame.historyLineIds[index]
+        else frame.screenLineIds[index - frame.historyCount]
+
+    fun anchorAt(row: TerminalVisibleRow, clippedPx: Int): ViewportAnchor = ViewportAnchor(
+        lineId(row.index), clippedPx.coerceIn(0, row.heightPx - 1),
+        if (row.index >= frame.historyCount) frame.screenGeneration else null,
+        if (row.index < frame.historyCount) frame.historyGeneration else null,
+    )
+
+    /** Padding below the final row retains the last real row, never invents an extra line ID. */
+    fun capture(): TerminalItemScrollTarget.Anchor? {
+        if (!ready) return null
+        val row = rows.firstOrNull { it.bottomPx > 0 } ?: rows.last()
+        return TerminalItemScrollTarget.Anchor(anchorAt(row, -row.topPx), row.heightPx)
+    }
+
+    val atTop: Boolean get() = !canScrollBackward
+
+    /** The existing fast-fling tolerance can be proved only when the first row is measured. */
+    fun nearTop(): Boolean = atTop || rows.firstOrNull { it.index == 0 }?.let {
+        -it.topPx <= TERMINAL_EDGE_THRESHOLD_PX
+    } == true
+
+    /** Same semantic content bottom as the eager controller, not necessarily the structural tail. */
+    val followRowIndex: Int? get() = if (fullVirtual?.tui == true) {
+        val last = maxOf(frame.terminalActiveBottomRow(fullVirtual.preserveGrid) ?: -1,
+            fullVirtual.retainedScreenBottom ?: -1).coerceAtMost(frame.screenLineIds.lastIndex)
+        frame.screenStartRow + last.coerceAtLeast(0)
+    } else frame.terminalFollowRowIndex()
+
+    /** A visible physical row plus exact screen-only prefixes gives the origin even if row0 is offscreen. */
+    val physicalScreenTop: Int? get() {
+        val policy = fullVirtual ?: return null
+        val visible = rows.firstOrNull { it.index >= frame.historyCount } ?: return null
+        return visible.topPx - policy.screen.top(visible.index - frame.historyCount)
+    }
+
+    fun measuredRow(index: Int): TerminalVisibleRow? = rows.firstOrNull { it.index == index } ?: run {
+        val policy = fullVirtual ?: return@run null
+        val origin = physicalScreenTop ?: return@run null
+        val screenIndex = index - frame.historyCount
+        if (screenIndex !in 0 until policy.screen.size) null else TerminalVisibleRow(index,
+            origin + policy.screen.top(screenIndex), policy.screen.rowHeight(screenIndex))
+    }
+
+    fun itemIndex(rowIndex: Int): Int = if (fullVirtual != null) rowIndex else minOf(rowIndex, frame.historyCount)
+
+    fun followDelta(): Int? {
+        if (fullVirtual?.tui == true && frame.terminalActiveBottomRow(fullVirtual.preserveGrid) == null &&
+            fullVirtual.retainedScreenBottom == null) return physicalScreenTop
+        val index = followRowIndex ?: return null
+        val row = measuredRow(index) ?: return null
+        val bottomDelta = row.bottomPx + tailPaddingPx - viewportHeightPx
+        return if (fullVirtual?.tui == true) maxOf(physicalScreenTop ?: return null, bottomDelta) else bottomDelta
+    }
+
+    fun nearFollow(): Boolean {
+        if (!ready) return false
+        val index = followRowIndex ?: return atTop
+        val delta = followDelta()
+        return if (delta != null) delta <= cellHeightPx * 2
+        else rows.first().index > index // Already below the semantic bottom, including blank grid rows.
+    }
+
+    fun isSatisfied(target: TerminalItemScrollTarget): Boolean {
+        if (!ready) return false
+        val delta = when (target) {
+            TerminalItemScrollTarget.Top -> return atTop
+            TerminalItemScrollTarget.Follow -> {
+                if (followRowIndex == null) return atTop
+                followDelta() ?: return false
+            }
+            is TerminalItemScrollTarget.Anchor -> {
+                val row = rows.firstOrNull { lineId(it.index) == target.anchor.lineId } ?: return false
+                row.topPx + terminalScaledItemClip(target.anchor.clippedTopPx, target.capturedRowHeightPx, row.heightPx)
+            }
+        }
+        // A semantic bottom above the viewport bottom still needs a BACKWARD correction even at
+        // the structural end (e.g. an active screen with blank rows). Clamp only in the blocked direction.
+        return delta == 0 || (delta < 0 && !canScrollBackward) || (delta > 0 && !canScrollForward)
+    }
+
+    /**
+     * An awaited scroll may synchronously publish its new measured offsets. Only that fresh read
+     * under the SAME immutable frame/font/viewport may finish without a frame yield. The executor
+     * separately verifies that its effect was not cancelled. This is not proof of GPU presentation.
+     */
+    fun confirmsScrollFrom(before: TerminalItemViewport, target: TerminalItemScrollTarget): Boolean =
+        ready && before.ready && frame === before.frame && layoutKey == before.layoutKey &&
+            viewportHeightPx == before.viewportHeightPx && cellHeightPx == before.cellHeightPx &&
+            tailPaddingPx == before.tailPaddingPx && fullVirtual == before.fullVirtual && isSatisfied(target)
+
+    // Frame identity is the contract. Do not structurally compare a 10k-row frame on every scroll.
+    override fun equals(other: Any?): Boolean = other is TerminalItemViewport && frame === other.frame &&
+        layoutKey == other.layoutKey && rows == other.rows && viewportHeightPx == other.viewportHeightPx &&
+        cellHeightPx == other.cellHeightPx && tailPaddingPx == other.tailPaddingPx &&
+        canScrollBackward == other.canScrollBackward && canScrollForward == other.canScrollForward && fullVirtual == other.fullVirtual
+
+    override fun hashCode(): Int = 31 * System.identityHashCode(frame) + rows.hashCode()
+}
+
+/** Always scale from the original capture, preventing drift after repeated font-size changes. */
+internal fun terminalScaledItemClip(clippedPx: Int, capturedHeightPx: Int, currentHeightPx: Int): Int {
+    require(currentHeightPx > 0)
+    val originalHeight = capturedHeightPx.takeIf { it > 0 } ?: currentHeightPx
+    return ((clippedPx.coerceAtLeast(0).toLong() * currentHeightPx + originalHeight / 2) / originalHeight)
+        .coerceIn(0L, currentHeightPx.toLong() - 1).toInt()
+}
+
+/** Identity policy shared in spirit with reduceViewport; no cell-height arithmetic is used here. */
+internal fun resolveTerminalItemAnchor(
+    frame: TerminalEmulator.RenderFrame,
+    anchor: ViewportAnchor,
+    lookup: TerminalViewportLineLookup,
+): ViewportAnchor? {
+    val index = lookup.find(frame, frame.rows.size, anchor.lineId)
+    val historyChanged = anchor.screenGeneration == null && anchor.historyGeneration != null &&
+        anchor.historyGeneration != frame.historyGeneration
+    if (index >= 0) {
+        if (index < frame.historyCount) {
+            if (historyChanged) return null
+            return anchor.copy(screenGeneration = null, historyGeneration = frame.historyGeneration)
+        }
+        if (anchor.historyGeneration != null ||
+            (anchor.screenGeneration != null && anchor.screenGeneration != frame.screenGeneration)
+        ) return null
+        return anchor.copy(screenGeneration = frame.screenGeneration, historyGeneration = null)
+    }
+    if (anchor.screenGeneration != null || historyChanged) return null
+    val replacement = nearestHistoryLineId(frame.historyLineIds, anchor.lineId) ?: return null
+    return anchor.copy(lineId = replacement, screenGeneration = null, historyGeneration = frame.historyGeneration)
+}
