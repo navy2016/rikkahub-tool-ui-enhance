@@ -28,6 +28,10 @@ prof需自身DEX校验+完整符号等价，profilem仍相等。历史pair verif
 唯一typed性能run41281700735已经派发；尚未宣称完成或通过，当前状态以typed-performance-dispatch.json及回执为准。
 原6DEX/42431方法/7799类符号JSON取回后逐项相等；自身DEX二进制校验在CI完成，本地没有APK。
 诊断报告benchmarks/results/main-width-a1-profile-build-diagnosis.md。不得重跑原失败、不得重复派发当前2016矩阵。
+typed run41281700735的双包构建/新资格已success，最新已进入`Run four paired launches with20formal windows per condition`。
+900s自动观察窗口已结束，不开启后台或重置轮询窗口；当前计时结果未取回，窗口完成数未知，不宣称性能通过。
+后续先读取typed-performance-status-snapshot.json/当前run，再收集同次原件；workspace verify_experiment.py已绑定0fc3143/41281700735，
+支持typed profile资产核验，但尚未在完整性能原件上执行。只有这一性能run待完成，生产仍306。
 
 用户在306后续方案／完整检查点之后要求继续，现推进A1：独立MAIN历史宽度生命周期的候选及机制验证。
 范围benchmarks/terminal-main-width-lifecycle/，新workflow terminal-main-width-lifecycle.yml；生产仍306/main ac977984。
