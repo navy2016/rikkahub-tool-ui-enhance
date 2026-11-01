@@ -20,6 +20,10 @@ typed profile资格采样前固定，不改写APK/旧guard；读取同次B1机�
 52项本地源码/协议检查通过。工作目录/workspace/terminal-review/full-virtual-physical-metrics-performance-v1，按dispatch/receipt恢复，禁止重复派发。
 发现bug记录benchmarks/TERMINAL_BUG_LOG.md；当前已修复新驱动冻结前IME历史快照先后风险，源码顺序守卫通过，设备验证待完成。
 生产仍306/main ac977984；性能尚无结果，不采用、不正式Release。
+执行源码a5ed6075853a155028c213a015de500ddc07672f，唯一性能run41300006846已派发，当前为in_progress。
+已确认原B1机制先决条件和双目标Release派生构建/typed资格步骤success，进入固定3360窗口实验；实际完成窗口数尚未知。
+900s自动观察窗口已结束，不重置窗口/不后台监控/不重复dispatch；后续读取该run当前状态和同次原件。
+工作目录dispatch.json/current-status.json/wait.json为恢复入口，verify_experiment.py已绑定该source/run、支持8槽各420窗口，尚未验证原始性能数据。
 
 ## B1当前任务（优先于下方B未开始记录）
 
