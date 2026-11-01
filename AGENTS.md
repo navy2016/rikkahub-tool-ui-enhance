@@ -13,6 +13,12 @@
 不放宽旧guard，不把机制计数当性能，不启动新正式Release；通过后才讨论独立端到端性能和最终采用。
 工作目录/workspace/terminal-review/full-virtual-main-width-lifecycle/；具体run和结果以新回执为准。
 
+A1机制已完成：候选冻结c4113db，执行源码d9980abe1e974220d3d7726d5e14a1d3fc98eb55，run41275351431 success。
+533 Release JVM（原504+新29）、20真实字体组件（新5+原15）、37生命周期点全部通过且原XML/log/annotation离线复核。
+原包经relay41276147317/41276112987取回；没有新的性能窗口或正式APK。生产仍306/main ac977984，A1仅benchmarks候选。
+报告benchmarks/results/main-width-lifecycle-a1-mechanism.md；身份f417e3fb3fe81d92fb4846f43b4e73ab225cf64b15594ed677ae54a944eaa422。
+下阶段才冻结306↔A1端到端性能（真实PTY/完整buffer与系统身份），不误用旧55守卫/旧P2成绩，不直接采用或叠B/C。
+
 用户在全部性能/最终回归证据后明确回复“好的，继续”，现正式采用bfa2990冻结的帧内安全发布两文件：
 ProcessSessionPage.kt hash ad418a9c4fdda6bd7d6d161807ca9607e2ea37f2c34a1deb9f721c57d32a1eea；
 新增TerminalInFramePublication.kt hash24ab5bc0d4c922bee666bdbef894aa83ff0d4c58f78a74103e1c980c9f3f5bc4。
