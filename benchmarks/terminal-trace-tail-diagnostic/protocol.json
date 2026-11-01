@@ -1,0 +1,96 @@
+{
+  "id": "terminal-trace-tail-diagnostic-v1",
+  "stage": "no-apk-producer-tail-diagnosis",
+  "baseProductionSha": "306e0b80b508c961bc00f2d4b34a2688e5857a1a",
+  "baseTree": "ac97798416997a8230c9fa2a5a8569cf0ed0a911",
+  "parentSourceSha": "958beb8d01bbd52137fd354c5ac1c9634c517db4",
+  "originalV3Run": 41343554975,
+  "originalV3ResultSha256": "3e863d05b4718c4a79ba80154580ed31c7855908135f178baf3423655136a2d8",
+  "originalConfigSha256": "e379b818afffb31c1b61cb4d8a8a8550f14da2fbce2a0d4abd0828674ecaa374",
+  "periodicConfigSha256": "5bacac8388736263b2ac3d6c57da0c1ee53198a2ae70674e60f4a70435c74ee2",
+  "expectedFingerprint": "Android/sdk_phone64_x86_64/emu64x:14/UE1A.230829.036.A1/11228894:userdebug/test-keys",
+  "expectedPerfetto": "Perfetto v34.0 (N/A)",
+  "order": [
+    "baseline",
+    "wait",
+    "periodic",
+    "composite",
+    "composite",
+    "periodic",
+    "wait",
+    "baseline"
+  ],
+  "targetPackage": "com.android.settings",
+  "systemAction": "android.settings.SETTINGS",
+  "setup": {
+    "forceStopBeforeEach": true,
+    "initialSettleMs": 1500,
+    "swipe": [
+      720,
+      2100,
+      720,
+      650,
+      200
+    ],
+    "afterSwipeQuietMs": 500
+  },
+  "cut": {
+    "clock": "CLOCK_BOOTTIME",
+    "source": "/proc/uptime",
+    "resolutionNs": 10000000,
+    "rule": "only complete-lifetime timestamps strictly below floor-bound can count as pre-cut; cut is diagnostic not a terminal input endpoint"
+  },
+  "variants": {
+    "baseline": {
+      "flushPeriodMs": 0,
+      "preStopQuietMs": 50,
+      "pulses": 0
+    },
+    "wait": {
+      "flushPeriodMs": 0,
+      "preStopQuietMs": 1050,
+      "pulses": 0
+    },
+    "periodic": {
+      "flushPeriodMs": 250,
+      "preStopQuietMs": 1050,
+      "pulses": 0
+    },
+    "composite": {
+      "flushPeriodMs": 0,
+      "prePulseQuietMs": 50,
+      "pulses": 8,
+      "pulseIntervalMs": 50,
+      "postPulseQuietMs": 600,
+      "command": [
+        "service",
+        "call",
+        "SurfaceFlinger",
+        "1004"
+      ],
+      "requiredReply": "Result: Parcel(NULL)"
+    }
+  },
+  "stop": {
+    "signal": "INT",
+    "identity": "PID,comm,start ticks",
+    "wait": "race-safe proc disappearance",
+    "polls": 100,
+    "intervalMs": 100
+  },
+  "invariants": {
+    "noApkBuildOrInstall": true,
+    "noLocalCompilation": true,
+    "noTerminalTimingWindows": true,
+    "noCandidate": true,
+    "noRootOrSelinuxChanges": true,
+    "noNewEndpointsForOldV3": true,
+    "noQualificationOrPerformanceAcceptance": true,
+    "noRetriesOrReplacementCases": true,
+    "noHistoricalParserMutation": true,
+    "allRawTracesAndFailuresRetained": true
+  },
+  "analysis": "diagnostic generic system-activity token/cookie graph only; before-cut final-matching UI token and all pre-cut records kept; post-cut work never substituted for an old terminal endpoint",
+  "diagnosticConfigChange": "Only add com.android.settings to existing atrace_apps for a built-in activity UI-token anchor; no app build/install or V3 config change",
+  "baselineConfigSha256": "6098913e0fc0dbdcf6f1b3780a48f802a297e33e44fda3322d0a80ddc7563ff2"
+}

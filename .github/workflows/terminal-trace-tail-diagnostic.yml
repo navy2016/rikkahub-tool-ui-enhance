@@ -1,0 +1,29 @@
+name: Android34 FrameTimeline Tail Diagnostic
+'on':
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - name: Verify fixed no-APK scope and strict cut identity guards
+        run: |
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_trace_tail_diagnostic.py
+          python3 -B .github/scripts/terminal-trace-tail-diagnostic.py guard
+      - name: Run eight fixed system-activity tail diagnostics without an APK
+        run: python3 -B .github/scripts/terminal-trace-tail-diagnostic.py run
+      - name: Keep every raw trace and failed case without qualification or performance claims
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-trace-tail-diagnostic-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/terminal-trace-tail-diagnostic/
+          if-no-files-found: error
+          retention-days: 30

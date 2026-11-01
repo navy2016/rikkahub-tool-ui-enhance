@@ -9,6 +9,16 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## 当前独立无APK尾部诊断（V3已结案，不是补采）
+
+冻结benchmarks/terminal-trace-tail-diagnostic：baseline/wait/periodic/composite正反各一次，8场景；内置Settings，无app编译/安装。
+协议e2a08b5f2ba50403f0865d21684afeebd9e1d463ab0fafcdace9daef70701e21；原配置只加Settings atrace，periodic另加250msflush。
+诊断切点使用/proc/uptime的10ms区间；只认可严格早于floor的同一UI token/Surface/Display链，后续帧/超出切点终点不作替代。
+composite切点后请求8次SurfaceFlinger1004合成，无权限或非预定ACK则失败，不提权；其他分支仅等待。
+SIGINT后PID/comm/start ticks一致及proc消失，所有失败/原trace保留；16项本地边界测试通过。
+通过terminal-pipeline-tests.yml suite=traceTailDiagnostic派发；恢复目录/workspace/terminal-review/full-virtual-trace-tail-diagnostic。
+只诊断生产者交付，不宣称终端资格/性能/采用；不改V3、C1或任何历史解析器/门槛。按唯一dispatch恢复。
+
 ## V3最终结论（优先于所有下方running／pending记录）
 
 唯一原生资格41343554975/sourcea5ccea022cd53f2a6595e6e84887f6899ee9f39d已failure，840窗口/24原轨迹/2launch全部离线复算完毕。
