@@ -17,3 +17,15 @@
 
 性能证据范围仍是API34/KVM/SwiftShader测试环境，不承诺实机同幅提速；正式APK是否改善仍待用户实机复核。
 本文不是已完成Release构建或已在用户设备安装的声明；具体构建/校验状态在独立采用回执记录。
+
+## 正式采用与包核验结果
+
+- 采用提交`306e0b80b508c961bc00f2d4b34a2688e5857a1a`，生产树`ac97798416997a8230c9fa2a5a8569cf0ed0a911`。
+- Release `41262430389`成功；独立签名/ZIP/ABI/源码身份/参考包比较 `41268182051`成功。
+- APK SHA256 `778f3c3aacee978d32fc00b7bb8bbcf5bb9bcda4be6c1f9cf504df8f6f9a5e18`，83,769,495字节。
+- 包名`me.rerere.rikkahub.dev.next.mod`，2.1.62/151，非debuggable，仅arm64-v8a。
+- 与55原正式包相比签名、manifest身份、字体、native和资源组一致，依赖版本元数据无变化。
+- DEX、baseline profile/source revision元数据变化；Web构建产物有11项增删/修改，Web源码未改，不能宣称整个APK仅有两项二进制变化。
+- 无本地APK下载或附件，无用户实机安装/性能确认。本次CI收益不是实机保证。
+
+用户随后要求分析后续全虚拟优化方案。本次仅给方案，不因提出A/B/C方向自动实施新候选或重跑已拒绝P2。

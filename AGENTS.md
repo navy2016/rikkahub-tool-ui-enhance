@@ -15,6 +15,15 @@ ProcessSessionPage.kt hash ad418a9c4fdda6bd7d6d161807ca9607e2ea37f2c34a1deb9f721
 历史实验脚本仍按其原基线守卫：不要放宽guard以在采用后的源码重跑历史试验；原件包与旧结果均不改。
 工作目录/workspace/terminal-review/inframe-adoption；正式构建/核验状态必须以该目录的新run回执为准，不能仅凭采用宣称APK已完成。
 
+正式采用提交306e0b80b508c961bc00f2d4b34a2688e5857a1a，main tree ac97798416997a8230c9fa2a5a8569cf0ed0a911。
+Release run41262430389及独立核验41268182051均success；APK SHA778f3c3aacee978d32fc00b7bb8bbcf5bb9bcda4be6c1f9cf504df8f6f9a5e18。
+签名/包身份/arm64/字体/native/资源及依赖元数据与55对照一致；DEX、profile、source metadata及部分Web构建产物不同，
+不声称整包仅两项二进制差异。APK未下载本地或作为附件，用户设备实测尚未执行。
+用户现要求分析相关代码并给出后续全虚拟优化方案；本轮仅分析，不实施新候选或新设备采样。
+方案/workspace/terminal-review/full-virtual-next-plan/plan.md，source-index.json给出306源码hash/定位。
+建议顺序：A独立MAIN历史宽度生命周期(不复活P2)；B复用物理行宽高测量产物；C已完成几何复用；D证据驱动快照预算；E选择/复制局部。
+同次480原件candidate侧复析：10k返回测宽墙钟并集246–279ms，提交315–339ms；非CPU/不可相加，未新增性能样本。
+
 用户要求从本地已验证的 `a79e7b693d42f22a086959e9fac0525b88515663` 建立独立优化线。
 当前使用 `opt/terminal-verified-a79e7b6`；推送和 workflow dispatch 均须明确指定此分支。
 原远端 `fix/terminal-viewport-semantic-reducer` 已有其他新提交，不自动 pull、merge、rebase 或覆盖它。
