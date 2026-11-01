@@ -26,7 +26,7 @@
       "asset": "benchmarks/terminal-physical-metrics-b1/candidate/TerminalViewportBinding.kt"
     }
   },
-  "protocolSha256": "a0ce1c2e9fbb385c6be0f3a7b7b3aac45997b129962b48190d84fc25ca3e06ae",
+  "protocolSha256": "540761e47f28647d4bc85680871bb7908f85db7e4d5d9d2fd813a3fe71402ed3",
   "patchSha256": "c92d2f1c9e597be4f6d1392c2aa7795d6bfd7c8e61f0c8d8d6eb5b9517e16452",
   "baselineTestsSha256": "984b4fef43095ceeca9ca4e3dff6d2cae434bf7df43bc0dc60bbe26bf2e36aaa"
 }

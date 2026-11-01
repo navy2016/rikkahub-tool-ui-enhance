@@ -16,6 +16,9 @@
 机制范围原504+新25=529Release JVM；原21+新7=28真实字体组件，24场景。无性能终点，不自动采用或Release。
 本地18项Python守卫通过；Kotlin/Android尚未运行。通过既有terminal-pipeline-tests.yml suite=physicalMetricsB1调用新workflow_call。
 工作目录/workspace/terminal-review/full-virtual-physical-metrics-b1；后续状态以该目录dispatch/receipt为准，不重复派发。
+首轮6b831072/41294632502已failure：28真实字体组件/24场景通过；JVM新FIFO测试误写shared=1，实际应2。
+306原hiddenCursorColumnReservationChangesBothMovedAndNewRows已证明：隐藏光标尾空格移除+新行尾空格使两行变化。
+仅修正该新测试并增加行ID/前后Text/4reused断言；五候选源码和设备测试字节不变。原失败保留，新SHA重新验证机制，不是性能补采。
 
 ## A1最终结论（优先于下方性能运行中记录）
 

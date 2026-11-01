@@ -792,7 +792,7 @@
   ],
   "candidateUnit": {
     "file": "app/src/test/java/me/rerere/rikkahub/data/container/TerminalPhysicalMetricsTest.kt",
-    "sha256": "cb1012eaa330c4380a571eaf0252e12356e1a2b29d833cd2bff49edd747c4f26",
+    "sha256": "a74b7653bc1f6c6ff7bf71390318d0eaa27184f450e69c7d54cb4e95c4ef6577",
     "classname": "me.rerere.rikkahub.data.container.TerminalPhysicalMetricsTest",
     "methods": [
       "originalApiStillMeasuresEveryColdScreenRow",
@@ -954,5 +954,14 @@
       "parser/scheduler changes",
       "dependency changes"
     ]
+  },
+  "testCorrection": {
+    "previousSourceSha": "6b83107251c9fcde4f1f77976243a139de3e3239",
+    "previousRun": 41294632502,
+    "previousIdentity": "a7871aa871fc2508a654dc60aa1c07e90ca48626a9b29d877cbee6d45f5f75c1",
+    "previousProtocol": "a0ce1c2e9fbb385c6be0f3a7b7b3aac45997b129962b48190d84fc25ca3e06ae",
+    "candidateSourceBytesUnchanged": true,
+    "deviceTestBytesUnchanged": true,
+    "reason": "New JVM FIFO assertion had assumed hidden cursor at column zero, but fixture leaves it at end. Assert removal of old cursor blank, new append blank,2shared and4reused rows; terminal semantics unchanged."
   }
 }

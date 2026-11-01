@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 ROOT=Path(__file__).resolve().parents[2]
 BASE=ROOT/'benchmarks/terminal-physical-metrics-b1'
 OUT=ROOT/'artifacts/terminal-physical-metrics-b1'
-IDENTITY_SHA='a7871aa871fc2508a654dc60aa1c07e90ca48626a9b29d877cbee6d45f5f75c1'
+IDENTITY_SHA='c8c2475077b82b23afad953a7b038e2f060739d9ac2a960ee6908a437c29be9d'
 def digest(raw):return hashlib.sha256(raw).hexdigest()
 def require(ok,message):
     if not ok:raise ValueError(message)

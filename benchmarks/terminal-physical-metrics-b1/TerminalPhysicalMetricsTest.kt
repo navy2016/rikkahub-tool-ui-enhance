@@ -140,10 +140,18 @@ class TerminalPhysicalMetricsTest {
     @Test fun fifoArchivedRowsAreMeasuredAsHistoryNotOldPhysicalProducts() {
         val model = terminal(); val index = TerminalTranscriptWidthIndex(); val first = model.renderFrame()
         index.width(first, "metric", product(first), ::measured)
+        // The hidden cursor is at the end, NOT at column zero. The moved row loses its reserved
+        // blank and the new row gains one, exactly as306's independent cursor-reservation test.
+        val beforeLast = first.rows.last().text.text
+        assertTrue(beforeLast.endsWith(" "))
         model.feed("\r\nappend"); val next = model.renderFrame()
+        assertEquals(first.screenLineIds.last(), next.screenLineIds[next.screenLineIds.lastIndex - 1])
+        assertEquals(beforeLast.dropLast(1), next.rows[next.rows.lastIndex - 1].text.text)
+        assertEquals("append ", next.rows.last().text.text)
         assertEquals(oracle(next), index.width(next, "metric", product(next), ::measured))
         assertEquals(1, index.lastMeasuredHistoryRows)
-        assertEquals(0, index.lastMeasuredScreenRows); assertEquals(1, index.lastSharedScreenRows)
+        assertEquals(0, index.lastMeasuredScreenRows); assertEquals(2, index.lastSharedScreenRows)
+        assertEquals(4, index.lastReusedScreenRows)
     }
     @Test fun shorteningAndTrimmingTheWidestRowUpdatesExactMaximum() {
         val model = terminal(); val index = TerminalTranscriptWidthIndex(); val first = model.renderFrame()
