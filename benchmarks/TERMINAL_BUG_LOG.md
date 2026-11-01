@@ -134,3 +134,13 @@ changes separately. Performance rejection by itself is not proof of a specific s
   then returns SIGINT/proc-absence stopExit0. V3adds matching PID/comm/start ticks before/during
   stop and observed disappearance,never treating signal permission denial as completion. Native
   full-page qualification still required; diagnostic success is not840window qualification.
+
+## INFRA-LIFECYCLE-005 — JitPack401 blocks V3 before any device window [one infrastructure retry planned]
+- Run41342838188/source9985cfc fails `:app:mergeTerminaltestNativeLibs` resolving unchanged
+  `com.github.rikkahub:sqlite-android:-SNAPSHOT`: GETmaven-metadata.xml returns401Unauthorized.
+- Qualification step never started; no app/device window or trace sample exists from this run.
+  Exact check annotations were retained; no full build-log download or dependency/version edit.
+- The same public metadata URL subsequently returns200 without credentials, naming snapshot
+  `-80cedc8888-1`; upstream repository is public. No token is sent to JitPack.
+- Keep original failed run. One separately identified infrastructure retry may use unchangedV3
+  source files/protocol/driver/config; it is not replacement sampling. If unresolved, retain the failure.

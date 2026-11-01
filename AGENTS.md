@@ -18,6 +18,9 @@ V3独立benchmarks/terminal-trace-lifecycle-v3：sh程序走stdin，config走匿
 配置/解析器/840窗口/24trace/2launch不变；只修传输并加强停止证明。V1/V2仍failure且各0采样窗口，C1仍机制已通过但未采用。
 V3协议3b1565f113c9eff14ceb11e71c1bf1ad3a6c799537838fb92981c62a3bca3288，18新+20原身份本地测试通过。
 workflow suite=traceLifecycleV3；恢复目录/workspace/terminal-review/full-virtual-trace-lifecycle-v3。只有独立资格通过后再冻结C1性能，禁止重复派发/自动采用。
+V3首次source9985cfc0df08f5044cad32e8a8d064d698fbb5fd/run41342838188在构建阶段因JitPack sqlite-android:-SNAPSHOT元数据401失败，资格步骤未开始，0窗口。
+同一公开URL无凭据GET已恢复200；不改依赖、不发token。允许一次独立标记的构建基础设施重试，V3所有源码/协议/驱动/config原字节不变。
+重试恢复目录/workspace/terminal-review/full-virtual-trace-lifecycle-v3-infra-retry，按唯一dispatch追踪；原失败继续保留，不是重采。
 
 ## 当前先做无APK配置传输诊断（优先于下方V2运行中记录）
 
