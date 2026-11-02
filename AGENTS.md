@@ -9,6 +9,17 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## R2已完成复算（优先于下方待运行记录）
+
+sourcebb6c14da2a47e9dc74f34913c4dafc35213567fd/run41515588411 success；6runtimeTUI/SELoff方法、22触屏手势、42原截图/回执独立核验。
+R1两个候选文件原字节通过两种渲染的宽度页面门：80→100保留LOCK，100→120保留AUTO；未完成完整回归/未采用。
+中文/CJK混排实际glyph列48点击在bothrenderer发送47列，4次PRESS/RELEASE均错列且行号正确；不是剪贴板变化/本地选区的证明。
+同逻辑24/48/80列marker在8类混合行中心跨度36px，12几何phase均复现。原因链是自然Text推进与固定W列换算不一致；需独立新修复。
+全部22clipboard哨兵不变、0本地非编辑选区；原“触摸变复制”仍未完整解释。贴底MAIN/IME/ALT矩阵gap均28px、返回增量0，实机间距bug仍open。
+报告benchmarks/results/306-tui-validation-r2.md；工作/workspace/terminal-review/306-tui-validation-r2，verify_r2.py/verified-report.json。
+原artifact13175374293/relay41518010280；report SHA fcd8bec87d5bbdf40f4be884617037fc0facfd27ec79e54a19eb1e1c6cecd505。
+R1/R2/历史候选与判据均冻结。生产仍306/main ac977984，不自动Release或性能实验。目前无待完成CI。
+
 ## 当前R2：固定R1宽度候选的真实TUI页面验证
 
 所有6方法必须runtime tui=true/SELoff，fullVirtual/default仅是renderer。2宽度+2鼠标+2混合字形IME/ALT几何。

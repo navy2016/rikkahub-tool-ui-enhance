@@ -197,6 +197,9 @@ changes separately. Performance rejection by itself is not proof of a specific s
   TerminalEagerViewportGeometry.followTarget and controller effect lifecycle. Exact triggering sequence is not yet isolated.
 - Preserve AUTO/LOCK intent, real measured rows,IME/blank-grace/FIFO and single-writer protections. Do not label a
   root cause or claim a fix before a reproduced geometry assertion. Device screenshot/operation context remains useful.
+- R2run41515588411(runtimeTUI/SELoff) independently verified: MAIN/IMEopen/redraw/closed/ALT/MAIN in bothrenderers,
+  80x28grid unchanged,viewport-relative bottom gap28px throughout; no post-return growth. This limited static-grid
+  matrix does not close the user's intermittent real-TUI bug or equate the viewport with physical-screen edges.
 
 ## DEVICE-306-002 — width-only change changes LOCK to AUTO [user reproduced; source path located]
 - TerminalEmulator.resize retains IDs on a columns-only resize. Many TUI SIGWINCH redraws then issue ED2;
@@ -208,6 +211,8 @@ changes separately. Performance rejection by itself is not proof of a specific s
   AUTO/jump/drag must supersede it. No stale-generation anchor reuse or synthetic history coordinates.
 - R1run41483158974 reproduced both renderers:80→100columns,rows28unchanged,screenGeneration4→5,
   LOCK→AUTO. Candidate518Release JVM passes; candidate native page not yet run. Originals independently verified.
+- R2same candidate bytes: bothrealTUIrenderer page methods preserve LOCKfor80→100 and AUTOfor100→120.
+  Native page gate passed,not production adoption/full regression; later redraw and rapid resize coverage still required.
 
 ## DEVICE-306-003 — MOUSE touch enters copy while SEL is OFF [user clarified; root cause NOT established]
 - User explicitly confirms MOUSEon/SELoff. The earlier SEL+MOUSE contradictory-state hypothesis does NOT
@@ -220,12 +225,18 @@ changes separately. Performance rejection by itself is not proof of a specific s
   and checked geometry; it did not deliver and verify a mouse drag. Preserve FIFO and release/cancel behavior.
 - R1verified6touch gestures acrossfullVirtual/default: exact rawSGR/FIFO,clipboard sentinel unchanged,
   no local selection; explicitOSC52control works. This is NOT the cause or fix of the user's still-open TUI report.
+- R2verified22gestures: actualglyph clicks inCJK/ASCII-CJK rows sendcolumn47instead ofmodelcolumn48 inbothrenderers.
+  SeeDEVICE-306-005. Clipboard never changed and no local selection; coordinate defect is proven,but copy behavior's
+  complete cause is not. Do not claim the original copy bug resolved.
 
 ## DEVICE-306-004 — some row right edges form stair-step jaggies [user reproduced; geometry diagnosis pending]
 - Current physical TUI rows use natural Text layout; TerminalEmulator cell widths/continuations and rounded
   W cell hints are not an assertion that shaped mixed-script run advances are exact integer cell multiples.
 - Need distinguish glyph/border alignment,background endpoints and clipping using screenshot plus real-font
   equal-column mixed-ASCII/CJK/emoji/style cases. Do not replace font,clip valid text or call a guessed fix complete.
+- R2actualTextLayoutResult: same logical24/48/80markers differ by36px acrossmixed rows inall12geometryphases.
+  ASCIIrow48center1187.5,CJK1155.5,emoji1191.5. Natural shaping advances differ fromcell-width assumptions;
+  all42screenshots/model/geometry records independently verified. User screenshot still absent; no visual repair adopted.
 
 ## WORK-PRIORITY-306 — functional repair precedes new collector/performance work
 - User's four formal306device regressions supersede pending optimization diagnostics. C1/old protocols stay frozen.
@@ -248,3 +259,11 @@ changes separately. Performance rejection by itself is not proof of a specific s
   diagnostic settle()/viewReceipt() did not assert/emit runtimeviewport.tui. Do not invent that field retroactively.
 - New independently versioned TUI validation must assert/emit tui=true and preserve bottom/IME/mouse boundaries.
   R1source,protocol,518unit tests and4raw cases remain unchanged; plainASCII success cannot close mixed-font bugs.
+- R2new driver now asserts/emits runtimeTUI/SELoff; all6native methods verified. HistoricalR1isnot retroactively changed.
+
+## DEVICE-306-005 — actual CJK glyph at logical48 is delivered as mouse47 [reproduced; repair required]
+- R2run41515588411/sourcebb6c14d/artifact13175374293/relay41518010280. All6native cases/22gestures/42screenshots replayed.
+- TerminalPointerMap.hit calls floor(localX/cellWidth); naturalText positions differ afterCJKfallback glyphs.
+  Actualcenters1155.5and1171.5,cell25,logicalcolumn48. BothPRESS+RELEASEarrive as47,row10or6correctly.
+- Not a lostbyte/FIFOerror or localSEL; all22clipboard sentinels intact. Do not equate this proven hit defect
+  with proof of the user's entire copy symptom. Needs shared exact cell/pixel geometry acrossdraw/hit/selection.
