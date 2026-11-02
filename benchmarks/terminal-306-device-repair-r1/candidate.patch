@@ -1,0 +1,196 @@
+--- a/app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt
++++ b/app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt
+@@ -1188,6 +1188,7 @@
+         }
+         TerminalPipelineTrace.record(processId, TerminalPipelineStage.ROW_SYNC_FINISHED, frameRevision = frame.revision)
+         TerminalPipelineTrace.record(processId, TerminalPipelineStage.FRAME_PUBLISHED, frameRevision = frame.revision)
++        viewportController.completeWidthChange(frame)
+         resizeAwaitingTuiRedraw.set(false)
+         forceBlankPending.set(hasDeferredGridBlank)
+         return true
+@@ -1584,6 +1585,9 @@
+         if (!columnsChanged && !rowsChanged && !bgManager.hasPendingTerminalResize(processId)) return@LaunchedEffect
+         val requestedColumns = terminalColumns
+         val requestedRows = terminalRows
++        val widthChangeRequest = if (columnsChanged && !rowsChanged) {
++            viewportController.beginWidthChange(requestedColumns)
++        } else null
+ 
+         val holdCompleteFrameForGrid = currentUsesTuiViewport && (columnsChanged || rowsChanged)
+         if (holdCompleteFrameForGrid) {
+@@ -1630,6 +1634,7 @@
+             if (imeStableForSizeHint) bgManager.saveTerminalSizeHint(process.command, applied.columns, applied.rows)
+             if (!holdCompleteFrameForGrid) scheduleTerminalRender()
+         }.onFailure {
++            viewportController.cancelWidthChange(widthChangeRequest)
+             resizeRenderFallbackJob.getAndSet(null)?.cancel()
+             resizeAwaitingTuiRedraw.set(false)
+             terminalStatus = "尺寸调整失败：${it.message}"
+--- a/app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt
++++ b/app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt
+@@ -4,6 +4,7 @@
+ import kotlinx.coroutines.flow.StateFlow
+ import kotlinx.coroutines.flow.asStateFlow
+ import me.rerere.rikkahub.utils.TerminalEmulator
++import me.rerere.rikkahub.utils.ownedRows
+ 
+ /** All dimensions refer to the grid below the fixed status-bar strip. */
+ internal data class TerminalViewportMetrics(
+@@ -99,6 +100,69 @@
+     private var fullImeScreenBottom: Int? = null
+     private var selectingVirtualText = false
+ 
++    /** An explicit user width request only. Scalar provenance, never an old frame/Text/layout. */
++    private data class WidthChangeLock(
++        val id: Long,
++        val owner: Any,
++        val columns: Int,
++        val rows: Int,
++        val alternate: Boolean,
++        val historyGeneration: Long,
++        val completedRevision: Long? = null,
++    )
++    private var widthChangeLock: WidthChangeLock? = null
++
++    fun beginWidthChange(columns: Int): Long? {
++        widthChangeLock = null
++        val current = frame ?: return null
++        val owned = current.ownedRows() ?: return null
++        if (state.value.autoScroll || !ready() || columns == owned.columns ||
++            state.value.anchor?.screenGeneration == null || !isTuiViewport()) return null
++        val id = ++nextOperationId
++        widthChangeLock = WidthChangeLock(id, owned.history.owner, columns, current.screenLineIds.size,
++            current.isAlternateScreen, current.historyGeneration)
++        mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
++        return id
++    }
++
++    /** Called after the matching resized frame is atomically published, before its layout arrives. */
++    fun completeWidthChange(published: TerminalEmulator.RenderFrame) {
++        val pending = widthChangeLock ?: return
++        val owned = published.ownedRows() ?: return
++        if (pending.owner !== owned.history.owner || pending.rows != published.screenLineIds.size ||
++            pending.alternate != published.isAlternateScreen || pending.historyGeneration != published.historyGeneration) {
++            widthChangeLock = null
++        } else if (owned.columns == pending.columns && pending.completedRevision == null) {
++            widthChangeLock = pending.copy(completedRevision = published.revision)
++        }
++    }
++
++    /** A cancelled/failed older request must not erase a newer width request. */
++    fun cancelWidthChange(request: Long?) {
++        if (request != null && widthChangeLock?.id == request) widthChangeLock = null
++    }
++
++    private fun isTuiViewport(): Boolean = if (usesItemViewport) itemViewport?.fullVirtual?.tui == true
++        else metrics?.usesTuiViewport == true
++
++    private fun retainsWidthChangeLock(current: TerminalEmulator.RenderFrame): Boolean {
++        val pending = widthChangeLock ?: return false
++        val owned = current.ownedRows() ?: return false
++        if (state.value.autoScroll || !isTuiViewport() || pending.owner !== owned.history.owner ||
++            pending.rows != current.screenLineIds.size || pending.alternate != current.isAlternateScreen ||
++            pending.historyGeneration != current.historyGeneration) {
++            widthChangeLock = null
++            return false
++        }
++        return owned.columns == pending.columns
++    }
++
++    private fun widthLayoutReconciled(current: TerminalEmulator.RenderFrame) {
++        val pending = widthChangeLock ?: return
++        val revision = pending.completedRevision ?: return
++        if (current.revision >= revision && current.ownedRows()?.columns == pending.columns) widthChangeLock = null
++    }
++
+     private data class MeasuredAnchorResolution(
+         val frameRevision: Long,
+         val anchor: TerminalViewportItemAnchor,
+@@ -273,6 +337,7 @@
+     /** Temporary interaction ownership; AUTO/LOCK intent changes only if the selection actually scrolls. */
+     fun beginVirtualSelection() {
+         if (itemViewport?.fullVirtual == null) return
++        widthChangeLock = null
+         selectingVirtualText = true
+         mutableState.value = state.value.copy(gesture = null, scrollEffect = null)
+     }
+@@ -306,6 +371,7 @@
+     /** Explicit semantic restore, including a renderer handoff; never consumes a guessed offset. */
+     fun restoreItemAnchor(anchor: ViewportAnchor, rowHeightPx: Int) {
+         require(rowHeightPx >= 0)
++        widthChangeLock = null
+         pendingItemTop = false
+         captureItemLock = false
+         mutableState.value = state.value.copy(mode = ViewportMode.LOCKED, anchor = anchor,
+@@ -331,6 +397,7 @@
+     /** Starts or continues real user input; called before the scrollable consumes its delta. */
+     fun beginUserScroll(origin: ViewportScrollOrigin, currentScrollPx: Int): Long {
+         require(origin.isUserInput)
++        widthChangeLock = null
+         fullImeAnchor = null
+         scrollPx = currentScrollPx.coerceAtLeast(0)
+         imeAnchor = null
+@@ -370,6 +437,7 @@
+     }
+ 
+     fun setFollow(enabled: Boolean, currentScrollPx: Int) {
++        widthChangeLock = null
+         fullImeAnchor = null
+         scrollPx = currentScrollPx.coerceAtLeast(0)
+         imeAnchor = null
+@@ -395,6 +463,7 @@
+     fun jumpToTop(currentScrollPx: Int) = jump(toBottom = false, currentScrollPx = currentScrollPx)
+ 
+     private fun jump(toBottom: Boolean, currentScrollPx: Int) {
++        widthChangeLock = null
+         fullImeAnchor = null
+         scrollPx = currentScrollPx.coerceAtLeast(0)
+         imeAnchor = null
+@@ -523,8 +592,15 @@
+             pendingItemTop = false
+         }
+         if (!state.value.autoScroll && state.value.anchor == null) capture(legacyOffsetPx ?: scrollPx)
++        val retainWidthLock = retainsWidthChangeLock(frame)
+         if (eagerGeometry != null && state.value.anchor != null) {
+-            val resolved = resolveTerminalItemAnchor(frame, requireNotNull(state.value.anchor), anchorLookup)
++            val originalResolved = resolveTerminalItemAnchor(frame, requireNotNull(state.value.anchor), anchorLookup)
++            val resolved = if (originalResolved == null && retainWidthLock) {
++                // The TUI redraw replaced line IDs, not the user's LOCK choice. Only current
++                // completed natural geometry may become the replacement anchor.
++                capture(scrollPx)
++                state.value.anchor
++            } else originalResolved
+             mutableState.value = if (resolved == null) state.value.copy(mode = followMode(), anchor = null) else {
+                 // Older saved default anchors have no measured scale. Bind once to the resolved
+                 // row's first actual height, just as the item backend does; do not rebase on every
+@@ -583,6 +659,7 @@
+             )
+         }
+         mutableState.value = state.value.copy(mode = output.mode, anchor = nextAnchor)
++        widthLayoutReconciled(frame)
+         if (output.targetScrollPx == scrollPx) {
+             mutableState.value = state.value.copy(scrollEffect = null)
+         } else if (state.value.scrollEffect?.targetScrollPx != output.targetScrollPx) {
+@@ -608,8 +685,13 @@
+         }
+         if (captureItemLock) capture(0)
+         if (!state.value.autoScroll && state.value.anchor == null) capture(0)
++        val retainWidthLock = retainsWidthChangeLock(observation.frame)
+         val previousAnchor = state.value.anchor
+-        val resolved = previousAnchor?.let { resolveTerminalItemAnchor(observation.frame, it, anchorLookup) }
++        val originalResolved = previousAnchor?.let { resolveTerminalItemAnchor(observation.frame, it, anchorLookup) }
++        val resolved = if (originalResolved == null && retainWidthLock) {
++            capture(0)
++            state.value.anchor
++        } else originalResolved
+         val target = if (state.value.autoScroll || resolved == null) {
+             mutableState.value = state.value.copy(
+                 mode = followMode(), anchor = null, anchorCellHeightPx = 0, anchorRowHeightPx = 0,
+@@ -634,6 +716,7 @@
+             TerminalItemScrollTarget.Anchor(anchor, state.value.anchorRowHeightPx)
+         }
+         publishItemTarget(target, origin, animated)
++        widthLayoutReconciled(observation.frame)
+     }
+ 
+     private fun publishItemTarget(target: TerminalItemScrollTarget, origin: ViewportScrollOrigin, animated: Boolean) {

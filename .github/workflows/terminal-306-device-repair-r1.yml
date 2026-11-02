@@ -1,0 +1,77 @@
+name: Terminal306 Width Intent and Unchanged Device Diagnosis R1
+'on':
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify exact306 isolated candidate and diagnostic boundaries
+        run: |
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_306_device_repair_r1.py
+          python3 -B .github/scripts/terminal-306-device-repair-r1.py guard
+      - name: Run original504 and new14 Release JVM tests with width candidate
+        run: |
+          chmod +x gradlew
+          python3 -B .github/scripts/terminal-306-device-repair-r1.py unit
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terminal-306-r1-jvm-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-306-device-repair-r1/unit/
+            artifacts/terminal-validation/
+          if-no-files-found: error
+          retention-days: 30
+  page-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify page target stays unchanged306
+        run: python3 -B .github/scripts/terminal-306-device-repair-r1.py guard
+      - name: Build pinned native test-only PRoot asset
+        run: python3 -B .github/scripts/build-terminal-proot.py
+      - name: Build unchanged306 Release-derived target and diagnostic test
+        run: |
+          chmod +x gradlew
+          python3 -B .github/scripts/terminal-306-device-repair-r1.py page-build
+      - name: Diagnose four native cases without width candidate or SEL
+        run: python3 -B .github/scripts/terminal-306-device-repair-r1.py page-run
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terminal-306-r1-page-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-306-device-repair-r1/page/
+            artifacts/terminal-pipeline/manifest.json
+            artifacts/terminal-pipeline/proot-overlay.json
+            artifacts/terminal-validation/
+          if-no-files-found: error
+          retention-days: 30

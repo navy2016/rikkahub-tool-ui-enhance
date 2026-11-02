@@ -9,6 +9,26 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## 当前最高优先级：306正式包四个实机功能回归
+
+用户实测报告：TUI应贴底时底部空隙变大；只改渲染宽度导致LOCK变AUTO；MOUSE拖动变成复制；部分行右缘阶梯锯齿。
+已记benchmarks/TERMINAL_BUG_LOG.md的DEVICE-306-001..004。暂停新性能/取证矩阵，先独立306功能修复与回归。
+宽度链路：resize保留ID，但后续TUI ED2清屏换ID，controller unresolved anchor会切follow；需范围限定到用户宽度变更。
+用户再次明确MOUSE开启/SEL关闭也复制：先前SEL+MOUSE假设不解释该报告，已从R1候选移除模式枚举/切换草稿。
+MOUSE根因未定；需未改306真实touch→pointer hit→PTY原字节→clipboard/OSC52对照，不能仅测模式标签。
+贴底和右缘根因尚未确认，不宣称已修复；右缘已向用户索要截图/程序/渲染模式，不阻塞其他项。
+benchmarks/terminal-native-tail-diagnostic是未提交/未派发草稿，保持停放。C1、A1/B1/V3等冻结候选/失败不夹带修改。
+生产仍306/main ac977984；本次修复需单独候选、Release CI测试、证据与再采用决策。当前无待完成CI。
+
+### R1验证计划（功能修复优先，不是性能实验）
+
+benchmarks/terminal-306-device-repair-r1候选仅ProcessSessionPage/TerminalViewportController宽度意图挂接；未改MOUSE/SEL路径。
+identity4cc50efc5c1ca3a8e0174a29e24a67ea138d40f9fe5fb0bac141e9a659bdba17；protocol d20a5cb091ff9cd36010ea287e42f996349cd76bdf72d1ee60692630a5e3db9a。
+16项本地guard通过。unit臂504原+14新=518Release JVM候选测试；page臂4方法使用未改306，不携带宽度候选。
+page检查fullVirtual/default各自MOUSEon/SELoff点击、拖动、800ms长按拖动的PTYhex/输入FIFO/clipboard哨兵/OSC52对照，以及80→100→120前后LOCK/AUTO。
+保存真实bottomGap/截图，非实机故障已解决的证明。若JVM通过仍需候选页面/完整回归，不自动采用或Release。
+workflow suite=device306RepairR1，恢复目录/workspace/terminal-review/306-device-repair-r1；以dispatch/receipt为准，不重复派发。
+
 ## 有限启动尾部诊断已验证（优先于下方待运行记录）
 
 573341f8902e787d50966120a195ac8d90242717/run41353833781 success；artifact13101954048/只读relay41354159180。

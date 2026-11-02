@@ -190,3 +190,50 @@ changes separately. Performance rejection by itself is not proof of a specific s
   SurfaceFrame. These are not the frozen selected targets and are not used to change the verdict.
 - Built-in Settings launch still cannot establish the cause of static terminal final-buffer absence.
   A separate small native306experiment is needed; no current native qualification or C1adoption.
+
+## DEVICE-306-001 — TUI bottom gap grows during operations [user reproduced; investigation]
+- User tested the formal306APK and reports intermittent failure to remain bottom-aligned when following is expected.
+- Source paths: ProcessSessionPage viewport/grid/IME sizing; TerminalViewportBinding; TerminalItemViewport.followDelta;
+  TerminalEagerViewportGeometry.followTarget and controller effect lifecycle. Exact triggering sequence is not yet isolated.
+- Preserve AUTO/LOCK intent, real measured rows,IME/blank-grace/FIFO and single-writer protections. Do not label a
+  root cause or claim a fix before a reproduced geometry assertion. Device screenshot/operation context remains useful.
+
+## DEVICE-306-002 — width-only change changes LOCK to AUTO [user reproduced; source path located]
+- TerminalEmulator.resize retains IDs on a columns-only resize. Many TUI SIGWINCH redraws then issue ED2;
+  eraseInDisplay(2) calls invalidateActiveScreenLineIds. A prior physical-row anchor is now invalid.
+- TerminalViewportController.reconcileItems treats an unresolved anchor as followMode; eager reconciliation
+  also changes to followMode after an unresolved measured anchor. This provides a concrete path for the report,
+  but must be reproduced with columns-change+TUI-clear, not silently change all historical clear policies.
+- Plan: bounded user-width-change intent preservation and exact reanchor after valid layout; explicit user
+  AUTO/jump/drag must supersede it. No stale-generation anchor reuse or synthetic history coordinates.
+
+## DEVICE-306-003 — MOUSE touch enters copy while SEL is OFF [user clarified; root cause NOT established]
+- User explicitly confirms MOUSEon/SELoff. The earlier SEL+MOUSE contradictory-state hypothesis does NOT
+  explain this report. Its enum/transition draft was removed from the R1candidate; do not count it as a fix.
+- Source inspection finds no page-parent SelectionContainer, and local virtual selection is disabled when SELoff.
+  Two independent paths need evidence: pointer coordinate/capture dispatch, and the application's OSC52clipboard
+  requests after receiving mouse input. Neither is yet proven as the reported cause.
+- Next: unchanged306native page with raw PTY mouse-byte receipt, touch press/drag/release (including long hold),
+  MOUSEon/SELoff assertions and clipboard sentinel/explicit OSC52control. Existing page test only toggled MOUSE
+  and checked geometry; it did not deliver and verify a mouse drag. Preserve FIFO and release/cancel behavior.
+
+## DEVICE-306-004 — some row right edges form stair-step jaggies [user reproduced; geometry diagnosis pending]
+- Current physical TUI rows use natural Text layout; TerminalEmulator cell widths/continuations and rounded
+  W cell hints are not an assertion that shaped mixed-script run advances are exact integer cell multiples.
+- Need distinguish glyph/border alignment,background endpoints and clipping using screenshot plus real-font
+  equal-column mixed-ASCII/CJK/emoji/style cases. Do not replace font,clip valid text or call a guessed fix complete.
+
+## WORK-PRIORITY-306 — functional repair precedes new collector/performance work
+- User's four formal306device regressions supersede pending optimization diagnostics. C1/old protocols stay frozen.
+- Untracked benchmarks/terminal-native-tail-diagnostic is an uncommitted draft,never dispatched; leave it parked.
+- Functional changes must use a separately identified306repair candidate with scoped tests/evidence. No automatic
+  adoption or formalRelease until correctness validation; production currently remains306.
+- Latest clarification: width changes must preserve whichever AUTO/LOCKstate existed before the change.
+  MOUSEfailure occurs without SEL. Screenshot has not appeared as a real attachment in the accessible files.
+
+## HARNESS-306-R1-001 — pre-dispatch preset and input-fence corrections
+- Draft diagnostic assumed80→120, but production presets are80,100,120,160,200. Corrected to80→100→120 before any CI run.
+- Direct manager terminator could overtake pending UI queue writes. Added UI_INPUT/enqueued count and enqueue/written byte fences before the terminator.
+- Empty initial preferences now mean not-configured, not JSON failure; startup+raw-flow+localsettings gates retained.
+- Screen-coordinate native touch tests retain DOWN/MOVE/UP and guaranteed CANCEL on failure; clipboard is restored in cleanup.
+- All corrections are confined to new R1tests/harness;16host tests pass. Kotlin/native execution pending, no production change.

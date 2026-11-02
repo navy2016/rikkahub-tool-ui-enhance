@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "suite": "terminal-306-device-repair-r1",
+  "baseProductionSha": "306e0b80b508c961bc00f2d4b34a2688e5857a1a",
+  "baseTree": "ac97798416997a8230c9fa2a5a8569cf0ed0a911",
+  "protocolSha256": "d20a5cb091ff9cd36010ea287e42f996349cd76bdf72d1ee60692630a5e3db9a",
+  "patchSha256": "113069124752aff9670a9258840a60e9cfdcd3fc14a52150ca9978b410c274db",
+  "files": {
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt": {
+      "base": "ad418a9c4fdda6bd7d6d161807ca9607e2ea37f2c34a1deb9f721c57d32a1eea",
+      "candidate": "4552335ec6121b5215e8c6a926be705878aa0193c567b509b8ea37104ce0062c",
+      "asset": "benchmarks/terminal-306-device-repair-r1/candidate/ProcessSessionPage.kt"
+    },
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt": {
+      "base": "4e8bcca180828756fa24e07993aed2e48d55d25683a34b9998bfd2b32a1efb85",
+      "candidate": "b75aab524007dc5a0558160e227e8f76201624679735194e8217c4e79fff9bc2",
+      "asset": "benchmarks/terminal-306-device-repair-r1/candidate/TerminalViewportController.kt"
+    }
+  }
+}
