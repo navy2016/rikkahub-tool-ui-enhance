@@ -9,6 +9,17 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## R1结果及最新TUI范围（优先于下方待验证记录）
+
+用户强调四项全部在TUI发现；default/fullVirtual只是渲染方式，不是普通Shell/TUI对照。
+R1source6881d80bbe2ab60bbc2c0852d76079abc1855095/run41483158974 success；518Release JVM+4native方法+6触屏手势+12截图同次原件独立核验。
+未改306在两种TUI渲染中均复现80→100后LOCK变AUTO；100→120原AUTO保持。候选只测过JVM，尚未测候选原生页面/采用。
+MOUSEon/SELoff点击/drag/800ms长按drag的PTYhex全匹配、clipboard哨兵不变、无本地选区；本组未复现复制，不是实机bug已解决。
+R1是RAW PTY+sh TUI+整屏寻址/SIGWINCH/ED2；少显式runtime tui回执，下一新驱动加断言，不修改R1。
+18次viewport内bottomGap均28px；不是屏幕底边距离，贴底和混合文字右缘仍需TUI几何诊断。
+报告benchmarks/results/306-device-repair-r1.md；恢复/workspace/terminal-review/306-device-repair-r1；artifact13162130156/13160433799，relay41511036211/41511113802已完成。
+生产仍306，四项未全部修复；后续固定候选字节做TUI原生验证。没有当前待完成CI，不派发性能/轨迹实验。
+
 ## 当前最高优先级：306正式包四个实机功能回归
 
 用户实测报告：TUI应贴底时底部空隙变大；只改渲染宽度导致LOCK变AUTO；MOUSE拖动变成复制；部分行右缘阶梯锯齿。

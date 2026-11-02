@@ -206,6 +206,8 @@ changes separately. Performance rejection by itself is not proof of a specific s
   but must be reproduced with columns-change+TUI-clear, not silently change all historical clear policies.
 - Plan: bounded user-width-change intent preservation and exact reanchor after valid layout; explicit user
   AUTO/jump/drag must supersede it. No stale-generation anchor reuse or synthetic history coordinates.
+- R1run41483158974 reproduced both renderers:80→100columns,rows28unchanged,screenGeneration4→5,
+  LOCK→AUTO. Candidate518Release JVM passes; candidate native page not yet run. Originals independently verified.
 
 ## DEVICE-306-003 — MOUSE touch enters copy while SEL is OFF [user clarified; root cause NOT established]
 - User explicitly confirms MOUSEon/SELoff. The earlier SEL+MOUSE contradictory-state hypothesis does NOT
@@ -216,6 +218,8 @@ changes separately. Performance rejection by itself is not proof of a specific s
 - Next: unchanged306native page with raw PTY mouse-byte receipt, touch press/drag/release (including long hold),
   MOUSEon/SELoff assertions and clipboard sentinel/explicit OSC52control. Existing page test only toggled MOUSE
   and checked geometry; it did not deliver and verify a mouse drag. Preserve FIFO and release/cancel behavior.
+- R1verified6touch gestures acrossfullVirtual/default: exact rawSGR/FIFO,clipboard sentinel unchanged,
+  no local selection; explicitOSC52control works. This is NOT the cause or fix of the user's still-open TUI report.
 
 ## DEVICE-306-004 — some row right edges form stair-step jaggies [user reproduced; geometry diagnosis pending]
 - Current physical TUI rows use natural Text layout; TerminalEmulator cell widths/continuations and rounded
@@ -237,3 +241,10 @@ changes separately. Performance rejection by itself is not proof of a specific s
 - Empty initial preferences now mean not-configured, not JSON failure; startup+raw-flow+localsettings gates retained.
 - Screen-coordinate native touch tests retain DOWN/MOVE/UP and guaranteed CANCEL on failure; clipboard is restored in cleanup.
 - All corrections are confined to new R1tests/harness;16host tests pass. Kotlin/native execution pending, no production change.
+- Final:R1source6881d80/run41483158974succeeded;518JVM/4native/6gestures/12screenshots independently verified.
+
+## EVIDENCE-306-R1-TUI — explicit runtime TUI receipt missing [R1 scope limitation; next driver only]
+- User confirms all4reports areTUI. R1configuresRAW PTY,shTUI,full-screen addressing,WINCH/ED2,but
+  diagnostic settle()/viewReceipt() did not assert/emit runtimeviewport.tui. Do not invent that field retroactively.
+- New independently versioned TUI validation must assert/emit tui=true and preserve bottom/IME/mouse boundaries.
+  R1source,protocol,518unit tests and4raw cases remain unchanged; plainASCII success cannot close mixed-font bugs.
