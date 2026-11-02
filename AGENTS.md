@@ -9,6 +9,16 @@
 
 ### Current adoption override（优先于下方历史“仍55/未采用”记录）
 
+## 当前R2：固定R1宽度候选的真实TUI页面验证
+
+所有6方法必须runtime tui=true/SELoff，fullVirtual/default仅是renderer。2宽度+2鼠标+2混合字形IME/ALT几何。
+R1两个候选文件原字节，未加入其它修复/C1；18项本地边界检查通过。
+R2协议8b6a9b0ac8e2f3364b574b48266ebec3021e95df41b7026a4d82cc6729722deb；driver35eb6095ecbaec7eee116e941864f9140f98c22efaf277357eac8f1b7a9501b3。
+鼠标新检查用模型cell map证明48列+字符，直接点实际TextLayoutResult字形中心，不再仅W*column生成自证坐标。
+几何记录24/48/80逻辑列在8类混合文字后的实测center，IME打开/重绘/关闭及ALT/MAIN回位；42原截图，所有finding/null保留。
+workflow suite=device306TuiR2，恢复/workspace/terminal-review/306-tui-validation-r2；按唯一dispatch追踪，不重复派发。
+宽度两路径保持LOCK/AUTO才通过此页面门；鼠标/几何为诊断，未承诺4项全修/采用/正式Release。生产306不变。
+
 ## R1结果及最新TUI范围（优先于下方待验证记录）
 
 用户强调四项全部在TUI发现；default/fullVirtual只是渲染方式，不是普通Shell/TUI对照。

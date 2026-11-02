@@ -1,0 +1,135 @@
+{
+  "id": "terminal-306-tui-validation-r2",
+  "priorSourceSha": "4cf4bd755f502598b3850ae1fe7662273ea49382",
+  "baseProductionSha": "306e0b80b508c961bc00f2d4b34a2688e5857a1a",
+  "baseTree": "ac97798416997a8230c9fa2a5a8569cf0ed0a911",
+  "r1IdentitySha256": "4cc50efc5c1ca3a8e0174a29e24a67ea138d40f9fe5fb0bac141e9a659bdba17",
+  "r1Run": 41483158974,
+  "r1SourceSha": "6881d80bbe2ab60bbc2c0852d76079abc1855095",
+  "r1VerifiedJvmCount": 518,
+  "candidateHashes": {
+    "app/src/main/java/me/rerere/rikkahub/ui/pages/container/ProcessSessionPage.kt": "4552335ec6121b5215e8c6a926be705878aa0193c567b509b8ea37104ce0062c",
+    "app/src/main/java/me/rerere/rikkahub/data/container/TerminalViewportController.kt": "b75aab524007dc5a0558160e227e8f76201624679735194e8217c4e79fff9bc2"
+  },
+  "helperHashes": {
+    ".github/scripts/terminal-306-device-repair-r1.py": "4e6d6bf942aebfbae75137fc6ffe58534e9b48041564b070c090bcaa01d3925b",
+    "benchmarks/terminal-306-device-repair-r1/identity.json": "4cc50efc5c1ca3a8e0174a29e24a67ea138d40f9fe5fb0bac141e9a659bdba17",
+    "benchmarks/terminal-306-device-repair-r1/protocol.json": "d20a5cb091ff9cd36010ea287e42f996349cd76bdf72d1ee60692630a5e3db9a"
+  },
+  "test": {
+    "asset": "benchmarks/terminal-306-tui-validation-r2/Terminal306TuiValidationTest.kt",
+    "file": "app/src/terminaltestAndroidTest/java/me/rerere/rikkahub/pipeline/Terminal306TuiValidationTest.kt",
+    "classname": "me.rerere.rikkahub.pipeline.Terminal306TuiValidationTest",
+    "sha256": "35eb6095ecbaec7eee116e941864f9140f98c22efaf277357eac8f1b7a9501b3",
+    "methods": [
+      "mouseFullVirtualSelOff",
+      "mouseDefaultSelOff",
+      "widthFullVirtualLockAndAuto",
+      "widthDefaultLockAndAuto",
+      "geometryFullVirtualTuiImeAndMixedBorders",
+      "geometryDefaultTuiImeAndMixedBorders"
+    ]
+  },
+  "expectedMethods": 6,
+  "expectedScreenshots": 42,
+  "requiredCases": [
+    "mouse-fullVirtual",
+    "mouse-chunkedLayers",
+    "width-fullVirtual",
+    "width-chunkedLayers",
+    "geometry-fullVirtual",
+    "geometry-chunkedLayers"
+  ],
+  "expectedFingerprint": "Android/sdk_phone64_x86_64/emu64x:14/UE1A.230829.036.A1/11228894:userdebug/test-keys",
+  "mouse": {
+    "phases": [
+      "tap",
+      "drag",
+      "hold-drag",
+      "glyph-0",
+      "glyph-1",
+      "glyph-2",
+      "glyph-3",
+      "glyph-4",
+      "glyph-5",
+      "glyph-6",
+      "glyph-7"
+    ],
+    "gestureSource": "SOURCE_TOUCHSCREEN",
+    "holdMs": 800,
+    "fixedNominalDragColumns": [
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "actualGlyphLogicalColumn": 48,
+    "terminalModes": [
+      1002,
+      1006
+    ],
+    "fifoFence": "UI_INPUT count equals enqueued count and written bytes before independent1f terminator",
+    "clipboard": "sentinel plus explicit OSC52positive control; unexpected changes retained"
+  },
+  "width": {
+    "phases": [
+      "initial",
+      "before-locked-width",
+      "after-locked-width",
+      "before-auto-width",
+      "after-auto-width"
+    ],
+    "columns": [
+      80,
+      100,
+      120
+    ],
+    "rowsMustRemainUnchanged": true,
+    "acceptance": "both TUI renderers keep LOCK then AUTO across explicit columns-only request and peerWINCH redraw"
+  },
+  "geometry": {
+    "phases": [
+      "mixed-main",
+      "mixed-ime-open",
+      "mixed-ime-redraw",
+      "mixed-ime-closed",
+      "mixed-alt",
+      "mixed-return"
+    ],
+    "markerColumns": [
+      24,
+      48,
+      80
+    ],
+    "alignmentTolerancePx": 1.0,
+    "rowKinds": [
+      "ASCII",
+      "combining",
+      "CJK",
+      "bold",
+      "emoji",
+      "italic",
+      "ASCII-CJK",
+      "ASCII-ZWJ"
+    ],
+    "input": "CSI absolute column markers; natural row layout unchanged; no glyph clipping or scaling",
+    "bottom": "raw content/viewport/usable-window/full-window coordinates; compare equal-IME states only",
+    "interpretation": "diagnosis,not all4bugs fixed or smartphone acceptance"
+  },
+  "scope": {
+    "allMethodsRequireRuntimeTui": true,
+    "selectionOff": true,
+    "fixedR1CandidateBytes": true,
+    "noC1OrOtherPerformanceCandidate": true,
+    "noHistoricalTestOrVerdictChange": true,
+    "noLocalBuild": true,
+    "releaseDerivedTargetOnly": true,
+    "noLocalApkDownload": true,
+    "noSamplingRetry": true,
+    "originalsAndNullsRetained": true,
+    "noAutomaticAdoption": true,
+    "noPerformanceClaim": true,
+    "noFormalRelease": true
+  }
+}

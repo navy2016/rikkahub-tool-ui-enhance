@@ -1,0 +1,46 @@
+name: Terminal306 R2 TUI Width Candidate and Glyph Diagnosis
+'on':
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  tui-page:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Verify fixed R1 candidate and runtime TUI scope
+        run: |
+          python3 -B -m unittest discover -s .github/scripts -p test_terminal_306_tui_validation_r2.py
+          python3 -B .github/scripts/terminal-306-tui-validation-r2.py guard
+      - name: Build pinned native test-only PRoot asset
+        run: python3 -B .github/scripts/build-terminal-proot.py
+      - name: Build Release-derived target with unchanged R1 candidate
+        run: |
+          chmod +x gradlew
+          python3 -B .github/scripts/terminal-306-tui-validation-r2.py build
+      - name: Execute six native TUI cases with exact glyph hit and IME evidence
+        run: python3 -B .github/scripts/terminal-306-tui-validation-r2.py run
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: terminal-306-tui-r2-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            artifacts/terminal-306-tui-validation-r2/
+            artifacts/terminal-pipeline/manifest.json
+            artifacts/terminal-pipeline/proot-overlay.json
+            artifacts/terminal-validation/
+          if-no-files-found: error
+          retention-days: 30
